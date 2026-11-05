@@ -1,5 +1,6 @@
 //! The Tauri app: the window, the plugins, and the commands that expose `tsundoku_core` to the UI.
 
+mod history;
 mod tools;
 
 use std::error::Error;
@@ -12,6 +13,8 @@ use tauri::{App, AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_window_state::StateFlags;
 use tsundoku_core::app_info::AppInfo;
 use tsundoku_core::data_folder::{self, BuildKind, DataPaths};
+use tsundoku_core::history::History;
+use tsundoku_core::preview::PreviewService;
 use tsundoku_core::settings::SettingsStore;
 use tsundoku_core::tools::ToolManager;
 
@@ -53,9 +56,14 @@ fn show_main_window_if_still_hidden(window: WebviewWindow) {
     });
 }
 
-/// Opens the data folder's settings and the tool manager over them. Development builds keep their own data folder
-/// (AGENTS.md → Data and Testing).
-fn open_tool_manager(app: &App) -> Result<ToolManager, Box<dyn Error>> {
+/// What lives in the data folder: the settings with the tools they set up, and the history. Development builds keep
+/// their own data folder (AGENTS.md → Data and Testing).
+struct AppData {
+    tools: ToolManager,
+    history: History,
+}
+
+fn open_data(app: &App) -> Result<AppData, Box<dyn Error>> {
     let build = if cfg!(debug_assertions) {
         BuildKind::Development
     } else {
@@ -65,11 +73,9 @@ fn open_tool_manager(app: &App) -> Result<ToolManager, Box<dyn Error>> {
     let paths = DataPaths::new(root);
     fs::create_dir_all(paths.root())?;
     let settings = Arc::new(SettingsStore::open(paths.settings_file())?);
-    Ok(ToolManager::new(
-        paths,
-        settings,
-        app.package_info().version.to_string(),
-    ))
+    let history = History::open(&paths.database_file(), paths.archive_file())?;
+    let tools = ToolManager::new(paths, settings, app.package_info().version.to_string());
+    Ok(AppData { tools, history })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -96,8 +102,11 @@ pub fn run() {
             let has_mica = window_vibrancy::apply_mica(&window, None).is_ok();
             app.manage(Backdrop { has_mica });
 
-            let tool_manager = Arc::new(open_tool_manager(app)?);
+            let data = open_data(app)?;
+            let tool_manager = Arc::new(data.tools);
             app.manage(Arc::clone(&tool_manager));
+            app.manage(Arc::new(data.history));
+            app.manage(Arc::new(PreviewService::new()));
             tools::start_daily_yt_dlp_update(app.handle().clone(), tool_manager);
 
             show_main_window_if_still_hidden(window);
@@ -115,6 +124,10 @@ pub fn run() {
             tools::update_yt_dlp,
             tools::check_tool_update,
             tools::set_yt_dlp_channel,
+            history::fetch_preview,
+            history::cancel_preview,
+            history::open_download,
+            history::show_download_in_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

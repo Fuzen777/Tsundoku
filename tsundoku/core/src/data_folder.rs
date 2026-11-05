@@ -62,6 +62,16 @@ impl DataPaths {
     pub fn tools_folder(&self) -> PathBuf {
         self.root.join("tools")
     }
+
+    /// The history's SQLite database.
+    pub fn database_file(&self) -> PathBuf {
+        self.root.join("tsundoku.db")
+    }
+
+    /// yt-dlp's download archive, rewritten from the history after every change.
+    pub fn archive_file(&self) -> PathBuf {
+        self.root.join("archive.txt")
+    }
 }
 
 #[cfg(test)]

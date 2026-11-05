@@ -25,9 +25,9 @@ title: AGENTS
 
 | Path | Contents |
 | --- | --- |
-| `tsundoku/src` | The React UI: `views/` (with `views/settings/`), `components/`, `strings.ts`, `api.ts`, `queries.ts` (React Query hooks), `standIns.ts` (what `api.ts` returns in a browser), `toolProgress.ts` (live install and update stages), `toolErrors.ts` (`ToolError` → sentence), `bindings/` (generated) |
-| `tsundoku/core` | `tsundoku-core`: the UI-free Rust logic and its tests. `process` runs external programs, `tools` finds, installs and updates them, `settings` and `data_folder` hold what's stored |
-| `tsundoku/src-tauri` | The Tauri app: window, plugins, `tools.rs` (the tool commands), `tauri.conf.json`, `capabilities/` |
+| `tsundoku/src` | The React UI: `views/` (with `views/settings/`), `components/`, `strings.ts`, `api.ts`, `queries.ts` (React Query hooks), `standIns.ts` (what `api.ts` returns in a browser), `toolProgress.ts` (live install and update stages), `usePreview.ts` (the preview card's state, and link drops), `errors.ts` (the core's errors → sentences), `format.ts` (sizes, lengths, dates), `bindings/` (generated) |
+| `tsundoku/core` | `tsundoku-core`: the UI-free Rust logic and its tests. `process` runs external programs, `tools` finds, installs and updates them, `metadata` asks yt-dlp what a link is, `history` is the SQLite history and `archive.txt`, `preview` combines the last two for the preview card, `settings` and `data_folder` hold what's stored. `tests/fixtures/metadata` holds real yt-dlp answers |
+| `tsundoku/src-tauri` | The Tauri app: window, plugins, `tools.rs` (the tool commands), `history.rs` (the preview and history commands), `tauri.conf.json`, `capabilities/` |
 | `Scripts` | Dev, check and build scripts |
 
 ## Building and Testing
@@ -37,6 +37,7 @@ title: AGENTS
 | `Scripts\Dev.cmd` | Starts the app with `tauri dev`: the UI reloads live, and Rust changes rebuild and restart the app |
 | `Scripts\Check.cmd` | `cargo fmt --check`, Clippy with warnings as errors, `cargo test` (which also regenerates `src/bindings`), then `tsc`, ESLint with no warnings allowed, and Vitest. Run it before every commit. |
 | `Scripts\Build.cmd` | Builds the release app and its NSIS installer |
+| `Scripts\Capture-Fixtures.ps1` | Runs yt-dlp on the test links and saves its answers, trimmed, as the metadata tests' fixtures. Run it when yt-dlp's output changes; it needs the network |
 
 - First setup: `npm install` in `tsundoku/`. Needs Rust (MSVC toolchain), Node and Visual Studio's C++ build tools.
 - **This PC:** the git-ignored `.cargo/config.toml` at the project root sends Rust's build output to `D:\Dev\tsundoku\target`, since Google Drive would sync it and lock files mid-build, and sets the dev data folder (below). Cargo reads it from any folder below the project root. Without it, Cargo builds into `tsundoku/target`. The installer lands in `<build folder>\release\bundle\nsis`.
@@ -48,9 +49,10 @@ title: AGENTS
 
 ## Data and Testing
 
-- The data folder holds `settings.json` and `tools\` (one folder each for `yt-dlp`, `ffmpeg` and `deno`: Tsundoku's own copies). Dev builds use their own: `TSUNDOKU_DATA_DIR` when set (this PC's `.cargo/config.toml` sets `D:\Dev\tsundoku\data`), otherwise `%LocalAppData%\Tsundoku Dev`. Release builds use `%LocalAppData%\Tsundoku` and ignore the variable.
+- The data folder holds `settings.json`, `tools\` (one folder each for `yt-dlp`, `ffmpeg` and `deno`: Tsundoku's own copies), the history's `tsundoku.db` (with its `-wal` and `-shm` files while the app runs) and `archive.txt`. Dev builds use their own: `TSUNDOKU_DATA_DIR` when set (this PC's `.cargo/config.toml` sets `D:\Dev\tsundoku\data`), otherwise `%LocalAppData%\Tsundoku Dev`. Release builds use `%LocalAppData%\Tsundoku` and ignore the variable.
 - `D:\Dev\tsundoku\` is the disposable sandbox: `data\` (the dev data folder), `downloads\` (test downloads) and `target\`. Anything under it can be changed or deleted freely for a test. Never test against an installed copy's `%LocalAppData%\Tsundoku`.
 - The first-run setup shows while `settings.json` has no yt-dlp or ffmpeg: delete it, with the app closed, to see it again. With `tools\` left in place, the setup offers those copies; delete `tools\` too for a first run from nothing. Setting `ytDlpLastUpdateCheck` to an old value makes the startup update of yt-dlp run.
+- Until downloads exist, the duplicate warning can be tried by adding rows to `tsundoku.db` (a `videos` row and a `downloads` row pointing at it). `archive.txt` is rewritten from the database when the app starts.
 
 ## Technical Notes
 
@@ -75,4 +77,20 @@ title: AGENTS
 - yt-dlp updates itself with `--update-to stable@latest` (or `nightly@latest`). Naming the release, not just the channel, lets it go back from a nightly build to an older stable one, which plain `--update-to stable` refuses as a downgrade. It renames itself to `yt-dlp.exe.old` while updating and deletes that at its next update.
 - ffmpeg and Deno are compared by the SHA-256 of the release file they came from, stored in `settings.json`. FFmpeg-Builds rebuilds daily under the rolling tag `latest`, so its releases are labelled by date. A copy adopted from `tools\` at setup has no stored checksum, so its first check always offers an update.
 - Progress reaches the UI as `tool-progress` events (`ToolProgress`); every install or update ends with one whose stage is `null`. `tools-changed` tells the UI a tool changed on its own (the startup update of yt-dlp).
-- A tool's errors reach the UI as `ToolError`, a tagged union; `toolErrors.ts` turns each kind into a sentence from `strings.ts`, with the technical `detail` underneath.
+- A tool's errors reach the UI as `ToolError`, a tagged union; `errors.ts` turns each kind into a sentence from `strings.ts`, with the technical `detail` underneath. `PreviewError` and `HistoryError` work the same way.
+
+### Metadata and Preview
+
+- `metadata::normalize_link` accepts only http and https links with a host (adding `https://` when there's no scheme), so pasted text, a search (`ytsearch:`) or a file path never reaches yt-dlp. The link is also passed after `--`, so nothing in it can be read as an option.
+- yt-dlp runs as `--ignore-config --no-playlist --flat-playlist --dump-single-json --encoding utf-8`, with `--js-runtimes deno:<path>` when Deno is set up (`--no-js-runtimes` otherwise, so a Deno on PATH can't hide that it's missing) and `--ffmpeg-location`. `--flat-playlist` makes a playlist or channel answer at once instead of reading each video; `--encoding utf-8` keeps its messages from being mangled by the Windows code page. The Deno path must be a Windows path: yt-dlp silently ignores a `/d/…` one.
+- The site is yt-dlp's `extractor_key` in lowercase, as yt-dlp's archive writes it (`youtube`, `soundcloud`, `archiveorg`), and with the video ID it's what the duplicate check matches on. A format counts as video when it has a height and isn't `vcodec: none`, since some sites (archive.org) give no codec.
+- yt-dlp reports a failure as its last `ERROR:` line; `classify_failure` sorts it into a `PreviewError` by phrases in it. Upcoming premieres are errors too ("This live event will begin in…"), not a field of the answer. When a site's message changes, add the new phrase and a test.
+- `PreviewService` runs one fetch at a time: starting one cancels the one before, and the UI ignores an answer that arrives after a newer request (`usePreview`).
+- `dragDropEnabled` is `false` in `tauri.conf.json`: with Tauri's own drop handling on, WebView2 never gives the page a dropped link.
+
+### History
+
+- `tsundoku.db` is SQLite (`rusqlite`, bundled), in WAL mode with foreign keys on. Migrations are SQL strings in `history.rs`, applied in order and counted in `PRAGMA user_version`; never change a released one, add one. A database from a newer version is refused rather than read.
+- `videos` holds one row per site and ID; `downloads` one row per finished download, removed with its video (`ON DELETE CASCADE`). Times are seconds since 1970.
+- `archive.txt` is rewritten whole (atomically) after every change and when the history opens, in the order videos were first downloaded.
+- The UI names a download by its ID to open it or show it in its folder, never by a path, so it can only open files the history recorded.

@@ -15,8 +15,22 @@ type: Features
 ## Navigation
 
 - **Sidebar**: Queue, History and Presets at the top, Settings at the bottom.
-- **Add bar**: the link field across the top. It can't fetch a link yet.
 - **About**: Settings shows the app's version.
+
+## Adding a Video
+
+- **Add bar**: paste a link and press Enter or Add. A link without `https://` ("youtu.be/…") works too.
+- **Drop a link**: dropping a link anywhere on the window, such as one dragged from a browser's address bar, puts it in the add bar and fetches it right away.
+- **Preview card**: under the add bar, the video's thumbnail, title, uploader, site, length, upload date and best quality ("1080p", or Audio Only). A spinner shows while yt-dlp fetches it, with Cancel; a new link replaces the one being fetched.
+- **Already downloaded**: when the history has the video, the card says when and with which preset, shows the file's path with Open File and Show in Folder, and Download becomes Download Again. If the file was moved or deleted, it says so. The check uses the site and the video's ID, so every link to a video is caught: `youtu.be`, Shorts, a timestamp, a playlist it's in.
+- **Refused links**: playlists and channels, live streams, and premieres that haven't started each get a plain message. So do unsupported sites, unavailable videos, videos needing a sign-in or an age check, and network errors, with yt-dlp's own error underneath.
+- **Without Deno**: a YouTube preview warns that some formats may be missing.
+- **Download**: shown, but not available until the queue arrives.
+
+## History
+
+- **Kept for good**: every finished download is recorded (once downloads exist), with the video's details, the preset, the file's path, size and format, and the date.
+- **yt-dlp's archive**: `archive.txt` lists every video in yt-dlp's own format (`youtube jNQXAC9IVRw`), kept up to date, so yt-dlp on the command line skips them too with `--download-archive`.
 
 ## Tools
 

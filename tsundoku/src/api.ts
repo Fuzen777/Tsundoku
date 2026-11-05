@@ -11,6 +11,7 @@ import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolUpdateCheck } from "./bindings/ToolUpdateCheck"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
+import type { VideoPreview } from "./bindings/VideoPreview"
 import { standIns } from "./standIns"
 
 /*
@@ -107,6 +108,32 @@ export async function setYtDlpChannel(channel: UpdateChannel): Promise<void> {
 export async function pickProgram(title: string, filterName: string): Promise<string | null> {
   if (!isTauri()) return null
   return open({ title, multiple: false, directory: false, filters: [{ name: filterName, extensions: ["exe"] }] })
+}
+
+/**
+ * What a link is, and whether it was downloaded before. Rejects with a PreviewError. Fetching another preview cancels
+ * this one, which then rejects as cancelled.
+ */
+export function fetchPreview(link: string): Promise<VideoPreview> {
+  if (!isTauri()) return standIns.fetchPreview(link)
+  return invoke<VideoPreview>("fetch_preview", { link })
+}
+
+export async function cancelPreview(): Promise<void> {
+  if (!isTauri()) return
+  await invoke("cancel_preview")
+}
+
+/** Opens a downloaded file in its default app. Rejects with a HistoryError. */
+export async function openDownload(downloadId: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("open_download", { downloadId })
+}
+
+/** Opens File Explorer on a download's folder, with the file selected. Rejects with a HistoryError. */
+export async function showDownloadInFolder(downloadId: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("show_download_in_folder", { downloadId })
 }
 
 export function onToolProgress(handler: (progress: ToolProgress) => void): Promise<UnlistenFn> {

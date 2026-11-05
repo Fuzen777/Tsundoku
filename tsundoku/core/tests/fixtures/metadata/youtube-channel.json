@@ -1,0 +1,12 @@
+{
+  "_type": "playlist",
+  "id": "UC4QobU6STFB0P71PMvOGN5A",
+  "title": "jawed - Videos",
+  "extractor": "youtube:tab",
+  "extractor_key": "YoutubeTab",
+  "webpage_url": "https://www.youtube.com/@jawed/videos",
+  "webpage_url_domain": "youtube.com",
+  "uploader": "jawed",
+  "channel": "jawed",
+  "playlist_count": 1
+}

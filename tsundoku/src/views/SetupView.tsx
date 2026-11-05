@@ -12,7 +12,7 @@ import { ToolStageProgress } from "../components/ToolStageProgress"
 import { formatBytes } from "../format"
 import { useDetectedTools, useFinishSetup, useToolDownloads } from "../queries"
 import { strings } from "../strings"
-import { describeToolError, isCancelled } from "../toolErrors"
+import { describeToolError, isCancelled } from "../errors"
 import { toolOrder } from "../toolInfo"
 import { useToolStage } from "../toolProgress"
 

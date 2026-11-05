@@ -2,6 +2,15 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.0.3 · 2026-11-05
+
+### New
+
+- Paste a link (or drop one on the window) to see the video's thumbnail, title, uploader, site, length, upload date and best quality, with Cancel while it loads.
+- A warning when the video was already downloaded, with when, which preset, and Open File and Show in Folder. It works whatever the link: `youtu.be`, Shorts, a timestamp or a playlist it's in.
+- Playlists, channels, live streams and premieres are refused with a plain message, as are unsupported sites, unavailable videos and videos needing a sign-in, with yt-dlp's error underneath.
+- The history database (`tsundoku.db`) and yt-dlp's download archive (`archive.txt`), kept in sync. Downloads fill them once they arrive.
+
 ## 0.0.2 · 2026-11-05
 
 ### New

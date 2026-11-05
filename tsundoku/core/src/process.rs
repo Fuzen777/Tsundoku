@@ -47,6 +47,10 @@ impl ProgramCommand {
     pub fn program(&self) -> &Path {
         &self.program
     }
+
+    pub fn arguments(&self) -> &[OsString] {
+        &self.args
+    }
 }
 
 /// One line a program wrote. A carriage return also ends a line, so progress drawn in place arrives line by line.

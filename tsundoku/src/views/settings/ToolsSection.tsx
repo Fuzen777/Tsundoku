@@ -21,7 +21,7 @@ import { ToolHeading } from "../../components/ToolHeading"
 import { ToolStageProgress } from "../../components/ToolStageProgress"
 import { useStoreToolStatus, useStoreYtDlpChannel, useToolsOverview } from "../../queries"
 import { strings } from "../../strings"
-import { describeToolError, isCancelled } from "../../toolErrors"
+import { describeToolError, isCancelled } from "../../errors"
 import { useToolStage } from "../../toolProgress"
 
 const CHANNEL_OPTIONS = [
@@ -39,7 +39,7 @@ export function ToolsSection() {
           <ToolCard key={status.id} status={status} channel={overview.data.ytDlpChannel} />
         ))
       ) : overview.isError ? (
-        <StatusMessage tone="danger" message={strings.tools.errors.unexpected} detail={String(overview.error)} />
+        <StatusMessage tone="danger" message={strings.errors.unexpected} detail={String(overview.error)} />
       ) : (
         <p className="text-fg-muted">{strings.settings.loadingTools}</p>
       )}

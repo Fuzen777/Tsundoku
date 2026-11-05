@@ -4,7 +4,7 @@ resolver = "3"
 
 # The version is bumped together with package.json, which tauri.conf.json reads (see AGENTS.md).
 [workspace.package]
-version = "0.0.2"
+version = "0.0.3"
 edition = "2024"
 authors = ["Fuzen777"]
 license = "MIT"

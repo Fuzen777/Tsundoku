@@ -3,12 +3,13 @@
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
+use crate::sync::lock;
 use crate::tools::ToolId;
 
 /// Everything stored in `settings.json`. Missing fields take their defaults and unknown ones are ignored, so a file
@@ -120,12 +121,13 @@ impl SettingsStore {
     }
 
     pub fn get(&self) -> Settings {
-        self.lock().clone()
+        lock(&self.current).clone()
     }
 
     /// Changes the settings and saves them. If saving fails, the settings in memory stay as they were.
     pub fn update<R>(&self, change: impl FnOnce(&mut Settings) -> R) -> Result<R, SettingsError> {
-        let mut current = self.lock();
+        // The settings stay whole even after a panic here: `change` works on a copy.
+        let mut current = lock(&self.current);
         let mut changed = current.clone();
         let result = change(&mut changed);
         let contents =
@@ -136,11 +138,6 @@ impl SettingsStore {
         })?;
         *current = changed;
         Ok(result)
-    }
-
-    fn lock(&self) -> MutexGuard<'_, Settings> {
-        // A panic while holding the lock can't leave the settings half-changed: `update` changes a copy.
-        self.current.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 

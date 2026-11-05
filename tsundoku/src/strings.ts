@@ -9,6 +9,12 @@ export const strings = {
   units: {
     bytes: ["B", "KB", "MB", "GB", "TB"],
   },
+  /** Between the parts of a line of details: "jawed · youtube.com". */
+  separator: " · ",
+  errors: {
+    cancelled: "Cancelled.",
+    unexpected: "Something went wrong.",
+  },
   nav: {
     queue: "Queue",
     history: "History",
@@ -26,6 +32,40 @@ export const strings = {
   history: {
     emptyTitle: "No Downloads Yet",
     emptyBody: "Everything you download is listed here, so you never get the same video twice.",
+    errors: {
+      database: "Couldn't read the history.",
+      newerVersion: "The history was saved by a newer version of Tsundoku. Update Tsundoku to open it.",
+      notFound: "This download isn't in the history anymore.",
+      fileMissing: "The file isn't where it was saved anymore.",
+      archive: "Couldn't update yt-dlp's download archive.",
+      openFailed: "Windows couldn't open it.",
+    },
+  },
+  preview: {
+    fetching: "Fetching the video's details…",
+    cancel: "Cancel",
+    dismiss: "Dismiss",
+    close: "Close",
+    download: "Download",
+    downloadAgain: "Download Again",
+    quality: (height: number) => `${height}p`,
+    audioOnly: "Audio Only",
+    alreadyDownloaded: (date: string, preset: string) => `Already downloaded on ${date} with ${preset}.`,
+    openFile: "Open File",
+    showInFolder: "Show in Folder",
+    missingDeno: "Deno isn't set up, so some YouTube formats may be missing. You can set it up in Settings.",
+    errors: {
+      invalidLink: "That isn't a link to a video. Paste a link that starts with https://.",
+      playlist: "Playlists and channels aren't supported yet. Paste a single video.",
+      liveStream: "This is a live stream, which can't be downloaded yet.",
+      upcoming: "This video hasn't started yet. Try again once it has.",
+      unsupportedSite: "yt-dlp doesn't support this site.",
+      unavailable: "This video isn't available. It may be private, removed or blocked in your country.",
+      signInRequired: "This video needs a signed-in account or an age check.",
+      network: "Couldn't reach the site. Check your connection, then try again.",
+      siteError: "yt-dlp couldn't read this site's page. Updating yt-dlp in Settings often fixes this.",
+      failed: "yt-dlp couldn't read this link.",
+    },
   },
   tools: {
     names: {
@@ -65,10 +105,8 @@ export const strings = {
       wontRun: (name: string) => `${name} won't run.`,
       updateFailed: (name: string) => `${name} couldn't update.`,
       busy: (name: string) => `${name} is already being set up or updated.`,
-      cancelled: "Cancelled.",
       notManaged: (name: string) => `Only Tsundoku's own copy of ${name} can be updated.`,
       storage: "Couldn't write the tool's files.",
-      unexpected: "Something went wrong.",
     },
   },
   setup: {

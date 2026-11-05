@@ -13,7 +13,7 @@ use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -26,6 +26,7 @@ use crate::cancel::CancelToken;
 use crate::data_folder::DataPaths;
 use crate::process::{self, ProgramCommand, RunError};
 use crate::settings::{SettingsError, SettingsStore, ToolSetup, UpdateChannel};
+use crate::sync::lock;
 
 /// The longest a tool may take to print its version. yt-dlp's first start unpacks itself, and an antivirus may scan
 /// it first.
@@ -579,7 +580,8 @@ fn read_version(id: ToolId, executable: &Path) -> Result<String, ToolError> {
     })
 }
 
-fn start_error(error: io::Error, executable: &Path) -> ToolError {
+/// Why a tool couldn't start: its file is gone, something blocked it, or another cause.
+pub(crate) fn start_error(error: io::Error, executable: &Path) -> ToolError {
     let blocked = cfg!(windows)
         && error
             .raw_os_error()
@@ -639,11 +641,6 @@ fn seconds_since_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs())
-}
-
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    // The maps stay consistent even if a thread panicked while holding one: each change is a single insert or remove.
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[cfg(test)]

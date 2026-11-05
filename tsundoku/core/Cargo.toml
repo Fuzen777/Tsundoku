@@ -12,6 +12,7 @@ publish = false
 dirs = "7"
 # Native TLS is Windows' own (SChannel): no crypto library to build, and Windows' certificate store.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "native-tls", "system-proxy"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"

@@ -3,11 +3,13 @@ import { mainNavItems, settingsNavItem, type NavItem, type ViewId } from "../nav
 interface SidebarProps {
   current: ViewId
   onSelect: (view: ViewId) => void
+  /** Its place in the window's grid. */
+  className?: string
 }
 
-export function Sidebar({ current, onSelect }: SidebarProps) {
+export function Sidebar({ current, onSelect, className }: SidebarProps) {
   return (
-    <nav className="flex flex-col gap-1 px-2 pb-3">
+    <nav className={`flex flex-col gap-1 px-2 pb-3 ${className ?? ""}`}>
       {mainNavItems.map((item) => (
         <NavButton key={item.id} item={item} selected={item.id === current} onSelect={onSelect} />
       ))}

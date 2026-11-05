@@ -36,7 +36,7 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 | Text | `--color-fg`, `--color-fg-secondary`, `--color-fg-muted` | Primary text; supporting details; labels, empty states and placeholders |
 | Accent | `--color-accent`, `--color-accent-hover`, `--color-on-accent` | Ai-iro (藍色), Japanese indigo: primary buttons, the selected navigation item, focus rings |
 | Destructive | `--color-danger`, `--color-danger-hover`, `--color-on-danger` | Confirming a destructive action |
-| Attention | `--color-warning` | Warnings that don't block, such as the duplicate warning |
+| Attention | `--color-warning` | Warnings that don't block: the icon of the duplicate warning, and of Deno missing |
 | Success | `--color-success` | Something finished well: the icon of a success message |
 
 ### Rules
@@ -58,6 +58,7 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 5. An empty list shows an `EmptyState`: a 40 px icon, a Title Case title and a one-sentence explanation.
 6. The first-run setup replaces the sidebar and the add bar: the app name, then the raised layer across the whole width, holding a centered column (`max-w-2xl`) with the title, a sentence, one card per tool, and the buttons at the bottom right.
 7. A tool is shown with `ToolHeading`: its icon on a 36 px tile (`--color-input`), its name, and what it does.
+8. The preview card opens between the add bar and the current view when a link is submitted or dropped, and closes with its × (or Cancel, or Dismiss). It's a `Card`: the thumbnail (176 px wide, 16:9, an empty `--color-input` tile when there's none), then the title (two lines at most), uploader and site, and a line of details (length, upload date, best quality), with × at the top right; then its notices as status messages; then Download at the bottom right.
 
 ---
 
@@ -103,8 +104,9 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 ### Status Messages
 
-- `StatusMessage` reports an outcome under the action that caused it: `success` (check icon in `--color-success`), `danger` (alert icon in `--color-danger`) or `neutral` (no icon, secondary text).
-- The message is a sentence in `--color-fg`. A `detail`, for errors, carries the technical cause in 12 px `--color-fg-muted`, selectable for copying.
+- `StatusMessage` reports an outcome or a notice: `success` (check icon in `--color-success`), `warning` (triangle icon in `--color-warning`), `danger` (alert icon in `--color-danger`) or `neutral` (no icon, secondary text).
+- The message is a sentence in `--color-fg`. A `detail` (an error's technical cause, a file's path) follows in 12 px `--color-fg-muted`, selectable for copying. Actions about the message, such as Open File, sit in a row under it, `sm` size.
+- Lists of details join their parts with " · " (`joinDetails`), skipping the ones that are unknown.
 - Errors read as what happened plus what to do ("Couldn't reach GitHub. Check your connection, then try again."). Cancelling is the user's choice and shows nothing.
 
 ---
@@ -113,6 +115,14 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 - **A few options side by side** (an update channel): `SegmentedControl`, the selected option filled with the accent.
 - **Options with a line of explanation each** (a tool's copy at setup): radio rows, the whole row clickable, the label in medium weight and the explanation in 12 px secondary text, truncated with the full text in a tooltip.
+
+---
+
+## Numbers and Dates
+
+- Sizes in 1024-based units with one decimal from KB up ("22.5 MB"), as Windows shows them (`formatBytes`).
+- Lengths as a player shows them ("0:19", "1:02:03") (`formatDuration`).
+- Dates in the reader's own format, medium style ("Apr 24, 2005") (`formatCalendarDate` for a calendar date, `formatDay` for a moment).
 
 ---
 

@@ -1,0 +1,27 @@
+{
+  "_type": "video",
+  "id": "XD300-23_68HighlightsAResearchCntAugHumanIntellect",
+  "title": "1968 Demo - FJCC Conference Presentation Reel #1",
+  "extractor": "archive.org",
+  "extractor_key": "ArchiveOrg",
+  "webpage_url": "https://archive.org/details/XD300-23_68HighlightsAResearchCntAugHumanIntellect",
+  "webpage_url_domain": "archive.org",
+  "uploader": "laura@archive.org",
+  "upload_date": "20100315",
+  "thumbnail": "https://archive.org/download/XD300-23_68HighlightsAResearchCntAugHumanIntellect/XD300-23_68HighlightsAResearchCntAugHumanIntellect.thumbs/XD300-23_68HighlightsAResearchCntAugHumanIntellect_000249.jpg",
+  "height": 304,
+  "formats": [
+    {
+      "format_id": "0",
+      "ext": "mp4",
+      "height": 240,
+      "width": 320
+    },
+    {
+      "format_id": "1",
+      "ext": "ogv",
+      "height": 304,
+      "width": 400
+    }
+  ]
+}
