@@ -23,16 +23,56 @@ pub struct Settings {
     pub downloads: DownloadSettings,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// How downloads run. Settings → Downloads edits it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
+#[ts(export)]
 pub struct DownloadSettings {
     /// How many downloads run at the same time.
     pub at_once: u32,
+    /// yt-dlp's `--limit-rate`, such as "2M", or `None` for no limit.
+    pub rate_limit: Option<String>,
+    /// The browser yt-dlp reads cookies from, for videos that need a signed-in account, or `None`.
+    pub cookies_browser: Option<CookiesBrowser>,
 }
 
 impl Default for DownloadSettings {
     fn default() -> Self {
-        Self { at_once: 2 }
+        Self {
+            at_once: 2,
+            rate_limit: None,
+            cookies_browser: None,
+        }
+    }
+}
+
+/// The browsers yt-dlp can read cookies from on Windows. Chrome, Edge and other Chromium browsers encrypt theirs
+/// with a key only they can use (app-bound encryption), so yt-dlp often can't read them; Firefox works.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum CookiesBrowser {
+    Firefox,
+    Chrome,
+    Edge,
+    Brave,
+    Opera,
+    Vivaldi,
+    Chromium,
+}
+
+impl CookiesBrowser {
+    /// The browser's name for `--cookies-from-browser`.
+    pub fn yt_dlp_name(self) -> &'static str {
+        match self {
+            Self::Firefox => "firefox",
+            Self::Chrome => "chrome",
+            Self::Edge => "edge",
+            Self::Brave => "brave",
+            Self::Opera => "opera",
+            Self::Vivaldi => "vivaldi",
+            Self::Chromium => "chromium",
+        }
     }
 }
 

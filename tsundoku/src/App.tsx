@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { showMainWindow } from "./api"
 import { AddBar } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
 import { PreviewCard } from "./components/PreviewCard"
 import { Sidebar } from "./components/Sidebar"
-import type { ViewId } from "./navigation"
+import { AppActionsContext, type ViewId } from "./navigation"
 import { useQueue, useToolsNeedSetup } from "./queries"
 import { useLinkDrop, usePreview } from "./usePreview"
 import { HistoryView } from "./views/HistoryView"
@@ -28,46 +28,49 @@ export function App() {
     return () => cancelAnimationFrame(frame)
   }, [])
 
-  // A dropped link goes in the add bar and is fetched right away.
-  const showDroppedLink = useCallback(
-    (dropped: string) => {
-      setLink(dropped)
-      void showPreview(dropped)
+  // A dropped link, or Download Again in the history, goes in the add bar and is fetched right away.
+  const showLink = useCallback(
+    (shown: string) => {
+      setLink(shown)
+      void showPreview(shown)
     },
     [showPreview],
   )
-  useLinkDrop(showDroppedLink)
+  useLinkDrop(showLink)
+  const actions = useMemo(() => ({ navigate: setView, showLink }), [showLink])
 
   if (needsSetup) return <SetupView />
 
   return (
-    <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)]">
-      <AppTitle />
-      <div className="flex items-center py-3 pr-4">
-        <AddBar link={link} onLinkChange={setLink} onSubmit={() => void showPreview(link)} />
-      </div>
-      <Sidebar
-        className="col-start-1 row-span-2 row-start-2"
-        current={view}
-        counts={{ queue: unfinished }}
-        onSelect={setView}
-      />
-      {preview.state.stage !== "idle" && (
-        <div className="col-start-2 row-start-2 pr-4 pb-3">
-          <PreviewCard
-            state={preview.state}
-            onClose={preview.close}
-            onAdded={() => {
-              preview.close()
-              setLink("")
-            }}
-          />
+    <AppActionsContext value={actions}>
+      <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)]">
+        <AppTitle />
+        <div className="flex items-center py-3 pr-4">
+          <AddBar link={link} onLinkChange={setLink} onSubmit={() => void showPreview(link)} />
         </div>
-      )}
-      <main className="col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
-        <CurrentView view={view} />
-      </main>
-    </div>
+        <Sidebar
+          className="col-start-1 row-span-2 row-start-2"
+          current={view}
+          counts={{ queue: unfinished }}
+          onSelect={setView}
+        />
+        {preview.state.stage !== "idle" && (
+          <div className="col-start-2 row-start-2 pr-4 pb-3">
+            <PreviewCard
+              state={preview.state}
+              onClose={preview.close}
+              onAdded={() => {
+                preview.close()
+                setLink("")
+              }}
+            />
+          </div>
+        )}
+        <main className="col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
+          <CurrentView view={view} />
+        </main>
+      </div>
+    </AppActionsContext>
   )
 }
 

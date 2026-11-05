@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { describeHistoryError, describePreviewError, describeToolError, isCancelled } from "./errors"
+import { describeHistoryError, describePreviewError, describeToolError, fixFor, isCancelled } from "./errors"
 import { strings } from "./strings"
 
 describe("describeToolError", () => {
@@ -51,5 +51,23 @@ describe("isCancelled", () => {
     expect(isCancelled({ kind: "cancelled" })).toBe(true)
     expect(isCancelled({ kind: "busy" })).toBe(false)
     expect(isCancelled(new Error("cancelled"))).toBe(false)
+  })
+})
+
+describe("fixFor", () => {
+  it("offers updating yt-dlp when a site's page couldn't be read", () => {
+    expect(fixFor({ kind: "siteError", detail: "[youtube] x: Failed to extract" })).toBe("updateYtDlp")
+  })
+
+  it("offers the cookies setting when the video needs a signed-in account, for a download too", () => {
+    expect(fixFor({ kind: "ytDlp", error: { kind: "signInRequired", detail: "Sign in to confirm your age" } })).toBe(
+      "cookies",
+    )
+  })
+
+  it("offers nothing for other failures", () => {
+    expect(fixFor({ kind: "unavailable", detail: "gone" })).toBeNull()
+    expect(fixFor({ kind: "noFile" })).toBeNull()
+    expect(fixFor(new Error("x"))).toBeNull()
   })
 })

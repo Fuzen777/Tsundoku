@@ -46,6 +46,8 @@ rules:
 
 - [ ] **The confirmation dialogs**: closing while downloading, Download Again with the same preset, deleting a preset, leaving a preset with unsaved changes. They're Windows' own dialogs, which the automated checks can't click.
 - [ ] **Cancelling during a merge**: that ffmpeg ends with yt-dlp and leaves no locked file. Ending the whole process tree is tested with cmd and ping, and Cancel while downloading was tried for real.
+- [ ] **Update yt-dlp from a failure**: the button under a "couldn't read this site's page" error. It's the same update as Settings → Tools, but no site failed that way during testing.
+- [ ] **Cookies from Firefox**: a video that needs a signed-in account, previewed and downloaded with Settings → Cookies on Firefox. The arguments reach yt-dlp (seen in a log), but no such video was tried.
 - [ ] **A site other than YouTube** downloading end to end, such as archive.org or SoundCloud, and a video with subtitles and SponsorBlock segments.
 
 ---

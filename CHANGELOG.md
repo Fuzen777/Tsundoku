@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.0.5 · 2026-11-05
+
+### New
+
+- The History view: every download, with search, site and preset filters, sorting on any column, each video's downloads when it has several, Open File, Show in Folder, Open Source Page, Download Again and Forget. Moved or deleted files show as missing.
+- Settings → Downloads: how many downloads run at once, a speed limit and the default preset. Settings → Cookies: a browser for yt-dlp to read cookies from, for videos that need a signed-in account, used by previews and downloads.
+- Failures offer their fix: Update yt-dlp or Try Nightly when a site's page couldn't be read, Set Up Cookies when a video needs a signed-in account.
+
 ## 0.0.4 · 2026-11-05
 
 ### New

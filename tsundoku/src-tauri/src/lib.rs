@@ -150,6 +150,10 @@ pub fn run() {
             history::cancel_preview,
             history::open_download,
             history::show_download_in_folder,
+            history::search_history,
+            history::history_filters,
+            history::video_downloads,
+            history::forget_video,
             downloads::presets_overview,
             downloads::save_preset,
             downloads::duplicate_preset,
@@ -165,6 +169,8 @@ pub fn run() {
             downloads::cancel_download,
             downloads::clear_finished_downloads,
             downloads::open_download_log,
+            downloads::download_options,
+            downloads::save_download_options,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

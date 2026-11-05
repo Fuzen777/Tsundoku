@@ -2,9 +2,15 @@ import { invoke, isTauri } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open } from "@tauri-apps/plugin-dialog"
+import { openUrl } from "@tauri-apps/plugin-opener"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
+import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { HistoryFilters } from "./bindings/HistoryFilters"
+import type { HistoryQuery } from "./bindings/HistoryQuery"
+import type { HistoryVideo } from "./bindings/HistoryVideo"
+import type { PastDownload } from "./bindings/PastDownload"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
@@ -34,6 +40,10 @@ export const queryKeys = {
   presets: ["presets"],
   presetArguments: ["preset-arguments"],
   queue: ["queue"],
+  history: ["history"],
+  historyFilters: ["history-filters"],
+  videoDownloads: ["video-downloads"],
+  downloadOptions: ["download-options"],
 } as const
 
 /** Sent by the core while a tool is installed or updated. */
@@ -279,4 +289,50 @@ export async function onCloseRequested(shouldClose: () => Promise<boolean>): Pro
   return getCurrentWindow().onCloseRequested(async (event) => {
     if (!(await shouldClose())) event.preventDefault()
   })
+}
+
+/** The history matching a search, filters and a sort, each video with its latest download. */
+export function searchHistory(query: HistoryQuery): Promise<HistoryVideo[]> {
+  if (!isTauri()) return Promise.resolve(standIns.searchHistory(query))
+  return invoke<HistoryVideo[]>("search_history", { query })
+}
+
+/** The sites and presets in the history, for its filters. */
+export function getHistoryFilters(): Promise<HistoryFilters> {
+  if (!isTauri()) return Promise.resolve(standIns.historyFilters)
+  return invoke<HistoryFilters>("history_filters")
+}
+
+/** Every download of a video in the history, newest first. */
+export function getVideoDownloads(videoId: number): Promise<PastDownload[]> {
+  if (!isTauri()) return Promise.resolve(standIns.videoDownloads)
+  return invoke<PastDownload[]>("video_downloads", { videoId })
+}
+
+/** Removes a video from the history and yt-dlp's archive, so it can be downloaded again. Its files stay. */
+export async function forgetVideo(videoId: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("forget_video", { videoId })
+}
+
+/** Opens a web page, such as a video's own page, in the default browser. */
+export async function openWebPage(url: string): Promise<void> {
+  if (!isTauri()) {
+    window.open(url, "_blank", "noopener")
+    return
+  }
+  await openUrl(url)
+}
+
+/** How downloads run: how many at once, the speed limit and the cookies browser. */
+export function getDownloadOptions(): Promise<DownloadSettings> {
+  if (!isTauri()) return Promise.resolve(standIns.downloadOptions)
+  return invoke<DownloadSettings>("download_options")
+}
+
+/** Saves how downloads run, and resolves to the options as saved. Rejects with a DownloadError for a speed limit
+ * yt-dlp wouldn't understand. */
+export function saveDownloadOptions(options: DownloadSettings): Promise<DownloadSettings> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<DownloadSettings>("save_download_options", { options })
 }

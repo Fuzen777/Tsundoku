@@ -62,7 +62,9 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 9. The sidebar shows a count beside Queue (downloads not done yet): an accent pill with the number, hidden at zero.
 10. The preview card opens between the add bar and the current view when a link is submitted or dropped, and closes with its × (or Cancel, or Dismiss). It's a `Card`: the thumbnail (176 px wide, 16:9, an empty `--color-input` tile when there's none), then the title (two lines at most), uploader and site, and a line of details (length, upload date, best quality), with × at the top right; then its notices as status messages; then the preset picker and Download at the bottom right.
 11. A queue row is a `Card`: the thumbnail (96 px), then the title, a line of details (preset, stage, size, speed, time left), the progress bar while it runs and its error if it failed; its actions on the right, `sm` size, the main one (Stop, Resume, Retry, Open File) `secondary` and the rest `ghost`.
-12. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right.
+12. The history view is a toolbar (search, the site and preset filters, the sort and its direction), a count, then one `Card` per video: the thumbnail (112 px), the title, "uploader · site · length", "preset · date · size" for the latest download, and a "File Missing" pill when its file is gone; Open File and Show in Folder as icon buttons, then a `Menu` for the rest. A video with several downloads has an accent "N Downloads" toggle that lists them under it, indented to the text. It's a list rather than a table: at the window's minimum width, eight columns leave no room for titles.
+13. Settings is a column of sections: Downloads, Cookies, Tools, About.
+14. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right.
 
 ---
 
@@ -106,11 +108,17 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 - Under the bar, a status text in 12 px `--color-fg-secondary` says what's happening ("Downloading… 12.3 MB of 86.8 MB"), with tabular figures so it doesn't jitter.
 - While an action runs, its buttons give way to Cancel.
 
+### Menus
+
+- `Menu`: a ghost icon button (three dots by default) opening a list of actions under it, right-aligned to the button, on `--color-bg` with a strong line border and a shadow. Escape or a click elsewhere closes it. A destructive item is in the danger color.
+- Icon buttons always have an `aria-label` and the same text as their tooltip.
+
 ### Status Messages
 
 - `StatusMessage` reports an outcome or a notice: `success` (check icon in `--color-success`), `warning` (triangle icon in `--color-warning`), `danger` (alert icon in `--color-danger`) or `neutral` (no icon, secondary text).
 - The message is a sentence in `--color-fg`. A `detail` (an error's technical cause, a file's path) follows in 12 px `--color-fg-muted`, selectable for copying. Actions about the message, such as Open File, sit in a row under it, `sm` size.
 - Lists of details join their parts with " · " (`joinDetails`), skipping the ones that are unknown.
+- A failure that has a fix (`FailureFixes`) shows it as buttons under the message: Update yt-dlp (and Try Nightly) when a site's page couldn't be read, Set Up Cookies when a video needs a signed-in account.
 - Errors read as what happened plus what to do ("Couldn't reach GitHub. Check your connection, then try again."). Cancelling is the user's choice and shows nothing.
 
 ---

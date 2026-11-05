@@ -15,11 +15,12 @@ import type { QueueItem } from "../bindings/QueueItem"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
+import { FailureFixes } from "../components/FailureFixes"
 import { Page } from "../components/Page"
 import { ProgressBar } from "../components/ProgressBar"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
-import { describeDownloadError, describeHistoryError, type ErrorDescription } from "../errors"
+import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
 import { formatBytes, formatDuration, formatSpeed, joinDetails } from "../format"
 import { useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
@@ -87,7 +88,9 @@ function QueueRow({ item }: { item: QueueItem }) {
         </p>
         {item.state === "running" && <ProgressBar value={progress?.fraction ?? undefined} label={stage} />}
         {item.state === "failed" && item.error && (
-          <StatusMessage tone="danger" {...describeDownloadError(item.error)} />
+          <StatusMessage tone="danger" {...describeDownloadError(item.error)}>
+            {fixFor(item.error) && <FailureFixes error={item.error} />}
+          </StatusMessage>
         )}
         {actionError && <StatusMessage tone="danger" {...actionError} />}
       </div>

@@ -403,6 +403,77 @@ fn clearing_removes_only_finished_downloads() {
 }
 
 #[test]
+fn checks_and_saves_the_options() {
+    let test = Test::new();
+    let saved = test
+        .queue
+        .set_options(DownloadSettings {
+            at_once: 9,
+            rate_limit: Some(" 4.2m ".to_owned()),
+            cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
+        })
+        .unwrap();
+    assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
+    assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
+    assert_eq!(test.queue.options(), saved);
+    assert_eq!(
+        test.settings.get().downloads,
+        saved,
+        "saved in settings.json"
+    );
+
+    let blank = DownloadSettings {
+        rate_limit: Some("   ".to_owned()),
+        ..saved.clone()
+    };
+    assert_eq!(test.queue.set_options(blank).unwrap().rate_limit, None);
+}
+
+#[test]
+fn reads_speed_limits_as_yt_dlp_does() {
+    assert_eq!(normalize_rate_limit(None), Ok(None));
+    assert_eq!(
+        normalize_rate_limit(Some("500k")),
+        Ok(Some("500K".to_owned()))
+    );
+    assert_eq!(
+        normalize_rate_limit(Some("1000")),
+        Ok(Some("1000".to_owned()))
+    );
+    assert_eq!(
+        normalize_rate_limit(Some("1.5G")),
+        Ok(Some("1.5G".to_owned()))
+    );
+    for invalid in ["fast", "2 MB", "-1M", "0", "2T", "M"] {
+        assert!(
+            matches!(
+                normalize_rate_limit(Some(invalid)),
+                Err(DownloadError::InvalidRateLimit { .. })
+            ),
+            "{invalid} should be refused"
+        );
+    }
+}
+
+#[test]
+fn raising_downloads_at_once_starts_more_right_away() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let [first, second] = ["a", "b"].map(|id| test.add(id));
+    wait_until("the first runs", || test.runner.started() == [first]);
+    let options = DownloadSettings {
+        at_once: 2,
+        ..test.queue.options()
+    };
+    test.queue.set_options(options).unwrap();
+    wait_until("the second runs", || {
+        test.runner.started() == [first, second]
+    });
+}
+
+#[test]
 fn deletes_only_old_logs() {
     let folder = tempfile::tempdir().unwrap();
     fs::write(folder.path().join("1.log"), b"log").unwrap();

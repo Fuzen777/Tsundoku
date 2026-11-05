@@ -162,7 +162,26 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.wrongState }
     case "storage":
       return { message: text.storage, detail: error.detail }
+    case "invalidRateLimit":
+      return { message: text.invalidRateLimit, detail: error.value }
     case "unexpected":
       return { message: strings.errors.unexpected, detail: error.detail }
+  }
+}
+
+/** What may fix a failed preview or download: updating yt-dlp when a site's page couldn't be read, or reading
+ * browser cookies when the video needs a signed-in account. */
+export type FailureFix = "updateYtDlp" | "cookies"
+
+export function fixFor(error: unknown): FailureFix | null {
+  const failure = isCoreError<DownloadError>(error) && error.kind === "ytDlp" ? error.error : error
+  if (!isCoreError<PreviewError>(failure)) return null
+  switch (failure.kind) {
+    case "siteError":
+      return "updateYtDlp"
+    case "signInRequired":
+      return "cookies"
+    default:
+      return null
   }
 }

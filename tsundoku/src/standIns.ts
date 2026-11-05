@@ -1,5 +1,10 @@
 import type { AppInfo } from "./bindings/AppInfo"
 import type { DetectedTool } from "./bindings/DetectedTool"
+import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { HistoryFilters } from "./bindings/HistoryFilters"
+import type { HistoryQuery } from "./bindings/HistoryQuery"
+import type { HistoryVideo } from "./bindings/HistoryVideo"
+import type { PastDownload } from "./bindings/PastDownload"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
@@ -73,6 +78,39 @@ function queueStandIn(id: number, state: QueueItem["state"], title: string, extr
   }
 }
 
+function historyStandIn(id: number, title: string, preset: string, count: number, fileExists = true): HistoryVideo {
+  return {
+    id,
+    ...previewStandIn.video,
+    videoId: `video${id}`,
+    title,
+    uploader: id % 2 ? "jawed" : "Blender Foundation",
+    durationSeconds: 19 + id * 97,
+    firstDownloadedAt: 1_793_000_000 + id * 86_400,
+    lastDownload: {
+      id,
+      preset,
+      filePath: ["C:", "Users", "You", "Videos", `${title} [video${id}].mkv`].join("\\"),
+      fileSize: 1_000_000 * id * 7,
+      format: "1080p · avc1 + mp4a",
+      downloadedAt: 1_793_000_000 + id * 86_400,
+      fileExists,
+    },
+    downloadCount: count,
+  }
+}
+
+const historyStandIns: HistoryVideo[] = [
+  historyStandIn(3, "Big Buck Bunny 60fps 4K", "1080p MP4", 2),
+  historyStandIn(2, "Me at the zoo", "Best Video", 1),
+  historyStandIn(1, "A Song Saved as MP3", "Audio MP3", 1, false),
+]
+
+const pastDownloadStandIns: PastDownload[] = [
+  historyStandIns[0].lastDownload,
+  { ...historyStandIns[0].lastDownload, id: 9, preset: "Best Audio", format: "opus", downloadedAt: 1_792_800_000 },
+]
+
 /** What api.ts returns when the UI runs in a plain browser, to check layouts without the app. */
 export const standIns = {
   appInfo: { version: "browser", hasMicaBackdrop: false } satisfies AppInfo,
@@ -121,6 +159,15 @@ export const standIns = {
     defaultAudioFolder: String.raw`C:\Users\You\Music`,
   } satisfies PresetsOverview,
   presetArguments: ["-f", "bv*+ba/b", "--merge-output-format", "mkv", "-o", "%(title).150B [%(id)s].%(ext)s"],
+  /** The history, searched by title only. */
+  searchHistory: (query: HistoryQuery): HistoryVideo[] =>
+    historyStandIns.filter((video) => video.title.toLowerCase().includes((query.search ?? "").toLowerCase())),
+  historyFilters: {
+    sites: [{ site: "youtube", siteName: "youtube.com" }],
+    presets: ["1080p MP4", "Audio MP3", "Best Audio", "Best Video"],
+  } satisfies HistoryFilters,
+  videoDownloads: pastDownloadStandIns,
+  downloadOptions: { atOnce: 2, rateLimit: null, cookiesBrowser: null } satisfies DownloadSettings,
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {
       progress: {

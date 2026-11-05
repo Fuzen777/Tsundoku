@@ -3,6 +3,10 @@ import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-quer
 import {
   detectTools,
   getAppInfo,
+  getDownloadOptions,
+  getHistoryFilters,
+  getVideoDownloads,
+  searchHistory,
   getPresetArguments,
   getPresetsOverview,
   getQueueItems,
@@ -11,6 +15,7 @@ import {
   getToolsOverview,
   queryKeys,
 } from "./api"
+import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { ToolStatus } from "./bindings/ToolStatus"
@@ -107,5 +112,31 @@ export function usePresetArguments(preset: Preset) {
 /** The download queue. The core's queue-changed events keep it current (queueEvents.ts). */
 export function useQueue() {
   return useQuery({ queryKey: queryKeys.queue, queryFn: getQueueItems, staleTime: Infinity })
+}
+
+/** The history view's results. Refetched when a download finishes or a video is forgotten (queueEvents.ts). */
+export function useHistory(query: HistoryQuery) {
+  return useQuery({
+    queryKey: [...queryKeys.history, query],
+    queryFn: () => searchHistory(query),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useHistoryFilters() {
+  return useQuery({ queryKey: queryKeys.historyFilters, queryFn: getHistoryFilters })
+}
+
+/** Every download of a video, loaded when its row is expanded. */
+export function useVideoDownloads(videoId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.videoDownloads, videoId],
+    queryFn: () => getVideoDownloads(videoId),
+    enabled,
+  })
+}
+
+export function useDownloadOptions() {
+  return useQuery({ queryKey: queryKeys.downloadOptions, queryFn: getDownloadOptions, staleTime: Infinity })
 }
 

@@ -58,6 +58,7 @@ impl PreviewService {
             yt_dlp: yt_dlp.as_deref(),
             deno: deno.as_deref(),
             ffmpeg: ffmpeg.as_deref(),
+            cookies_browser: queue.options().cookies_browser,
         };
         let fetched = metadata::fetch(&fetch_tools, &link, &cancel);
         {

@@ -13,6 +13,7 @@ use crate::cancel::CancelToken;
 use crate::metadata::{PreviewError, classify_failure};
 use crate::presets::Preset;
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
+use crate::settings::CookiesBrowser;
 use crate::tools::{ToolError, start_error};
 
 /// The most recent lines of yt-dlp's error output kept to explain a failure.
@@ -35,6 +36,9 @@ pub struct JobSpec {
     pub yt_dlp: Option<PathBuf>,
     pub ffmpeg: Option<PathBuf>,
     pub deno: Option<PathBuf>,
+    /// yt-dlp's `--limit-rate`, such as "2M".
+    pub rate_limit: Option<String>,
+    pub cookies_browser: Option<CookiesBrowser>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -179,6 +183,15 @@ pub(crate) fn arguments(
         ]),
         None => args.push("--no-js-runtimes".to_owned()),
     }
+    if let Some(browser) = job.cookies_browser {
+        args.extend([
+            "--cookies-from-browser".to_owned(),
+            browser.yt_dlp_name().to_owned(),
+        ]);
+    }
+    if let Some(rate_limit) = &job.rate_limit {
+        args.extend(["--limit-rate".to_owned(), rate_limit.clone()]);
+    }
     if job.overwrite {
         args.push("--force-overwrites".to_owned());
     }
@@ -286,6 +299,8 @@ mod tests {
             yt_dlp: Some(PathBuf::from("yt-dlp.exe")),
             ffmpeg: Some(PathBuf::from(r"C:\tools\ffmpeg\ffmpeg.exe")),
             deno: None,
+            rate_limit: None,
+            cookies_browser: None,
         }
     }
 
@@ -323,6 +338,28 @@ mod tests {
         assert_eq!(
             &args[args.len() - 2..],
             ["--", "https://www.youtube.com/watch?v=jNQXAC9IVRw"]
+        );
+    }
+
+    #[test]
+    fn adds_the_cookies_browser_and_speed_limit_before_the_preset() {
+        let mut job = job("best-video", false);
+        job.cookies_browser = Some(CookiesBrowser::Firefox);
+        job.rate_limit = Some("2M".to_owned());
+        let args = arguments(&job, Path::new("result.json")).unwrap();
+        let cookies = args
+            .iter()
+            .position(|arg| arg == "--cookies-from-browser")
+            .unwrap();
+        let limit = args.iter().position(|arg| arg == "--limit-rate").unwrap();
+        let preset = args.iter().position(|arg| arg == "-f").unwrap();
+        assert_eq!(
+            (args[cookies + 1].as_str(), args[limit + 1].as_str()),
+            ("firefox", "2M")
+        );
+        assert!(
+            cookies < preset && limit < preset,
+            "so a preset's extra arguments can change them"
         );
     }
 

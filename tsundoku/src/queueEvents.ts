@@ -17,6 +17,10 @@ const progress = createLiveStore<number, DownloadProgress>()
 export function trackQueue(queryClient: QueryClient): void {
   void onQueueChanged((items) => {
     queryClient.setQueryData(queryKeys.queue, items)
+    // A download that finished is in the history now.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.history })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.videoDownloads })
     for (const item of items) {
       if (item.progress) {
         progress.set(item.id, item.progress)

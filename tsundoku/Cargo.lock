@@ -4397,7 +4397,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "tauri",
  "tauri-build",
@@ -4411,7 +4411,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku-core"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "dirs",
  "reqwest",

@@ -3,13 +3,20 @@ import { Loader2, X } from "lucide-react"
 import { addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
 import type { PastDownload } from "../bindings/PastDownload"
 import type { VideoPreview } from "../bindings/VideoPreview"
-import { describeDownloadError, describeHistoryError, describePreviewError, type ErrorDescription } from "../errors"
+import {
+  describeDownloadError,
+  describeHistoryError,
+  describePreviewError,
+  fixFor,
+  type ErrorDescription,
+} from "../errors"
 import { formatCalendarDate, formatDay, formatDuration, joinDetails } from "../format"
 import { usePresets } from "../queries"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
 import { Card } from "./Card"
+import { FailureFixes } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { StatusMessage } from "./StatusMessage"
 import { Thumbnail } from "./Thumbnail"
@@ -41,7 +48,9 @@ export function PreviewCard({ state, onClose, onAdded }: PreviewCardProps) {
       {state.stage === "failed" && (
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <StatusMessage tone="danger" {...describePreviewError(state.error)} />
+            <StatusMessage tone="danger" {...describePreviewError(state.error)}>
+              {fixFor(state.error) && <FailureFixes error={state.error} />}
+            </StatusMessage>
           </div>
           <Button size="sm" variant="ghost" onClick={onClose}>
             {strings.preview.dismiss}

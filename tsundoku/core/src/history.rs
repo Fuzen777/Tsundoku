@@ -92,6 +92,26 @@ pub struct HistoryVideo {
     pub download_count: u32,
 }
 
+/// What the history can be filtered by.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HistoryFilters {
+    /// Every site in the history, by name.
+    pub sites: Vec<HistorySite>,
+    /// Every preset a download was made with, by name.
+    pub presets: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HistorySite {
+    /// What `HistoryQuery::site` takes.
+    pub site: String,
+    pub site_name: String,
+}
+
 /// What the history view asks for.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
@@ -120,6 +140,8 @@ pub enum HistorySort {
     Downloaded,
     /// By the latest download's size.
     Size,
+    /// By the latest download's preset.
+    Preset,
 }
 
 impl HistorySort {
@@ -131,6 +153,7 @@ impl HistorySort {
             Self::Duration => "v.duration_seconds",
             Self::Downloaded => "d.downloaded_at",
             Self::Size => "d.file_size",
+            Self::Preset => "d.preset COLLATE NOCASE",
         }
     }
 }
@@ -295,6 +318,28 @@ impl History {
             })?
             .collect::<Result<_, _>>()?;
         Ok(videos)
+    }
+
+    /// The sites and presets in the history, for the history view's filters.
+    pub fn filters(&self) -> Result<HistoryFilters, HistoryError> {
+        let connection = self.database.lock();
+        let mut sites = connection.prepare(
+            "SELECT site, MIN(site_name) FROM videos GROUP BY site ORDER BY MIN(site_name) COLLATE NOCASE",
+        )?;
+        let sites = sites
+            .query_map([], |row| {
+                Ok(HistorySite {
+                    site: row.get(0)?,
+                    site_name: row.get(1)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        let mut presets = connection
+            .prepare("SELECT DISTINCT preset FROM downloads ORDER BY preset COLLATE NOCASE")?;
+        let presets = presets
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        Ok(HistoryFilters { sites, presets })
     }
 
     /// Where a download's file was saved, if it's still there.
@@ -768,6 +813,67 @@ mod tests {
             ["beta", "gamma", "Alpha"]
         );
         assert_eq!(sorted(HistorySort::Size, false), ["gamma", "beta", "Alpha"]);
+    }
+
+    #[test]
+    fn lists_the_sites_and_presets_to_filter_by() {
+        let test = TestHistory::new();
+        test.history
+            .record(
+                &video("youtube", "1", "A", "x", 1.0),
+                &download("Best Video", 1, 1),
+            )
+            .unwrap();
+        test.history
+            .record(
+                &video("soundcloud", "2", "B", "x", 1.0),
+                &download("audio mp3", 2, 1),
+            )
+            .unwrap();
+        test.history
+            .record(
+                &video("youtube", "3", "C", "x", 1.0),
+                &download("Best Video", 3, 1),
+            )
+            .unwrap();
+
+        let filters = test.history.filters().unwrap();
+        let sites: Vec<_> = filters
+            .sites
+            .iter()
+            .map(|site| (site.site.as_str(), site.site_name.as_str()))
+            .collect();
+        assert_eq!(
+            sites,
+            [("soundcloud", "soundcloud.com"), ("youtube", "youtube.com")]
+        );
+        assert_eq!(
+            filters.presets,
+            ["audio mp3", "Best Video"],
+            "ignoring case"
+        );
+    }
+
+    #[test]
+    fn sorts_by_preset() {
+        let test = TestHistory::new();
+        test.history
+            .record(
+                &video("youtube", "1", "A", "x", 1.0),
+                &download("MP3", 1, 1),
+            )
+            .unwrap();
+        test.history
+            .record(
+                &video("youtube", "2", "B", "x", 1.0),
+                &download("best video", 2, 1),
+            )
+            .unwrap();
+        let query = HistoryQuery {
+            sort: HistorySort::Preset,
+            ..HistoryQuery::default()
+        };
+        assert_eq!(titles(&test.history.search(&query).unwrap()), ["B", "A"]);
     }
 
     #[test]

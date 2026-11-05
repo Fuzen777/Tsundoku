@@ -23,12 +23,14 @@ use crate::database::Database;
 use crate::history::{History, NewDownload};
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::presets::{PresetError, PresetManager};
-use crate::settings::SettingsStore;
+use crate::settings::{DownloadSettings, SettingsStore};
 use crate::sync::lock;
 use crate::tools::{ToolId, ToolManager};
 
 /// Logs older than this are deleted at startup.
 const LOG_LIFETIME: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+/// The most downloads that can run at once.
+pub const MAX_AT_ONCE: u32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -167,6 +169,9 @@ pub enum DownloadError {
     /// The queue or the history couldn't be saved.
     #[error("couldn't save: {detail}")]
     Storage { detail: String },
+    /// A speed limit yt-dlp wouldn't understand.
+    #[error("{value} isn't a speed limit")]
+    InvalidRateLimit { value: String },
     #[error("unexpected error: {detail}")]
     Unexpected { detail: String },
 }
@@ -391,6 +396,31 @@ impl DownloadQueue {
         Ok(())
     }
 
+    /// How downloads run: how many at once, the speed limit and the cookies browser.
+    pub fn options(&self) -> DownloadSettings {
+        self.settings.get().downloads
+    }
+
+    /// Saves how downloads run, and starts more right away if more can run at once. The speed limit is checked and
+    /// written as yt-dlp writes it ("2M"); an empty one means no limit.
+    pub fn set_options(
+        &self,
+        options: DownloadSettings,
+    ) -> Result<DownloadSettings, DownloadError> {
+        let options = DownloadSettings {
+            at_once: options.at_once.clamp(1, MAX_AT_ONCE),
+            rate_limit: normalize_rate_limit(options.rate_limit.as_deref())?,
+            cookies_browser: options.cookies_browser,
+        };
+        self.settings
+            .update(|settings| settings.downloads = options.clone())
+            .map_err(|error| DownloadError::Storage {
+                detail: error.to_string(),
+            })?;
+        self.schedule();
+        Ok(options)
+    }
+
     /// The item's log: yt-dlp's output for each of its runs.
     pub fn log_path(&self, id: i64) -> PathBuf {
         self.logs_folder.join(format!("{id}.log"))
@@ -438,6 +468,7 @@ impl DownloadQueue {
     }
 
     fn job_for(&self, item: &QueueItem) -> JobSpec {
+        let options = self.options();
         JobSpec {
             id: item.id,
             url: item.video.url.clone(),
@@ -449,6 +480,8 @@ impl DownloadQueue {
             yt_dlp: self.tools.executable(ToolId::YtDlp),
             ffmpeg: self.tools.executable(ToolId::Ffmpeg),
             deno: self.tools.executable(ToolId::Deno),
+            rate_limit: options.rate_limit,
+            cookies_browser: options.cookies_browser,
         }
     }
 
@@ -551,6 +584,34 @@ impl DownloadQueue {
     fn notify(&self) {
         let items = self.items();
         self.listener.changed(&items);
+    }
+}
+
+/// A speed limit as yt-dlp's `--limit-rate` takes it: bytes per second, with an optional K, M or G ("500K", "4.2M").
+/// Blank means no limit.
+fn normalize_rate_limit(text: Option<&str>) -> Result<Option<String>, DownloadError> {
+    let text = text.unwrap_or_default().trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let (number, unit) = match text.char_indices().last() {
+        Some((index, unit)) if unit.is_ascii_alphabetic() => {
+            (&text[..index], Some(unit.to_ascii_uppercase()))
+        }
+        _ => (text, None),
+    };
+    let is_number = number.parse::<f64>().is_ok_and(|value| value > 0.0)
+        && number
+            .chars()
+            .all(|character| character.is_ascii_digit() || character == '.');
+    match unit {
+        None | Some('K' | 'M' | 'G') if is_number => Ok(Some(format!(
+            "{number}{}",
+            unit.map(String::from).unwrap_or_default()
+        ))),
+        _ => Err(DownloadError::InvalidRateLimit {
+            value: text.to_owned(),
+        }),
     }
 }
 

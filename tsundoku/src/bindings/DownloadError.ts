@@ -5,4 +5,4 @@ import type { PreviewError } from "./PreviewError";
 /**
  * Why a download, or an action on the queue, failed.
  */
-export type DownloadError = { "kind": "ytDlp", error: PreviewError, } | { "kind": "folder", path: string, detail: string, } | { "kind": "noFile" } | { "kind": "preset", error: PresetError, } | { "kind": "alreadyQueued" } | { "kind": "notFound" } | { "kind": "wrongState" } | { "kind": "storage", detail: string, } | { "kind": "unexpected", detail: string, };
+export type DownloadError = { "kind": "ytDlp", error: PreviewError, } | { "kind": "folder", path: string, detail: string, } | { "kind": "noFile" } | { "kind": "preset", error: PresetError, } | { "kind": "alreadyQueued" } | { "kind": "notFound" } | { "kind": "wrongState" } | { "kind": "storage", detail: string, } | { "kind": "invalidRateLimit", value: string, } | { "kind": "unexpected", detail: string, };

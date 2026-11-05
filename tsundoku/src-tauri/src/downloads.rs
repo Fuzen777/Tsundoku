@@ -10,6 +10,7 @@ use tsundoku_core::downloads::{
 };
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
+use tsundoku_core::settings::DownloadSettings;
 
 /// Sent with every item when the queue changes.
 const QUEUE_CHANGED_EVENT: &str = "queue-changed";
@@ -121,6 +122,20 @@ pub fn cancel_download(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
 #[tauri::command]
 pub fn clear_finished_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
     queue.clear_finished()
+}
+
+/// How downloads run: how many at once, the speed limit and the cookies browser.
+#[tauri::command]
+pub fn download_options(queue: Queue<'_>) -> DownloadSettings {
+    queue.options()
+}
+
+#[tauri::command]
+pub fn save_download_options(
+    queue: Queue<'_>,
+    options: DownloadSettings,
+) -> Result<DownloadSettings, DownloadError> {
+    queue.set_options(options)
 }
 
 /// Opens the download's log in the default text editor.

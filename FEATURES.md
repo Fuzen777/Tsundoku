@@ -51,8 +51,26 @@ type: Features
 
 ## History
 
+- **History view**: every video downloaded, newest first: thumbnail, title, uploader, site, length, and its latest download's preset, date and size.
+- **Search, filters, sorting**: search titles and uploaders word by word; filter by site and by preset; sort by date downloaded, title, uploader, site, length, size or preset, either way.
+- **Several downloads**: a video downloaded more than once (as video, then as audio) expands to list each download, with its format, path, Open File and Show in Folder.
+- **Actions**: Open File and Show in Folder, and in its menu Open Source Page, Download Again (the link goes in the add bar and its preview opens) and Forget.
+- **Forget**: after asking, removes the video from the history and from `archive.txt`, so it can be downloaded again. Its files stay where they are.
+- **File Missing**: a download whose file was moved or deleted says so, and its Open File is off.
 - **Kept for good**: every finished download is recorded, with the video's details, the preset, the file's path, size and format ("1080p · avc1 + mp4a", or "mp3"), and the date. A file yt-dlp found already there is recorded too.
 - **yt-dlp's archive**: `archive.txt` lists every video in yt-dlp's own format (`youtube jNQXAC9IVRw`), kept up to date, so yt-dlp on the command line skips them too with `--download-archive`.
+
+## Settings
+
+- **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
+- **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
+- **Default Preset**: the one the preview card picks, also settable in the presets view.
+- **Cookies**: a browser to read cookies from (Firefox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium), for videos that need a signed-in account or an age check. It applies to previews and downloads. Choosing a Chromium browser warns that Windows' app-bound encryption often stops yt-dlp from reading its cookies; Firefox works.
+
+## Fixes Offered on Failures
+
+- **A site's page couldn't be read**: Update yt-dlp, and Try Nightly when Tsundoku's copy is on Stable, right under the error, on the preview card or the queue row.
+- **The video needs a signed-in account**: Set Up Cookies opens Settings.
 
 ## Tools
 

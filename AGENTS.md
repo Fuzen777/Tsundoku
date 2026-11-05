@@ -25,7 +25,7 @@ title: AGENTS
 
 | Path | Contents |
 | --- | --- |
-| `tsundoku/src` | The React UI: `views/` (with `views/settings/`), `components/`, `strings.ts`, `api.ts`, `queries.ts` (React Query hooks), `standIns.ts` (what `api.ts` returns in a browser), `toolProgress.ts` (live install and update stages), `usePreview.ts` (the preview card's state, and link drops), `queueEvents.ts` (the queue's events, and the close guard), `liveStore.ts` (values that stream, such as progress), `errors.ts` (the core's errors → sentences), `format.ts` (sizes, lengths, dates), `components/styles.ts` (shared class names), `views/presets/` (the preset editor), `bindings/` (generated) |
+| `tsundoku/src` | The React UI: `views/` (with `views/settings/`), `components/`, `strings.ts`, `api.ts`, `queries.ts` (React Query hooks), `standIns.ts` (what `api.ts` returns in a browser), `toolProgress.ts` (live install and update stages), `usePreview.ts` (the preview card's state, and link drops), `queueEvents.ts` (the queue's events, and the close guard), `liveStore.ts` (values that stream, such as progress), `errors.ts` (the core's errors → sentences), `format.ts` (sizes, lengths, dates), `components/styles.ts` (shared class names), `views/presets/` (the preset editor), `views/settings/` (Settings' sections), `navigation.ts` (the views, and `AppActionsContext` for navigating and showing a link from any view), `bindings/` (generated) |
 | `tsundoku/core` | `tsundoku-core`: the UI-free Rust logic and its tests. `process` runs external programs, `tools` finds, installs and updates them, `metadata` asks yt-dlp what a link is, `history` is the SQLite history and `archive.txt`, `preview` combines the last two for the preview card, `presets` the presets and their arguments, `downloads` the queue and its yt-dlp runs, `database` the SQLite database the history and the queue share, `settings` and `data_folder` hold what's stored. `tests/fixtures/metadata` holds real yt-dlp answers |
 | `tsundoku/src-tauri` | The Tauri app: window, plugins, `tools.rs` (the tool commands), `history.rs` (the preview and history commands), `downloads.rs` (the preset and queue commands, and the queue's events), `tauri.conf.json`, `capabilities/` |
 | `DOCUMENTATION/Docs` | How parts of the app work: `Download Pipeline.md` |
@@ -97,6 +97,12 @@ title: AGENTS
 - `archive.txt` is rewritten whole (atomically) after every change and when the history opens, in the order videos were first downloaded.
 - The UI names a download by its ID to open it or show it in its folder, never by a path, so it can only open files the history recorded.
 
+### History View
+
+- The history view is a list of cards, not a table: the window's minimum width (760 px) can't fit eight columns and a readable title. Sorting is a select with a direction button; it covers every column `HistorySort` has.
+- Its results refetch whenever the queue changes (a download finishing adds to the history) and after Forget.
+- Download Again in the history puts the video's link in the add bar and opens its preview (`AppActionsContext.showLink`), so the preset is picked and the duplicate warning shown as for any link.
+
 ### Presets and Downloads
 
 - [Download Pipeline](./DOCUMENTATION/Docs/Download%20Pipeline.md) covers the queue's states, yt-dlp's arguments, the progress lines, temporary folders and logs.
@@ -104,4 +110,5 @@ title: AGENTS
 - Extra arguments are split on spaces with double quotes grouping, backslashes left alone for Windows paths. Options that would break progress, paths, the history or the single-video rule are refused, abbreviations included, since yt-dlp accepts them (`--outp` for `--output`); `--progress` is allowed though it begins `--progress-template`.
 - A queue item stores a copy of its preset and its resolved folder, so editing a preset or the default folder later doesn't change it.
 - `DownloadQueue` owns its items and runs each download on a thread of its own; `QueueListener` passes changes and progress to the app crate, which sends them as events. The runner is a trait (`JobRunner`), so tests swap yt-dlp for `FakeRunner`.
+- `DownloadSettings` (`settings.json` → `downloads`) is also what the UI edits: downloads at once (1–5), the speed limit (checked and written as yt-dlp takes it, such as "900K") and the cookies browser. The cookies browser applies to previews too, since a video that needs a signed-in account can't be previewed without it.
 - The UI asks before closing while downloads run (`onCloseRequested` in `queueEvents.ts`, which needs `core:window:allow-destroy`), and uses Windows' dialogs for confirmations (`dialog:allow-ask`).
