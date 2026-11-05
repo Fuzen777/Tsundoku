@@ -1,5 +1,5 @@
-//! yt-dlp, ffmpeg and Deno: finding copies already on this PC, downloading the official builds into the data
-//! folder's `tools\`, checking that they run, and keeping the app's copies up to date.
+//! yt-dlp, ffmpeg, Deno and gallery-dl: finding copies already on this PC, downloading the official builds into the
+//! data folder's `tools\`, checking that they run, and keeping the app's copies up to date.
 
 mod catalog;
 mod checksum;
@@ -52,10 +52,14 @@ pub enum ToolId {
     YtDlp,
     Ffmpeg,
     Deno,
+    /// Downloads image posts, such as Instagram photos. Optional, like Deno, and not part of the first-run setup.
+    GalleryDl,
 }
 
 impl ToolId {
-    pub const ALL: [Self; 3] = [Self::YtDlp, Self::Ffmpeg, Self::Deno];
+    pub const ALL: [Self; 4] = [Self::YtDlp, Self::Ffmpeg, Self::Deno, Self::GalleryDl];
+    /// The tools the first-run setup offers.
+    pub const SETUP: [Self; 3] = [Self::YtDlp, Self::Ffmpeg, Self::Deno];
 }
 
 /// Why a tool can't be set up, updated or run. The UI turns each into a sentence; `detail` fields carry the
@@ -154,7 +158,7 @@ pub struct ToolStatus {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ToolsOverview {
-    /// yt-dlp, ffmpeg and Deno, in that order.
+    /// yt-dlp, ffmpeg, Deno and gallery-dl, in that order.
     pub tools: Vec<ToolStatus>,
     pub yt_dlp_channel: UpdateChannel,
 }
@@ -270,7 +274,7 @@ impl ToolManager {
     pub fn overview(&self) -> ToolsOverview {
         let tools = self.settings.get().tools;
         ToolsOverview {
-            tools: for_each_tool(|id| match tools.get(id) {
+            tools: for_each_tool(&ToolId::ALL, |id| match tools.get(id) {
                 Some(setup) => {
                     let executable = self.executable_for(id, setup);
                     tool_status(id, setup, &executable, read_version(id, &executable))
@@ -287,11 +291,11 @@ impl ToolManager {
         }
     }
 
-    /// The copies already on this PC that run, for the first-run setup.
+    /// The copies already on this PC that run, for the first-run setup's tools.
     pub fn detect(&self) -> Vec<DetectedTool> {
         let path_variable = env::var_os("PATH");
         let tools_folder = self.paths.tools_folder();
-        for_each_tool(|id| DetectedTool {
+        for_each_tool(&ToolId::SETUP, |id| DetectedTool {
             id,
             found: locate::candidates(id, &tools_folder, path_variable.as_deref())
                 .into_iter()
@@ -306,10 +310,11 @@ impl ToolManager {
         })
     }
 
-    /// The size of each tool's download, asked of GitHub. A size is `None` when GitHub couldn't be asked.
+    /// The size of each of the first-run setup's downloads, asked of GitHub. A size is `None` when GitHub couldn't be
+    /// asked.
     pub fn downloads(&self) -> Vec<ToolDownload> {
         let github = GitHub::new(&self.app_version).ok();
-        for_each_tool(|id| ToolDownload {
+        for_each_tool(&ToolId::SETUP, |id| ToolDownload {
             id,
             size: github
                 .as_ref()
@@ -438,8 +443,8 @@ impl ToolManager {
             })
     }
 
-    /// Asks GitHub whether a newer build than the app's copy exists. For ffmpeg and Deno, whose updates are offered,
-    /// never automatic.
+    /// Asks GitHub whether a newer build than the app's copy exists. For ffmpeg, Deno and gallery-dl, whose updates
+    /// are offered, never automatic.
     pub fn check_for_update(&self, id: ToolId) -> Result<ToolUpdateCheck, ToolError> {
         let Some(ToolSetup::Managed { checksum }) = self.settings.get().tools.get(id).cloned()
         else {
@@ -481,7 +486,7 @@ impl ToolManager {
         {
             return Ok(release.clone());
         }
-        let release = github.latest_release(spec(id).release.repository)?;
+        let release = github.latest_release(&spec(id).release)?;
         lock(&self.releases).insert(id, (Instant::now(), release.clone()));
         Ok(release)
     }
@@ -535,12 +540,15 @@ impl Drop for Operation<'_> {
     }
 }
 
-/// Runs `work` for each tool at once, since each mostly waits on a program or the network, and returns the results
-/// in the tools' order.
-fn for_each_tool<T: Send>(work: impl Fn(ToolId) -> T + Sync) -> Vec<T> {
+/// Runs `work` for each of `ids` at once, since each mostly waits on a program or the network, and returns the
+/// results in the order of `ids`.
+fn for_each_tool<T: Send>(ids: &[ToolId], work: impl Fn(ToolId) -> T + Sync) -> Vec<T> {
     thread::scope(|scope| {
         let work = &work;
-        let handles = ToolId::ALL.map(|id| scope.spawn(move || work(id)));
+        let handles: Vec<_> = ids
+            .iter()
+            .map(|&id| scope.spawn(move || work(id)))
+            .collect();
         handles
             .into_iter()
             .map(|handle| {

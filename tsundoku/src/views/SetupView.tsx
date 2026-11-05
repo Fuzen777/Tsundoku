@@ -13,7 +13,7 @@ import { formatBytes } from "../format"
 import { useDetectedTools, useFinishSetup, useToolDownloads } from "../queries"
 import { strings } from "../strings"
 import { describeToolError, isCancelled } from "../errors"
-import { toolOrder } from "../toolInfo"
+import { setupToolOrder } from "../toolInfo"
 import { useToolStage } from "../toolProgress"
 
 /** For a tool found on this PC: use that copy, or download Tsundoku's own anyway. */
@@ -40,7 +40,7 @@ export function SetupView() {
     return size === undefined || size === null ? null : formatBytes(size)
   }
 
-  const remaining = toolOrder.filter((id) => outcomes[id]?.state !== "ready")
+  const remaining = setupToolOrder.filter((id) => outcomes[id]?.state !== "ready")
   const hasFailures = remaining.some((id) => outcomes[id]?.state === "failed")
   const onlyDenoFailed = hasFailures && remaining.length === 1 && remaining[0] === "deno"
   const primaryLabel = hasFailures
@@ -70,7 +70,7 @@ export function SetupView() {
     setWorking(false)
     const latest = new Map(settled)
     const outcomeOf = (id: ToolId) => (latest.has(id) ? latest.get(id) : outcomes[id])
-    if (toolOrder.every((id) => outcomeOf(id)?.state === "ready")) finishSetup()
+    if (setupToolOrder.every((id) => outcomeOf(id)?.state === "ready")) finishSetup()
   }
 
   function cancel() {
@@ -89,7 +89,7 @@ export function SetupView() {
           {detected.isPending ? (
             <p className="text-fg-muted">{strings.setup.lookingForTools}</p>
           ) : (
-            toolOrder.map((id) => (
+            setupToolOrder.map((id) => (
               <SetupToolCard
                 key={id}
                 id={id}

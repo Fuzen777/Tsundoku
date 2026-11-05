@@ -1,4 +1,4 @@
-//! GitHub releases, where all three tools publish their official builds.
+//! The releases where the tools publish their official builds: on GitHub, and on Codeberg for gallery-dl.
 
 use std::fmt::Write as _;
 use std::fs::File;
@@ -13,6 +13,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use super::ToolError;
+use super::catalog::ReleaseSource;
 use crate::cancel::CancelToken;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -81,8 +82,8 @@ impl GitHub {
         Ok(Self { client })
     }
 
-    pub fn latest_release(&self, repository: &str) -> Result<Release, ToolError> {
-        let url = format!("https://api.github.com/repos/{repository}/releases/latest");
+    pub fn latest_release(&self, source: &ReleaseSource) -> Result<Release, ToolError> {
+        let url = source.host.latest_release_url(source.repository);
         let request = self
             .client
             .get(&url)
@@ -158,7 +159,7 @@ fn checked(response: Response) -> Result<Response, ToolError> {
         return Err(ToolError::RateLimited);
     }
     Err(ToolError::Network {
-        detail: format!("GitHub answered {status} for {}", response.url()),
+        detail: format!("the server answered {status} for {}", response.url()),
     })
 }
 

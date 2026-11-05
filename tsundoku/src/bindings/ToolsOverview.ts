@@ -7,6 +7,6 @@ import type { UpdateChannel } from "./UpdateChannel";
  */
 export type ToolsOverview = { 
 /**
- * yt-dlp, ffmpeg and Deno, in that order.
+ * yt-dlp, ffmpeg, Deno and gallery-dl, in that order.
  */
 tools: Array<ToolStatus>, ytDlpChannel: UpdateChannel, };

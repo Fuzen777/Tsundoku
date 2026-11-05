@@ -82,6 +82,7 @@ pub struct ToolsSettings {
     pub yt_dlp: Option<ToolSetup>,
     pub ffmpeg: Option<ToolSetup>,
     pub deno: Option<ToolSetup>,
+    pub gallery_dl: Option<ToolSetup>,
     pub yt_dlp_channel: UpdateChannel,
     /// When yt-dlp was last checked for updates, in seconds since 1970, so the startup check runs at most once a day.
     pub yt_dlp_last_update_check: Option<u64>,
@@ -93,6 +94,7 @@ impl ToolsSettings {
             ToolId::YtDlp => self.yt_dlp.as_ref(),
             ToolId::Ffmpeg => self.ffmpeg.as_ref(),
             ToolId::Deno => self.deno.as_ref(),
+            ToolId::GalleryDl => self.gallery_dl.as_ref(),
         }
     }
 
@@ -101,6 +103,7 @@ impl ToolsSettings {
             ToolId::YtDlp => self.yt_dlp = setup,
             ToolId::Ffmpeg => self.ffmpeg = setup,
             ToolId::Deno => self.deno = setup,
+            ToolId::GalleryDl => self.gallery_dl = setup,
         }
     }
 }

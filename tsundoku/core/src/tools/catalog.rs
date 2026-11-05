@@ -15,13 +15,33 @@ pub(crate) struct ToolSpec {
     pub release: ReleaseSource,
 }
 
-/// Where the official build is published: a GitHub repository's latest release.
+/// Where the official build is published: a repository's latest release.
 pub(crate) struct ReleaseSource {
+    pub host: ReleaseHost,
     pub repository: &'static str,
     pub asset: &'static str,
     /// The release file listing the asset's SHA-256.
     pub checksums: &'static str,
     pub package: Package,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReleaseHost {
+    GitHub,
+    /// Codeberg, a Forgejo server, whose API describes a release in the same shape as GitHub's.
+    Codeberg,
+}
+
+impl ReleaseHost {
+    /// The API address of `repository`'s latest release.
+    pub fn latest_release_url(self, repository: &str) -> String {
+        match self {
+            Self::GitHub => format!("https://api.github.com/repos/{repository}/releases/latest"),
+            Self::Codeberg => {
+                format!("https://codeberg.org/api/v1/repos/{repository}/releases/latest")
+            }
+        }
+    }
 }
 
 pub(crate) enum Package {
@@ -36,6 +56,7 @@ pub(crate) fn spec(id: ToolId) -> &'static ToolSpec {
         ToolId::YtDlp => &YT_DLP,
         ToolId::Ffmpeg => &FFMPEG,
         ToolId::Deno => &DENO,
+        ToolId::GalleryDl => &GALLERY_DL,
     }
 }
 
@@ -50,6 +71,7 @@ static YT_DLP: ToolSpec = ToolSpec {
     // --ignore-config, so a broken yt-dlp config file can't stop it from answering.
     version_args: &["--ignore-config", "--version"],
     release: ReleaseSource {
+        host: ReleaseHost::GitHub,
         repository: "yt-dlp/yt-dlp",
         asset: "yt-dlp.exe",
         checksums: "SHA2-256SUMS",
@@ -64,6 +86,7 @@ static FFMPEG: ToolSpec = ToolSpec {
     folder: "ffmpeg",
     version_args: &["-version"],
     release: ReleaseSource {
+        host: ReleaseHost::GitHub,
         repository: "yt-dlp/FFmpeg-Builds",
         asset: "ffmpeg-master-latest-win64-gpl-shared.zip",
         checksums: "checksums.sha256",
@@ -78,12 +101,29 @@ static DENO: ToolSpec = ToolSpec {
     folder: "deno",
     version_args: &["--version"],
     release: ReleaseSource {
+        host: ReleaseHost::GitHub,
         repository: "denoland/deno",
         asset: "deno-x86_64-pc-windows-msvc.zip",
         checksums: "deno-x86_64-pc-windows-msvc.zip.sha256sum",
         package: Package::Zip {
             keep: keep_deno_file,
         },
+    },
+};
+
+/// gallery-dl's standalone Windows build, a single program like yt-dlp's. Its development moved to Codeberg in 2026:
+/// the GitHub repository's releases since 1.32 have no files.
+static GALLERY_DL: ToolSpec = ToolSpec {
+    command: "gallery-dl",
+    folder: "gallery-dl",
+    // --config-ignore, so a broken gallery-dl config file can't stop it from answering.
+    version_args: &["--config-ignore", "--version"],
+    release: ReleaseSource {
+        host: ReleaseHost::Codeberg,
+        repository: "mikf/gallery-dl",
+        asset: "gallery-dl.exe",
+        checksums: "SHA256SUMS",
+        package: Package::Program,
     },
 };
 
@@ -118,6 +158,21 @@ mod tests {
         assert!(!keep(
             "ffmpeg-master-latest-win64-gpl-shared/include/libavcodec/avcodec.h"
         ));
+    }
+
+    #[test]
+    fn asks_each_host_for_the_latest_release() {
+        assert_eq!(
+            ReleaseHost::GitHub.latest_release_url("yt-dlp/yt-dlp"),
+            "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest"
+        );
+        assert_eq!(
+            spec(ToolId::GalleryDl)
+                .release
+                .host
+                .latest_release_url(spec(ToolId::GalleryDl).release.repository),
+            "https://codeberg.org/api/v1/repos/mikf/gallery-dl/releases/latest"
+        );
     }
 
     #[test]

@@ -248,17 +248,19 @@ export const strings = {
       ytDlp: "yt-dlp",
       ffmpeg: "ffmpeg",
       deno: "Deno",
+      galleryDl: "gallery-dl",
     },
     descriptions: {
       ytDlp: "Downloads the videos.",
       ffmpeg: "Merges video and audio, and converts formats. Comes with ffprobe.",
       deno: "Runs YouTube's player code for yt-dlp. Without it, some YouTube formats may be missing.",
+      galleryDl: "Downloads image posts, such as Instagram photos and carousels. Optional.",
     },
     managed: "Tsundoku's Copy",
     external: "Your Copy",
     notSetUp: "Not set up.",
     stages: {
-      connecting: "Connecting to GitHub…",
+      connecting: "Looking for the latest release…",
       downloading: (received: string, total: string | null) =>
         total === null ? `Downloading… ${received}` : `Downloading… ${received} of ${total}`,
       verifying: "Checking the download…",
@@ -267,7 +269,7 @@ export const strings = {
       updating: "Updating…",
     },
     errors: {
-      network: "Couldn't reach GitHub. Check your connection, then try again.",
+      network: "Couldn't reach the download site. Check your connection, then try again.",
       rateLimited: "GitHub is limiting requests from this network. Try again in an hour.",
       missingFromRelease: (file: string) => `The latest release is missing ${file}. Try again later.`,
       checksumMissing: (file: string) =>

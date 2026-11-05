@@ -25,7 +25,7 @@ pub(crate) fn install_release(
     let tool = spec(id);
     let asset = release.asset(tool.release.asset)?;
     let expected = release_checksum(id, release, github)?;
-    // One working folder per tool, since the first-run setup installs all three at once.
+    // One working folder per tool, since the first-run setup installs several at once.
     let download_folder = tools_folder.join(format!(".download-{}", tool.folder));
     let new_folder = tools_folder.join(format!(".new-{}", tool.folder));
 

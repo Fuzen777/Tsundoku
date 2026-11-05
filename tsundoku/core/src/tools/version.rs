@@ -17,6 +17,16 @@ pub(crate) fn parse(id: ToolId, first_line: &str) -> Option<String> {
         ToolId::Ffmpeg => first_word_after(line, "ffmpeg version "),
         // "deno 2.9.8 (stable, release, x86_64-pc-windows-msvc)"
         ToolId::Deno => first_word_after(line, "deno "),
+        // "1.32.19", or "1.32.20-dev" for a dev build.
+        ToolId::GalleryDl => line
+            .starts_with(|character: char| character.is_ascii_digit())
+            .then_some(line)
+            .filter(|version| {
+                version.contains('.')
+                    && version
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'))
+            }),
     };
     version.map(str::to_owned)
 }
@@ -72,5 +82,22 @@ mod tests {
             Some("2.9.8")
         );
         assert_eq!(parse(ToolId::Deno, "v8 15.0.245.2-rusty"), None);
+    }
+
+    #[test]
+    fn reads_gallery_dl_versions() {
+        assert_eq!(
+            parse(ToolId::GalleryDl, "1.32.19\r").as_deref(),
+            Some("1.32.19")
+        );
+        assert_eq!(
+            parse(ToolId::GalleryDl, "1.32.20-dev").as_deref(),
+            Some("1.32.20-dev")
+        );
+        assert_eq!(
+            parse(ToolId::GalleryDl, "Usage: gallery-dl [OPTIONS] URL"),
+            None
+        );
+        assert_eq!(parse(ToolId::GalleryDl, "2.9.8 (stable, release)"), None);
     }
 }

@@ -74,6 +74,11 @@ rules:
 - **Live streams and premieres.** Record live streams (`--live-from-start`) and wait for upcoming premieres (`--wait-for-video`) instead of refusing them.
 - **Clips and chapters in the UI.** Download a time range (`--download-sections`) or split by chapter (`--split-chapters`) from the preview card rather than through extra arguments.
 
+### Images
+
+- **Image posts through gallery-dl.** Add gallery-dl as a fourth tool and send image-first sites (Instagram, X, Pixiv…) to it by domain, the rest to yt-dlp, so Instagram photo posts and carousels can be downloaded. One post per link first, profiles later; a download becomes a folder and its file list. See the [feasibility review](https://claude.ai/artifact/CaFPJUSLnVixQCc3WccNm5).
+- **Duplicate images by hash.** Store each downloaded image's SHA-256 to catch identical files, and a perceptual hash (`image_hasher`) to catch reposts, resizes and re-compressed copies, as Hitomi Downloader's duplicate finder does. A later addition: a hash exists only once the file is downloaded, so it can flag or discard a duplicate but not prevent the download, which stays the post ID check's job. Needs image posts above.
+
 ### Distribution
 
 - **macOS and Linux builds.** Per-OS tool downloads and installers, and testing on both.

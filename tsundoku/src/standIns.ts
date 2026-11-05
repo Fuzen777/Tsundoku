@@ -131,6 +131,7 @@ export const standIns = {
         problem: null,
       },
       { id: "deno", setup: null, path: null, version: null, problem: null },
+      { id: "galleryDl", setup: null, path: null, version: null, problem: null },
     ],
     ytDlpChannel: "stable",
   } satisfies ToolsOverview,
