@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.0.4 · 2026-11-05
+
+### New
+
+- Downloads: pick a preset on the preview card and Download. The queue runs two at a time, with each one's stage, size, speed and time left, and Stop, Resume, Cancel, Retry, Open File, Show in Folder and Open Log. It comes back after a restart, and closing while downloading asks first.
+- Presets: Best Video, 1080p MP4, Best Audio and Audio MP3 to start with, and an editor for the quality, container or audio format, file name, folder, embedding, SponsorBlock and extra yt-dlp arguments, showing the arguments it gives.
+- Every finished download is recorded in the history and in `archive.txt`, so the duplicate warning now works on its own. Download Again with the same preset asks before replacing the file.
+
 ## 0.0.3 · 2026-11-05
 
 ### New

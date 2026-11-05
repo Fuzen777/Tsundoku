@@ -25,11 +25,33 @@ type: Features
 - **Already downloaded**: when the history has the video, the card says when and with which preset, shows the file's path with Open File and Show in Folder, and Download becomes Download Again. If the file was moved or deleted, it says so. The check uses the site and the video's ID, so every link to a video is caught: `youtu.be`, Shorts, a timestamp, a playlist it's in.
 - **Refused links**: playlists and channels, live streams, and premieres that haven't started each get a plain message. So do unsupported sites, unavailable videos, videos needing a sign-in or an age check, and network errors, with yt-dlp's own error underneath.
 - **Without Deno**: a YouTube preview warns that some formats may be missing.
-- **Download**: shown, but not available until the queue arrives.
+- **Download**: pick a preset (the default is preselected) and Download: the video joins the queue, and the card and the add bar clear. With a video already downloaded, it's Download Again; with the same preset as before, it asks first, since the new file replaces the old one.
+- **Already in the queue**: the card says so, without Download.
+
+## Queue
+
+- **Two at a time**: downloads start in the order they were added, two at once.
+- **Each row**: thumbnail, title, preset, what it's doing (Downloading Video, Downloading Audio, Merging, Converting, Embedding…), size, speed and time left, with a progress bar.
+- **Stop and Resume**: Stop ends the download and keeps what it got; Resume continues from there. Stopping one that's waiting holds it.
+- **Cancel**: removes the download and its partial files.
+- **Failed downloads**: the reason, in plain words with yt-dlp's error under it, and Retry, which continues where it failed.
+- **Finished downloads**: Open File, Show in Folder and Open Log, until Clear Finished. They stay in the history.
+- **Logs**: each download keeps yt-dlp's full output, kept for 30 days.
+- **After a restart**: the queue comes back; downloads that were running come back stopped, and waiting ones start.
+- **Closing while downloading**: asks first. Downloads continue where they stopped next time.
+- **Sidebar count**: the number of downloads not done yet, beside Queue.
+
+## Presets
+
+- **Four to start with**: Best Video (best quality, in MKV, the default), 1080p MP4 (up to 1080p, H.264 and AAC for older devices), Best Audio (the audio as it is) and Audio MP3.
+- **Editor**: name; video or audio; for video, the quality limit and the container (MKV, MP4 or as merged); for audio, the format (as it is, MP3, M4A, Opus or FLAC); the file name; the folder (Videos or Music by default); what to embed (metadata, thumbnail, chapters, subtitles with their languages); SponsorBlock (off, mark as chapters, remove sponsors); and extra yt-dlp arguments.
+- **Arguments shown**: the editor shows the yt-dlp arguments the preset gives, as they change. Extra arguments that would break downloads (such as `--yes-playlist` or `-o`) are refused, with the reason.
+- **Set as Default, Duplicate, Delete**, and **Reset** for the four built-ins, which can be edited but not deleted.
+- **Kept per download**: a download keeps the preset as it was when it was added, so editing a preset doesn't change downloads already in the queue.
 
 ## History
 
-- **Kept for good**: every finished download is recorded (once downloads exist), with the video's details, the preset, the file's path, size and format, and the date.
+- **Kept for good**: every finished download is recorded, with the video's details, the preset, the file's path, size and format ("1080p · avc1 + mp4a", or "mp3"), and the date. A file yt-dlp found already there is recorded too.
 - **yt-dlp's archive**: `archive.txt` lists every video in yt-dlp's own format (`youtube jNQXAC9IVRw`), kept up to date, so yt-dlp on the command line skips them too with `--download-archive`.
 
 ## Tools

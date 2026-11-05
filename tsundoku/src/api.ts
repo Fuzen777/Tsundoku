@@ -1,9 +1,13 @@
 import { invoke, isTauri } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { open } from "@tauri-apps/plugin-dialog"
+import { ask, open } from "@tauri-apps/plugin-dialog"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { DetectedTool } from "./bindings/DetectedTool"
+import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
+import type { Preset } from "./bindings/Preset"
+import type { PresetsOverview } from "./bindings/PresetsOverview"
+import type { QueueItem } from "./bindings/QueueItem"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolId } from "./bindings/ToolId"
 import type { ToolProgress } from "./bindings/ToolProgress"
@@ -11,6 +15,7 @@ import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolUpdateCheck } from "./bindings/ToolUpdateCheck"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
+import type { VideoInfo } from "./bindings/VideoInfo"
 import type { VideoPreview } from "./bindings/VideoPreview"
 import { standIns } from "./standIns"
 
@@ -26,12 +31,19 @@ export const queryKeys = {
   toolsOverview: ["tools-overview"],
   detectedTools: ["detected-tools"],
   toolDownloads: ["tool-downloads"],
+  presets: ["presets"],
+  presetArguments: ["preset-arguments"],
+  queue: ["queue"],
 } as const
 
 /** Sent by the core while a tool is installed or updated. */
 const TOOL_PROGRESS_EVENT = "tool-progress"
 /** Sent by the core when a tool changed on its own, such as yt-dlp's daily update. */
 const TOOLS_CHANGED_EVENT = "tools-changed"
+/** Sent by the core with every queue item when the queue changes. */
+const QUEUE_CHANGED_EVENT = "queue-changed"
+/** Sent by the core while a download runs. */
+const DOWNLOAD_PROGRESS_EVENT = "download-progress"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -144,4 +156,127 @@ export function onToolProgress(handler: (progress: ToolProgress) => void): Promi
 export function onToolsChanged(handler: () => void): Promise<UnlistenFn> {
   if (!isTauri()) return Promise.resolve(() => {})
   return listen(TOOLS_CHANGED_EVENT, () => handler())
+}
+
+/** The presets, the default and the default folders. */
+export function getPresetsOverview(): Promise<PresetsOverview> {
+  if (!isTauri()) return Promise.resolve(standIns.presetsOverview)
+  return invoke<PresetsOverview>("presets_overview")
+}
+
+/** Saves a preset, replacing the one with its ID. Rejects with a PresetError. */
+export function savePreset(preset: Preset): Promise<PresetsOverview> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<PresetsOverview>("save_preset", { preset })
+}
+
+/** Adds a copy of a preset after it, under `name`, and resolves to the copy. */
+export function duplicatePreset(id: string, name: string): Promise<Preset> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<Preset>("duplicate_preset", { id, name })
+}
+
+export function deletePreset(id: string): Promise<PresetsOverview> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<PresetsOverview>("delete_preset", { id })
+}
+
+/** Puts a built-in preset back as it ships. */
+export function resetPreset(id: string): Promise<PresetsOverview> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<PresetsOverview>("reset_preset", { id })
+}
+
+export function setDefaultPreset(id: string): Promise<PresetsOverview> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<PresetsOverview>("set_default_preset", { id })
+}
+
+/** The yt-dlp arguments a preset gives. Rejects with a PresetError when its extra arguments can't be used. */
+export function getPresetArguments(preset: Preset): Promise<string[]> {
+  if (!isTauri()) return Promise.resolve(standIns.presetArguments)
+  return invoke<string[]>("preset_arguments", { preset })
+}
+
+export function getQueueItems(): Promise<QueueItem[]> {
+  if (!isTauri()) return Promise.resolve(standIns.queueItems)
+  return invoke<QueueItem[]>("queue_items")
+}
+
+/** Adds a video to the download queue. Rejects with a DownloadError. */
+export function addToQueue(video: VideoInfo, presetId: string, overwrite: boolean): Promise<QueueItem> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite })
+}
+
+/** Stops a running download, keeping its partial files, or holds a waiting one. */
+export async function stopDownload(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("stop_download", { id })
+}
+
+export async function resumeDownload(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("resume_download", { id })
+}
+
+export async function retryDownload(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("retry_download", { id })
+}
+
+/** Removes a download that isn't done, with its partial files. */
+export async function cancelDownload(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("cancel_download", { id })
+}
+
+export async function clearFinishedDownloads(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("clear_finished_downloads")
+}
+
+/** Opens a download's log in the default text editor. Rejects with a DownloadError. */
+export async function openDownloadLog(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("open_download_log", { id })
+}
+
+export function onQueueChanged(handler: (items: QueueItem[]) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<QueueItem[]>(QUEUE_CHANGED_EVENT, (event) => handler(event.payload))
+}
+
+export function onDownloadProgress(handler: (event: DownloadProgressEvent) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<DownloadProgressEvent>(DOWNLOAD_PROGRESS_EVENT, (event) => handler(event.payload))
+}
+
+/** Asks for a folder. Resolves to its path, or null if the user cancelled. */
+export async function pickFolder(title: string): Promise<string | null> {
+  if (!isTauri()) return null
+  return open({ title, directory: true, multiple: false })
+}
+
+interface Confirmation {
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel: string
+}
+
+/** Asks the user to confirm something with Windows' own dialog. In a browser, the page's. */
+export async function confirmWithUser({ title, message, confirmLabel, cancelLabel }: Confirmation): Promise<boolean> {
+  if (!isTauri()) return window.confirm(`${title}
+
+${message}`)
+  return ask(message, { title, kind: "warning", okLabel: confirmLabel, cancelLabel })
+}
+
+/** Lets the UI keep the window open, such as while downloads run: `shouldClose` resolving to false cancels closing. */
+export async function onCloseRequested(shouldClose: () => Promise<boolean>): Promise<UnlistenFn> {
+  if (!isTauri()) return () => {}
+  return getCurrentWindow().onCloseRequested(async (event) => {
+    if (!(await shouldClose())) event.preventDefault()
+  })
 }

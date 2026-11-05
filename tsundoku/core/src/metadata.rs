@@ -41,7 +41,7 @@ pub struct VideoInfo {
 }
 
 /// Why a link can't be previewed or downloaded. The UI turns each into a sentence; `detail` is yt-dlp's own error.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum PreviewError {

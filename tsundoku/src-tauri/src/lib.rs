@@ -1,5 +1,6 @@
 //! The Tauri app: the window, the plugins, and the commands that expose `tsundoku_core` to the UI.
 
+mod downloads;
 mod history;
 mod tools;
 
@@ -13,7 +14,10 @@ use tauri::{App, AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_window_state::StateFlags;
 use tsundoku_core::app_info::AppInfo;
 use tsundoku_core::data_folder::{self, BuildKind, DataPaths};
+use tsundoku_core::database::Database;
+use tsundoku_core::downloads::{DownloadQueue, QueueServices, YtDlpRunner};
 use tsundoku_core::history::History;
+use tsundoku_core::presets::PresetManager;
 use tsundoku_core::preview::PreviewService;
 use tsundoku_core::settings::SettingsStore;
 use tsundoku_core::tools::ToolManager;
@@ -56,14 +60,10 @@ fn show_main_window_if_still_hidden(window: WebviewWindow) {
     });
 }
 
-/// What lives in the data folder: the settings with the tools they set up, and the history. Development builds keep
-/// their own data folder (AGENTS.md → Data and Testing).
-struct AppData {
-    tools: ToolManager,
-    history: History,
-}
-
-fn open_data(app: &App) -> Result<AppData, Box<dyn Error>> {
+/// Opens what lives in the data folder (the settings, the tools they set up, the history and the download queue) and
+/// gives each to Tauri's state for the commands. Development builds keep their own data folder (AGENTS.md → Data and
+/// Testing).
+fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let build = if cfg!(debug_assertions) {
         BuildKind::Development
     } else {
@@ -72,10 +72,36 @@ fn open_data(app: &App) -> Result<AppData, Box<dyn Error>> {
     let root = data_folder::resolve(build).ok_or("Windows has no local app data folder")?;
     let paths = DataPaths::new(root);
     fs::create_dir_all(paths.root())?;
+
     let settings = Arc::new(SettingsStore::open(paths.settings_file())?);
-    let history = History::open(&paths.database_file(), paths.archive_file())?;
-    let tools = ToolManager::new(paths, settings, app.package_info().version.to_string());
-    Ok(AppData { tools, history })
+    let database = Arc::new(Database::open(&paths.database_file())?);
+    let history = Arc::new(History::new(Arc::clone(&database), paths.archive_file())?);
+    let presets = Arc::new(PresetManager::new(Arc::clone(&settings)));
+    let logs_folder = paths.logs_folder();
+    let tools = Arc::new(ToolManager::new(
+        paths,
+        Arc::clone(&settings),
+        app.package_info().version.to_string(),
+    ));
+    let queue = DownloadQueue::open(QueueServices {
+        database,
+        history: Arc::clone(&history),
+        tools: Arc::clone(&tools),
+        presets: Arc::clone(&presets),
+        settings,
+        logs_folder,
+        runner: Arc::new(YtDlpRunner),
+        listener: Arc::new(downloads::EventListener {
+            app: app.handle().clone(),
+        }),
+    })?;
+
+    app.manage(Arc::clone(&tools));
+    app.manage(history);
+    app.manage(presets);
+    app.manage(queue);
+    app.manage(Arc::new(PreviewService::new()));
+    Ok(tools)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -102,11 +128,7 @@ pub fn run() {
             let has_mica = window_vibrancy::apply_mica(&window, None).is_ok();
             app.manage(Backdrop { has_mica });
 
-            let data = open_data(app)?;
-            let tool_manager = Arc::new(data.tools);
-            app.manage(Arc::clone(&tool_manager));
-            app.manage(Arc::new(data.history));
-            app.manage(Arc::new(PreviewService::new()));
+            let tool_manager = open_data(app)?;
             tools::start_daily_yt_dlp_update(app.handle().clone(), tool_manager);
 
             show_main_window_if_still_hidden(window);
@@ -128,6 +150,21 @@ pub fn run() {
             history::cancel_preview,
             history::open_download,
             history::show_download_in_folder,
+            downloads::presets_overview,
+            downloads::save_preset,
+            downloads::duplicate_preset,
+            downloads::delete_preset,
+            downloads::reset_preset,
+            downloads::set_default_preset,
+            downloads::preset_arguments,
+            downloads::queue_items,
+            downloads::add_to_queue,
+            downloads::stop_download,
+            downloads::resume_download,
+            downloads::retry_download,
+            downloads::cancel_download,
+            downloads::clear_finished_downloads,
+            downloads::open_download_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
+use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{History, HistoryError};
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::preview::{PreviewService, VideoPreview};
@@ -14,15 +15,17 @@ pub async fn fetch_preview(
     tools: State<'_, Arc<ToolManager>>,
     history: State<'_, Arc<History>>,
     previews: State<'_, Arc<PreviewService>>,
+    queue: State<'_, Arc<DownloadQueue>>,
     link: String,
 ) -> Result<VideoPreview, PreviewError> {
-    let (tools, history, previews) = (
+    let (tools, history, previews, queue) = (
         Arc::clone(&tools),
         Arc::clone(&history),
         Arc::clone(&previews),
+        Arc::clone(&queue),
     );
     // yt-dlp takes seconds to answer: off the async runtime's threads, which must never block.
-    tauri::async_runtime::spawn_blocking(move || previews.fetch(&tools, &history, &link))
+    tauri::async_runtime::spawn_blocking(move || previews.fetch(&tools, &history, &queue, &link))
         .await
         .unwrap_or_else(|error| {
             Err(PreviewError::Failed {

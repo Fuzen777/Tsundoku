@@ -1,5 +1,6 @@
 import { strings } from "../strings"
 import { Button } from "./Button"
+import { TextInput } from "./Field"
 
 interface AddBarProps {
   link: string
@@ -19,15 +20,12 @@ export function AddBar({ link, onLinkChange, onSubmit }: AddBarProps) {
         if (hasLink) onSubmit()
       }}
     >
-      <input
-        type="text"
+      <TextInput
         name="link"
         value={link}
         onChange={(event) => onLinkChange(event.target.value)}
         placeholder={strings.addBar.placeholder}
-        spellCheck={false}
-        autoComplete="off"
-        className="h-8 min-w-0 flex-1 rounded-md border border-line bg-input px-3 text-sm outline-none transition-colors placeholder:text-fg-muted hover:bg-input-hover focus:border-accent"
+        className="flex-1"
       />
       <Button type="submit" variant="primary" disabled={!hasLink}>
         {strings.addBar.add}

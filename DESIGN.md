@@ -58,7 +58,11 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 5. An empty list shows an `EmptyState`: a 40 px icon, a Title Case title and a one-sentence explanation.
 6. The first-run setup replaces the sidebar and the add bar: the app name, then the raised layer across the whole width, holding a centered column (`max-w-2xl`) with the title, a sentence, one card per tool, and the buttons at the bottom right.
 7. A tool is shown with `ToolHeading`: its icon on a 36 px tile (`--color-input`), its name, and what it does.
-8. The preview card opens between the add bar and the current view when a link is submitted or dropped, and closes with its × (or Cancel, or Dismiss). It's a `Card`: the thumbnail (176 px wide, 16:9, an empty `--color-input` tile when there's none), then the title (two lines at most), uploader and site, and a line of details (length, upload date, best quality), with × at the top right; then its notices as status messages; then Download at the bottom right.
+8. A view's page-wide buttons (such as Clear Finished) sit on its title's right, `sm` size.
+9. The sidebar shows a count beside Queue (downloads not done yet): an accent pill with the number, hidden at zero.
+10. The preview card opens between the add bar and the current view when a link is submitted or dropped, and closes with its × (or Cancel, or Dismiss). It's a `Card`: the thumbnail (176 px wide, 16:9, an empty `--color-input` tile when there's none), then the title (two lines at most), uploader and site, and a line of details (length, upload date, best quality), with × at the top right; then its notices as status messages; then the preset picker and Download at the bottom right.
+11. A queue row is a `Card`: the thumbnail (96 px), then the title, a line of details (preset, stage, size, speed, time left), the progress bar while it runs and its error if it failed; its actions on the right, `sm` size, the main one (Stop, Resume, Retry, Open File) `secondary` and the rest `ghost`.
+12. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right.
 
 ---
 
@@ -111,9 +115,20 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 ---
 
+## Forms
+
+- Each field is a `Field`: a medium-weight label, the control, then a hint in 12 px muted text, or its error in the danger color instead.
+- Text fields and selects share one look (`INPUT_CLASSES` in `components/styles.ts`): 32 px tall, `--color-input`, a line border, the accent border when focused. Selects are native, so their list follows Windows' theme.
+- Code-like values (file name templates, yt-dlp arguments, languages) use the monospace font, Cascadia Mono.
+- Edits that take effect at once (a toggle in Settings) save right away; an editor with many fields (a preset) keeps a draft until Save, with Discard beside it, and asks before leaving unsaved changes.
+- Confirmations (overwriting a file, deleting a preset, closing while downloading) use Windows' own dialog (`confirmWithUser`), with the action as its button label.
+
+---
+
 ## Choices
 
 - **A few options side by side** (an update channel): `SegmentedControl`, the selected option filled with the accent.
+- **A longer list** (a video quality, the preset to download with): a native select.
 - **Options with a line of explanation each** (a tool's copy at setup): radio rows, the whole row clickable, the label in medium weight and the explanation in 12 px secondary text, truncated with the full text in a tooltip.
 
 ---

@@ -1,49 +1,18 @@
-//! The history of every download: `tsundoku.db` (SQLite) is its source of truth, and yt-dlp's `archive.txt` is
+//! The history of every download: its tables in `tsundoku.db` (database.rs) are its source of truth, and yt-dlp's `archive.txt` is
 //! rewritten from it after every change, one `<site> <id>` line per video, so yt-dlp can use it too.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::Arc;
 
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
+use crate::database::Database;
 use crate::metadata::VideoInfo;
-use crate::sync::lock;
 
-/// Each entry upgrades the database by one version, recorded in `PRAGMA user_version`. Never change an entry once
-/// released; add one.
-const MIGRATIONS: &[&str] = &[
-    // 1: videos, and one row per finished download of each.
-    "CREATE TABLE videos (
-        id INTEGER PRIMARY KEY,
-        site TEXT NOT NULL,
-        site_name TEXT NOT NULL,
-        video_id TEXT NOT NULL,
-        url TEXT NOT NULL,
-        title TEXT NOT NULL,
-        uploader TEXT,
-        duration_seconds REAL,
-        upload_date TEXT,
-        thumbnail_url TEXT,
-        best_height INTEGER,
-        first_downloaded_at INTEGER NOT NULL,
-        UNIQUE (site, video_id)
-    );
-    CREATE TABLE downloads (
-        id INTEGER PRIMARY KEY,
-        video INTEGER NOT NULL REFERENCES videos (id) ON DELETE CASCADE,
-        preset TEXT NOT NULL,
-        file_path TEXT NOT NULL,
-        file_size INTEGER,
-        format TEXT,
-        downloaded_at INTEGER NOT NULL
-    );
-    CREATE INDEX downloads_by_video ON downloads (video, downloaded_at);",
-];
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum HistoryError {
@@ -175,43 +144,25 @@ const DOWNLOAD_COLUMNS: &str =
 const DOWNLOAD_OFFSET: usize = 12;
 
 pub struct History {
-    connection: Mutex<Connection>,
+    database: Arc<Database>,
     archive_path: PathBuf,
 }
 
 impl History {
-    /// Opens the history, creating or upgrading the database as needed, and rewrites `archive.txt` from it in case a
-    /// crash left the two apart.
-    pub fn open(database_path: &Path, archive_path: PathBuf) -> Result<Self, HistoryError> {
-        Self::with_connection(Connection::open(database_path)?, archive_path)
-    }
-
-    /// A history kept in memory, for tests.
-    pub fn open_in_memory(archive_path: PathBuf) -> Result<Self, HistoryError> {
-        Self::with_connection(Connection::open_in_memory()?, archive_path)
-    }
-
-    fn with_connection(
-        mut connection: Connection,
-        archive_path: PathBuf,
-    ) -> Result<Self, HistoryError> {
-        connection.pragma_update(None, "foreign_keys", true)?;
-        // Write-ahead logging: a crash mid-write can't damage the database, and reads don't wait on writes.
-        connection
-            .pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get::<_, String>(0))?;
-        migrate(&mut connection)?;
+    /// The history in `database`. Rewrites `archive.txt` from it, in case a crash left the two apart.
+    pub fn new(database: Arc<Database>, archive_path: PathBuf) -> Result<Self, HistoryError> {
         let history = Self {
-            connection: Mutex::new(connection),
+            database,
             archive_path,
         };
-        history.write_archive(&lock(&history.connection))?;
+        history.write_archive(&history.database.lock())?;
         Ok(history)
     }
 
     /// Records a finished download, adding the video or refreshing its details, then rewrites `archive.txt`.
     /// Returns the download's ID.
     pub fn record(&self, video: &VideoInfo, download: &NewDownload) -> Result<i64, HistoryError> {
-        let mut connection = lock(&self.connection);
+        let mut connection = self.database.lock();
         let transaction = connection.transaction()?;
         let video_row: i64 = transaction.query_row(
             "INSERT INTO videos (site, site_name, video_id, url, title, uploader, duration_seconds, upload_date,
@@ -261,7 +212,7 @@ impl History {
         site: &str,
         video_id: &str,
     ) -> Result<Option<PastDownload>, HistoryError> {
-        let connection = lock(&self.connection);
+        let connection = self.database.lock();
         let download = connection
             .query_row(
                 &format!(
@@ -277,7 +228,7 @@ impl History {
 
     /// Every download of a video in the history, newest first.
     pub fn downloads_of(&self, video_row: i64) -> Result<Vec<PastDownload>, HistoryError> {
-        let connection = lock(&self.connection);
+        let connection = self.database.lock();
         let mut statement = connection.prepare(&format!(
             "SELECT {DOWNLOAD_COLUMNS} FROM downloads d WHERE d.video = ?1 ORDER BY d.downloaded_at DESC, d.id DESC"
         ))?;
@@ -321,7 +272,7 @@ impl History {
         };
         let direction = if query.descending { "DESC" } else { "ASC" };
 
-        let connection = lock(&self.connection);
+        let connection = self.database.lock();
         let mut statement = connection.prepare(&format!(
             "SELECT {VIDEO_COLUMNS}, {DOWNLOAD_COLUMNS},
                 (SELECT COUNT(*) FROM downloads c WHERE c.video = v.id)
@@ -348,7 +299,7 @@ impl History {
 
     /// Where a download's file was saved, if it's still there.
     pub fn download_path(&self, download_id: i64) -> Result<PathBuf, HistoryError> {
-        let connection = lock(&self.connection);
+        let connection = self.database.lock();
         let path: String = connection
             .query_row(
                 "SELECT file_path FROM downloads WHERE id = ?1",
@@ -370,7 +321,7 @@ impl History {
     /// Removes a video and its downloads from the history and from `archive.txt`, so it can be downloaded again.
     /// Its files stay where they are.
     pub fn forget(&self, video_row: i64) -> Result<(), HistoryError> {
-        let connection = lock(&self.connection);
+        let connection = self.database.lock();
         let removed = connection.execute("DELETE FROM videos WHERE id = ?1", [video_row])?;
         if removed == 0 {
             return Err(HistoryError::NotFound);
@@ -397,21 +348,6 @@ impl History {
             }
         })
     }
-}
-
-fn migrate(connection: &mut Connection) -> Result<(), HistoryError> {
-    let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    let latest = MIGRATIONS.len() as i64;
-    if version > latest {
-        return Err(HistoryError::NewerVersion { version });
-    }
-    for (index, migration) in MIGRATIONS.iter().enumerate().skip(version as usize) {
-        let transaction = connection.transaction()?;
-        transaction.execute_batch(migration)?;
-        transaction.pragma_update(None, "user_version", index as i64 + 1)?;
-        transaction.commit()?;
-    }
-    Ok(())
 }
 
 fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
@@ -464,7 +400,8 @@ mod tests {
     impl TestHistory {
         fn new() -> Self {
             let folder = tempfile::tempdir().unwrap();
-            let history = History::open_in_memory(folder.path().join("archive.txt")).unwrap();
+            let database = Arc::new(Database::open_in_memory().unwrap());
+            let history = History::new(database, folder.path().join("archive.txt")).unwrap();
             Self { history, folder }
         }
 
@@ -506,13 +443,8 @@ mod tests {
     }
 
     #[test]
-    fn creates_the_database_at_the_latest_version() {
-        let test = TestHistory::new();
-        let version: i64 = lock(&test.history.connection)
-            .pragma_query_value(None, "user_version", |row| row.get(0))
-            .unwrap();
-        assert_eq!(version, MIGRATIONS.len() as i64);
-        assert_eq!(test.archive(), "");
+    fn writes_an_empty_archive_for_an_empty_history() {
+        assert_eq!(TestHistory::new().archive(), "");
     }
 
     #[test]
@@ -520,16 +452,23 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let database = folder.path().join("tsundoku.db");
         let archive = folder.path().join("archive.txt");
-        History::open(&database, archive.clone())
-            .unwrap()
-            .record(
-                &video("youtube", "jNQXAC9IVRw", "Me at the zoo", "jawed", 19.0),
-                &download("Best Video", 1, 10),
-            )
-            .unwrap();
+        History::new(
+            Arc::new(Database::open(&database).unwrap()),
+            archive.clone(),
+        )
+        .unwrap()
+        .record(
+            &video("youtube", "jNQXAC9IVRw", "Me at the zoo", "jawed", 19.0),
+            &download("Best Video", 1, 10),
+        )
+        .unwrap();
 
         fs::remove_file(&archive).unwrap();
-        let reopened = History::open(&database, archive.clone()).unwrap();
+        let reopened = History::new(
+            Arc::new(Database::open(&database).unwrap()),
+            archive.clone(),
+        )
+        .unwrap();
         assert!(
             reopened
                 .last_download("youtube", "jNQXAC9IVRw")
@@ -541,18 +480,6 @@ mod tests {
             "youtube jNQXAC9IVRw\n",
             "rewritten on open"
         );
-    }
-
-    #[test]
-    fn refuses_a_database_from_a_newer_version() {
-        let folder = tempfile::tempdir().unwrap();
-        let database = folder.path().join("tsundoku.db");
-        Connection::open(&database)
-            .unwrap()
-            .pragma_update(None, "user_version", 99)
-            .unwrap();
-        let error = History::open(&database, folder.path().join("archive.txt")).err();
-        assert_eq!(error, Some(HistoryError::NewerVersion { version: 99 }));
     }
 
     #[test]
@@ -666,7 +593,10 @@ mod tests {
 
         assert_eq!(test.archive(), "youtube b\n");
         assert_eq!(test.history.last_download("youtube", "a").unwrap(), None);
-        let downloads: i64 = lock(&test.history.connection)
+        let downloads: i64 = test
+            .history
+            .database
+            .lock()
             .query_row("SELECT COUNT(*) FROM downloads", [], |row| row.get(0))
             .unwrap();
         assert_eq!(downloads, 1, "its downloads went with it");

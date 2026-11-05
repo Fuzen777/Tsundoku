@@ -72,6 +72,11 @@ impl DataPaths {
     pub fn archive_file(&self) -> PathBuf {
         self.root.join("archive.txt")
     }
+
+    /// One log per download, with yt-dlp's output.
+    pub fn logs_folder(&self) -> PathBuf {
+        self.root.join("logs")
+    }
 }
 
 #[cfg(test)]

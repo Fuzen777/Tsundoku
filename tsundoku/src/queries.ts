@@ -1,13 +1,18 @@
 import { useCallback } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   detectTools,
   getAppInfo,
+  getPresetArguments,
+  getPresetsOverview,
+  getQueueItems,
   getToolDownloads,
   getToolsNeedSetup,
   getToolsOverview,
   queryKeys,
 } from "./api"
+import type { Preset } from "./bindings/Preset"
+import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
@@ -75,3 +80,32 @@ export function useStoreYtDlpChannel() {
     [queryClient],
   )
 }
+
+export function usePresets() {
+  return useQuery({ queryKey: queryKeys.presets, queryFn: getPresetsOverview, staleTime: Infinity })
+}
+
+/** Puts the presets, as an action returned them, in place. */
+export function useStorePresets() {
+  const queryClient = useQueryClient()
+  return useCallback(
+    (overview: PresetsOverview) => queryClient.setQueryData(queryKeys.presets, overview),
+    [queryClient],
+  )
+}
+
+/** The yt-dlp arguments a preset gives, kept while the next ones load so the editor doesn't flicker. */
+export function usePresetArguments(preset: Preset) {
+  return useQuery({
+    queryKey: [...queryKeys.presetArguments, preset],
+    queryFn: () => getPresetArguments(preset),
+    placeholderData: keepPreviousData,
+    retry: false,
+  })
+}
+
+/** The download queue. The core's queue-changed events keep it current (queueEvents.ts). */
+export function useQueue() {
+  return useQuery({ queryKey: queryKeys.queue, queryFn: getQueueItems, staleTime: Infinity })
+}
+

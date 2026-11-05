@@ -1,24 +1,29 @@
 import { useState } from "react"
 import { Loader2, X } from "lucide-react"
-import { openDownload, showDownloadInFolder } from "../api"
+import { addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
 import type { PastDownload } from "../bindings/PastDownload"
 import type { VideoPreview } from "../bindings/VideoPreview"
-import { describeHistoryError, describePreviewError, type ErrorDescription } from "../errors"
+import { describeDownloadError, describeHistoryError, describePreviewError, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatDay, formatDuration, joinDetails } from "../format"
+import { usePresets } from "../queries"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
 import { Card } from "./Card"
+import { SelectInput } from "./Field"
 import { StatusMessage } from "./StatusMessage"
+import { Thumbnail } from "./Thumbnail"
 
 interface PreviewCardProps {
   state: Exclude<PreviewState, { stage: "idle" }>
   /** Cancel, Dismiss or Close. */
   onClose: () => void
+  /** The video joined the queue. */
+  onAdded: () => void
 }
 
 /** Under the add bar: what a link is, whether it was downloaded before, and Download. */
-export function PreviewCard({ state, onClose }: PreviewCardProps) {
+export function PreviewCard({ state, onClose, onAdded }: PreviewCardProps) {
   return (
     <Card className="flex flex-col gap-3 p-4">
       {state.stage === "loading" && (
@@ -43,18 +48,23 @@ export function PreviewCard({ state, onClose }: PreviewCardProps) {
           </Button>
         </div>
       )}
-      {state.stage === "ready" && <VideoDetails preview={state.preview} onClose={onClose} />}
+      {state.stage === "ready" && <VideoDetails preview={state.preview} onClose={onClose} onAdded={onAdded} />}
     </Card>
   )
 }
 
-function VideoDetails({ preview, onClose }: { preview: VideoPreview; onClose: () => void }) {
+interface VideoDetailsProps {
+  preview: VideoPreview
+  onClose: () => void
+  onAdded: () => void
+}
+
+function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
   const { video, lastDownload, missingJsRuntime } = preview
   return (
     <>
       <div className="flex gap-4">
-        {/* Keyed by its address, so a thumbnail that failed doesn't hide the next video's. */}
-        <Thumbnail key={video.thumbnailUrl} url={video.thumbnailUrl} />
+        <Thumbnail key={video.thumbnailUrl} url={video.thumbnailUrl} className="w-44" />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <p className="line-clamp-2 font-semibold select-text" title={video.title}>
             {video.title}
@@ -74,30 +84,71 @@ function VideoDetails({ preview, onClose }: { preview: VideoPreview; onClose: ()
       </div>
       {lastDownload && <AlreadyDownloaded download={lastDownload} />}
       {missingJsRuntime && <StatusMessage tone="warning" message={strings.preview.missingDeno} />}
-      <div className="flex justify-end">
-        {/* Downloads arrive with the queue (M3). */}
-        <Button variant="primary" disabled>
-          {lastDownload ? strings.preview.downloadAgain : strings.preview.download}
-        </Button>
-      </div>
+      {preview.inQueue ? (
+        <p className="text-right text-fg-secondary">{strings.preview.inQueue}</p>
+      ) : (
+        <DownloadControls preview={preview} onAdded={onAdded} />
+      )}
     </>
   )
 }
 
-/** The video's thumbnail, or an empty tile when it has none or it doesn't load. */
-function Thumbnail({ url }: { url: string | null }) {
-  const [failed, setFailed] = useState(false)
+/** The preset picker and Download. Downloading again with the preset used before asks first, since the new file
+ * replaces the old one. */
+function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
+  const { data: presets } = usePresets()
+  const [chosenId, setChosenId] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const presetId = chosenId ?? presets?.defaultId ?? null
+
+  async function download() {
+    const preset = presets?.presets.find((candidate) => candidate.id === presetId)
+    if (!preset) return
+    const sameAsBefore = preview.lastDownload?.preset === preset.name
+    if (
+      sameAsBefore &&
+      !(await confirmWithUser({
+        title: strings.preview.overwriteTitle,
+        message: strings.preview.overwriteMessage(preset.name),
+        confirmLabel: strings.preview.overwriteConfirm,
+        cancelLabel: strings.dialogs.cancel,
+      }))
+    ) {
+      return
+    }
+    setAdding(true)
+    setError(null)
+    try {
+      await addToQueue(preview.video, preset.id, sameAsBefore)
+      onAdded()
+    } catch (caught) {
+      setError(describeDownloadError(caught))
+      setAdding(false)
+    }
+  }
+
   return (
-    <div className="aspect-video w-44 shrink-0 overflow-hidden rounded-md bg-input">
-      {url && !failed && (
-        <img
-          src={url}
-          alt=""
-          referrerPolicy="no-referrer"
-          className="size-full object-cover"
-          onError={() => setFailed(true)}
-        />
-      )}
+    <div className="flex flex-col items-end gap-2">
+      {error && <StatusMessage tone="danger" {...error} />}
+      <div className="flex items-center gap-2">
+        <SelectInput
+          aria-label={strings.preview.preset}
+          title={strings.preview.preset}
+          value={presetId ?? ""}
+          disabled={!presets || adding}
+          onChange={(event) => setChosenId(event.target.value)}
+        >
+          {presets?.presets.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name}
+            </option>
+          ))}
+        </SelectInput>
+        <Button variant="primary" loading={adding} disabled={!presetId} onClick={() => void download()}>
+          {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
+        </Button>
+      </div>
     </div>
   )
 }

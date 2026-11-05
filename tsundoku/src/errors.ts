@@ -1,11 +1,13 @@
+import type { DownloadError } from "./bindings/DownloadError"
 import type { HistoryError } from "./bindings/HistoryError"
+import type { PresetError } from "./bindings/PresetError"
 import type { PreviewError } from "./bindings/PreviewError"
 import type { ToolError } from "./bindings/ToolError"
 import type { ToolId } from "./bindings/ToolId"
 import { strings } from "./strings"
 
 /*
-  The core's errors are tagged unions (ToolError, PreviewError, HistoryError): an action that fails rejects with one.
+  The core's errors are tagged unions (ToolError, PreviewError, HistoryError, PresetError, DownloadError): an action that fails rejects with one.
   These turn each kind into a sentence from strings.ts, with the technical detail underneath.
 */
 
@@ -116,5 +118,51 @@ export function describeHistoryError(error: unknown): ErrorDescription {
       return { message: text.archive, detail: error.detail }
     case "openFailed":
       return { message: text.openFailed, detail: error.detail }
+  }
+}
+
+export function describePresetError(error: unknown): ErrorDescription {
+  if (!isCoreError<PresetError>(error)) return unexpected(error)
+  const text = strings.presets.errors
+  switch (error.kind) {
+    case "emptyName":
+      return { message: text.emptyName }
+    case "emptyFileName":
+      return { message: text.emptyFileName }
+    case "refusedArgument":
+      return { message: text.refusedArgument(error.argument) }
+    case "unclosedQuote":
+      return { message: text.unclosedQuote }
+    case "notFound":
+      return { message: text.notFound }
+    case "builtIn":
+      return { message: text.builtIn }
+    case "storage":
+      return { message: text.storage, detail: error.detail }
+  }
+}
+
+export function describeDownloadError(error: unknown): ErrorDescription {
+  if (!isCoreError<DownloadError>(error)) return unexpected(error)
+  const text = strings.queue.errors
+  switch (error.kind) {
+    case "ytDlp":
+      return describePreviewError(error.error)
+    case "folder":
+      return { message: text.folder, detail: `${error.path}: ${error.detail}` }
+    case "noFile":
+      return { message: text.noFile }
+    case "preset":
+      return describePresetError(error.error)
+    case "alreadyQueued":
+      return { message: text.alreadyQueued }
+    case "notFound":
+      return { message: text.notFound }
+    case "wrongState":
+      return { message: text.wrongState }
+    case "storage":
+      return { message: text.storage, detail: error.detail }
+    case "unexpected":
+      return { message: strings.errors.unexpected, detail: error.detail }
   }
 }

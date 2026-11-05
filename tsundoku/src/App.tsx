@@ -5,7 +5,7 @@ import { AppTitle } from "./components/AppTitle"
 import { PreviewCard } from "./components/PreviewCard"
 import { Sidebar } from "./components/Sidebar"
 import type { ViewId } from "./navigation"
-import { useToolsNeedSetup } from "./queries"
+import { useQueue, useToolsNeedSetup } from "./queries"
 import { useLinkDrop, usePreview } from "./usePreview"
 import { HistoryView } from "./views/HistoryView"
 import { PresetsView } from "./views/PresetsView"
@@ -19,6 +19,8 @@ export function App() {
   const { data: needsSetup } = useToolsNeedSetup()
   const preview = usePreview()
   const { show: showPreview } = preview
+  const { data: queue = [] } = useQueue()
+  const unfinished = queue.filter((item) => item.state !== "done").length
 
   useEffect(() => {
     // After the first frame is painted, so the hidden window never shows blank.
@@ -44,10 +46,22 @@ export function App() {
       <div className="flex items-center py-3 pr-4">
         <AddBar link={link} onLinkChange={setLink} onSubmit={() => void showPreview(link)} />
       </div>
-      <Sidebar className="col-start-1 row-span-2 row-start-2" current={view} onSelect={setView} />
+      <Sidebar
+        className="col-start-1 row-span-2 row-start-2"
+        current={view}
+        counts={{ queue: unfinished }}
+        onSelect={setView}
+      />
       {preview.state.stage !== "idle" && (
         <div className="col-start-2 row-start-2 pr-4 pb-3">
-          <PreviewCard state={preview.state} onClose={preview.close} />
+          <PreviewCard
+            state={preview.state}
+            onClose={preview.close}
+            onAdded={() => {
+              preview.close()
+              setLink("")
+            }}
+          />
         </div>
       )}
       <main className="col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">

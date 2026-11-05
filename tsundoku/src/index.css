@@ -6,6 +6,7 @@
 */
 @theme {
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
 
   /* Window background, only painted without Mica (Windows 10) */
   --color-bg: light-dark(#f3f3f3, #202020);

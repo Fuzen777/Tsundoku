@@ -6,6 +6,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::cancel::CancelToken;
+use crate::downloads::DownloadQueue;
 use crate::history::{History, PastDownload};
 use crate::metadata::{self, FetchTools, PreviewError, VideoInfo};
 use crate::sync::lock;
@@ -18,6 +19,8 @@ pub struct VideoPreview {
     pub video: VideoInfo,
     /// The latest download of this video, when it was downloaded before.
     pub last_download: Option<PastDownload>,
+    /// The video is in the download queue and not done yet.
+    pub in_queue: bool,
     /// yt-dlp ran without Deno, so YouTube may have offered fewer formats.
     pub missing_js_runtime: bool,
 }
@@ -33,11 +36,13 @@ impl PreviewService {
         Self::default()
     }
 
-    /// Asks yt-dlp what `text` links to, and the history whether it was downloaded before.
+    /// Asks yt-dlp what `text` links to, the history whether it was downloaded before, and the queue whether it's
+    /// in it.
     pub fn fetch(
         &self,
         tools: &ToolManager,
         history: &History,
+        queue: &DownloadQueue,
         text: &str,
     ) -> Result<VideoPreview, PreviewError> {
         let link = metadata::normalize_link(text).ok_or(PreviewError::InvalidLink)?;
@@ -69,6 +74,7 @@ impl PreviewService {
                 detail: error.to_string(),
             })?;
         Ok(VideoPreview {
+            in_queue: queue.contains(&fetched.video.site, &fetched.video.video_id),
             video: fetched.video,
             last_download,
             missing_js_runtime: fetched.missing_js_runtime,

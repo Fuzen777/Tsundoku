@@ -60,7 +60,7 @@ impl ToolId {
 
 /// Why a tool can't be set up, updated or run. The UI turns each into a sentence; `detail` fields carry the
 /// technical cause, shown under it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum ToolError {

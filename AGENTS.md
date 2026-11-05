@@ -25,9 +25,10 @@ title: AGENTS
 
 | Path | Contents |
 | --- | --- |
-| `tsundoku/src` | The React UI: `views/` (with `views/settings/`), `components/`, `strings.ts`, `api.ts`, `queries.ts` (React Query hooks), `standIns.ts` (what `api.ts` returns in a browser), `toolProgress.ts` (live install and update stages), `usePreview.ts` (the preview card's state, and link drops), `errors.ts` (the core's errors → sentences), `format.ts` (sizes, lengths, dates), `bindings/` (generated) |
-| `tsundoku/core` | `tsundoku-core`: the UI-free Rust logic and its tests. `process` runs external programs, `tools` finds, installs and updates them, `metadata` asks yt-dlp what a link is, `history` is the SQLite history and `archive.txt`, `preview` combines the last two for the preview card, `settings` and `data_folder` hold what's stored. `tests/fixtures/metadata` holds real yt-dlp answers |
-| `tsundoku/src-tauri` | The Tauri app: window, plugins, `tools.rs` (the tool commands), `history.rs` (the preview and history commands), `tauri.conf.json`, `capabilities/` |
+| `tsundoku/src` | The React UI: `views/` (with `views/settings/`), `components/`, `strings.ts`, `api.ts`, `queries.ts` (React Query hooks), `standIns.ts` (what `api.ts` returns in a browser), `toolProgress.ts` (live install and update stages), `usePreview.ts` (the preview card's state, and link drops), `queueEvents.ts` (the queue's events, and the close guard), `liveStore.ts` (values that stream, such as progress), `errors.ts` (the core's errors → sentences), `format.ts` (sizes, lengths, dates), `components/styles.ts` (shared class names), `views/presets/` (the preset editor), `bindings/` (generated) |
+| `tsundoku/core` | `tsundoku-core`: the UI-free Rust logic and its tests. `process` runs external programs, `tools` finds, installs and updates them, `metadata` asks yt-dlp what a link is, `history` is the SQLite history and `archive.txt`, `preview` combines the last two for the preview card, `presets` the presets and their arguments, `downloads` the queue and its yt-dlp runs, `database` the SQLite database the history and the queue share, `settings` and `data_folder` hold what's stored. `tests/fixtures/metadata` holds real yt-dlp answers |
+| `tsundoku/src-tauri` | The Tauri app: window, plugins, `tools.rs` (the tool commands), `history.rs` (the preview and history commands), `downloads.rs` (the preset and queue commands, and the queue's events), `tauri.conf.json`, `capabilities/` |
+| `DOCUMENTATION/Docs` | How parts of the app work: `Download Pipeline.md` |
 | `Scripts` | Dev, check and build scripts |
 
 ## Building and Testing
@@ -49,10 +50,11 @@ title: AGENTS
 
 ## Data and Testing
 
-- The data folder holds `settings.json`, `tools\` (one folder each for `yt-dlp`, `ffmpeg` and `deno`: Tsundoku's own copies), the history's `tsundoku.db` (with its `-wal` and `-shm` files while the app runs) and `archive.txt`. Dev builds use their own: `TSUNDOKU_DATA_DIR` when set (this PC's `.cargo/config.toml` sets `D:\Dev\tsundoku\data`), otherwise `%LocalAppData%\Tsundoku Dev`. Release builds use `%LocalAppData%\Tsundoku` and ignore the variable.
+- The data folder holds `settings.json`, `tools\` (one folder each for `yt-dlp`, `ffmpeg` and `deno`: Tsundoku's own copies), the history and the queue's `tsundoku.db` (with its `-wal` and `-shm` files while the app runs), `archive.txt`, and `logs\` (one log per download). Dev builds use their own: `TSUNDOKU_DATA_DIR` when set (this PC's `.cargo/config.toml` sets `D:\Dev\tsundoku\data`), otherwise `%LocalAppData%\Tsundoku Dev`. Release builds use `%LocalAppData%\Tsundoku` and ignore the variable.
 - `D:\Dev\tsundoku\` is the disposable sandbox: `data\` (the dev data folder), `downloads\` (test downloads) and `target\`. Anything under it can be changed or deleted freely for a test. Never test against an installed copy's `%LocalAppData%\Tsundoku`.
 - The first-run setup shows while `settings.json` has no yt-dlp or ffmpeg: delete it, with the app closed, to see it again. With `tools\` left in place, the setup offers those copies; delete `tools\` too for a first run from nothing. Setting `ytDlpLastUpdateCheck` to an old value makes the startup update of yt-dlp run.
-- Until downloads exist, the duplicate warning can be tried by adding rows to `tsundoku.db` (a `videos` row and a `downloads` row pointing at it). `archive.txt` is rewritten from the database when the app starts.
+- In the dev data folder, every preset's folder is set to `D:\Dev\tsundoku\downloads`, so test downloads never land in Videos or Music. A preset that's reset goes back to the default folder; set it again in the editor before downloading with it.
+- The queue's tests (`core/src/downloads/tests.rs`) run against `FakeRunner`, which finishes, fails or is cancelled when a test says, so the state machine is tested without yt-dlp. Real downloads were tried with `jNQXAC9IVRw` (19 s) and, to stop and resume mid-download, `aqz-KE-bpKQ` (Big Buck Bunny, 250 MB at 1080p).
 
 ## Technical Notes
 
@@ -90,7 +92,16 @@ title: AGENTS
 
 ### History
 
-- `tsundoku.db` is SQLite (`rusqlite`, bundled), in WAL mode with foreign keys on. Migrations are SQL strings in `history.rs`, applied in order and counted in `PRAGMA user_version`; never change a released one, add one. A database from a newer version is refused rather than read.
+- `tsundoku.db` is SQLite (`rusqlite`, bundled), in WAL mode with foreign keys on, shared by the history and the queue through `database.rs`. Migrations are SQL strings there, applied in order and counted in `PRAGMA user_version`; never change a released one, add one. A database from a newer version is refused rather than read.
 - `videos` holds one row per site and ID; `downloads` one row per finished download, removed with its video (`ON DELETE CASCADE`). Times are seconds since 1970.
 - `archive.txt` is rewritten whole (atomically) after every change and when the history opens, in the order videos were first downloaded.
 - The UI names a download by its ID to open it or show it in its folder, never by a path, so it can only open files the history recorded.
+
+### Presets and Downloads
+
+- [Download Pipeline](./DOCUMENTATION/Docs/Download%20Pipeline.md) covers the queue's states, yt-dlp's arguments, the progress lines, temporary folders and logs.
+- Presets live in `settings.json` (`presets.list`, `presets.defaultId`); the four built-ins have fixed IDs and can be reset, others are `custom-<n>`. `Preset::to_args` gives a preset's yt-dlp arguments, and both the editor and the queue use it.
+- Extra arguments are split on spaces with double quotes grouping, backslashes left alone for Windows paths. Options that would break progress, paths, the history or the single-video rule are refused, abbreviations included, since yt-dlp accepts them (`--outp` for `--output`); `--progress` is allowed though it begins `--progress-template`.
+- A queue item stores a copy of its preset and its resolved folder, so editing a preset or the default folder later doesn't change it.
+- `DownloadQueue` owns its items and runs each download on a thread of its own; `QueueListener` passes changes and progress to the app crate, which sends them as events. The runner is a trait (`JobRunner`), so tests swap yt-dlp for `FakeRunner`.
+- The UI asks before closing while downloads run (`onCloseRequested` in `queueEvents.ts`, which needs `core:window:allow-destroy`), and uses Windows' dialogs for confirmations (`dialog:allow-ask`).

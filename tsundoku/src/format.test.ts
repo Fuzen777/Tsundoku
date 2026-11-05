@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatBytes, formatCalendarDate, formatDay, formatDuration, joinDetails } from "./format"
+import { formatBytes, formatCalendarDate, formatDay, formatDuration, formatSpeed, joinDetails } from "./format"
 
 describe("formatBytes", () => {
   it("keeps bytes whole", () => {
@@ -12,6 +12,13 @@ describe("formatBytes", () => {
     expect(formatBytes(23_575_744)).toBe("22.5 MB")
     expect(formatBytes(90_993_957)).toBe("86.8 MB")
     expect(formatBytes(5 * 1024 ** 3)).toBe("5.0 GB")
+  })
+})
+
+describe("formatSpeed", () => {
+  it("shows bytes per second", () => {
+    expect(formatSpeed(5_452_595.4)).toBe("5.2 MB/s")
+    expect(formatSpeed(512)).toBe("512 B/s")
   })
 })
 

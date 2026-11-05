@@ -8,6 +8,10 @@ export type VideoPreview = { video: VideoInfo,
  */
 lastDownload: PastDownload | null, 
 /**
+ * The video is in the download queue and not done yet.
+ */
+inQueue: boolean, 
+/**
  * yt-dlp ran without Deno, so YouTube may have offered fewer formats.
  */
 missingJsRuntime: boolean, };

@@ -12,6 +12,11 @@ export function formatBytes(bytes: number): string {
   return unitIndex === 0 ? `${value} ${units[0]}` : `${value.toFixed(1)} ${units[unitIndex]}`
 }
 
+/** A download speed: "5.2 MB/s". */
+export function formatSpeed(bytesPerSecond: number): string {
+  return strings.units.perSecond(formatBytes(Math.round(bytesPerSecond)))
+}
+
 /** A length as a video player shows it: "0:19", "2:23", "1:02:03". */
 export function formatDuration(seconds: number): string {
   const total = Math.round(seconds)

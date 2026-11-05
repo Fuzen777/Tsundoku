@@ -40,7 +40,13 @@ rules:
 ### Preview
 
 - [ ] **Dropping a link from a browser.** Drag a link, or the address bar's padlock, from Firefox, Chrome and Edge onto the window. The drop handler was tested with a synthetic drop, not a real drag between apps.
-- [ ] **Open File and Show in Folder** on the duplicate warning: that they open the right file and folder. Their errors (file gone, unknown download) are tested.
+- [ ] **Open File and Show in Folder** on the duplicate warning and the queue, and **Open Log**: that they open the right file, folder and log. Their errors (file gone, unknown download) are tested.
+
+### Downloads
+
+- [ ] **The confirmation dialogs**: closing while downloading, Download Again with the same preset, deleting a preset, leaving a preset with unsaved changes. They're Windows' own dialogs, which the automated checks can't click.
+- [ ] **Cancelling during a merge**: that ffmpeg ends with yt-dlp and leaves no locked file. Ending the whole process tree is tested with cmd and ping, and Cancel while downloading was tried for real.
+- [ ] **A site other than YouTube** downloading end to end, such as archive.org or SoundCloud, and a video with subtitles and SponsorBlock segments.
 
 ---
 

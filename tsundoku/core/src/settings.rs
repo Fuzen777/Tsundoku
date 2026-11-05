@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
+use crate::presets::PresetsSettings;
 use crate::sync::lock;
 use crate::tools::ToolId;
 
@@ -18,6 +19,21 @@ use crate::tools::ToolId;
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub tools: ToolsSettings,
+    pub presets: PresetsSettings,
+    pub downloads: DownloadSettings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DownloadSettings {
+    /// How many downloads run at the same time.
+    pub at_once: u32,
+}
+
+impl Default for DownloadSettings {
+    fn default() -> Self {
+        Self { at_once: 2 }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
