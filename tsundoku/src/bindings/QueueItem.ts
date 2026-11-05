@@ -8,11 +8,12 @@ import type { VideoInfo } from "./VideoInfo";
 
 export type QueueItem = { id: number, video: VideoInfo, 
 /**
- * The preset as it was when the video was added, so editing the preset doesn't change the download.
+ * The preset as it was when the video was added, so editing the preset doesn't change the download. `None`
+ * for a post of images, whose files are kept as the site gives them.
  */
-preset: Preset, 
+preset: Preset | null, 
 /**
- * Where the file goes.
+ * Where the file goes, or a post's files: the site's folder in the posts folder.
  */
 folder: string, state: QueueState, 
 /**

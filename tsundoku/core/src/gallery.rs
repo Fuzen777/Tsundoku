@@ -194,8 +194,34 @@ pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewE
 
 /// Turns an error gallery-dl met while reading the site into the reason the link can't be downloaded.
 fn classify_error(error: &Value) -> PreviewError {
-    let kind = text(error, "error").unwrap_or_default();
-    let message = text(error, "message").unwrap_or_default();
+    classify_message(
+        &text(error, "error").unwrap_or_default(),
+        &text(error, "message").unwrap_or_default(),
+    )
+}
+
+/// Why a download of a post failed, from gallery-dl's error output: its last error line, such as
+/// "[instagram][error] HttpError: '401 Unauthorized' for 'https://…'", sorted as an error in a preview's answer is.
+pub(crate) fn classify_download_failure(code: Option<i32>, stderr: &[&str]) -> PreviewError {
+    let error_line = stderr
+        .iter()
+        .rev()
+        .find_map(|line| line.rsplit_once("[error]").map(|(_, error)| error.trim()));
+    match error_line {
+        Some(error)
+            if code != Some(UNSUPPORTED_EXIT_CODE) && !error.starts_with("Unsupported URL") =>
+        {
+            match error.split_once(": ") {
+                Some((kind, message)) if !kind.contains(' ') => classify_message(kind, message),
+                _ => classify_message("", error),
+            }
+        }
+        _ => classify_exit(code, stderr),
+    }
+}
+
+fn classify_message(kind: &str, message: &str) -> PreviewError {
+    let kind = kind.to_owned();
     let detail = if message.is_empty() {
         kind.clone()
     } else {
@@ -533,6 +559,35 @@ mod tests {
                 detail: "KeyError: 'data'".to_owned()
             }
         );
+    }
+
+    #[test]
+    fn classifies_failed_downloads_by_their_last_error() {
+        assert!(matches!(
+            classify_download_failure(
+                Some(4),
+                &[
+                    "[instagram][info] Downloading 1 of 3",
+                    "[instagram][error] HttpError: '401 Unauthorized' for 'https://www.instagram.com/api/'",
+                ]
+            ),
+            PreviewError::SignInRequired { .. }
+        ));
+        assert!(matches!(
+            classify_download_failure(
+                Some(4),
+                &["[instagram][error] HttpError: '429 Too Many Requests' for 'https://x'"]
+            ),
+            PreviewError::Network { .. }
+        ));
+        assert_eq!(
+            classify_download_failure(Some(64), &["[gallery-dl][error] Unsupported URL 'x'"]),
+            PreviewError::UnsupportedSite
+        );
+        assert!(matches!(
+            classify_download_failure(Some(1), &["Traceback (most recent call last):"]),
+            PreviewError::Failed { .. }
+        ));
     }
 
     #[test]

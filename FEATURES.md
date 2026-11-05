@@ -31,7 +31,8 @@ type: Features
 - **Preview card**: under the add bar, the video's thumbnail, title, uploader, site, length, upload date and best quality ("1080p", or Audio Only). A spinner shows while yt-dlp fetches it, with Cancel; a new link replaces the one being fetched.
 - **Already downloaded**: when the history has the video, the card says when and with which preset, shows the file's path with Open File and Show in Folder, and Download becomes Download Again. If the file was moved or deleted, it says so. The check uses the site and the video's ID, so every link to a video is caught: `youtu.be`, Shorts, a timestamp, a playlist it's in.
 - **Refused links**: playlists and channels, live streams, and premieres that haven't started each get a plain message. So do unsupported sites, unavailable videos, videos needing a sign-in or an age check, and network errors, with yt-dlp's own error underneath.
-- **Image posts**: an Instagram, X, Bluesky, Pixiv or other image post shows its caption, author, date and what it holds ("2 images, 4 videos"). Each link is read by whichever tool suits it, yt-dlp or gallery-dl, and by the other when the first can't, so the user never has to choose. Downloading posts isn't there yet.
+- **Image posts**: an Instagram, X, Bluesky, Pixiv or other image post shows its caption, author, date and what it holds ("2 images, 4 videos"). Each link is read by whichever tool suits it, yt-dlp or gallery-dl, and by the other when the first can't, so the user never has to choose.
+- **Download a post**: a post has Download without a preset, since its files are kept as the site gives them. They all go into the site's folder (Instagram, X, or the site's name) in the posts folder. Files already there are skipped, so Download Again only fetches what's missing.
 - **Without Deno**: a YouTube preview warns that some formats may be missing.
 - **Download**: pick a preset (the default is preselected) and Download: the video joins the queue, and the card and the add bar clear. With a video already downloaded, it's Download Again; with the same preset as before, it asks first, since the new file replaces the old one.
 - **Already in the queue**: the card says so, without Download.
@@ -39,6 +40,7 @@ type: Features
 ## Queue
 
 - **Two at a time**: downloads start in the order they were added, two at once.
+- **Posts**: a post's row shows what it holds ("3 images, 1 video") instead of a preset, and its progress counts files. On Instagram, each file waits a random 10 to 20 seconds first (Settings → Posts of Images), so the account isn't blocked.
 - **Each row**: thumbnail, title, preset, what it's doing (Downloading Video, Downloading Audio, Merging, Converting, Embedding…), size, speed and time left, with a progress bar.
 - **Stop and Resume**: Stop ends the download and keeps what it got; Resume continues from there. Stopping one that's waiting holds it.
 - **Cancel**: removes the download and its partial files.
@@ -73,6 +75,7 @@ type: Features
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
+- **Posts of Images**: the posts folder, where each site gets a folder of its own (the Pictures folder by default, with Choose Folder… and Use Default), and the pause before each Instagram file: a random time in a range, 10 to 20 seconds to start with, up to 600.
 - **Cookies**: where to read cookies from, for links that need a signed-in account or an age check. It applies to previews and downloads. Automatic (the default) finds every browser profile on the PC and picks, for each link, the one signed in to its site (by which cookies exist, never their values), or for an unknown site the one that visited it last. A single browser (Firefox, Zen, LibreWolf, Floorp, Waterfox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium) uses its profile signed in to the site, else its default one. Choosing a Chromium browser warns that they lock and encrypt their cookies on Windows; Firefox and its forks work.
 - **Supported Sites**: every site yt-dlp and gallery-dl can read, merged into one searchable list without saying which tool reads which, each site once (its playlists, channels and other parts that the tools list on their own are left out). Sites that need an account (Instagram, X, YouTube, TikTok, Reddit, Facebook, Twitch, Niconico, Bilibili) come first, under Signed In with the browser profiles signed in to them, most recent first, or under Not Signed In. The list is read again when Settings opens after a minute, since sign-ins change in the browser.
 
@@ -84,7 +87,7 @@ type: Features
 
 ## Tools
 
-Tsundoku downloads with three free tools: yt-dlp, ffmpeg (with ffprobe) and Deno, which yt-dlp needs for some YouTube formats. A fourth, gallery-dl, can be set up in Settings → Tools for image posts, which Tsundoku doesn't download yet.
+Tsundoku downloads with three free tools: yt-dlp, ffmpeg (with ffprobe) and Deno, which yt-dlp needs for some YouTube formats. A fourth, gallery-dl, can be set up in Settings → Tools for image posts.
 
 ### First-Run Setup
 

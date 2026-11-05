@@ -22,6 +22,10 @@ const IMAGE_SITES: [&str; 15] = [
     "wallhaven.cc",
 ];
 
+/// Sites that block an account reading them too fast, by domain: a post's files are downloaded with a pause
+/// between them (`DownloadSettings::post_pause`).
+const PACED_SITES: [&str; 1] = ["instagram.com"];
+
 /// A site where an account changes what can be read, and the cookies that show a browser is signed in to it.
 #[derive(Debug, PartialEq, Eq)]
 pub struct SignInSite {
@@ -101,6 +105,14 @@ pub fn prefers_images(link: &str) -> bool {
     IMAGE_SITES.iter().any(|site| on_domain(&host, site))
 }
 
+/// Whether a post at `link` is downloaded with a pause between its files.
+pub fn paces_downloads(link: &str) -> bool {
+    let Some(host) = host(link) else {
+        return false;
+    };
+    PACED_SITES.iter().any(|site| on_domain(&host, site))
+}
+
 /// The sign-in site `link` belongs to, if any.
 pub fn sign_in_site(link: &str) -> Option<&'static SignInSite> {
     let host = host(link)?;
@@ -164,6 +176,15 @@ mod tests {
         ] {
             assert!(prefers_images(link), "{link}");
         }
+    }
+
+    #[test]
+    fn paces_instagram_only() {
+        assert!(paces_downloads("https://www.instagram.com/p/DfPQchkG1tg/"));
+        assert!(!paces_downloads(
+            "https://x.com/NASA/status/2105698284354367897"
+        ));
+        assert!(!paces_downloads("https://notinstagram.com/p/1"));
     }
 
     #[test]

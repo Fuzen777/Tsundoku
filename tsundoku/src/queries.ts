@@ -4,6 +4,7 @@ import {
   checkForAppUpdate,
   detectTools,
   getAppInfo,
+  getDefaultPostsFolder,
   getDownloadOptions,
   getSupportedSites,
   getHistoryFilters,
@@ -141,6 +142,10 @@ export function useVideoDownloads(videoId: number, enabled: boolean) {
 /** The supported sites, read again when Settings opens after a minute, since sign-ins change in the browser. */
 export function useSupportedSites() {
   return useQuery({ queryKey: queryKeys.supportedSites, queryFn: getSupportedSites, staleTime: 60_000 })
+}
+
+export function useDefaultPostsFolder() {
+  return useQuery({ queryKey: queryKeys.defaultPostsFolder, queryFn: getDefaultPostsFolder, staleTime: Infinity })
 }
 
 export function useDownloadOptions() {

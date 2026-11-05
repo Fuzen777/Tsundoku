@@ -47,6 +47,7 @@ export const queryKeys = {
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
   downloadOptions: ["download-options"],
+  defaultPostsFolder: ["default-posts-folder"],
   supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
 } as const
@@ -222,6 +223,18 @@ export function getQueueItems(): Promise<QueueItem[]> {
 export function addToQueue(video: VideoInfo, presetId: string, overwrite: boolean): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
   return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite })
+}
+
+/** Adds a post of images, whose files all go into the site's folder in the posts folder. */
+export function addPostToQueue(video: VideoInfo): Promise<QueueItem> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<QueueItem>("add_post_to_queue", { video })
+}
+
+/** Where posts go when no folder is chosen. */
+export function getDefaultPostsFolder(): Promise<string> {
+  if (!isTauri()) return Promise.resolve(standIns.defaultPostsFolder)
+  return invoke<string>("default_posts_folder")
 }
 
 /** Stops a running download, keeping its partial files, or holds a waiting one. */

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Loader2, X } from "lucide-react"
-import { addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
+import { addPostToQueue, addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
 import type { PastDownload } from "../bindings/PastDownload"
 import type { VideoPreview } from "../bindings/VideoPreview"
 import {
@@ -102,7 +102,7 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
       {preview.inQueue ? (
         <p className="text-right text-fg-secondary">{strings.preview.inQueue}</p>
       ) : video.post ? (
-        <p className="text-right text-fg-secondary">{strings.preview.postsNotYet}</p>
+        <PostDownloadControls preview={preview} onAdded={onAdded} />
       ) : (
         <DownloadControls preview={preview} onAdded={onAdded} />
       )}
@@ -166,6 +166,34 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
           {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** Download for a post of images: every file as the site gives it, so there's no preset to pick. Downloading again
+ * only fetches the files that aren't in the folder any more. */
+function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<ErrorDescription | null>(null)
+
+  async function download() {
+    setAdding(true)
+    setError(null)
+    try {
+      await addPostToQueue(preview.video)
+      onAdded()
+    } catch (caught) {
+      setError(describeDownloadError(caught))
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      {error && <StatusMessage tone="danger" {...error} />}
+      <Button variant="primary" loading={adding} onClick={() => void download()}>
+        {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
+      </Button>
     </div>
   )
 }

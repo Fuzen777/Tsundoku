@@ -84,7 +84,11 @@ function QueueRow({ item }: { item: QueueItem }) {
           {item.video.title}
         </p>
         <p className="truncate text-xs text-fg-secondary tabular-nums">
-          {joinDetails([item.preset.name, stage, ...sizeDetails(item, progress)])}
+          {joinDetails([
+            item.preset?.name ?? (item.video.post && strings.preview.postContents(item.video.post.images, item.video.post.videos)),
+            stage,
+            ...sizeDetails(item, progress),
+          ])}
         </p>
         {item.state === "running" && <ProgressBar value={progress?.fraction ?? undefined} label={stage} />}
         {item.state === "failed" && item.error && (

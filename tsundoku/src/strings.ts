@@ -65,7 +65,7 @@ export const strings = {
     closeConfirm: "Close",
     errors: {
       folder: "Couldn't create the download folder.",
-      noFile: "yt-dlp finished without saying which file it made.",
+      noFile: "The download finished without saying which file it made.",
       alreadyQueued: "This video is already in the queue.",
       notFound: "This download isn't in the queue anymore.",
       wrongState: "That can't be done to this download right now.",
@@ -154,8 +154,8 @@ export const strings = {
       ].filter(Boolean)
       return parts.join(", ")
     },
-    postsNotYet: "Downloading posts of images comes in a later update.",
-    alreadyDownloaded: (date: string, preset: string) => `Already downloaded on ${date} with ${preset}.`,
+    alreadyDownloaded: (date: string, preset: string) =>
+      preset ? `Already downloaded on ${date} with ${preset}.` : `Already downloaded on ${date}.`,
     openFile: "Open File",
     showInFolder: "Show in Folder",
     preset: "Preset",
@@ -358,6 +358,19 @@ export const strings = {
     rateLimitHint: "For each download, in bytes per second, such as 500K or 2M. Leave it empty for no limit.",
     defaultPreset: "Default Preset",
     defaultPresetHint: "Picked on the preview card unless you choose another.",
+    posts: "Posts of Images",
+    postsFolder: "Folder",
+    postsFolderHint: "Each site's posts go in a folder of their own here, such as Instagram or X.",
+    postsFolderTitle: "Choose Where Posts Go",
+    chooseFolder: "Choose Folder…",
+    useDefaultFolder: "Use Default",
+    defaultFolder: (path: string) => `The default: ${path}`,
+    postPause: "Pause Between Instagram Files",
+    postPauseHint: (longest: number) =>
+      `Instagram blocks accounts that read too fast, so Tsundoku waits a random time in this range before each file, up to ${longest} seconds.`,
+    pauseFrom: "From",
+    pauseTo: "to",
+    seconds: "seconds",
     cookies: "Cookies",
     cookiesBrowser: "Read Cookies From",
     cookiesNone: "None",

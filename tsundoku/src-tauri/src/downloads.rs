@@ -99,6 +99,20 @@ pub fn add_to_queue(
     queue.add(video, &preset_id, overwrite)
 }
 
+/// Adds a post of images, whose files all go into the site's folder in the posts folder.
+#[tauri::command]
+pub fn add_post_to_queue(queue: Queue<'_>, video: VideoInfo) -> Result<QueueItem, DownloadError> {
+    queue.add_post(video)
+}
+
+/// Where posts go when no folder is chosen.
+#[tauri::command]
+pub fn default_posts_folder() -> String {
+    tsundoku_core::downloads::default_posts_folder()
+        .display()
+        .to_string()
+}
+
 #[tauri::command]
 pub fn stop_download(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
     queue.stop(id)
@@ -124,7 +138,7 @@ pub fn clear_finished_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
     queue.clear_finished()
 }
 
-/// How downloads run: how many at once, the speed limit and the cookies browser.
+/// How downloads run: how many at once, the speed limit, the cookies browser, and where posts go and how fast.
 #[tauri::command]
 pub fn download_options(queue: Queue<'_>) -> DownloadSettings {
     queue.options()

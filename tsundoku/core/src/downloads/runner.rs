@@ -1,5 +1,6 @@
-//! Running one download: yt-dlp with the preset's arguments, its progress read as it goes and its output kept in
-//! the item's log. A trait, so the queue's tests can use a runner that doesn't download.
+//! Running one download: yt-dlp with the preset's arguments for a video, gallery-dl for a post of images
+//! (`post_runner`), its progress read as it goes and its output kept in the item's log. A trait, so the queue's
+//! tests can use a runner that doesn't download.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -8,22 +9,24 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 
-use super::{DownloadError, DownloadProgress, DownloadStage, progress};
+use super::{DownloadError, DownloadProgress, DownloadStage, post_runner, progress};
 use crate::cancel::CancelToken;
 use crate::metadata::{PreviewError, classify_failure};
-use crate::presets::Preset;
+use crate::presets::{Preset, PresetError};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
+use crate::settings::PauseRange;
 use crate::tools::{ToolError, start_error};
 
-/// The most recent lines of yt-dlp's error output kept to explain a failure.
-const KEPT_ERROR_LINES: usize = 50;
+/// The most recent lines of a tool's error output kept to explain a failure.
+pub(super) const KEPT_ERROR_LINES: usize = 50;
 
 /// Everything one run of a download needs.
 #[derive(Debug, Clone)]
 pub struct JobSpec {
     pub id: i64,
     pub url: String,
-    pub preset: Preset,
+    /// A video's preset. `None` for a post, whose files are downloaded as they are.
+    pub preset: Option<Preset>,
     /// Where the file goes.
     pub folder: PathBuf,
     /// Where yt-dlp works: in the destination folder, so finishing is a rename on the same drive. Kept by Stop so
@@ -39,12 +42,25 @@ pub struct JobSpec {
     pub rate_limit: Option<String>,
     /// The `--cookies-from-browser` value (`browsers::cookies_for`), or `None` for no cookies.
     pub cookies: Option<String>,
+    /// Set for a post of images, which gallery-dl downloads.
+    pub post: Option<PostJob>,
+}
+
+/// What downloading a post takes beyond a video's needs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostJob {
+    pub gallery_dl: Option<PathBuf>,
+    /// The pause before each file, on a site that blocks fast readers (`sites::paces_downloads`).
+    pub pause: Option<PauseRange>,
+    /// How many files the preview found, to show progress.
+    pub files: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum JobOutcome {
     Finished {
-        file_path: PathBuf,
+        /// The files made, in order: one for a video, one or more for a post.
+        files: Vec<PathBuf>,
         /// Resolution and codecs, such as "1080p · avc1 + mp4a", or the audio's format.
         format: Option<String>,
     },
@@ -62,92 +78,107 @@ pub trait JobRunner: Send + Sync {
     ) -> JobOutcome;
 }
 
-/// Downloads with yt-dlp.
-pub struct YtDlpRunner;
+/// Downloads with the tools: gallery-dl for a post, yt-dlp for a video.
+pub struct ToolRunner;
 
-impl JobRunner for YtDlpRunner {
+impl JobRunner for ToolRunner {
     fn run(
         &self,
         job: &JobSpec,
         cancel: &CancelToken,
         on_progress: &mut dyn FnMut(DownloadProgress),
     ) -> JobOutcome {
-        let Some(yt_dlp) = &job.yt_dlp else {
-            return JobOutcome::Failed(DownloadError::YtDlp {
-                error: PreviewError::Tool {
-                    tool: crate::tools::ToolId::YtDlp,
-                    error: ToolError::FileMissing {
-                        path: "yt-dlp".to_owned(),
-                    },
-                },
-            });
-        };
-        for folder in [&job.folder, &job.temp_folder] {
-            if let Err(error) = fs::create_dir_all(folder) {
-                return JobOutcome::Failed(DownloadError::Folder {
-                    path: folder.display().to_string(),
-                    detail: error.to_string(),
-                });
-            }
-        }
-        let result_file = job.temp_folder.join("tsundoku-result.json");
-        let _ = fs::remove_file(&result_file);
-        let args = match arguments(job, &result_file) {
-            Ok(args) => args,
-            Err(error) => return JobOutcome::Failed(DownloadError::Preset { error }),
-        };
-        let command = ProgramCommand::new(yt_dlp).args(&args);
-
-        // Appended to, so a resumed or retried download keeps the earlier runs' output above.
-        let mut log = open_log(&job.log_path);
-        write_log(
-            &mut log,
-            &format!("=== {} yt-dlp {}", seconds_since_epoch(), args.join(" ")),
-        );
-        on_progress(DownloadProgress::at(DownloadStage::Starting));
-
-        let mut errors = Vec::new();
-        let result = process::run(&command, cancel, None, |line| {
-            if let Some(progress) = progress::parse_line(line.text()) {
-                on_progress(progress);
-                return;
-            }
-            write_log(&mut log, line.text());
-            if let OutputLine::Stderr(text) = line {
-                if errors.len() == KEPT_ERROR_LINES {
-                    errors.remove(0);
-                }
-                errors.push(text);
-            }
-        });
-
-        match result {
-            Err(RunError::Cancelled) => JobOutcome::Cancelled,
-            Err(RunError::Start { source, .. }) => JobOutcome::Failed(DownloadError::YtDlp {
-                error: PreviewError::Tool {
-                    tool: crate::tools::ToolId::YtDlp,
-                    error: start_error(source, yt_dlp),
-                },
-            }),
-            Err(other) => JobOutcome::Failed(DownloadError::Unexpected {
-                detail: other.to_string(),
-            }),
-            Ok(status) if !status.success() => {
-                let lines: Vec<&str> = errors.iter().map(String::as_str).collect();
-                JobOutcome::Failed(DownloadError::YtDlp {
-                    error: classify_failure(&lines),
-                })
-            }
-            Ok(_) => read_result(&result_file),
+        match &job.post {
+            Some(post) => post_runner::run(job, post, cancel, on_progress),
+            None => run_yt_dlp(job, cancel, on_progress),
         }
     }
 }
 
-/// yt-dlp's arguments for a download: Tsundoku's own (progress, paths, tools), then the preset's, then the link.
-pub(crate) fn arguments(
+/// Makes the destination and temporary folders.
+pub(super) fn make_folders(job: &JobSpec) -> Result<(), DownloadError> {
+    for folder in [&job.folder, &job.temp_folder] {
+        fs::create_dir_all(folder).map_err(|error| DownloadError::Folder {
+            path: folder.display().to_string(),
+            detail: error.to_string(),
+        })?;
+    }
+    Ok(())
+}
+
+fn run_yt_dlp(
     job: &JobSpec,
-    result_file: &Path,
-) -> Result<Vec<String>, crate::presets::PresetError> {
+    cancel: &CancelToken,
+    on_progress: &mut dyn FnMut(DownloadProgress),
+) -> JobOutcome {
+    let Some(yt_dlp) = &job.yt_dlp else {
+        return JobOutcome::Failed(DownloadError::YtDlp {
+            error: PreviewError::Tool {
+                tool: crate::tools::ToolId::YtDlp,
+                error: ToolError::FileMissing {
+                    path: "yt-dlp".to_owned(),
+                },
+            },
+        });
+    };
+    if let Err(error) = make_folders(job) {
+        return JobOutcome::Failed(error);
+    }
+    let result_file = job.temp_folder.join("tsundoku-result.json");
+    let _ = fs::remove_file(&result_file);
+    let args = match arguments(job, &result_file) {
+        Ok(args) => args,
+        Err(error) => return JobOutcome::Failed(DownloadError::Preset { error }),
+    };
+    let command = ProgramCommand::new(yt_dlp).args(&args);
+
+    // Appended to, so a resumed or retried download keeps the earlier runs' output above.
+    let mut log = open_log(&job.log_path);
+    write_log(
+        &mut log,
+        &format!("=== {} yt-dlp {}", seconds_since_epoch(), args.join(" ")),
+    );
+    on_progress(DownloadProgress::at(DownloadStage::Starting));
+
+    let mut errors = Vec::new();
+    let result = process::run(&command, cancel, None, |line| {
+        if let Some(progress) = progress::parse_line(line.text()) {
+            on_progress(progress);
+            return;
+        }
+        write_log(&mut log, line.text());
+        if let OutputLine::Stderr(text) = line {
+            if errors.len() == KEPT_ERROR_LINES {
+                errors.remove(0);
+            }
+            errors.push(text);
+        }
+    });
+
+    match result {
+        Err(RunError::Cancelled) => JobOutcome::Cancelled,
+        Err(RunError::Start { source, .. }) => JobOutcome::Failed(DownloadError::YtDlp {
+            error: PreviewError::Tool {
+                tool: crate::tools::ToolId::YtDlp,
+                error: start_error(source, yt_dlp),
+            },
+        }),
+        Err(other) => JobOutcome::Failed(DownloadError::Unexpected {
+            detail: other.to_string(),
+        }),
+        Ok(status) if !status.success() => {
+            let lines: Vec<&str> = errors.iter().map(String::as_str).collect();
+            JobOutcome::Failed(DownloadError::YtDlp {
+                error: classify_failure(&lines),
+            })
+        }
+        Ok(_) => read_result(&result_file),
+    }
+}
+
+/// yt-dlp's arguments for a download: Tsundoku's own (progress, paths, tools), then the preset's, then the link.
+pub(crate) fn arguments(job: &JobSpec, result_file: &Path) -> Result<Vec<String>, PresetError> {
+    let preset = job.preset.as_ref().ok_or(PresetError::NotFound)?;
     let [download_template, postprocess_template] = progress::templates();
     let mut args: Vec<String> = [
         "--ignore-config",
@@ -194,7 +225,7 @@ pub(crate) fn arguments(
     if job.overwrite {
         args.push("--force-overwrites".to_owned());
     }
-    args.extend(job.preset.to_args()?);
+    args.extend(preset.to_args()?);
     // After "--", the link can't be taken for an option.
     args.extend(["--".to_owned(), job.url.clone()]);
     Ok(args)
@@ -221,7 +252,7 @@ fn read_result(result_file: &Path) -> JobOutcome {
             acodec,
             ext,
         }) => JobOutcome::Finished {
-            file_path: PathBuf::from(file_path),
+            files: vec![PathBuf::from(file_path)],
             format: format_label(height, vcodec.as_deref(), acodec.as_deref(), ext.as_deref()),
         },
         _ => JobOutcome::Failed(DownloadError::NoFile),
@@ -256,7 +287,7 @@ pub(crate) fn format_label(
     }
 }
 
-fn open_log(path: &Path) -> Option<File> {
+pub(super) fn open_log(path: &Path) -> Option<File> {
     if let Some(folder) = path.parent() {
         fs::create_dir_all(folder).ok()?;
     }
@@ -264,7 +295,7 @@ fn open_log(path: &Path) -> Option<File> {
 }
 
 /// A log that can't be written is skipped: the download matters more than its log.
-fn write_log(log: &mut Option<File>, line: &str) {
+pub(super) fn write_log(log: &mut Option<File>, line: &str) {
     if let Some(file) = log
         && writeln!(file, "{line}").is_err()
     {
@@ -272,7 +303,7 @@ fn write_log(log: &mut Option<File>, line: &str) {
     }
 }
 
-fn seconds_since_epoch() -> u64 {
+pub(super) fn seconds_since_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs())
@@ -289,8 +320,7 @@ mod tests {
             url: "https://www.youtube.com/watch?v=jNQXAC9IVRw".to_owned(),
             preset: built_in_presets()
                 .into_iter()
-                .find(|preset| preset.id == preset_id)
-                .unwrap(),
+                .find(|preset| preset.id == preset_id),
             folder: PathBuf::from(r"D:\Videos"),
             temp_folder: PathBuf::from(r"D:\Videos\.tsundoku-7"),
             log_path: PathBuf::from(r"C:\data\logs\7.log"),
@@ -300,6 +330,7 @@ mod tests {
             deno: None,
             rate_limit: None,
             cookies: None,
+            post: None,
         }
     }
 
@@ -407,7 +438,7 @@ mod tests {
         assert_eq!(
             read_result(&result_file),
             JobOutcome::Finished {
-                file_path: PathBuf::from(r"D:\Videos\Me at the zoo [jNQXAC9IVRw].mkv"),
+                files: vec![PathBuf::from(r"D:\Videos\Me at the zoo [jNQXAC9IVRw].mkv")],
                 format: Some("240p · av01 + opus".to_owned()),
             }
         );

@@ -1,7 +1,8 @@
-//! The download queue: videos waiting, running (a few at a time), stopped, done or failed, kept in `tsundoku.db` so
+//! The download queue: videos and posts of images waiting, running (a few at a time), stopped, done or failed, kept in `tsundoku.db` so
 //! they come back after a restart. A finished download is recorded in the history. See
 //! `DOCUMENTATION/Docs/Download Pipeline.md`.
 
+mod post_runner;
 mod progress;
 mod runner;
 mod store;
@@ -16,7 +17,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub use self::runner::{JobOutcome, JobRunner, JobSpec, YtDlpRunner};
+pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
 use crate::browsers;
 use crate::cancel::CancelToken;
@@ -25,6 +26,7 @@ use crate::history::{History, NewDownload};
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::presets::{PresetError, PresetManager};
 use crate::settings::{DownloadSettings, SettingsStore};
+use crate::sites;
 use crate::sync::lock;
 use crate::tools::{ToolId, ToolManager};
 
@@ -52,9 +54,10 @@ pub struct QueueItem {
     #[ts(type = "number")]
     pub id: i64,
     pub video: VideoInfo,
-    /// The preset as it was when the video was added, so editing the preset doesn't change the download.
-    pub preset: crate::presets::Preset,
-    /// Where the file goes.
+    /// The preset as it was when the video was added, so editing the preset doesn't change the download. `None`
+    /// for a post of images, whose files are kept as the site gives them.
+    pub preset: Option<crate::presets::Preset>,
+    /// Where the file goes, or a post's files: the site's folder in the posts folder.
     pub folder: String,
     pub state: QueueState,
     /// Download Again with the same preset: replace the file made before.
@@ -148,8 +151,8 @@ pub enum DownloadStage {
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum DownloadError {
-    /// yt-dlp failed, or couldn't run; its error, sorted as a preview's is.
-    #[error("yt-dlp failed: {error}")]
+    /// yt-dlp, or gallery-dl for a post, failed or couldn't run; its error, sorted as a preview's is.
+    #[error("download failed: {error}")]
     YtDlp { error: PreviewError },
     /// The destination or temporary folder couldn't be made.
     #[error("couldn't make {path}: {detail}")]
@@ -299,9 +302,37 @@ impl DownloadQueue {
             id: 0,
             folder: preset.resolved_folder().display().to_string(),
             video,
-            preset,
+            preset: Some(preset),
             state: QueueState::Waiting,
             overwrite,
+            added_at: seconds_since_epoch(),
+            result: None,
+            error: None,
+            progress: None,
+        };
+        item.id = self.store.insert(&item)?;
+        lock(&self.state).items.push(item.clone());
+        self.schedule();
+        Ok(item)
+    }
+
+    /// Adds a post of images (a video whose `post` is set, from gallery-dl), to download all its files into the
+    /// site's folder in the posts folder. Files already there are skipped, so adding a post again only fetches what's
+    /// missing.
+    pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
+        if video.post.is_none() {
+            return Err(DownloadError::WrongState);
+        }
+        if self.contains(&video.site, &video.video_id) {
+            return Err(DownloadError::AlreadyQueued);
+        }
+        let mut item = QueueItem {
+            id: 0,
+            folder: post_folder(&self.options(), &video).display().to_string(),
+            video,
+            preset: None,
+            state: QueueState::Waiting,
+            overwrite: false,
             added_at: seconds_since_epoch(),
             result: None,
             error: None,
@@ -397,7 +428,7 @@ impl DownloadQueue {
         Ok(())
     }
 
-    /// How downloads run: how many at once, the speed limit and the cookies browser.
+    /// How downloads run: how many at once, the speed limit, the cookies browser, and where posts go and how fast.
     pub fn options(&self) -> DownloadSettings {
         self.settings.get().downloads
     }
@@ -412,6 +443,11 @@ impl DownloadQueue {
             at_once: options.at_once.clamp(1, MAX_AT_ONCE),
             rate_limit: normalize_rate_limit(options.rate_limit.as_deref())?,
             cookies_browser: options.cookies_browser,
+            posts_folder: options
+                .posts_folder
+                .map(|folder| folder.trim().to_owned())
+                .filter(|folder| !folder.is_empty()),
+            post_pause: options.post_pause.normalized(),
         };
         self.settings
             .update(|settings| settings.downloads = options.clone())
@@ -483,6 +519,11 @@ impl DownloadQueue {
             deno: self.tools.executable(ToolId::Deno),
             rate_limit: options.rate_limit,
             cookies: browsers::cookies_for(options.cookies_browser, &item.video.url),
+            post: item.video.post.map(|contents| PostJob {
+                gallery_dl: self.tools.executable(ToolId::GalleryDl),
+                pause: sites::paces_downloads(&item.video.url).then_some(options.post_pause),
+                files: contents.images + contents.videos,
+            }),
         }
     }
 
@@ -533,8 +574,13 @@ impl DownloadQueue {
                     item.state = QueueState::Failed;
                     item.error = Some(error);
                 }
-                (_, JobOutcome::Finished { file_path, format }) => {
-                    match self.record(&item.video, &item.preset.name, &file_path, format) {
+                (_, JobOutcome::Finished { files, format }) => {
+                    let preset = item
+                        .preset
+                        .as_ref()
+                        .map(|preset| preset.name.clone())
+                        .unwrap_or_default();
+                    match self.record(&item.video, &preset, &files, format) {
                         Ok(result) => {
                             item.state = QueueState::Done;
                             item.result = Some(result);
@@ -553,16 +599,22 @@ impl DownloadQueue {
         self.schedule();
     }
 
+    /// Records a finished download in the history: its first file, and the size of all of them. A post's preset
+    /// name is empty.
     fn record(
         &self,
         video: &VideoInfo,
         preset_name: &str,
-        file_path: &Path,
+        files: &[PathBuf],
         format: Option<String>,
     ) -> Result<DownloadResult, DownloadError> {
-        let file_size = fs::metadata(file_path)
-            .ok()
-            .map(|metadata| metadata.len() as i64);
+        let file_path = files.first().ok_or(DownloadError::NoFile)?;
+        let sizes: Vec<i64> = files
+            .iter()
+            .filter_map(|file| fs::metadata(file).ok())
+            .map(|metadata| metadata.len() as i64)
+            .collect();
+        let file_size = (!sizes.is_empty()).then(|| sizes.iter().sum());
         let download = NewDownload {
             preset: preset_name.to_owned(),
             file_path: file_path.display().to_string(),
@@ -615,6 +667,36 @@ fn normalize_rate_limit(text: Option<&str>) -> Result<Option<String>, DownloadEr
             value: text.to_owned(),
         }),
     }
+}
+
+/// Where posts go when no folder is chosen: the Pictures folder, or the user's folder if Windows has none.
+pub fn default_posts_folder() -> PathBuf {
+    dirs::picture_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_default()
+}
+
+/// A post's folder: the posts folder, then a folder for the site ("Instagram", "X", or gallery-dl's name such as
+/// "danbooru"), so each site's files can be imported on their own.
+fn post_folder(options: &DownloadSettings, video: &VideoInfo) -> PathBuf {
+    let base = options
+        .posts_folder
+        .as_deref()
+        .map(PathBuf::from)
+        .unwrap_or_else(default_posts_folder);
+    let site = sites::sign_in_site(&video.url).map_or(video.site.as_str(), |site| site.name);
+    let name: String = site
+        .chars()
+        .map(|character| {
+            if character.is_control() || r#"<>:"/\|?*"#.contains(character) {
+                '_'
+            } else {
+                character
+            }
+        })
+        .collect();
+    let name = name.trim_matches(['.', ' ']);
+    base.join(if name.is_empty() { "Other" } else { name })
 }
 
 fn find(items: &mut [QueueItem], id: i64) -> Result<&mut QueueItem, DownloadError> {

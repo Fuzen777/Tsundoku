@@ -15,7 +15,7 @@ use tauri_plugin_window_state::StateFlags;
 use tsundoku_core::app_info::AppInfo;
 use tsundoku_core::data_folder::{self, BuildKind, DataPaths};
 use tsundoku_core::database::Database;
-use tsundoku_core::downloads::{DownloadQueue, QueueServices, YtDlpRunner};
+use tsundoku_core::downloads::{DownloadQueue, QueueServices, ToolRunner};
 use tsundoku_core::history::History;
 use tsundoku_core::presets::PresetManager;
 use tsundoku_core::preview::PreviewService;
@@ -91,7 +91,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         presets: Arc::clone(&presets),
         settings,
         logs_folder,
-        runner: Arc::new(YtDlpRunner),
+        runner: Arc::new(ToolRunner),
         listener: Arc::new(downloads::EventListener {
             app: app.handle().clone(),
         }),
@@ -169,6 +169,8 @@ pub fn run() {
             downloads::preset_arguments,
             downloads::queue_items,
             downloads::add_to_queue,
+            downloads::add_post_to_queue,
+            downloads::default_posts_folder,
             downloads::stop_download,
             downloads::resume_download,
             downloads::retry_download,

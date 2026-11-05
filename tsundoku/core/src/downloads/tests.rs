@@ -11,6 +11,7 @@ use crate::presets::built_in_presets;
 #[derive(Default)]
 struct FakeRunner {
     started: Mutex<Vec<i64>>,
+    jobs: Mutex<Vec<JobSpec>>,
     outcomes: Mutex<HashMap<i64, JobOutcome>>,
 }
 
@@ -22,6 +23,14 @@ impl FakeRunner {
     fn started(&self) -> Vec<i64> {
         lock(&self.started).clone()
     }
+
+    fn job(&self, id: i64) -> JobSpec {
+        lock(&self.jobs)
+            .iter()
+            .find(|job| job.id == id)
+            .cloned()
+            .unwrap()
+    }
 }
 
 impl JobRunner for FakeRunner {
@@ -32,6 +41,7 @@ impl JobRunner for FakeRunner {
         on_progress: &mut dyn FnMut(DownloadProgress),
     ) -> JobOutcome {
         lock(&self.started).push(job.id);
+        lock(&self.jobs).push(job.clone());
         fs::create_dir_all(&job.temp_folder).unwrap();
         on_progress(DownloadProgress::at(DownloadStage::DownloadingVideo));
         loop {
@@ -89,6 +99,8 @@ impl Test {
                 }
                 // No cookies, so the tests never look at this PC's browsers.
                 settings.downloads.cookies_browser = None;
+                settings.downloads.posts_folder =
+                    Some(folder.path().join("posts").display().to_string());
             })
             .unwrap();
         let runner = Arc::new(FakeRunner::default());
@@ -163,7 +175,7 @@ impl Test {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, b"video").unwrap();
         JobOutcome::Finished {
-            file_path: path,
+            files: vec![path],
             format: Some("1080p · avc1 + mp4a".to_owned()),
         }
     }
@@ -355,8 +367,9 @@ fn keeps_the_preset_as_it_was_when_added() {
         .into_iter()
         .find(|item| item.id == id)
         .unwrap();
-    assert_eq!(item.preset.name, "Best Video");
-    assert_eq!(item.preset.output, built_in_presets()[0].output);
+    let preset = item.preset.unwrap();
+    assert_eq!(preset.name, "Best Video");
+    assert_eq!(preset.output, built_in_presets()[0].output);
 }
 
 #[test]
@@ -417,10 +430,18 @@ fn checks_and_saves_the_options() {
             at_once: 9,
             rate_limit: Some(" 4.2m ".to_owned()),
             cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
+            posts_folder: Some("   ".to_owned()),
+            post_pause: crate::settings::PauseRange { min: 30, max: 5 },
         })
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
+    assert_eq!(saved.posts_folder, None, "blank is the Pictures folder");
+    assert_eq!(
+        saved.post_pause,
+        crate::settings::PauseRange { min: 5, max: 5 },
+        "the shortest pause is never longer than the longest"
+    );
     assert_eq!(test.queue.options(), saved);
     assert_eq!(
         test.settings.get().downloads,
@@ -491,5 +512,117 @@ fn deletes_only_old_logs() {
     assert!(
         folder.path().join("notes.txt").exists(),
         "only logs are deleted"
+    );
+}
+
+fn post(post_id: &str) -> VideoInfo {
+    VideoInfo {
+        site: "instagram".to_owned(),
+        site_name: "instagram.com".to_owned(),
+        video_id: post_id.to_owned(),
+        url: format!("https://www.instagram.com/p/{post_id}/"),
+        title: format!("Post {post_id}"),
+        uploader: Some("someone".to_owned()),
+        duration_seconds: None,
+        upload_date: None,
+        thumbnail_url: None,
+        best_height: None,
+        post: Some(crate::metadata::PostContents {
+            images: 2,
+            videos: 1,
+        }),
+    }
+}
+
+#[test]
+fn downloads_a_post_into_its_sites_folder_at_a_safe_pace() {
+    let test = Test::new();
+    let id = test.queue.add_post(post("Abc123")).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+
+    let job = test.runner.job(id);
+    let site_folder = test.folder.path().join("posts").join("Instagram");
+    assert_eq!(job.folder, site_folder);
+    assert_eq!(job.preset, None);
+    let post_job = job.post.unwrap();
+    assert_eq!(post_job.files, 3);
+    assert_eq!(post_job.pause, Some(crate::settings::PauseRange::default()));
+
+    fs::create_dir_all(&site_folder).unwrap();
+    let files: Vec<PathBuf> = ["1.jpg", "2.mp4", "3.jpg"]
+        .iter()
+        .map(|name| site_folder.join(name))
+        .collect();
+    for file in &files {
+        fs::write(file, b"image").unwrap();
+    }
+    test.runner.complete(
+        id,
+        JobOutcome::Finished {
+            files: files.clone(),
+            format: None,
+        },
+    );
+    wait_until("it's done", || test.state(id) == Some(QueueState::Done));
+
+    let result = test
+        .queue
+        .items()
+        .into_iter()
+        .find(|item| item.id == id)
+        .unwrap()
+        .result
+        .unwrap();
+    assert_eq!(result.file_path, files[0].display().to_string());
+    assert_eq!(result.file_size, Some(15), "every file counts");
+    let last = test
+        .history
+        .last_download("instagram", "Abc123")
+        .unwrap()
+        .unwrap();
+    assert_eq!(last.preset, "", "a post has no preset");
+}
+
+#[test]
+fn only_paces_sites_that_need_it() {
+    let test = Test::new();
+    let mut tweet = post("2105698284354367897");
+    tweet.site = "twitter".to_owned();
+    tweet.url = "https://x.com/NASA/status/2105698284354367897".to_owned();
+    let id = test.queue.add_post(tweet).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    let job = test.runner.job(id);
+    assert!(job.folder.ends_with("X"));
+    assert_eq!(job.post.unwrap().pause, None);
+    test.queue.cancel(id).unwrap();
+}
+
+#[test]
+fn a_video_isnt_added_as_a_post() {
+    let test = Test::new();
+    assert_eq!(
+        test.queue.add_post(video("a")),
+        Err(DownloadError::WrongState)
+    );
+    assert!(test.queue.items().is_empty());
+}
+
+#[test]
+fn names_site_folders_safely() {
+    let options = DownloadSettings {
+        posts_folder: Some(r"D:\Posts".to_owned()),
+        ..DownloadSettings::default()
+    };
+    let mut odd = post("1");
+    odd.site = "a:b/c.".to_owned();
+    odd.url = "https://example.org/1".to_owned();
+    assert_eq!(
+        post_folder(&options, &odd),
+        Path::new(r"D:\Posts").join("a_b_c")
+    );
+    odd.site = "..".to_owned();
+    assert_eq!(
+        post_folder(&options, &odd),
+        Path::new(r"D:\Posts").join("Other")
     );
 }

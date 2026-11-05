@@ -1,17 +1,22 @@
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { queryKeys, saveDownloadOptions, setDefaultPreset } from "../../api"
+import { pickFolder, queryKeys, saveDownloadOptions, setDefaultPreset } from "../../api"
 import type { CookiesBrowser } from "../../bindings/CookiesBrowser"
 import type { DownloadSettings } from "../../bindings/DownloadSettings"
+import type { PauseRange } from "../../bindings/PauseRange"
+import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { describeDownloadError, describePresetError, type ErrorDescription } from "../../errors"
-import { useDownloadOptions, usePresets, useStorePresets } from "../../queries"
+import { useDefaultPostsFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
 
 const text = strings.settings
+
+/** The longest pause between a post's files, in seconds (`PauseRange::LONGEST` in the core). */
+const LONGEST_PAUSE = 600
 
 /** The most downloads that can run at once (`MAX_AT_ONCE` in the core). */
 const AT_ONCE_CHOICES = [1, 2, 3, 4, 5] as const
@@ -136,6 +141,81 @@ export function DownloadsSection() {
         </Field>
         {error && <StatusMessage tone="danger" {...error} />}
         {presetError && <StatusMessage tone="danger" {...presetError} />}
+      </Card>
+    </Section>
+  )
+}
+
+/** Settings → Posts of Images: where posts go, each site in its own folder, and the pause between Instagram's files. */
+export function PostsSection() {
+  const { options, save, error } = useSaveOptions()
+  const { data: defaultFolder } = useDefaultPostsFolder()
+  // The pause is saved when a field is left or Enter is pressed, not at every key.
+  const [pause, setPause] = useState<{ min: string; max: string } | null>(null)
+  const savedPause = options?.postPause ?? { min: 10, max: 20 }
+  const shownPause = pause ?? { min: String(savedPause.min), max: String(savedPause.max) }
+  const folder = options?.postsFolder ?? null
+
+  async function chooseFolder() {
+    const chosen = await pickFolder(text.postsFolderTitle)
+    if (chosen) await save({ postsFolder: chosen })
+  }
+
+  async function savePause() {
+    if (pause === null) return
+    const read = (value: string, fallback: number) => {
+      const number = Number.parseInt(value, 10)
+      return Number.isNaN(number) ? fallback : Math.max(0, number)
+    }
+    const changed: PauseRange = { min: read(pause.min, savedPause.min), max: read(pause.max, savedPause.max) }
+    if (await save({ postPause: changed })) setPause(null)
+  }
+
+  const pauseInput = (end: "min" | "max", label: string) => (
+    <TextInput
+      id={`settings-pause-${end}`}
+      aria-label={label}
+      inputMode="numeric"
+      className="w-20 text-right tabular-nums"
+      value={shownPause[end]}
+      disabled={!options}
+      onChange={(event) => setPause({ ...shownPause, [end]: event.target.value })}
+      onBlur={() => void savePause()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") void savePause()
+      }}
+    />
+  )
+
+  return (
+    <Section title={text.posts}>
+      <Card className="flex flex-col gap-4 p-4">
+        <Field
+          label={text.postsFolder}
+          hint={folder || !defaultFolder ? text.postsFolderHint : `${text.postsFolderHint} ${text.defaultFolder(defaultFolder)}`}
+        >
+          <div className="flex gap-2">
+            <TextInput readOnly className="flex-1" value={folder ?? defaultFolder ?? ""} title={folder ?? defaultFolder ?? ""} />
+            <Button disabled={!options} onClick={() => void chooseFolder()}>
+              {text.chooseFolder}
+            </Button>
+            {folder && (
+              <Button variant="ghost" onClick={() => void save({ postsFolder: null })}>
+                {text.useDefaultFolder}
+              </Button>
+            )}
+          </div>
+        </Field>
+        <Field label={text.postPause} hint={text.postPauseHint(LONGEST_PAUSE)} htmlFor="settings-pause-min">
+          <div className="flex items-center gap-2 text-fg-secondary">
+            <span>{text.pauseFrom}</span>
+            {pauseInput("min", text.pauseFrom)}
+            <span>{text.pauseTo}</span>
+            {pauseInput("max", text.pauseTo)}
+            <span>{text.seconds}</span>
+          </div>
+        </Field>
+        {error && <StatusMessage tone="danger" {...error} />}
       </Card>
     </Section>
   )

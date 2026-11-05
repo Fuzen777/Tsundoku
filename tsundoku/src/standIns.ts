@@ -202,7 +202,14 @@ export const standIns = {
     ],
     imagesSetUp: false,
   } satisfies SupportedSites,
-  downloadOptions: { atOnce: 2, rateLimit: null, cookiesBrowser: "automatic" } satisfies DownloadSettings,
+  downloadOptions: {
+    atOnce: 2,
+    rateLimit: null,
+    cookiesBrowser: "automatic",
+    postsFolder: null,
+    postPause: { min: 10, max: 20 },
+  } satisfies DownloadSettings,
+  defaultPostsFolder: String.raw`C:\Users\You\Pictures`,
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {
       progress: {

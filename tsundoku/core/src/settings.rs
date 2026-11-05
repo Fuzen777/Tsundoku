@@ -36,6 +36,11 @@ pub struct DownloadSettings {
     /// the browser profile signed in to the link's site (`browsers::cookies_for`), a browser its profile, `None`
     /// none at all.
     pub cookies_browser: Option<CookiesBrowser>,
+    /// Where posts of images go, each site in a folder of its own, or `None` for the Pictures folder.
+    pub posts_folder: Option<String>,
+    /// How long to wait before each file of a post on a site that limits how fast it's read
+    /// (`sites::paces_downloads`, Instagram), so the account isn't blocked.
+    pub post_pause: PauseRange,
 }
 
 impl Default for DownloadSettings {
@@ -44,7 +49,48 @@ impl Default for DownloadSettings {
             at_once: 2,
             rate_limit: None,
             cookies_browser: Some(CookiesBrowser::Automatic),
+            posts_folder: None,
+            post_pause: PauseRange::default(),
         }
+    }
+}
+
+/// A random wait between `min` and `max` seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct PauseRange {
+    pub min: u32,
+    pub max: u32,
+}
+
+impl PauseRange {
+    /// The longest pause that can be set, in seconds.
+    pub const LONGEST: u32 = 600;
+
+    /// Within 0 to `LONGEST`, with `min` no more than `max`.
+    pub fn normalized(self) -> Self {
+        let max = self.max.min(Self::LONGEST);
+        Self {
+            min: self.min.min(max),
+            max,
+        }
+    }
+
+    /// As gallery-dl's `--sleep` takes it: "10-20", or "10" when both ends are the same.
+    pub fn to_arg(self) -> String {
+        if self.min == self.max {
+            self.min.to_string()
+        } else {
+            format!("{}-{}", self.min, self.max)
+        }
+    }
+}
+
+impl Default for PauseRange {
+    /// One file every 10 to 20 seconds: slow, but safe from Instagram's limits.
+    fn default() -> Self {
+        Self { min: 10, max: 20 }
     }
 }
 
