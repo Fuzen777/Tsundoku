@@ -41,7 +41,7 @@ jobs:
           $version = (Get-Content tsundoku/package.json -Raw | ConvertFrom-Json).version
           $cargoVersion = (Select-String -Path tsundoku/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
           if ($cargoVersion -ne $version) {
-            throw "tsundoku/Cargo.toml has version $cargoVersion but package.json has $version: bump both together."
+            throw "tsundoku/Cargo.toml has version $cargoVersion but package.json has ${version}: bump both together."
           }
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
             throw "The tag $env:GITHUB_REF_NAME doesn't match the version $version in tsundoku/package.json."
