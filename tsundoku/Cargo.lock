@@ -4664,7 +4664,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "tauri",
@@ -4681,7 +4681,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "dirs",
  "reqwest",
