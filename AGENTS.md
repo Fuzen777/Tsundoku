@@ -67,7 +67,9 @@ title: AGENTS
 
 ### Releases
 
-- A release is a version tag pushed to GitHub: `.github/workflows/release.yml` checks that the tag matches `package.json` and `Cargo.toml`, runs `Scripts\Check.cmd`, checks the committed bindings are current, then `tauri-action` builds the installer, signs it and publishes a release with `latest.json` for the updater. Running the workflow by hand builds without publishing or signing.
+- A release is a version tag pushed to GitHub: `.github/workflows/release.yml` checks that the tag matches `package.json` and `Cargo.toml`, runs `Scripts\Check.cmd`, checks the committed bindings are current, then `tauri-action` builds the installer, signs it and publishes a release with `latest.json` for the updater, and a last step sets `.github/release-notes.md` as the release's text (`tauri-action` only takes it as a string). Running the workflow by hand builds without publishing or signing, and keeps the installer with the run: a way to test a build before tagging.
+- Push the tag on its own, after the commit (`git push origin main`, then `git push origin vX.Y.Z`). The v0.1.0 tag, pushed in one go with the commit that first added the workflow, started no run.
+- A run takes about 20 minutes without a cache and 10 with one.
 - Releases aren't marked pre-release, even for 0.x: the updater reads `releases/latest/download/latest.json`, and GitHub's "latest" skips pre-releases.
 - Signing: the private key and its password are the repository's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets; the user keeps the key file outside the repository. Only the public key is in `tauri.conf.json` (`plugins.updater.pubkey`). Losing the private key means installed copies can't update anymore: a new key needs a new install.
 - `src-tauri/tauri.release.conf.json` turns on the updater's files (`createUpdaterArtifacts`) for the release build only, since making them needs the private key. `Scripts\Build.cmd` builds the installer without them.

@@ -1,9 +1,7 @@
 # Builds Tsundoku on GitHub's Windows machines and publishes it.
-# - Pushing a version tag (v0.1.0, matching "version" in tsundoku/package.json and tsundoku/Cargo.toml) checks, builds
-#   and publishes a GitHub release with the installer and the updater's latest.json, signed with the key in the
-#   TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets.
-# - Running it by hand (Actions > Release > Run workflow) checks and builds without publishing or signing: the
-#   installer is kept with the run, to try a build.
+# - Pushing a version tag (v0.1.0, matching "version" in tsundoku/package.json and tsundoku/Cargo.toml) checks, builds and publishes a GitHub release with the installer and the updater's latest.json, signed with the key in the TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets, and .github/release-notes.md as its text.
+# - Push the tag on its own, after the commit: pushed together with the branch that first added this file, it started no run.
+# - Running it by hand (Actions > Release > Run workflow) checks and builds without publishing or signing: the installer is kept with the run, to try a build.
 name: Release
 
 on:
@@ -78,11 +76,18 @@ jobs:
           projectPath: tsundoku
           tagName: ${{ github.ref_name }}
           releaseName: Tsundoku ${{ steps.version.outputs.version }}
-          releaseBodyPath: .github/release-notes.md
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: --config src-tauri/tauri.release.conf.json
+
+      # tauri-action takes the release's text only as a string, so it's set from the file once the release exists.
+      - name: Add the release notes
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --notes-file .github/release-notes.md
 
       - name: Build without publishing
         if: github.event_name == 'workflow_dispatch'
@@ -91,7 +96,7 @@ jobs:
 
       - name: Keep the installer with the run
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Tsundoku-${{ steps.version.outputs.version }}-setup
           path: tsundoku/target/release/bundle/nsis/*-setup.exe
