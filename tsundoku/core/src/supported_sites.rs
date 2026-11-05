@@ -2,7 +2,7 @@
 //! reads a link is Tsundoku's business, not the user's. Sites that need an account show whether a browser profile
 //! is signed in to them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Duration;
 
@@ -16,6 +16,48 @@ use crate::sites::SIGN_IN_SITES;
 
 /// How long a tool may take to list its sites.
 const LIST_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Parts of a site that yt-dlp lists as extractors of their own, named after the site with one or more of these
+/// added ("ArteTVPlaylist" beside "ArteTV"). Such a name is left out when the site itself is listed. Words that often
+/// make a name of their own ("TV", "News", "Play") aren't here.
+const SITE_PARTS: [&str; 36] = [
+    "album",
+    "albums",
+    "article",
+    "articles",
+    "category",
+    "categories",
+    "channel",
+    "channels",
+    "collection",
+    "collections",
+    "course",
+    "courses",
+    "embed",
+    "episode",
+    "episodes",
+    "live",
+    "playlist",
+    "playlists",
+    "podcast",
+    "podcasts",
+    "program",
+    "programs",
+    "recording",
+    "recordings",
+    "search",
+    "season",
+    "seasons",
+    "series",
+    "show",
+    "shows",
+    "tab",
+    "title",
+    "user",
+    "users",
+    "video",
+    "videos",
+];
 
 /// Everything Settings → Supported Sites shows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -84,14 +126,15 @@ fn list(program: &Path, args: &[&str]) -> Option<Vec<String>> {
 }
 
 /// yt-dlp lists one extractor per line, such as "youtube:tab" or "Instagram"; the part before ":" is the site.
-/// Broken extractors and the catch-all "generic" are left out.
+/// Broken extractors, the catch-all "generic" and descriptions rather than names ("Bilibili category extractor")
+/// are left out.
 fn yt_dlp_sites(lines: &[String]) -> Vec<String> {
     lines
         .iter()
         .map(|line| line.trim())
         .filter(|line| !line.is_empty() && !line.contains("(CURRENTLY BROKEN)"))
         .map(|line| line.split(':').next().unwrap_or(line).trim().to_owned())
-        .filter(|name| !name.eq_ignore_ascii_case("generic"))
+        .filter(|name| !name.eq_ignore_ascii_case("generic") && !name.contains(char::is_whitespace))
         .collect()
 }
 
@@ -142,8 +185,8 @@ fn sign_ins(
         .collect()
 }
 
-/// One entry per site whatever the case of its name or how many tools list it, sorted by name. Sign-in sites take
-/// their own name ("X" for "twitter") and are always listed.
+/// One entry per site whatever the case of its name or how many tools list it, sorted by name, without the parts of
+/// a listed site (`SITE_PARTS`). Sign-in sites take their own name ("X" for "twitter") and are always listed.
 fn merge<'a>(
     names: impl Iterator<Item = &'a str>,
     sign_ins: &BTreeMap<&'static str, Vec<SignedInProfile>>,
@@ -166,9 +209,27 @@ fn merge<'a>(
                 signed_in: None,
             });
     }
+    let names: BTreeSet<String> = sites.keys().cloned().collect();
+    sites.retain(|name, site| site.signed_in.is_some() || !is_part_of_listed_site(name, &names));
     let mut sites: Vec<SupportedSite> = sites.into_values().collect();
     sites.sort_by_key(|site| site.name.to_lowercase());
     sites
+}
+
+/// Whether `name` (in lowercase) is another listed site's name followed by `SITE_PARTS`, such as "artetvplaylist"
+/// when "artetv" is listed.
+fn is_part_of_listed_site(name: &str, names: &BTreeSet<String>) -> bool {
+    name.char_indices()
+        .skip(1)
+        .any(|(index, _)| names.contains(&name[..index]) && is_site_parts(&name[index..]))
+}
+
+/// Whether `rest` is made only of `SITE_PARTS`, such as "playlist" or "seasonplaylist".
+fn is_site_parts(rest: &str) -> bool {
+    rest.is_empty()
+        || SITE_PARTS
+            .iter()
+            .any(|part| rest.strip_prefix(part).is_some_and(is_site_parts))
 }
 
 #[cfg(test)]
@@ -184,9 +245,60 @@ mod tests {
     #[test]
     fn reads_yt_dlps_list() {
         let names = yt_dlp_sites(&lines(
-            "Instagram\ninstagram:story\nyoutube\nyoutube:tab\nSomeSite (CURRENTLY BROKEN)\ngeneric\n",
+            "Instagram\ninstagram:story\nyoutube\nyoutube:tab\nSomeSite (CURRENTLY BROKEN)\ngeneric\n\
+             Bilibili category extractor\n",
         ));
         assert_eq!(names, ["Instagram", "instagram", "youtube", "youtube"]);
+    }
+
+    #[test]
+    fn leaves_out_the_parts_of_a_listed_site() {
+        let sites = merge(
+            [
+                "ArteTV",
+                "ArteTVPlaylist",
+                "ArteTVEmbed",
+                "AmericasTestKitchen",
+                "AmericasTestKitchenSeason",
+                "BiliBiliBangumi",
+                "BiliBiliBangumiSeason",
+                "BilibiliAudio",
+                "BilibiliAudioAlbum",
+                "InstagramUser",
+                // A part of a site that isn't listed stays.
+                "SoloPlaylist",
+                // Longer names that aren't parts stay too.
+                "2ch",
+                "2chan",
+                "apa",
+                "Aparat",
+                "bbc",
+                "bbc.co.uk",
+            ]
+            .into_iter(),
+            &BTreeMap::new(),
+        );
+        let names: Vec<&str> = sites
+            .iter()
+            .filter(|site| site.signed_in.is_none())
+            .map(|site| site.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "2ch",
+                "2chan",
+                "AmericasTestKitchen",
+                "apa",
+                "Aparat",
+                "ArteTV",
+                "bbc",
+                "bbc.co.uk",
+                "BilibiliAudio",
+                "BiliBiliBangumi",
+                "SoloPlaylist",
+            ]
+        );
     }
 
     #[test]
