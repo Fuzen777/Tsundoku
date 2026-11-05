@@ -6,6 +6,7 @@ use std::sync::Mutex;
 use serde::Serialize;
 use ts_rs::TS;
 
+use crate::browsers;
 use crate::cancel::CancelToken;
 use crate::downloads::DownloadQueue;
 use crate::gallery::{self, GalleryTools};
@@ -58,16 +59,16 @@ impl PreviewService {
         let deno = tools.executable(ToolId::Deno);
         let ffmpeg = tools.executable(ToolId::Ffmpeg);
         let gallery_dl = tools.executable(ToolId::GalleryDl);
-        let cookies_browser = queue.options().cookies_browser;
+        let cookies = browsers::cookies_for(queue.options().cookies_browser, &link);
         let fetch_tools = FetchTools {
             yt_dlp: yt_dlp.as_deref(),
             deno: deno.as_deref(),
             ffmpeg: ffmpeg.as_deref(),
-            cookies_browser,
+            cookies: cookies.clone(),
         };
         let gallery_tools = GalleryTools {
             gallery_dl: gallery_dl.as_deref(),
-            cookies_browser,
+            cookies,
         };
         let fetched = read_link(
             &link,

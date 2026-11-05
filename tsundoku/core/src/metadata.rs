@@ -9,7 +9,6 @@ use ts_rs::TS;
 
 use crate::cancel::CancelToken;
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
-use crate::settings::CookiesBrowser;
 use crate::tools::{ToolError, ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
@@ -107,13 +106,14 @@ pub enum PreviewError {
     Cancelled,
 }
 
-/// The programs a fetch runs: yt-dlp, and Deno and ffmpeg when they're set up, and the browser to read cookies from.
+/// The programs a fetch runs: yt-dlp, and Deno and ffmpeg when they're set up, and where to read cookies from.
 #[derive(Debug, Clone, Default)]
 pub struct FetchTools<'a> {
     pub yt_dlp: Option<&'a Path>,
     pub deno: Option<&'a Path>,
     pub ffmpeg: Option<&'a Path>,
-    pub cookies_browser: Option<CookiesBrowser>,
+    /// The `--cookies-from-browser` value (`browsers::cookies_for`), or `None` for no cookies.
+    pub cookies: Option<String>,
 }
 
 /// What a fetch found.
@@ -225,10 +225,8 @@ fn command(tools: &FetchTools, yt_dlp: &Path, link: &str) -> ProgramCommand {
     if let Some(ffmpeg) = tools.ffmpeg {
         command = command.arg("--ffmpeg-location").arg(ffmpeg);
     }
-    if let Some(browser) = tools.cookies_browser {
-        command = command
-            .arg("--cookies-from-browser")
-            .arg(browser.yt_dlp_name());
+    if let Some(cookies) = &tools.cookies {
+        command = command.arg("--cookies-from-browser").arg(cookies);
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
     command.arg("--").arg(link)
@@ -606,7 +604,7 @@ mod tests {
             yt_dlp: Some(Path::new("yt-dlp.exe")),
             deno: None,
             ffmpeg: Some(Path::new(r"C:\tools\ffmpeg.exe")),
-            cookies_browser: Some(CookiesBrowser::Firefox),
+            cookies: Some("firefox".to_owned()),
         };
         let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
         let args: Vec<_> = command

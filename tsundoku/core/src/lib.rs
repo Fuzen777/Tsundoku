@@ -5,6 +5,7 @@
 
 pub mod app_info;
 pub mod atomic_file;
+pub mod browsers;
 pub mod cancel;
 pub mod data_folder;
 pub mod database;

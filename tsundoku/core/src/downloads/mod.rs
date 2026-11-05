@@ -18,6 +18,7 @@ use ts_rs::TS;
 
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, YtDlpRunner};
 use self::store::QueueStore;
+use crate::browsers;
 use crate::cancel::CancelToken;
 use crate::database::Database;
 use crate::history::{History, NewDownload};
@@ -481,7 +482,7 @@ impl DownloadQueue {
             ffmpeg: self.tools.executable(ToolId::Ffmpeg),
             deno: self.tools.executable(ToolId::Deno),
             rate_limit: options.rate_limit,
-            cookies_browser: options.cookies_browser,
+            cookies: browsers::cookies_for(options.cookies_browser, &item.video.url),
         }
     }
 

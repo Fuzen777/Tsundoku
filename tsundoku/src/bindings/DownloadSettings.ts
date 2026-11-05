@@ -14,6 +14,8 @@ atOnce: number,
  */
 rateLimit: string | null, 
 /**
- * The browser yt-dlp reads cookies from, for videos that need a signed-in account, or `None`.
+ * Where yt-dlp and gallery-dl read cookies from, for links that need a signed-in account: `Automatic` finds
+ * the browser profile signed in to the link's site (`browsers::cookies_for`), a browser its profile, `None`
+ * none at all.
  */
 cookiesBrowser: CookiesBrowser | null, };

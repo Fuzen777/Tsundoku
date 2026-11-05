@@ -355,11 +355,16 @@ export const strings = {
     cookiesBrowser: "Read Cookies From",
     cookiesNone: "None",
     cookiesHint:
-      "For videos that need you signed in or old enough: yt-dlp reads the browser's cookies, as if you were watching there.",
+      "For links that need you signed in or old enough: Tsundoku reads your browser's cookies, as if you were watching there. Automatic picks the browser profile signed in to each site.",
     chromiumWarning:
-      "Chrome, Edge and other Chromium browsers lock their cookies on Windows, so yt-dlp often can't read them. Firefox works.",
+      "Chrome, Edge and other Chromium browsers lock their cookies on Windows while they're open, and often encrypt them, so they often can't be read. Firefox and Zen work.",
     browsers: {
+      automatic: "Automatic",
       firefox: "Firefox",
+      zen: "Zen",
+      libreWolf: "LibreWolf",
+      floorp: "Floorp",
+      waterfox: "Waterfox",
       chrome: "Chrome",
       edge: "Edge",
       brave: "Brave",

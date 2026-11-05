@@ -73,7 +73,7 @@ type: Features
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
-- **Cookies**: a browser to read cookies from (Firefox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium), for videos that need a signed-in account or an age check. It applies to previews and downloads. Choosing a Chromium browser warns that Windows' app-bound encryption often stops yt-dlp from reading its cookies; Firefox works.
+- **Cookies**: where to read cookies from, for links that need a signed-in account or an age check. It applies to previews and downloads. Automatic (the default) finds every browser profile on the PC and picks, for each link, the one signed in to its site (by which cookies exist, never their values), or for an unknown site the one that visited it last. A single browser (Firefox, Zen, LibreWolf, Floorp, Waterfox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium) uses its profile signed in to the site, else its default one. Choosing a Chromium browser warns that they lock and encrypt their cookies on Windows; Firefox and its forks work.
 
 ## Fixes Offered on Failures
 

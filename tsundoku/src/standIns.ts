@@ -188,7 +188,7 @@ export const standIns = {
     presets: ["1080p MP4", "Audio MP3", "Best Audio", "Best Video"],
   } satisfies HistoryFilters,
   videoDownloads: pastDownloadStandIns,
-  downloadOptions: { atOnce: 2, rateLimit: null, cookiesBrowser: null } satisfies DownloadSettings,
+  downloadOptions: { atOnce: 2, rateLimit: null, cookiesBrowser: "automatic" } satisfies DownloadSettings,
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {
       progress: {

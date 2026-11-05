@@ -32,7 +32,9 @@ pub struct DownloadSettings {
     pub at_once: u32,
     /// yt-dlp's `--limit-rate`, such as "2M", or `None` for no limit.
     pub rate_limit: Option<String>,
-    /// The browser yt-dlp reads cookies from, for videos that need a signed-in account, or `None`.
+    /// Where yt-dlp and gallery-dl read cookies from, for links that need a signed-in account: `Automatic` finds
+    /// the browser profile signed in to the link's site (`browsers::cookies_for`), a browser its profile, `None`
+    /// none at all.
     pub cookies_browser: Option<CookiesBrowser>,
 }
 
@@ -41,18 +43,24 @@ impl Default for DownloadSettings {
         Self {
             at_once: 2,
             rate_limit: None,
-            cookies_browser: None,
+            cookies_browser: Some(CookiesBrowser::Automatic),
         }
     }
 }
 
-/// The browsers yt-dlp can read cookies from on Windows. Chrome, Edge and other Chromium browsers encrypt theirs
-/// with a key only they can use (app-bound encryption), so yt-dlp often can't read them; Firefox works.
+/// The browsers cookies can be read from on Windows, or `Automatic` for whichever is signed in to the link's site.
+/// Chrome, Edge and other Chromium browsers encrypt their cookies with a key only they can use (app-bound
+/// encryption) and lock them while running, so they often can't be read; Firefox and its forks work.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum CookiesBrowser {
+    Automatic,
     Firefox,
+    Zen,
+    LibreWolf,
+    Floorp,
+    Waterfox,
     Chrome,
     Edge,
     Brave,
@@ -62,10 +70,16 @@ pub enum CookiesBrowser {
 }
 
 impl CookiesBrowser {
-    /// The browser's name for `--cookies-from-browser`.
+    /// The browser family's name for `--cookies-from-browser`: Firefox's forks read as Firefox, given their profile
+    /// folder. `Automatic` never reaches a tool; it resolves to a profile first.
     pub fn yt_dlp_name(self) -> &'static str {
         match self {
-            Self::Firefox => "firefox",
+            Self::Automatic
+            | Self::Firefox
+            | Self::Zen
+            | Self::LibreWolf
+            | Self::Floorp
+            | Self::Waterfox => "firefox",
             Self::Chrome => "chrome",
             Self::Edge => "edge",
             Self::Brave => "brave",
@@ -73,6 +87,22 @@ impl CookiesBrowser {
             Self::Vivaldi => "vivaldi",
             Self::Chromium => "chromium",
         }
+    }
+
+    /// Whether the browser keeps Firefox's cookie database (`cookies.sqlite`).
+    pub fn is_firefox_family(self) -> bool {
+        matches!(
+            self,
+            Self::Firefox | Self::Zen | Self::LibreWolf | Self::Floorp | Self::Waterfox
+        )
+    }
+
+    /// Whether yt-dlp finds the browser's profile by name alone. Firefox's forks need their profile folder.
+    pub fn known_to_yt_dlp(self) -> bool {
+        !matches!(
+            self,
+            Self::Automatic | Self::Zen | Self::LibreWolf | Self::Floorp | Self::Waterfox
+        )
     }
 }
 

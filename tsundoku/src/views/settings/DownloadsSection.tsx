@@ -16,7 +16,23 @@ const text = strings.settings
 /** The most downloads that can run at once (`MAX_AT_ONCE` in the core). */
 const AT_ONCE_CHOICES = [1, 2, 3, 4, 5] as const
 
-const BROWSERS: readonly CookiesBrowser[] = ["firefox", "chrome", "edge", "brave", "opera", "vivaldi", "chromium"]
+const BROWSERS: readonly CookiesBrowser[] = [
+  "automatic",
+  "firefox",
+  "zen",
+  "libreWolf",
+  "floorp",
+  "waterfox",
+  "chrome",
+  "edge",
+  "brave",
+  "opera",
+  "vivaldi",
+  "chromium",
+]
+
+/** Browsers that keep Firefox's cookie database, which can be read while they run. */
+const FIREFOX_FAMILY: readonly CookiesBrowser[] = ["automatic", "firefox", "zen", "libreWolf", "floorp", "waterfox"]
 
 /** Saves download options as they change. Each section shows its own error. */
 function useSaveOptions() {
@@ -125,7 +141,7 @@ export function DownloadsSection() {
   )
 }
 
-/** Settings → Cookies: the browser yt-dlp reads cookies from, for videos that need a signed-in account. */
+/** Settings → Cookies: where cookies are read from, for links that need a signed-in account. */
 export function CookiesSection() {
   const { options, save, error } = useSaveOptions()
   const browser = options?.cookiesBrowser ?? null
@@ -148,7 +164,7 @@ export function CookiesSection() {
             ))}
           </SelectInput>
         </Field>
-        {browser !== null && browser !== "firefox" && <StatusMessage tone="warning" message={text.chromiumWarning} />}
+        {browser !== null && !FIREFOX_FAMILY.includes(browser) && <StatusMessage tone="warning" message={text.chromiumWarning} />}
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
     </Section>

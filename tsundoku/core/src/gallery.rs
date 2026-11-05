@@ -10,7 +10,6 @@ use serde_json::Value;
 use crate::cancel::CancelToken;
 use crate::metadata::{PostContents, PreviewError, VideoInfo};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
-use crate::settings::CookiesBrowser;
 use crate::tools::{ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
@@ -25,11 +24,12 @@ const TITLE_LENGTH: usize = 120;
 /// File extensions counted as videos. X gives its animated GIFs as MP4.
 const VIDEO_EXTENSIONS: [&str; 6] = ["mp4", "webm", "mov", "m4v", "mkv", "m3u8"];
 
-/// The programs a fetch runs: gallery-dl, and the browser to read cookies from.
+/// The programs a fetch runs: gallery-dl, and where to read cookies from.
 #[derive(Debug, Clone, Default)]
 pub struct GalleryTools<'a> {
     pub gallery_dl: Option<&'a Path>,
-    pub cookies_browser: Option<CookiesBrowser>,
+    /// The `--cookies-from-browser` value (`browsers::cookies_for`), or `None` for no cookies.
+    pub cookies: Option<String>,
 }
 
 /// Runs gallery-dl on the link and reads its answer. `link` must come from `metadata::normalize_link`.
@@ -82,10 +82,8 @@ fn command(tools: &GalleryTools, gallery_dl: &Path, link: &str) -> ProgramComman
         // Every file's details as JSON, without downloading.
         "--dump-json",
     ]);
-    if let Some(browser) = tools.cookies_browser {
-        command = command
-            .arg("--cookies-from-browser")
-            .arg(browser.yt_dlp_name());
+    if let Some(cookies) = &tools.cookies {
+        command = command.arg("--cookies-from-browser").arg(cookies);
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
     command.arg("--").arg(link)
@@ -558,7 +556,7 @@ mod tests {
     fn puts_the_link_after_the_options() {
         let tools = GalleryTools {
             gallery_dl: Some(Path::new("gallery-dl.exe")),
-            cookies_browser: Some(CookiesBrowser::Firefox),
+            cookies: Some("firefox".to_owned()),
         };
         let args: Vec<String> = command(&tools, Path::new("gallery-dl.exe"), "-x")
             .arguments()
