@@ -5,6 +5,7 @@ import {
   detectTools,
   getAppInfo,
   getDownloadOptions,
+  getSupportedSites,
   getHistoryFilters,
   getVideoDownloads,
   searchHistory,
@@ -135,6 +136,11 @@ export function useVideoDownloads(videoId: number, enabled: boolean) {
     queryFn: () => getVideoDownloads(videoId),
     enabled,
   })
+}
+
+/** The supported sites, read again when Settings opens after a minute, since sign-ins change in the browser. */
+export function useSupportedSites() {
+  return useQuery({ queryKey: queryKeys.supportedSites, queryFn: getSupportedSites, staleTime: 60_000 })
 }
 
 export function useDownloadOptions() {

@@ -380,6 +380,20 @@ export const strings = {
       chromium: "Chromium",
     },
     saved: "Saved.",
+    sites: {
+      title: "Supported Sites",
+      intro:
+        "Every site Tsundoku can download from. Sites that need an account show which browser profiles are signed in to them; Tsundoku uses the most recent one.",
+      loading: "Listing the supported sites…",
+      search: "Search Sites",
+      signedIn: "Signed In",
+      notSignedIn: "Not Signed In",
+      allSites: (count: number) => `All Sites (${count.toLocaleString()})`,
+      noMatches: "No sites match.",
+      profile: (browser: string, profile: string) => `${browser} · ${profile}`,
+      signInHint: (site: string) => `Sign in to ${site} in a browser`,
+      imagesNotSetUp: "Image sites such as Pixiv and DeviantArt are listed once image downloads are set up in Tools.",
+    },
     about: "About",
   },
 } as const

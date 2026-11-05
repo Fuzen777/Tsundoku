@@ -8,6 +8,7 @@ import type { PastDownload } from "./bindings/PastDownload"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { VideoPreview } from "./bindings/VideoPreview"
@@ -188,6 +189,19 @@ export const standIns = {
     presets: ["1080p MP4", "Audio MP3", "Best Audio", "Best Video"],
   } satisfies HistoryFilters,
   videoDownloads: pastDownloadStandIns,
+  supportedSites: {
+    sites: [
+      { name: "abc.net.au", signedIn: null },
+      { name: "Bilibili", signedIn: [] },
+      { name: "danbooru", signedIn: null },
+      { name: "Instagram", signedIn: [{ browser: "zen", profile: "Main" }] },
+      { name: "SoundCloud", signedIn: null },
+      { name: "Vimeo", signedIn: null },
+      { name: "X", signedIn: [{ browser: "zen", profile: "Main" }, { browser: "vivaldi", profile: "Work" }] },
+      { name: "YouTube", signedIn: [] },
+    ],
+    imagesSetUp: false,
+  } satisfies SupportedSites,
   downloadOptions: { atOnce: 2, rateLimit: null, cookiesBrowser: "automatic" } satisfies DownloadSettings,
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {

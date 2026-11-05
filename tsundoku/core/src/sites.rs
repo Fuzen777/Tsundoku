@@ -29,6 +29,8 @@ pub struct SignInSite {
     pub name: &'static str,
     /// The site's domains: its links, and the hosts its cookies are set for.
     pub domains: &'static [&'static str],
+    /// The site's name in yt-dlp's and gallery-dl's lists of supported sites, in lowercase.
+    pub extractor: &'static str,
     /// Cookies that only exist while signed in. Only their names are ever read, never their values.
     pub cookies: &'static [&'static str],
 }
@@ -38,46 +40,55 @@ pub const SIGN_IN_SITES: [SignInSite; 9] = [
     SignInSite {
         name: "Instagram",
         domains: &["instagram.com"],
+        extractor: "instagram",
         cookies: &["sessionid"],
     },
     SignInSite {
         name: "X",
         domains: &["x.com", "twitter.com"],
+        extractor: "twitter",
         cookies: &["auth_token"],
     },
     SignInSite {
         name: "YouTube",
         domains: &["youtube.com", "youtu.be"],
+        extractor: "youtube",
         cookies: &["LOGIN_INFO"],
     },
     SignInSite {
         name: "TikTok",
         domains: &["tiktok.com"],
+        extractor: "tiktok",
         cookies: &["sessionid"],
     },
     SignInSite {
         name: "Reddit",
         domains: &["reddit.com"],
+        extractor: "reddit",
         cookies: &["reddit_session"],
     },
     SignInSite {
         name: "Facebook",
         domains: &["facebook.com"],
+        extractor: "facebook",
         cookies: &["c_user"],
     },
     SignInSite {
         name: "Twitch",
         domains: &["twitch.tv"],
+        extractor: "twitch",
         cookies: &["auth-token"],
     },
     SignInSite {
         name: "Niconico",
         domains: &["nicovideo.jp"],
+        extractor: "niconico",
         cookies: &["user_session"],
     },
     SignInSite {
         name: "Bilibili",
         domains: &["bilibili.com"],
+        extractor: "bilibili",
         cookies: &["SESSDATA"],
     },
 ];

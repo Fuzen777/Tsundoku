@@ -18,5 +18,6 @@ pub mod preview;
 pub mod process;
 pub mod settings;
 pub mod sites;
+pub mod supported_sites;
 mod sync;
 pub mod tools;

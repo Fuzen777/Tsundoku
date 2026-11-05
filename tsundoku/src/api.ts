@@ -16,6 +16,7 @@ import type { PastDownload } from "./bindings/PastDownload"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolId } from "./bindings/ToolId"
 import type { ToolProgress } from "./bindings/ToolProgress"
@@ -46,6 +47,7 @@ export const queryKeys = {
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
   downloadOptions: ["download-options"],
+  supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
 } as const
 
@@ -325,6 +327,13 @@ export async function openWebPage(url: string): Promise<void> {
     return
   }
   await openUrl(url)
+}
+
+/** Every site the tools can read, with the browser profiles signed in to the sites that need an account. Takes a
+ * few seconds: it runs both tools and reads the browsers' cookie names. */
+export function getSupportedSites(): Promise<SupportedSites> {
+  if (!isTauri()) return Promise.resolve(standIns.supportedSites)
+  return invoke<SupportedSites>("supported_sites")
 }
 
 /** How downloads run: how many at once, the speed limit and the cookies browser. */

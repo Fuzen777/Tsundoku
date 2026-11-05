@@ -151,6 +151,7 @@ pub fn run() {
             tools::update_yt_dlp,
             tools::check_tool_update,
             tools::set_yt_dlp_channel,
+            tools::supported_sites,
             history::fetch_preview,
             history::cancel_preview,
             history::open_download,

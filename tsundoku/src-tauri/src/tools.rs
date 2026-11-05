@@ -6,6 +6,7 @@ use std::thread;
 
 use tauri::{AppHandle, Emitter, State};
 use tsundoku_core::settings::UpdateChannel;
+use tsundoku_core::supported_sites::{self, SupportedSites};
 use tsundoku_core::tools::{
     DetectedTool, ToolDownload, ToolError, ToolId, ToolManager, ToolProgress, ToolStatus,
     ToolUpdateCheck, ToolsOverview,
@@ -47,6 +48,21 @@ pub fn tools_need_setup(tools: Tools<'_>) -> bool {
 pub async fn tools_overview(tools: Tools<'_>) -> Result<ToolsOverview, ToolError> {
     let tools = Arc::clone(&tools);
     run_blocking(move || Ok(tools.overview())).await
+}
+
+/// Every site yt-dlp or gallery-dl can read, with the browser profiles signed in to the sites that need an account.
+#[tauri::command]
+pub async fn supported_sites(tools: Tools<'_>) -> Result<SupportedSites, ToolError> {
+    let tools = Arc::clone(&tools);
+    run_blocking(move || {
+        let yt_dlp = tools.executable(ToolId::YtDlp);
+        let gallery_dl = tools.executable(ToolId::GalleryDl);
+        Ok(supported_sites::supported_sites(
+            yt_dlp.as_deref(),
+            gallery_dl.as_deref(),
+        ))
+    })
+    .await
 }
 
 #[tauri::command]
