@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.9 · 2026-11-05
+
+### New
+
+- **A post's files in the history**: a downloaded post keeps every one of its files. Its row in the history shows what it held ("2 images, 1 video") and a Files list with each file's name, size, Open File and Show in Folder, and File Missing for one that was moved or deleted. Forgetting the post forgets its files' records too; the files stay.
+
+### Changed
+
+- The history's preset filter leaves out posts, which have no preset.
+
 ## 0.1.8 · 2026-11-05
 
 ### New

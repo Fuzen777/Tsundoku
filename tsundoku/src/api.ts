@@ -9,6 +9,7 @@ import type { AppInfo } from "./bindings/AppInfo"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
@@ -46,6 +47,7 @@ export const queryKeys = {
   history: ["history"],
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
+  downloadFiles: ["download-files"],
   downloadOptions: ["download-options"],
   defaultPostsFolder: ["default-posts-folder"],
   supportedSites: ["supported-sites"],
@@ -325,6 +327,24 @@ export function getHistoryFilters(): Promise<HistoryFilters> {
 export function getVideoDownloads(videoId: number): Promise<PastDownload[]> {
   if (!isTauri()) return Promise.resolve(standIns.videoDownloads)
   return invoke<PastDownload[]>("video_downloads", { videoId })
+}
+
+/** Every file of a download, in order, with whether each is still there. */
+export function getDownloadFiles(downloadId: number): Promise<HistoryFile[]> {
+  if (!isTauri()) return Promise.resolve(standIns.downloadFiles)
+  return invoke<HistoryFile[]>("download_files", { downloadId })
+}
+
+/** Opens one file of a download in its default app. Rejects with a HistoryError. */
+export async function openDownloadFile(downloadId: number, position: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("open_download_file", { downloadId, position })
+}
+
+/** Opens File Explorer on one file of a download, with it selected. Rejects with a HistoryError. */
+export async function showDownloadFileInFolder(downloadId: number, position: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("show_download_file_in_folder", { downloadId, position })
 }
 
 /** Removes a video from the history and yt-dlp's archive, so it can be downloaded again. Its files stay. */

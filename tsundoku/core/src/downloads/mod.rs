@@ -22,7 +22,7 @@ use self::store::QueueStore;
 use crate::browsers;
 use crate::cancel::CancelToken;
 use crate::database::Database;
-use crate::history::{History, NewDownload};
+use crate::history::{History, NewDownload, SavedFile};
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::presets::{PresetError, PresetManager};
 use crate::settings::{DownloadSettings, SettingsStore};
@@ -599,8 +599,8 @@ impl DownloadQueue {
         self.schedule();
     }
 
-    /// Records a finished download in the history: its first file, and the size of all of them. A post's preset
-    /// name is empty.
+    /// Records a finished download in the history: its file, or every file of a post with the size of all of them.
+    /// A post's preset name is empty.
     fn record(
         &self,
         video: &VideoInfo,
@@ -609,15 +609,25 @@ impl DownloadQueue {
         format: Option<String>,
     ) -> Result<DownloadResult, DownloadError> {
         let file_path = files.first().ok_or(DownloadError::NoFile)?;
-        let sizes: Vec<i64> = files
+        let saved: Vec<SavedFile> = files
             .iter()
-            .filter_map(|file| fs::metadata(file).ok())
-            .map(|metadata| metadata.len() as i64)
+            .map(|file| SavedFile {
+                path: file.display().to_string(),
+                size: fs::metadata(file)
+                    .ok()
+                    .map(|metadata| metadata.len() as i64),
+            })
             .collect();
+        let sizes: Vec<i64> = saved.iter().filter_map(|file| file.size).collect();
         let file_size = (!sizes.is_empty()).then(|| sizes.iter().sum());
         let download = NewDownload {
             preset: preset_name.to_owned(),
             file_path: file_path.display().to_string(),
+            files: if video.post.is_some() {
+                saved
+            } else {
+                Vec::new()
+            },
             file_size,
             format,
             downloaded_at: seconds_since_epoch(),

@@ -6,7 +6,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
-    History, HistoryError, HistoryFilters, HistoryQuery, HistoryVideo, PastDownload,
+    History, HistoryError, HistoryFile, HistoryFilters, HistoryQuery, HistoryVideo, PastDownload,
 };
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::preview::{PreviewService, VideoPreview};
@@ -63,6 +63,49 @@ pub fn show_download_in_folder(
     download_id: i64,
 ) -> Result<(), HistoryError> {
     let path = history.download_path(download_id)?;
+    app.opener().reveal_item_in_dir(path).map_err(open_failed)
+}
+
+/// Every file of a download, for a post's list of files. Off the async runtime's threads, since it checks each
+/// file still exists.
+#[tauri::command]
+pub async fn download_files(
+    history: State<'_, Arc<History>>,
+    download_id: i64,
+) -> Result<Vec<HistoryFile>, HistoryError> {
+    let history = Arc::clone(&history);
+    tauri::async_runtime::spawn_blocking(move || history.files_of(download_id))
+        .await
+        .unwrap_or_else(|error| {
+            Err(HistoryError::Database {
+                detail: error.to_string(),
+            })
+        })
+}
+
+/// Opens one file of a download, by its place in `download_files`, in its default app.
+#[tauri::command]
+pub fn open_download_file(
+    app: AppHandle,
+    history: State<'_, Arc<History>>,
+    download_id: i64,
+    position: u32,
+) -> Result<(), HistoryError> {
+    let path = history.file_path(download_id, position)?;
+    app.opener()
+        .open_path(path.display().to_string(), None::<&str>)
+        .map_err(open_failed)
+}
+
+/// Opens one file's folder in File Explorer, with the file selected.
+#[tauri::command]
+pub fn show_download_file_in_folder(
+    app: AppHandle,
+    history: State<'_, Arc<History>>,
+    download_id: i64,
+    position: u32,
+) -> Result<(), HistoryError> {
+    let path = history.file_path(download_id, position)?;
     app.opener().reveal_item_in_dir(path).map_err(open_failed)
 }
 

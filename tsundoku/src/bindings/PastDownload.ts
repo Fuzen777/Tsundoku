@@ -19,4 +19,8 @@ downloadedAt: number,
 /**
  * Whether the file is still where it was saved.
  */
-fileExists: boolean, };
+fileExists: boolean, 
+/**
+ * How many files it made: 1 for a video, every file for a post (`History::files_of` lists them).
+ */
+fileCount: number, };

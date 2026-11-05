@@ -5,6 +5,7 @@ import {
   detectTools,
   getAppInfo,
   getDefaultPostsFolder,
+  getDownloadFiles,
   getDownloadOptions,
   getSupportedSites,
   getHistoryFilters,
@@ -131,6 +132,14 @@ export function useHistoryFilters() {
 }
 
 /** Every download of a video, loaded when its row is expanded. */
+export function useDownloadFiles(downloadId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.downloadFiles, downloadId],
+    queryFn: () => getDownloadFiles(downloadId),
+    enabled,
+  })
+}
+
 export function useVideoDownloads(videoId: number, enabled: boolean) {
   return useQuery({
     queryKey: [...queryKeys.videoDownloads, videoId],

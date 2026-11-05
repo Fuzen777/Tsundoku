@@ -10,7 +10,7 @@ use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
 use crate::database::Database;
-use crate::metadata::VideoInfo;
+use crate::metadata::{PostContents, VideoInfo};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -48,11 +48,35 @@ impl From<rusqlite::Error> for HistoryError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewDownload {
     pub preset: String,
+    /// The file, or a post's first file.
     pub file_path: String,
+    /// Every file of a post, in order, the first being `file_path`. Empty for a video.
+    pub files: Vec<SavedFile>,
     pub file_size: Option<i64>,
     pub format: Option<String>,
     /// In seconds since 1970.
     pub downloaded_at: i64,
+}
+
+/// One file of a post, to record.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedFile {
+    pub path: String,
+    pub size: Option<i64>,
+}
+
+/// One file of a download in the history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HistoryFile {
+    /// Its place in the download, from 0: what Open File and Show in Folder name.
+    pub position: u32,
+    pub path: String,
+    #[ts(type = "number | null")]
+    pub size: Option<i64>,
+    /// Whether the file is still where it was saved.
+    pub exists: bool,
 }
 
 /// A download in the history.
@@ -74,6 +98,8 @@ pub struct PastDownload {
     pub downloaded_at: i64,
     /// Whether the file is still where it was saved.
     pub file_exists: bool,
+    /// How many files it made: 1 for a video, every file for a post (`History::files_of` lists them).
+    pub file_count: u32,
 }
 
 /// A video in the history, with its latest download.
@@ -161,10 +187,13 @@ impl HistorySort {
 /// The video's columns, in the order `video_from_row` reads them from 0, then the download's from `DOWNLOAD_OFFSET`.
 const VIDEO_COLUMNS: &str =
     "v.id, v.site, v.site_name, v.video_id, v.url, v.title, v.uploader, v.duration_seconds,
-    v.upload_date, v.thumbnail_url, v.best_height, v.first_downloaded_at";
+    v.upload_date, v.thumbnail_url, v.best_height, v.first_downloaded_at, v.post_images, v.post_videos";
 const DOWNLOAD_COLUMNS: &str =
-    "d.id, d.preset, d.file_path, d.file_size, d.format, d.downloaded_at";
-const DOWNLOAD_OFFSET: usize = 12;
+    "d.id, d.preset, d.file_path, d.file_size, d.format, d.downloaded_at,
+    (SELECT COUNT(*) FROM download_files f WHERE f.download = d.id)";
+const DOWNLOAD_OFFSET: usize = 14;
+/// How many columns `DOWNLOAD_COLUMNS` has.
+const DOWNLOAD_WIDTH: usize = 7;
 
 pub struct History {
     database: Arc<Database>,
@@ -189,12 +218,13 @@ impl History {
         let transaction = connection.transaction()?;
         let video_row: i64 = transaction.query_row(
             "INSERT INTO videos (site, site_name, video_id, url, title, uploader, duration_seconds, upload_date,
-                thumbnail_url, best_height, first_downloaded_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                thumbnail_url, best_height, first_downloaded_at, post_images, post_videos)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             ON CONFLICT (site, video_id) DO UPDATE SET site_name = excluded.site_name, url = excluded.url,
                 title = excluded.title, uploader = excluded.uploader, duration_seconds = excluded.duration_seconds,
                 upload_date = excluded.upload_date, thumbnail_url = excluded.thumbnail_url,
-                best_height = excluded.best_height
+                best_height = excluded.best_height, post_images = excluded.post_images,
+                post_videos = excluded.post_videos
             RETURNING id",
             params![
                 video.site,
@@ -208,6 +238,8 @@ impl History {
                 video.thumbnail_url,
                 video.best_height,
                 download.downloaded_at,
+                video.post.map(|post| post.images),
+                video.post.map(|post| post.videos),
             ],
             |row| row.get(0),
         )?;
@@ -224,6 +256,12 @@ impl History {
             ],
             |row| row.get(0),
         )?;
+        for (position, file) in download.files.iter().enumerate() {
+            transaction.execute(
+                "INSERT INTO download_files (download, position, file_path, file_size) VALUES (?1, ?2, ?3, ?4)",
+                params![download_id, position as i64, file.path, file.size],
+            )?;
+        }
         transaction.commit()?;
         self.write_archive(&connection)?;
         Ok(download_id)
@@ -313,7 +351,7 @@ impl History {
                     video: video_from_row(row)?,
                     first_downloaded_at: row.get(11)?,
                     last_download: download_from_row(row, DOWNLOAD_OFFSET)?,
-                    download_count: row.get(DOWNLOAD_OFFSET + 6)?,
+                    download_count: row.get(DOWNLOAD_OFFSET + DOWNLOAD_WIDTH)?,
                 })
             })?
             .collect::<Result<_, _>>()?;
@@ -335,7 +373,8 @@ impl History {
             })?
             .collect::<Result<_, _>>()?;
         let mut presets = connection
-            .prepare("SELECT DISTINCT preset FROM downloads ORDER BY preset COLLATE NOCASE")?;
+            // A post's download has no preset.
+            .prepare("SELECT DISTINCT preset FROM downloads WHERE preset <> '' ORDER BY preset COLLATE NOCASE")?;
         let presets = presets
             .query_map([], |row| row.get(0))?
             .collect::<Result<_, _>>()?;
@@ -360,6 +399,56 @@ impl History {
             Err(HistoryError::FileMissing {
                 path: path.display().to_string(),
             })
+        }
+    }
+
+    /// Every file of a download, in order, and whether each is still there. A video's download has one.
+    pub fn files_of(&self, download_id: i64) -> Result<Vec<HistoryFile>, HistoryError> {
+        let connection = self.database.lock();
+        let mut statement = connection.prepare(
+            "SELECT position, file_path, file_size FROM download_files WHERE download = ?1 ORDER BY position",
+        )?;
+        let mut files: Vec<HistoryFile> = statement
+            .query_map([download_id], |row| {
+                let path: String = row.get(1)?;
+                Ok(HistoryFile {
+                    position: row.get(0)?,
+                    exists: Path::new(&path).exists(),
+                    path,
+                    size: row.get(2)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        if files.is_empty() {
+            let (path, size): (String, Option<i64>) = connection
+                .query_row(
+                    "SELECT file_path, file_size FROM downloads WHERE id = ?1",
+                    [download_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?
+                .ok_or(HistoryError::NotFound)?;
+            files.push(HistoryFile {
+                position: 0,
+                exists: Path::new(&path).exists(),
+                path,
+                size,
+            });
+        }
+        Ok(files)
+    }
+
+    /// Where one file of a download was saved, if it's still there: `position` from `files_of`.
+    pub fn file_path(&self, download_id: i64, position: u32) -> Result<PathBuf, HistoryError> {
+        let files = self.files_of(download_id)?;
+        let file = files
+            .into_iter()
+            .find(|file| file.position == position)
+            .ok_or(HistoryError::NotFound)?;
+        if file.exists {
+            Ok(PathBuf::from(file.path))
+        } else {
+            Err(HistoryError::FileMissing { path: file.path })
         }
     }
 
@@ -407,8 +496,10 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
         upload_date: row.get(8)?,
         thumbnail_url: row.get(9)?,
         best_height: row.get(10)?,
-        // The history doesn't keep what a post held yet.
-        post: None,
+        post: match (row.get(12)?, row.get(13)?) {
+            (Some(images), Some(videos)) => Some(PostContents { images, videos }),
+            _ => None,
+        },
     })
 }
 
@@ -423,6 +514,8 @@ fn download_from_row(row: &Row, offset: usize) -> rusqlite::Result<PastDownload>
         file_size: row.get(offset + 3)?,
         format: row.get(offset + 4)?,
         downloaded_at: row.get(offset + 5)?,
+        // A download of one file has no rows in `download_files`.
+        file_count: row.get::<_, u32>(offset + 6)?.max(1),
     })
 }
 
@@ -479,6 +572,7 @@ mod tests {
             file_path: format!(r"C:\does\not\exist\{preset}-{downloaded_at}.mkv"),
             file_size: Some(file_size),
             format: Some("1080p · avc1 + mp4a".to_owned()),
+            files: Vec::new(),
             downloaded_at,
         }
     }
@@ -905,5 +999,97 @@ mod tests {
             Err(HistoryError::FileMissing { .. })
         ));
         assert_eq!(test.history.download_path(999), Err(HistoryError::NotFound));
+    }
+
+    #[test]
+    fn keeps_every_file_of_a_post() {
+        let test = TestHistory::new();
+        let files: Vec<PathBuf> = ["1.jpg", "2.mp4", "3.jpg"]
+            .iter()
+            .map(|name| test.folder.path().join(name))
+            .collect();
+        for file in &files {
+            fs::write(file, b"image").unwrap();
+        }
+        let mut post = video("instagram", "Abc123", "A post", "someone", 0.0);
+        post.duration_seconds = None;
+        post.post = Some(PostContents {
+            images: 2,
+            videos: 1,
+        });
+        let saved = NewDownload {
+            preset: String::new(),
+            file_path: files[0].display().to_string(),
+            files: files
+                .iter()
+                .map(|file| SavedFile {
+                    path: file.display().to_string(),
+                    size: Some(5),
+                })
+                .collect(),
+            file_size: Some(15),
+            format: None,
+            downloaded_at: 1,
+        };
+        let id = test.history.record(&post, &saved).unwrap();
+
+        let found = test.history.search(&HistoryQuery::default()).unwrap();
+        assert_eq!(found[0].video.post, post.post, "what the post held is kept");
+        assert_eq!(found[0].last_download.file_count, 3);
+        assert_eq!(
+            test.history.filters().unwrap().presets,
+            Vec::<String>::new(),
+            "a post's empty preset isn't a filter"
+        );
+
+        let listed = test.history.files_of(id).unwrap();
+        assert_eq!(
+            listed.iter().map(|file| file.position).collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert!(
+            listed
+                .iter()
+                .all(|file| file.exists && file.size == Some(5))
+        );
+        assert_eq!(test.history.file_path(id, 1), Ok(files[1].clone()));
+        fs::remove_file(&files[2]).unwrap();
+        assert!(!test.history.files_of(id).unwrap()[2].exists);
+        assert!(matches!(
+            test.history.file_path(id, 2),
+            Err(HistoryError::FileMissing { .. })
+        ));
+        assert_eq!(test.history.file_path(id, 7), Err(HistoryError::NotFound));
+
+        test.history.forget(found[0].id).unwrap();
+        assert_eq!(
+            test.history.files_of(id),
+            Err(HistoryError::NotFound),
+            "forgotten with its video"
+        );
+    }
+
+    #[test]
+    fn lists_a_videos_one_file() {
+        let test = TestHistory::new();
+        let id = test
+            .history
+            .record(
+                &video("youtube", "a", "A", "x", 1.0),
+                &download("Best Video", 1, 10),
+            )
+            .unwrap();
+        let files = test.history.files_of(id).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].size, Some(10));
+        assert!(!files[0].exists);
+        assert_eq!(
+            test.history
+                .last_download("youtube", "a")
+                .unwrap()
+                .unwrap()
+                .file_count,
+            1
+        );
     }
 }

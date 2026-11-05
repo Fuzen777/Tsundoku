@@ -50,6 +50,17 @@ const MIGRATIONS: &[&str] = &[
         result TEXT,
         error TEXT
     );",
+    // 3: what a post held, and every file of a download that made several (a post of images). A download of one file
+    // has no rows here: its `file_path` is the file.
+    "ALTER TABLE videos ADD COLUMN post_images INTEGER;
+    ALTER TABLE videos ADD COLUMN post_videos INTEGER;
+    CREATE TABLE download_files (
+        download INTEGER NOT NULL REFERENCES downloads (id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER,
+        PRIMARY KEY (download, position)
+    );",
 ];
 
 pub struct Database {

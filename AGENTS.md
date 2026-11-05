@@ -112,7 +112,7 @@ title: AGENTS
 ### History
 
 - `tsundoku.db` is SQLite (`rusqlite`, bundled), in WAL mode with foreign keys on, shared by the history and the queue through `database.rs`. Migrations are SQL strings there, applied in order and counted in `PRAGMA user_version`; never change a released one, add one. A database from a newer version is refused rather than read.
-- `videos` holds one row per site and ID; `downloads` one row per finished download, removed with its video (`ON DELETE CASCADE`). Times are seconds since 1970.
+- `videos` holds one row per site and ID (with `post_images` and `post_videos` for a post); `downloads` one row per finished download, removed with its video (`ON DELETE CASCADE`); `download_files` every file of a download that made several (a post), removed with its download. A video's download has no `download_files` rows: its `file_path` is the file. Times are seconds since 1970.
 - `archive.txt` is rewritten whole (atomically) after every change and when the history opens, in the order videos were first downloaded.
 - The UI names a download by its ID to open it or show it in its folder, never by a path, so it can only open files the history recorded.
 

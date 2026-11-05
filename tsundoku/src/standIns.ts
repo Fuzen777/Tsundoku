@@ -1,6 +1,7 @@
 import type { AppInfo } from "./bindings/AppInfo"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
@@ -35,6 +36,7 @@ const previewStandIn: VideoPreview = {
     format: "240p · av01 + opus",
     downloadedAt: 1_793_876_473,
     fileExists: true,
+    fileCount: 1,
   },
   inQueue: false,
   missingJsRuntime: true,
@@ -97,12 +99,41 @@ function historyStandIn(id: number, title: string, preset: string, count: number
       format: "1080p · avc1 + mp4a",
       downloadedAt: 1_793_000_000 + id * 86_400,
       fileExists,
+      fileCount: 1,
     },
     downloadCount: count,
   }
 }
 
+const postHistoryStandIn: HistoryVideo = {
+  ...historyStandIn(4, "A carousel of photos and clips from this week", "", 1),
+  site: "instagram",
+  siteName: "instagram.com",
+  uploader: "Instagram",
+  durationSeconds: null,
+  bestHeight: null,
+  post: { images: 2, videos: 1 },
+  lastDownload: {
+    id: 4,
+    preset: "",
+    filePath: String.raw`C:\Users\You\Pictures\Instagram\3780_1.jpg`,
+    fileSize: 9_400_000,
+    format: null,
+    downloadedAt: 1_793_400_000,
+    fileExists: true,
+    fileCount: 3,
+  },
+}
+
+const downloadFileStandIns: HistoryFile[] = ["3780_1.jpg", "3780_2.mp4", "3780_3.jpg"].map((name, position) => ({
+  position,
+  path: ["C:", "Users", "You", "Pictures", "Instagram", name].join("\\"),
+  size: 1_200_000 * (position + 1),
+  exists: position !== 2,
+}))
+
 const historyStandIns: HistoryVideo[] = [
+  postHistoryStandIn,
   historyStandIn(3, "Big Buck Bunny 60fps 4K", "1080p MP4", 2),
   historyStandIn(2, "Me at the zoo", "Best Video", 1),
   historyStandIn(1, "A Song Saved as MP3", "Audio MP3", 1, false),
@@ -189,6 +220,7 @@ export const standIns = {
     presets: ["1080p MP4", "Audio MP3", "Best Audio", "Best Video"],
   } satisfies HistoryFilters,
   videoDownloads: pastDownloadStandIns,
+  downloadFiles: downloadFileStandIns,
   supportedSites: {
     sites: [
       { name: "abc.net.au", signedIn: null },

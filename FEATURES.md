@@ -64,6 +64,7 @@ type: Features
 - **History view**: every video downloaded, newest first: thumbnail, title, uploader, site, length, and its latest download's preset, date and size.
 - **Search, filters, sorting**: search titles and uploaders word by word; filter by site and by preset; sort by date downloaded, title, uploader, site, length, size or preset, either way.
 - **Several downloads**: a video downloaded more than once (as video, then as audio) expands to list each download, with its format, path, Open File and Show in Folder.
+- **Posts**: a downloaded post shows what it held ("2 images, 1 video") and expands to list every file it saved, each with its size, Open File and Show in Folder, or File Missing.
 - **Actions**: Open File and Show in Folder, and in its menu Open Source Page, Download Again (the link goes in the add bar and its preview opens) and Forget.
 - **Forget**: after asking, removes the video from the history and from `archive.txt`, so it can be downloaded again. Its files stay where they are.
 - **File Missing**: a download whose file was moved or deleted says so, and its Open File is off.

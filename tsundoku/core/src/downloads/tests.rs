@@ -581,6 +581,12 @@ fn downloads_a_post_into_its_sites_folder_at_a_safe_pace() {
         .unwrap()
         .unwrap();
     assert_eq!(last.preset, "", "a post has no preset");
+    assert_eq!(last.file_count, 3);
+    assert_eq!(
+        test.history.files_of(result.download_id).unwrap().len(),
+        3,
+        "every file is in the history"
+    );
 }
 
 #[test]

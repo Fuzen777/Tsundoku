@@ -1,7 +1,16 @@
 import { useDeferredValue, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, FolderOpen, History, Play, Search } from "lucide-react"
-import { confirmWithUser, forgetVideo, openDownload, openWebPage, queryKeys, showDownloadInFolder } from "../api"
+import {
+  confirmWithUser,
+  forgetVideo,
+  openDownload,
+  openDownloadFile,
+  openWebPage,
+  queryKeys,
+  showDownloadFileInFolder,
+  showDownloadInFolder,
+} from "../api"
 import type { HistorySort } from "../bindings/HistorySort"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { PastDownload } from "../bindings/PastDownload"
@@ -16,7 +25,7 @@ import { Thumbnail } from "../components/Thumbnail"
 import { describeHistoryError, type ErrorDescription } from "../errors"
 import { formatBytes, formatDay, formatDuration, joinDetails } from "../format"
 import { useAppActions } from "../navigation"
-import { useHistory, useHistoryFilters, useVideoDownloads } from "../queries"
+import { useDownloadFiles, useHistory, useHistoryFilters, useVideoDownloads } from "../queries"
 import { strings } from "../strings"
 
 const text = strings.history
@@ -119,6 +128,7 @@ function HistoryRow({ video }: { video: HistoryVideo }) {
   const { showLink } = useAppActions()
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(false)
+  const [filesExpanded, setFilesExpanded] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const { lastDownload } = video
 
@@ -153,6 +163,7 @@ function HistoryRow({ video }: { video: HistoryVideo }) {
               video.uploader,
               video.siteName,
               video.durationSeconds !== null && formatDuration(video.durationSeconds),
+              video.post && strings.preview.postContents(video.post.images, video.post.videos),
             ])}
           </p>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-fg-secondary tabular-nums">
@@ -167,17 +178,22 @@ function HistoryRow({ video }: { video: HistoryVideo }) {
               <span className="rounded-full border border-warning/50 px-1.5 text-warning">{text.fileMissing}</span>
             )}
           </p>
-          {video.downloadCount > 1 && (
-            <button
-              type="button"
-              aria-expanded={expanded}
-              onClick={() => setExpanded((isExpanded) => !isExpanded)}
-              className="flex w-fit items-center gap-1 rounded text-xs font-medium text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-accent"
-            >
-              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              {text.downloadCount(video.downloadCount)}
-            </button>
-          )}
+          <div className="flex flex-wrap gap-x-4">
+            {lastDownload.fileCount > 1 && (
+              <ExpandToggle
+                expanded={filesExpanded}
+                onToggle={() => setFilesExpanded((isExpanded) => !isExpanded)}
+                label={text.fileCount(lastDownload.fileCount)}
+              />
+            )}
+            {video.downloadCount > 1 && (
+              <ExpandToggle
+                expanded={expanded}
+                onToggle={() => setExpanded((isExpanded) => !isExpanded)}
+                label={text.downloadCount(video.downloadCount)}
+              />
+            )}
+          </div>
         </div>
         <FileButtons download={lastDownload} onError={setError} />
         <Menu
@@ -189,10 +205,75 @@ function HistoryRow({ video }: { video: HistoryVideo }) {
           ]}
         />
       </div>
+      {filesExpanded && <FileList downloadId={lastDownload.id} onError={setError} />}
       {expanded && <DownloadList videoId={video.id} onError={setError} />}
       {error && <StatusMessage tone="danger" {...error} />}
     </Card>
   )
+}
+
+/** The link that shows or hides a list under a row. */
+function ExpandToggle({ expanded, onToggle, label }: { expanded: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className="flex w-fit items-center gap-1 rounded text-xs font-medium text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-accent"
+    >
+      {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      {label}
+    </button>
+  )
+}
+
+/** Every file of a post's download, each with Open File and Show in Folder while it's still there. */
+function FileList({ downloadId, onError }: { downloadId: number; onError: (error: ErrorDescription) => void }) {
+  const { data: files } = useDownloadFiles(downloadId, true)
+  const run = (action: (downloadId: number, position: number) => Promise<void>, position: number) =>
+    action(downloadId, position).catch((error: unknown) => onError(describeHistoryError(error)))
+  return (
+    <div className="ml-31 flex flex-col divide-y divide-line border-t border-line">
+      {files?.map((file) => (
+        <div key={file.position} className="flex items-center gap-3 py-1.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs text-fg-secondary select-text" title={file.path}>
+              {fileName(file.path)}
+              {file.size !== null && <span className="ml-2 text-fg-muted tabular-nums">{formatBytes(file.size)}</span>}
+              {!file.exists && <span className="ml-2 text-warning">{text.fileMissing}</span>}
+            </p>
+          </div>
+          <div className="flex shrink-0">
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={text.openFile}
+              title={text.openFile}
+              disabled={!file.exists}
+              onClick={() => void run(openDownloadFile, file.position)}
+            >
+              <Play size={16} />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={text.showInFolder}
+              title={text.showInFolder}
+              disabled={!file.exists}
+              onClick={() => void run(showDownloadFileInFolder, file.position)}
+            >
+              <FolderOpen size={16} />
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The last part of a Windows or other path. */
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path
 }
 
 /** Every download of a video, for a row that's expanded. */
@@ -208,6 +289,7 @@ function DownloadList({ videoId, onError }: { videoId: number; onError: (error: 
                 download.preset,
                 formatDay(download.downloadedAt),
                 download.format,
+                download.fileCount > 1 && text.fileCount(download.fileCount),
                 download.fileSize !== null && formatBytes(download.fileSize),
               ])}
               {!download.fileExists && <span className="ml-2 text-warning">{text.fileMissing}</span>}

@@ -108,6 +108,7 @@ export const strings = {
     descending: "Descending",
     videoCount: (count: number) => (count === 1 ? "1 video" : `${count} videos`),
     downloadCount: (count: number) => `${count} Downloads`,
+    fileCount: (count: number) => `${count} Files`,
     fileMissing: "File Missing",
     openFile: "Open File",
     showInFolder: "Show in Folder",
