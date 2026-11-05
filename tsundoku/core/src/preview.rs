@@ -59,7 +59,8 @@ impl PreviewService {
         let deno = tools.executable(ToolId::Deno);
         let ffmpeg = tools.executable(ToolId::Ffmpeg);
         let gallery_dl = tools.executable(ToolId::GalleryDl);
-        let cookies = browsers::cookies_for(queue.options().cookies_browser, &link);
+        let cookies_choice = queue.options().cookies_browser;
+        let cookies = browsers::cookies_for(cookies_choice, &link);
         let fetch_tools = FetchTools {
             yt_dlp: yt_dlp.as_deref(),
             deno: deno.as_deref(),
@@ -84,7 +85,17 @@ impl PreviewService {
             }
         }
 
-        let fetched = fetched?;
+        let fetched = fetched.map_err(|error| match error {
+            PreviewError::SignInRequired { detail, .. } => {
+                let site = sites::sign_in_site(&link);
+                PreviewError::SignInRequired {
+                    detail,
+                    site: site.map(|site| site.name.to_owned()),
+                    cookies: browsers::sign_in_state(cookies_choice, &link),
+                }
+            }
+            other => other,
+        })?;
         let last_download = history
             .last_download(&fetched.video.site, &fetched.video.video_id)
             .map_err(|error| PreviewError::Failed {
@@ -282,9 +293,7 @@ mod tests {
 
     #[test]
     fn a_missing_sign_in_isnt_retried_with_the_other_tool() {
-        let sign_in = PreviewError::SignInRequired {
-            detail: "login page".to_owned(),
-        };
+        let sign_in = PreviewError::sign_in("login page".to_owned());
         let (result, asked) = read(PHOTO, Ok(info("reel", None)), Some(Err(sign_in.clone())));
         assert_eq!(result.unwrap_err(), sign_in);
         assert_eq!(asked, ["gallery-dl"]);

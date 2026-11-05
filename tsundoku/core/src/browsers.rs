@@ -15,6 +15,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::metadata::SignInCookies;
 use crate::settings::CookiesBrowser;
 use crate::sites::{self, SignInSite};
 
@@ -102,14 +103,21 @@ const CHROMIUM_FOLDERS: [(CookiesBrowser, &str); 5] = [
 pub fn find_profiles(roots: &BrowserRoots) -> Vec<BrowserProfile> {
     let mut profiles = Vec::new();
     for (browser, folder) in FIREFOX_FOLDERS {
-        profiles.extend(firefox_profiles(browser, &roots.roaming.join(folder)));
+        profiles.extend(firefox_profiles(
+            browser,
+            &join_parts(&roots.roaming, folder),
+        ));
     }
     for (browser, folder) in CHROMIUM_FOLDERS {
-        profiles.extend(chromium_profiles(browser, &roots.local.join(folder)));
+        profiles.extend(chromium_profiles(
+            browser,
+            &join_parts(&roots.local, folder),
+        ));
     }
-    profiles.extend(opera_profile(
-        &roots.roaming.join("Opera Software/Opera Stable"),
-    ));
+    profiles.extend(opera_profile(&join_parts(
+        &roots.roaming,
+        "Opera Software/Opera Stable",
+    )));
     profiles.retain(|profile| profile.cookie_database().is_some());
     profiles
 }
@@ -141,7 +149,7 @@ fn firefox_profiles(browser: CookiesBrowser, folder: &Path) -> Vec<BrowserProfil
             let path = value(keys, "Path")?;
             let relative = value(keys, "IsRelative").is_none_or(|flag| flag == "1");
             let full_path = if relative {
-                folder.join(normalize_ini_path(path))
+                join_parts(folder, path)
             } else {
                 PathBuf::from(path)
             };
@@ -223,6 +231,15 @@ fn value<'a>(keys: &'a [(String, String)], key: &str) -> Option<&'a str> {
     keys.iter()
         .find(|(name, _)| name == key)
         .map(|(_, value)| value.as_str())
+}
+
+/// `base` with a relative path whose parts are separated by `/` or `\`, joined one part at a time so the result uses
+/// the system's separator throughout.
+fn join_parts(base: &Path, relative: &str) -> PathBuf {
+    relative
+        .split(['/', '\\'])
+        .filter(|part| !part.is_empty())
+        .fold(base.to_path_buf(), |path, part| path.join(part))
 }
 
 /// `Profiles/abc.default` and `Profiles\abc.default` name the same folder.
@@ -395,6 +412,40 @@ pub fn cookies_for(choice: Option<CookiesBrowser>, link: &str) -> Option<String>
     }
 }
 
+/// Whether a browser profile (of the chosen browser) is signed in to `link`'s site, for the hint shown when the
+/// site asks for a sign-in.
+pub fn sign_in_state(choice: Option<CookiesBrowser>, link: &str) -> SignInCookies {
+    let Some(choice) = choice else {
+        return SignInCookies::Off;
+    };
+    let profiles = BrowserRoots::of_this_user()
+        .map(|roots| find_profiles(&roots))
+        .unwrap_or_default();
+    sign_in_state_among(&profiles, choice, link, cookie_uses)
+}
+
+fn sign_in_state_among(
+    profiles: &[BrowserProfile],
+    choice: CookiesBrowser,
+    link: &str,
+    read: impl Fn(&BrowserProfile, &[String]) -> io::Result<Vec<CookieUse>>,
+) -> SignInCookies {
+    let Some(site) = sites::sign_in_site(link) else {
+        return SignInCookies::Unknown;
+    };
+    let domains = sites::cookie_domains(link);
+    let signed_in = profiles
+        .iter()
+        .filter(|profile| choice == CookiesBrowser::Automatic || profile.browser == choice)
+        .filter_map(|profile| read(profile, &domains).ok())
+        .any(|uses| signed_in_since(&uses, site).is_some());
+    if signed_in {
+        SignInCookies::SignedIn
+    } else {
+        SignInCookies::NotSignedIn
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,7 +524,7 @@ mod tests {
     fn finds_chromium_profiles_and_the_last_used() {
         let folder = tempfile::tempdir().unwrap();
         let roots = roots(folder.path());
-        let user_data = roots.local.join("Microsoft/Edge/User Data");
+        let user_data = join_parts(&roots.local, "Microsoft/Edge/User Data");
         write(
             &user_data.join("Local State"),
             r#"{"profile":{"last_used":"Profile 1","info_cache":{"Default":{"name":"Personal"},"Profile 1":{"name":"Work"}}}}"#,
@@ -562,6 +613,36 @@ mod tests {
         assert_eq!(
             chosen(Some(CookiesBrowser::Brave), "https://instagram.com/p/1/"),
             None
+        );
+    }
+
+    #[test]
+    fn tells_whether_a_profile_is_signed_in_to_the_site() {
+        let profiles = [
+            profile(CookiesBrowser::Firefox, "a", true),
+            profile(CookiesBrowser::Zen, "b", false),
+        ];
+        let state = |choice, link| sign_in_state_among(&profiles, choice, link, read);
+        let instagram = "https://www.instagram.com/p/1/";
+        assert_eq!(
+            state(CookiesBrowser::Automatic, instagram),
+            SignInCookies::SignedIn
+        );
+        assert_eq!(
+            state(CookiesBrowser::Zen, instagram),
+            SignInCookies::SignedIn
+        );
+        assert_eq!(
+            state(CookiesBrowser::Firefox, instagram),
+            SignInCookies::NotSignedIn
+        );
+        assert_eq!(
+            state(CookiesBrowser::Automatic, "https://x.com/a/status/1"),
+            SignInCookies::NotSignedIn
+        );
+        assert_eq!(
+            state(CookiesBrowser::Automatic, "https://example.com/v"),
+            SignInCookies::Unknown
         );
     }
 

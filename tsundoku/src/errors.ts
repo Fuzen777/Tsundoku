@@ -2,6 +2,7 @@ import type { DownloadError } from "./bindings/DownloadError"
 import type { HistoryError } from "./bindings/HistoryError"
 import type { PresetError } from "./bindings/PresetError"
 import type { PreviewError } from "./bindings/PreviewError"
+import type { SignInCookies } from "./bindings/SignInCookies"
 import type { ToolError } from "./bindings/ToolError"
 import type { ToolId } from "./bindings/ToolId"
 import { strings } from "./strings"
@@ -92,7 +93,7 @@ export function describePreviewError(error: unknown): ErrorDescription {
     case "unavailable":
       return { message: text.unavailable, detail: error.detail }
     case "signInRequired":
-      return { message: text.signInRequired, detail: error.detail }
+      return { message: describeSignIn(error.site, error.cookies), detail: error.detail }
     case "network":
       return { message: text.network, detail: error.detail }
     case "siteError":
@@ -104,6 +105,14 @@ export function describePreviewError(error: unknown): ErrorDescription {
     case "cancelled":
       return { message: strings.errors.cancelled }
   }
+}
+
+/** The sign-in hint: what to do depends on whether cookies are on and a browser is signed in to the site. */
+function describeSignIn(site: string | null, cookies: SignInCookies): string {
+  const text = strings.preview.errors
+  if (cookies === "off") return text.signInOff(site)
+  if (site === null || cookies === "unknown") return text.signInRequired
+  return cookies === "notSignedIn" ? text.signInNeeded(site) : text.signInRefused(site)
 }
 
 export function describeHistoryError(error: unknown): ErrorDescription {
@@ -174,8 +183,9 @@ export function describeDownloadError(error: unknown): ErrorDescription {
 }
 
 /** What may fix a failed preview or download: updating the tool that couldn't read a site's page, reading browser
- * cookies when a signed-in account is needed, or setting up gallery-dl for a post of images. */
-export type FailureFix = "updateYtDlp" | "updateGalleryDl" | "cookies" | "setUpImages"
+ * cookies when a signed-in account is needed, signing in to the site in a browser and trying again, or setting up
+ * gallery-dl for a post of images. */
+export type FailureFix = "updateYtDlp" | "updateGalleryDl" | "cookies" | "signIn" | "setUpImages"
 
 export function fixFor(error: unknown): FailureFix | null {
   const failure = isCoreError<DownloadError>(error) && error.kind === "ytDlp" ? error.error : error
@@ -184,7 +194,7 @@ export function fixFor(error: unknown): FailureFix | null {
     case "siteError":
       return failure.tool === "galleryDl" ? "updateGalleryDl" : "updateYtDlp"
     case "signInRequired":
-      return "cookies"
+      return failure.cookies === "notSignedIn" || failure.cookies === "signedIn" ? "signIn" : "cookies"
     case "imagesNotSetUp":
       return "setUpImages"
     default:

@@ -80,6 +80,8 @@ export const strings = {
       installed: "Done. Try again.",
       tryNightly: "Try Nightly",
       setUpCookies: "Set Up Cookies",
+      tryAgain: "Try Again",
+      cookieSettings: "Cookie Settings",
       updated: (version: string | null) =>
         version === null ? "yt-dlp is updated. Try again." : `yt-dlp is now version ${version}. Try again.`,
     },
@@ -174,6 +176,11 @@ export const strings = {
         "This looks like a post of images. Downloading images takes one more free tool, which Tsundoku can set up.",
       unavailable: "This isn't available. It may be private, removed or blocked in your country.",
       signInRequired: "This needs a signed-in account or an age check.",
+      signInOff: (site: string | null) =>
+        `${site ?? "This site"} needs you signed in. Turn on cookies so Tsundoku can use your browser's sign-in.`,
+      signInNeeded: (site: string) => `${site} needs you signed in. Sign in to ${site} in your browser, then try again.`,
+      signInRefused: (site: string) =>
+        `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
       network: "Couldn't reach the site. Check your connection, then try again.",
       siteError: "Couldn't read this site's page. An update often fixes this.",
       failed: "Couldn't read this link.",

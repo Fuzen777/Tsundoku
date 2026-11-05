@@ -214,7 +214,7 @@ fn classify_error(error: &Value) -> PreviewError {
         "cookies needed",
         "sign in",
     ]) {
-        PreviewError::SignInRequired { detail }
+        PreviewError::sign_in(detail)
     } else if kind == "NotFoundError"
         || mentions(&[
             "'400 bad request'",
@@ -225,7 +225,7 @@ fn classify_error(error: &Value) -> PreviewError {
     {
         PreviewError::Unavailable { detail }
     } else if mentions(&["'401", "'403"]) {
-        PreviewError::SignInRequired { detail }
+        PreviewError::sign_in(detail)
     } else if mentions(&["'429", "rate limit", "timed out", "connection"]) {
         PreviewError::Network { detail }
     } else {

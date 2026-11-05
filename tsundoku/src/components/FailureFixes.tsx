@@ -9,7 +9,8 @@ import { StatusMessage } from "./StatusMessage"
 
 /**
  * Buttons that may fix a failed preview or download (see `fixFor`): Update yt-dlp, or Try Nightly, or Update
- * gallery-dl, when a site's page couldn't be read; Set Up Cookies when a signed-in account is needed; Set Up Image
+ * gallery-dl, when a site's page couldn't be read; Set Up Cookies when a signed-in account is needed and cookies are
+ * off; Try Again once signed in, when no browser is signed in to the site or its sign-in was refused; Set Up Image
  * Downloads for a post of images while gallery-dl isn't set up. Nothing for other failures.
  */
 export function FailureFixes({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
@@ -20,6 +21,20 @@ export function FailureFixes({ error, onRetry }: { error: unknown; onRetry?: () 
       <Button size="sm" onClick={() => navigate("settings")}>
         {strings.queue.fixes.setUpCookies}
       </Button>
+    )
+  }
+  if (fix === "signIn") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        {onRetry && (
+          <Button size="sm" onClick={onRetry}>
+            {strings.queue.fixes.tryAgain}
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => navigate("settings")}>
+          {strings.queue.fixes.cookieSettings}
+        </Button>
+      </div>
     )
   }
   if (fix === "updateYtDlp") return <UpdateYtDlp />

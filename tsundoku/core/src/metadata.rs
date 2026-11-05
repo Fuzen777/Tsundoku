@@ -77,9 +77,17 @@ pub enum PreviewError {
     /// Private, removed, blocked in this country, or never existed.
     #[error("unavailable: {detail}")]
     Unavailable { detail: String },
-    /// Needs a signed-in account, or an age check.
+    /// Needs a signed-in account, or an age check. The preview adds which site and whether a browser is signed in
+    /// to it, for the hint on the card.
     #[error("sign-in required: {detail}")]
-    SignInRequired { detail: String },
+    SignInRequired {
+        detail: String,
+        /// The site's name, when it's one of `sites::SIGN_IN_SITES`.
+        #[serde(default)]
+        site: Option<String>,
+        #[serde(default)]
+        cookies: SignInCookies,
+    },
     #[error("network error: {detail}")]
     Network { detail: String },
     /// The tool couldn't read the site's page, which an update of the tool often fixes.
@@ -104,6 +112,33 @@ pub enum PreviewError {
     },
     #[error("cancelled")]
     Cancelled,
+}
+
+/// Where cookies stood when a link needed a signed-in account.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SignInCookies {
+    /// Not looked at: a download, or a site whose sign-in cookies Tsundoku doesn't know.
+    #[default]
+    Unknown,
+    /// Settings → Cookies is None.
+    Off,
+    /// No browser profile is signed in to the site.
+    NotSignedIn,
+    /// A profile is signed in, yet the site still refused: the sign-in may have expired.
+    SignedIn,
+}
+
+impl PreviewError {
+    /// A sign-in error with only the tool's message; the preview fills in the rest.
+    pub fn sign_in(detail: String) -> Self {
+        Self::SignInRequired {
+            detail,
+            site: None,
+            cookies: SignInCookies::Unknown,
+        }
+    }
 }
 
 /// The programs a fetch runs: yt-dlp, and Deno and ffmpeg when they're set up, and where to read cookies from.
@@ -370,7 +405,7 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
         "join this channel",
         "private video",
     ]) {
-        PreviewError::SignInRequired { detail }
+        PreviewError::sign_in(detail)
     } else if mentions(&[
         "unavailable",
         "not available",

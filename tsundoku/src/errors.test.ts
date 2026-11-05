@@ -57,6 +57,19 @@ describe("isCancelled", () => {
   })
 })
 
+describe("the sign-in hint", () => {
+  it("says what to do about a missing sign-in", () => {
+    const signIn = (site: string | null, cookies: string) =>
+      describePreviewError({ kind: "signInRequired", detail: "x", site, cookies }).message
+    expect(signIn("Instagram", "notSignedIn")).toBe(
+      "Instagram needs you signed in. Sign in to Instagram in your browser, then try again.",
+    )
+    expect(signIn("X", "signedIn")).toContain("didn't accept your browser's sign-in")
+    expect(signIn(null, "off")).toContain("Turn on cookies")
+    expect(signIn(null, "unknown")).toBe("This needs a signed-in account or an age check.")
+  })
+})
+
 describe("fixFor", () => {
   it("offers updating yt-dlp when a site's page couldn't be read", () => {
     expect(fixFor({ kind: "siteError", tool: "ytDlp", detail: "[youtube] x: Failed to extract" })).toBe("updateYtDlp")
@@ -71,6 +84,13 @@ describe("fixFor", () => {
     expect(fixFor({ kind: "ytDlp", error: { kind: "signInRequired", detail: "Sign in to confirm your age" } })).toBe(
       "cookies",
     )
+  })
+
+  it("offers trying again once signed in when cookies are on", () => {
+    const signIn = { kind: "signInRequired", detail: "login page", site: "Instagram" }
+    expect(fixFor({ ...signIn, cookies: "notSignedIn" })).toBe("signIn")
+    expect(fixFor({ ...signIn, cookies: "signedIn" })).toBe("signIn")
+    expect(fixFor({ ...signIn, cookies: "off" })).toBe("cookies")
   })
 
   it("offers nothing for other failures", () => {

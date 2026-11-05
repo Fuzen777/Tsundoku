@@ -87,6 +87,8 @@ impl Test {
                 for preset in &mut settings.presets.list {
                     preset.folder = Some(downloads.clone());
                 }
+                // No cookies, so the tests never look at this PC's browsers.
+                settings.downloads.cookies_browser = None;
             })
             .unwrap();
         let runner = Arc::new(FakeRunner::default());
