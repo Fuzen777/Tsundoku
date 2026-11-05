@@ -29,13 +29,15 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 | Role | Token | Usage |
 | --- | --- | --- |
 | Window background | `--color-bg` | Painted only without Mica (Windows 10) |
-| Raised layer | `--color-surface` | The content area, cards, panels |
-| Interactive background | `--color-input`, `--color-input-hover` | Inputs, secondary buttons, hovered and selected rows |
+| Raised layer | `--color-surface` | The content area, panels |
+| Card | `--color-card` | Cards, one step above the content area |
+| Interactive background | `--color-input`, `--color-input-hover` | Inputs, secondary buttons, hovered and selected rows, icon tiles |
 | Borders | `--color-line`, `--color-line-strong` | Dividers and outlines; strong for emphasis |
 | Text | `--color-fg`, `--color-fg-secondary`, `--color-fg-muted` | Primary text; supporting details; labels, empty states and placeholders |
 | Accent | `--color-accent`, `--color-accent-hover`, `--color-on-accent` | Ai-iro (藍色), Japanese indigo: primary buttons, the selected navigation item, focus rings |
 | Destructive | `--color-danger`, `--color-danger-hover`, `--color-on-danger` | Confirming a destructive action |
 | Attention | `--color-warning` | Warnings that don't block, such as the duplicate warning |
+| Success | `--color-success` | Something finished well: the icon of a success message |
 
 ### Rules
 
@@ -52,8 +54,10 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 1. The app name (積ん読 beside it) and the add bar run across the top.
 2. The sidebar is on the left: the views at the top, Settings at the bottom.
 3. The current view sits in the raised layer (`--color-surface`, a line border on its top and left, rounded top-left corner).
-4. A view is a `Page`: its title, then content that scrolls on its own.
+4. A view is a `Page`: its title, then content that scrolls on its own. Within it, a `Section` groups related content under a 14 px semibold title, and a `Card` raises one item (`--color-card`, a line border, 8 px corners).
 5. An empty list shows an `EmptyState`: a 40 px icon, a Title Case title and a one-sentence explanation.
+6. The first-run setup replaces the sidebar and the add bar: the app name, then the raised layer across the whole width, holding a centered column (`max-w-2xl`) with the title, a sentence, one card per tool, and the buttons at the bottom right.
+7. A tool is shown with `ToolHeading`: its icon on a 36 px tile (`--color-input`), its name, and what it does.
 
 ---
 
@@ -85,6 +89,30 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 - `type` defaults to `button`; a form's submit button passes `type="submit"`.
 - Full-width rows stay plain `<button>`s, such as the sidebar's navigation items (the selected one gets a background and an accent pill on its left edge).
+- Inside a card, actions sit in a row under the content, `sm` size: the main one first (`primary` when it's the obvious next step, such as Download for a tool that isn't set up, otherwise `secondary`), then `ghost` ones.
+
+---
+
+## Feedback
+
+### Progress
+
+- `ProgressBar`: 4 px tall, accent on `--color-line`. With a value it fills; without one, a third-width slider moves across, for work whose length isn't known.
+- Under the bar, a status text in 12 px `--color-fg-secondary` says what's happening ("Downloading… 12.3 MB of 86.8 MB"), with tabular figures so it doesn't jitter.
+- While an action runs, its buttons give way to Cancel.
+
+### Status Messages
+
+- `StatusMessage` reports an outcome under the action that caused it: `success` (check icon in `--color-success`), `danger` (alert icon in `--color-danger`) or `neutral` (no icon, secondary text).
+- The message is a sentence in `--color-fg`. A `detail`, for errors, carries the technical cause in 12 px `--color-fg-muted`, selectable for copying.
+- Errors read as what happened plus what to do ("Couldn't reach GitHub. Check your connection, then try again."). Cancelling is the user's choice and shows nothing.
+
+---
+
+## Choices
+
+- **A few options side by side** (an update channel): `SegmentedControl`, the selected option filled with the accent.
+- **Options with a line of explanation each** (a tool's copy at setup): radio rows, the whole row clickable, the label in medium weight and the explanation in 12 px secondary text, truncated with the full text in a tooltip.
 
 ---
 
@@ -98,4 +126,6 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 ## Motion
 
-- Color changes use Tailwind's `transition-colors` (150 ms). Nothing else animates yet.
+- Color changes use Tailwind's `transition-colors` (150 ms).
+- A progress bar's fill eases to each new value over 150 ms; its indeterminate slider loops every 1.4 s (`animate-indeterminate`, defined in `index.css`).
+- Nothing else animates yet.

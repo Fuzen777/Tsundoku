@@ -1,18 +1,23 @@
+import { Card } from "../components/Card"
 import { Page } from "../components/Page"
+import { Section } from "../components/Section"
 import { useAppInfo } from "../queries"
 import { strings } from "../strings"
+import { ToolsSection } from "./settings/ToolsSection"
 
 export function SettingsView() {
   const { data: appInfo } = useAppInfo()
   return (
     <Page title={strings.nav.settings}>
-      <section>
-        <h2 className="mb-2 text-sm font-semibold">{strings.settings.about}</h2>
-        <div className="rounded-lg border border-line bg-input px-4 py-3">
-          <p className="font-medium">{strings.appName}</p>
-          {appInfo && <p className="text-fg-secondary">{strings.settings.version(appInfo.version)}</p>}
-        </div>
-      </section>
+      <div className="flex max-w-3xl flex-col gap-6">
+        <ToolsSection />
+        <Section title={strings.settings.about}>
+          <Card className="px-4 py-3">
+            <p className="font-medium">{strings.appName}</p>
+            {appInfo && <p className="text-fg-secondary">{strings.version(appInfo.version)}</p>}
+          </Card>
+        </Section>
+      </div>
     </Page>
   )
 }

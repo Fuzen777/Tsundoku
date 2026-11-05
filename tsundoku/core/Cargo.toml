@@ -9,5 +9,26 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+dirs = "7"
+# Native TLS is Windows' own (SChannel): no crypto library to build, and Windows' certificate store.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "native-tls", "system-proxy"] }
 serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+thiserror = "2"
 ts-rs = "12.0.1"
+which = "8"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+# Job objects, so ending a program also ends everything it started (process.rs).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+tempfile = "3"

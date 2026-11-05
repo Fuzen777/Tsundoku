@@ -2,7 +2,7 @@
 
 Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows app that downloads videos with [yt-dlp](https://github.com/yt-dlp/yt-dlp) and remembers everything it has downloaded. Paste a link and it tells you whether you already have that video, when you got it and where the file is, before downloading it again.
 
-**Status:** early development. Only the window and its navigation exist so far.
+**Status:** early development. The window, its navigation and the tool setup (finding or downloading yt-dlp, ffmpeg and Deno, and keeping them up to date) exist so far.
 
 ## Planned for Version 1
 

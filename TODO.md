@@ -30,6 +30,15 @@ rules:
 
 ---
 
+## Testing
+
+### Tools
+
+- [ ] **Choose File… in Settings → Tools.** Pick a copy of each tool through Windows' file dialog, including a wrong program and an ffmpeg without ffprobe beside it. The checks behind it are tested; the dialog itself wasn't driven.
+- [ ] **An antivirus taking a tool.** A quarantined or blocked yt-dlp should give the "Windows Security or your antivirus blocked or removed it" message, at setup and when it's already set up. Hard to cause on purpose.
+
+---
+
 ## Features in Consideration
 
 ### History
