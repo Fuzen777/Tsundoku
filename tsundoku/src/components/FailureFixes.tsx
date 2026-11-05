@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { setYtDlpChannel, updateYtDlp } from "../api"
+import { installTool, setYtDlpChannel, updateYtDlp } from "../api"
 import { describeToolError, fixFor, isCancelled, type ErrorDescription } from "../errors"
 import { useAppActions } from "../navigation"
 import { useStoreToolStatus, useStoreYtDlpChannel, useToolsOverview } from "../queries"
@@ -8,10 +8,11 @@ import { Button } from "./Button"
 import { StatusMessage } from "./StatusMessage"
 
 /**
- * Buttons that may fix a failed preview or download (see `fixFor`): Update yt-dlp, or Try Nightly, when a site's
- * page couldn't be read; Set Up Cookies when the video needs a signed-in account. Nothing for other failures.
+ * Buttons that may fix a failed preview or download (see `fixFor`): Update yt-dlp, or Try Nightly, or Update
+ * gallery-dl, when a site's page couldn't be read; Set Up Cookies when a signed-in account is needed; Set Up Image
+ * Downloads for a post of images while gallery-dl isn't set up. Nothing for other failures.
  */
-export function FailureFixes({ error }: { error: unknown }) {
+export function FailureFixes({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const fix = fixFor(error)
   const { navigate } = useAppActions()
   if (fix === "cookies") {
@@ -22,7 +23,42 @@ export function FailureFixes({ error }: { error: unknown }) {
     )
   }
   if (fix === "updateYtDlp") return <UpdateYtDlp />
+  if (fix === "updateGalleryDl") return <InstallGalleryDl label={strings.queue.fixes.updateGalleryDl} onDone={onRetry} />
+  if (fix === "setUpImages") return <InstallGalleryDl label={strings.queue.fixes.setUpImages} onDone={onRetry} />
   return null
+}
+
+/** Downloads Tsundoku's own copy of gallery-dl, the latest one, then tries again when the caller can. */
+function InstallGalleryDl({ label, onDone }: { label: string; onDone?: () => void }) {
+  const storeToolStatus = useStoreToolStatus()
+  const [installing, setInstalling] = useState(false)
+  const [outcome, setOutcome] = useState<(ErrorDescription & { tone: "success" | "danger" }) | null>(null)
+
+  async function install() {
+    setInstalling(true)
+    setOutcome(null)
+    try {
+      const installed = await installTool("galleryDl")
+      storeToolStatus(installed)
+      if (onDone) onDone()
+      else setOutcome({ tone: "success", message: strings.queue.fixes.installed })
+    } catch (error) {
+      if (!isCancelled(error)) setOutcome({ tone: "danger", ...describeToolError(error, "galleryDl") })
+    } finally {
+      setInstalling(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" loading={installing} onClick={() => void install()}>
+          {label}
+        </Button>
+      </div>
+      {outcome && <StatusMessage {...outcome} />}
+    </div>
+  )
 }
 
 function UpdateYtDlp() {

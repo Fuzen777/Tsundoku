@@ -62,6 +62,7 @@ export function App() {
             <PreviewCard
               state={preview.state}
               onClose={preview.close}
+              onRetry={(retryLink) => void preview.show(retryLink)}
               onAdded={() => {
                 preview.close()
                 setLink("")

@@ -186,6 +186,7 @@ fn video(video_id: &str) -> VideoInfo {
         upload_date: None,
         thumbnail_url: None,
         best_height: Some(1080),
+        post: None,
     }
 }
 

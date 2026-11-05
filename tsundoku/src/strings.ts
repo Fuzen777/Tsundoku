@@ -75,6 +75,9 @@ export const strings = {
     },
     fixes: {
       updateYtDlp: "Update yt-dlp",
+      updateGalleryDl: "Update gallery-dl",
+      setUpImages: "Set Up Image Downloads",
+      installed: "Done. Try again.",
       tryNightly: "Try Nightly",
       setUpCookies: "Set Up Cookies",
       updated: (version: string | null) =>
@@ -134,7 +137,7 @@ export const strings = {
     checkFailed: "Couldn't check for updates.",
   },
   preview: {
-    fetching: "Fetching the video's details…",
+    fetching: "Fetching the details…",
     cancel: "Cancel",
     dismiss: "Dismiss",
     close: "Close",
@@ -142,6 +145,14 @@ export const strings = {
     downloadAgain: "Download Again",
     quality: (height: number) => `${height}p`,
     audioOnly: "Audio Only",
+    postContents: (images: number, videos: number) => {
+      const parts = [
+        images > 0 && `${images} ${images === 1 ? "image" : "images"}`,
+        videos > 0 && `${videos} ${videos === 1 ? "video" : "videos"}`,
+      ].filter(Boolean)
+      return parts.join(", ")
+    },
+    postsNotYet: "Downloading posts of images comes in a later update.",
     alreadyDownloaded: (date: string, preset: string) => `Already downloaded on ${date} with ${preset}.`,
     openFile: "Open File",
     showInFolder: "Show in Folder",
@@ -153,16 +164,19 @@ export const strings = {
     overwriteConfirm: "Replace",
     missingDeno: "Deno isn't set up, so some YouTube formats may be missing. You can set it up in Settings.",
     errors: {
-      invalidLink: "That isn't a link to a video. Paste a link that starts with https://.",
-      playlist: "Playlists and channels aren't supported yet. Paste a single video.",
+      invalidLink: "That isn't a link. Paste a link that starts with https://.",
+      playlist: "Playlists, channels and profiles aren't supported yet. Paste a single video or post.",
       liveStream: "This is a live stream, which can't be downloaded yet.",
       upcoming: "This video hasn't started yet. Try again once it has.",
-      unsupportedSite: "yt-dlp doesn't support this site.",
-      unavailable: "This video isn't available. It may be private, removed or blocked in your country.",
-      signInRequired: "This video needs a signed-in account or an age check.",
+      unsupportedSite: "This site isn't supported.",
+      noVideo: "There's no video to download here.",
+      imagesNotSetUp:
+        "This looks like a post of images. Downloading images takes one more free tool, which Tsundoku can set up.",
+      unavailable: "This isn't available. It may be private, removed or blocked in your country.",
+      signInRequired: "This needs a signed-in account or an age check.",
       network: "Couldn't reach the site. Check your connection, then try again.",
-      siteError: "yt-dlp couldn't read this site's page. Updating yt-dlp in Settings often fixes this.",
-      failed: "yt-dlp couldn't read this link.",
+      siteError: "Couldn't read this site's page. An update often fixes this.",
+      failed: "Couldn't read this link.",
     },
   },
   presets: {

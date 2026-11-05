@@ -7,7 +7,7 @@ export type PreviewState =
   | { stage: "idle" }
   | { stage: "loading"; link: string }
   | { stage: "ready"; preview: VideoPreview }
-  | { stage: "failed"; error: unknown }
+  | { stage: "failed"; link: string; error: unknown }
 
 /**
  * The preview card's state. Showing a link replaces whatever was shown, and only the latest link's answer is kept:
@@ -26,7 +26,7 @@ export function usePreview() {
       if (request === latestRequest.current) setState({ stage: "ready", preview })
     } catch (error) {
       if (request !== latestRequest.current) return
-      setState(isCancelled(error) ? { stage: "idle" } : { stage: "failed", error })
+      setState(isCancelled(error) ? { stage: "idle" } : { stage: "failed", link, error })
     }
   }, [])
 

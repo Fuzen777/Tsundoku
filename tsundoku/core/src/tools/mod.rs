@@ -45,10 +45,12 @@ const BLOCKED_ERROR_CODES: [i32; 4] = [
     4551, // ERROR_SYSTEM_INTEGRITY_POLICY_VIOLATION (Smart App Control)
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum ToolId {
+    /// The default, so errors saved before they named their tool read as yt-dlp's.
+    #[default]
     YtDlp,
     Ffmpeg,
     Deno,

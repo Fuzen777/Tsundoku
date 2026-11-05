@@ -75,6 +75,7 @@ impl JobRunner for YtDlpRunner {
         let Some(yt_dlp) = &job.yt_dlp else {
             return JobOutcome::Failed(DownloadError::YtDlp {
                 error: PreviewError::Tool {
+                    tool: crate::tools::ToolId::YtDlp,
                     error: ToolError::FileMissing {
                         path: "yt-dlp".to_owned(),
                     },
@@ -124,6 +125,7 @@ impl JobRunner for YtDlpRunner {
             Err(RunError::Cancelled) => JobOutcome::Cancelled,
             Err(RunError::Start { source, .. }) => JobOutcome::Failed(DownloadError::YtDlp {
                 error: PreviewError::Tool {
+                    tool: crate::tools::ToolId::YtDlp,
                     error: start_error(source, yt_dlp),
                 },
             }),

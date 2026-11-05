@@ -407,6 +407,8 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
         upload_date: row.get(8)?,
         thumbnail_url: row.get(9)?,
         best_height: row.get(10)?,
+        // The history doesn't keep what a post held yet.
+        post: None,
     })
 }
 
@@ -467,6 +469,7 @@ mod tests {
             upload_date: Some("2005-04-24".to_owned()),
             thumbnail_url: None,
             best_height: Some(1080),
+            post: None,
         }
     }
 

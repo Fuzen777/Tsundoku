@@ -24,13 +24,14 @@ type: Features
 - **Sidebar**: Queue, History and Presets at the top, Settings at the bottom.
 - **About**: Settings shows the app's version.
 
-## Adding a Video
+## Adding a Video or Post
 
 - **Add bar**: paste a link and press Enter or Add. A link without `https://` ("youtu.be/…") works too.
 - **Drop a link**: dropping a link anywhere on the window, such as one dragged from a browser's address bar, puts it in the add bar and fetches it right away.
 - **Preview card**: under the add bar, the video's thumbnail, title, uploader, site, length, upload date and best quality ("1080p", or Audio Only). A spinner shows while yt-dlp fetches it, with Cancel; a new link replaces the one being fetched.
 - **Already downloaded**: when the history has the video, the card says when and with which preset, shows the file's path with Open File and Show in Folder, and Download becomes Download Again. If the file was moved or deleted, it says so. The check uses the site and the video's ID, so every link to a video is caught: `youtu.be`, Shorts, a timestamp, a playlist it's in.
 - **Refused links**: playlists and channels, live streams, and premieres that haven't started each get a plain message. So do unsupported sites, unavailable videos, videos needing a sign-in or an age check, and network errors, with yt-dlp's own error underneath.
+- **Image posts**: an Instagram, X, Bluesky, Pixiv or other image post shows its caption, author, date and what it holds ("2 images, 4 videos"). Each link is read by whichever tool suits it, yt-dlp or gallery-dl, and by the other when the first can't, so the user never has to choose. Downloading posts isn't there yet.
 - **Without Deno**: a YouTube preview warns that some formats may be missing.
 - **Download**: pick a preset (the default is preselected) and Download: the video joins the queue, and the card and the add bar clear. With a video already downloaded, it's Download Again; with the same preset as before, it asks first, since the new file replaces the old one.
 - **Already in the queue**: the card says so, without Download.
@@ -78,6 +79,7 @@ type: Features
 
 - **A site's page couldn't be read**: Update yt-dlp, and Try Nightly when Tsundoku's copy is on Stable, right under the error, on the preview card or the queue row.
 - **The video needs a signed-in account**: Set Up Cookies opens Settings.
+- **A post of images while gallery-dl isn't set up**: Set Up Image Downloads sets it up and fetches the post again. A site gallery-dl couldn't read offers Update gallery-dl.
 
 ## Tools
 

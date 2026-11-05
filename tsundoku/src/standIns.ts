@@ -24,6 +24,7 @@ const previewStandIn: VideoPreview = {
     uploadDate: "2005-04-24",
     thumbnailUrl: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
     bestHeight: 240,
+    post: null,
   },
   lastDownload: {
     id: 1,
@@ -111,6 +112,25 @@ const pastDownloadStandIns: PastDownload[] = [
   { ...historyStandIns[0].lastDownload, id: 9, preset: "Best Audio", format: "opus", downloadedAt: 1_792_800_000 },
 ]
 
+const postStandIn: VideoPreview = {
+  video: {
+    site: "instagram",
+    siteName: "instagram.com",
+    videoId: "DfPQchkG1tg",
+    url: "https://www.instagram.com/p/DfPQchkG1tg/",
+    title: "A carousel of photos and clips from this week",
+    uploader: "Instagram",
+    durationSeconds: null,
+    uploadDate: "2026-11-02",
+    thumbnailUrl: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
+    bestHeight: null,
+    post: { images: 2, videos: 4 },
+  },
+  lastDownload: null,
+  inQueue: false,
+  missingJsRuntime: false,
+}
+
 /** What api.ts returns when the UI runs in a plain browser, to check layouts without the app. */
 export const standIns = {
   appInfo: { version: "browser", hasMicaBackdrop: false } satisfies AppInfo,
@@ -196,12 +216,19 @@ export const standIns = {
       },
     }),
   ] satisfies QueueItem[],
-  /** A downloaded video after a short wait, or a failure for a link containing "fail". */
+  /**
+   * A downloaded video after a short wait; a post of images for an Instagram link; or a failure for a link
+   * containing "fail", or "images" (gallery-dl not set up).
+   */
   fetchPreview(link: string): Promise<VideoPreview> {
     return new Promise((resolve, reject) =>
       setTimeout(() => {
         if (link.includes("fail")) {
           reject({ kind: "unavailable", detail: "[youtube] aaaaaaaaaaa: This video is unavailable" })
+        } else if (link.includes("images")) {
+          reject({ kind: "imagesNotSetUp" })
+        } else if (link.includes("instagram")) {
+          resolve(postStandIn)
         } else {
           resolve(previewStandIn)
         }

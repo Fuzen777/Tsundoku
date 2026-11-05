@@ -27,10 +27,12 @@ interface PreviewCardProps {
   onClose: () => void
   /** The video joined the queue. */
   onAdded: () => void
+  /** Fetch the link again, after a fix such as setting up gallery-dl. */
+  onRetry: (link: string) => void
 }
 
 /** Under the add bar: what a link is, whether it was downloaded before, and Download. */
-export function PreviewCard({ state, onClose, onAdded }: PreviewCardProps) {
+export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardProps) {
   return (
     <Card className="flex flex-col gap-3 p-4">
       {state.stage === "loading" && (
@@ -49,7 +51,7 @@ export function PreviewCard({ state, onClose, onAdded }: PreviewCardProps) {
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <StatusMessage tone="danger" {...describePreviewError(state.error)}>
-              {fixFor(state.error) && <FailureFixes error={state.error} />}
+              {fixFor(state.error) && <FailureFixes error={state.error} onRetry={() => onRetry(state.link)} />}
             </StatusMessage>
           </div>
           <Button size="sm" variant="ghost" onClick={onClose}>
@@ -83,7 +85,11 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
             {joinDetails([
               video.durationSeconds !== null && formatDuration(video.durationSeconds),
               video.uploadDate && formatCalendarDate(video.uploadDate),
-              video.bestHeight === null ? strings.preview.audioOnly : strings.preview.quality(video.bestHeight),
+              video.post
+                ? strings.preview.postContents(video.post.images, video.post.videos)
+                : video.bestHeight === null
+                  ? strings.preview.audioOnly
+                  : strings.preview.quality(video.bestHeight),
             ])}
           </p>
         </div>
@@ -95,6 +101,8 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
       {missingJsRuntime && <StatusMessage tone="warning" message={strings.preview.missingDeno} />}
       {preview.inQueue ? (
         <p className="text-right text-fg-secondary">{strings.preview.inQueue}</p>
+      ) : video.post ? (
+        <p className="text-right text-fg-secondary">{strings.preview.postsNotYet}</p>
       ) : (
         <DownloadControls preview={preview} onAdded={onAdded} />
       )}

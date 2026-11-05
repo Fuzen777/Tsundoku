@@ -1,0 +1,9 @@
+[
+  [
+    -1,
+    {
+      "error": "NotFoundError",
+      "message": "Requested user could not be found"
+    }
+  ]
+]

@@ -30,9 +30,12 @@ describe("describePreviewError", () => {
     })
   })
 
-  it("describes yt-dlp failing to run as a tool error", () => {
-    expect(describePreviewError({ kind: "tool", error: { kind: "blocked" } }).message).toBe(
+  it("describes yt-dlp or gallery-dl failing to run as that tool's error", () => {
+    expect(describePreviewError({ kind: "tool", tool: "ytDlp", error: { kind: "blocked" } }).message).toBe(
       strings.tools.errors.blocked("yt-dlp"),
+    )
+    expect(describePreviewError({ kind: "tool", tool: "galleryDl", error: { kind: "blocked" } }).message).toBe(
+      strings.tools.errors.blocked("gallery-dl"),
     )
   })
 })
@@ -56,7 +59,12 @@ describe("isCancelled", () => {
 
 describe("fixFor", () => {
   it("offers updating yt-dlp when a site's page couldn't be read", () => {
-    expect(fixFor({ kind: "siteError", detail: "[youtube] x: Failed to extract" })).toBe("updateYtDlp")
+    expect(fixFor({ kind: "siteError", tool: "ytDlp", detail: "[youtube] x: Failed to extract" })).toBe("updateYtDlp")
+    expect(fixFor({ kind: "siteError", tool: "galleryDl", detail: "KeyError: 'data'" })).toBe("updateGalleryDl")
+  })
+
+  it("offers setting up image downloads for a post of images", () => {
+    expect(fixFor({ kind: "imagesNotSetUp" })).toBe("setUpImages")
   })
 
   it("offers the cookies setting when the video needs a signed-in account, for a download too", () => {

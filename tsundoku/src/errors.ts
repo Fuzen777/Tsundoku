@@ -85,6 +85,10 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.upcoming, detail: error.detail || undefined }
     case "unsupportedSite":
       return { message: text.unsupportedSite }
+    case "noVideo":
+      return { message: text.noVideo, detail: error.detail }
+    case "imagesNotSetUp":
+      return { message: text.imagesNotSetUp }
     case "unavailable":
       return { message: text.unavailable, detail: error.detail }
     case "signInRequired":
@@ -96,7 +100,7 @@ export function describePreviewError(error: unknown): ErrorDescription {
     case "failed":
       return { message: text.failed, detail: error.detail }
     case "tool":
-      return describeToolError(error.error, "ytDlp")
+      return describeToolError(error.error, error.tool)
     case "cancelled":
       return { message: strings.errors.cancelled }
   }
@@ -169,18 +173,20 @@ export function describeDownloadError(error: unknown): ErrorDescription {
   }
 }
 
-/** What may fix a failed preview or download: updating yt-dlp when a site's page couldn't be read, or reading
- * browser cookies when the video needs a signed-in account. */
-export type FailureFix = "updateYtDlp" | "cookies"
+/** What may fix a failed preview or download: updating the tool that couldn't read a site's page, reading browser
+ * cookies when a signed-in account is needed, or setting up gallery-dl for a post of images. */
+export type FailureFix = "updateYtDlp" | "updateGalleryDl" | "cookies" | "setUpImages"
 
 export function fixFor(error: unknown): FailureFix | null {
   const failure = isCoreError<DownloadError>(error) && error.kind === "ytDlp" ? error.error : error
   if (!isCoreError<PreviewError>(failure)) return null
   switch (failure.kind) {
     case "siteError":
-      return "updateYtDlp"
+      return failure.tool === "galleryDl" ? "updateGalleryDl" : "updateYtDlp"
     case "signInRequired":
       return "cookies"
+    case "imagesNotSetUp":
+      return "setUpImages"
     default:
       return null
   }

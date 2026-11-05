@@ -10,7 +10,7 @@ use ts_rs::TS;
 use crate::cancel::CancelToken;
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::settings::CookiesBrowser;
-use crate::tools::{ToolError, start_error};
+use crate::tools::{ToolError, ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
@@ -18,7 +18,7 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 /// What yt-dlp writes when YouTube extraction runs without a JavaScript runtime (Deno).
 const NO_JS_RUNTIME_WARNING: &str = "No supported JavaScript runtime";
 
-/// A single video, as yt-dlp describes it.
+/// A single video, as yt-dlp describes it, or a post of images and videos, as gallery-dl describes it (see `post`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -37,8 +37,20 @@ pub struct VideoInfo {
     /// As YYYY-MM-DD.
     pub upload_date: Option<String>,
     pub thumbnail_url: Option<String>,
-    /// The tallest video format, or `None` for audio only.
+    /// The tallest video format, or `None` for audio only or a post.
     pub best_height: Option<u32>,
+    /// What a post holds, when the link is a post of images and videos (from gallery-dl). `None` for a video.
+    #[serde(default)]
+    pub post: Option<PostContents>,
+}
+
+/// The files of a post, such as an Instagram carousel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PostContents {
+    pub images: u32,
+    pub videos: u32,
 }
 
 /// Why a link can't be previewed or downloaded. The UI turns each into a sentence; `detail` is yt-dlp's own error.
@@ -60,6 +72,9 @@ pub enum PreviewError {
     Upcoming { detail: String },
     #[error("unsupported site")]
     UnsupportedSite,
+    /// yt-dlp found no video at the link, which may be a post of images.
+    #[error("no video: {detail}")]
+    NoVideo { detail: String },
     /// Private, removed, blocked in this country, or never existed.
     #[error("unavailable: {detail}")]
     Unavailable { detail: String },
@@ -68,14 +83,26 @@ pub enum PreviewError {
     SignInRequired { detail: String },
     #[error("network error: {detail}")]
     Network { detail: String },
-    /// yt-dlp couldn't read the site's page, which an update of yt-dlp often fixes.
+    /// The tool couldn't read the site's page, which an update of the tool often fixes.
     #[error("site error: {detail}")]
-    SiteError { detail: String },
+    SiteError {
+        /// yt-dlp or gallery-dl.
+        #[serde(default)]
+        tool: ToolId,
+        detail: String,
+    },
+    /// yt-dlp found no video, and gallery-dl, which downloads images, isn't set up.
+    #[error("no video, and image downloads aren't set up")]
+    ImagesNotSetUp,
     #[error("failed: {detail}")]
     Failed { detail: String },
-    /// yt-dlp itself couldn't run.
-    #[error("yt-dlp couldn't run: {error}")]
-    Tool { error: ToolError },
+    /// yt-dlp or gallery-dl itself couldn't run.
+    #[error("the tool couldn't run: {error}")]
+    Tool {
+        #[serde(default)]
+        tool: ToolId,
+        error: ToolError,
+    },
     #[error("cancelled")]
     Cancelled,
 }
@@ -134,6 +161,7 @@ pub fn fetch(
 ) -> Result<Fetched, PreviewError> {
     let Some(yt_dlp) = tools.yt_dlp else {
         return Err(PreviewError::Tool {
+            tool: ToolId::YtDlp,
             error: ToolError::FileMissing {
                 path: "yt-dlp".to_owned(),
             },
@@ -143,6 +171,7 @@ pub fn fetch(
         process::run_collecting_with_cancel(&command(tools, yt_dlp, link), cancel, FETCH_TIMEOUT)
             .map_err(|error| match error {
             RunError::Start { source, .. } => PreviewError::Tool {
+                tool: ToolId::YtDlp,
                 error: start_error(source, yt_dlp),
             },
             RunError::Cancelled => PreviewError::Cancelled,
@@ -284,6 +313,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         upload_date: info.upload_date.as_deref().and_then(iso_date),
         thumbnail_url: info.thumbnail,
         best_height,
+        post: None,
     })
 }
 
@@ -317,6 +347,13 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
         PreviewError::InvalidLink
     } else if mentions(&["unsupported url"]) {
         PreviewError::UnsupportedSite
+    } else if mentions(&[
+        "no video formats found",
+        "no video could be found",
+        "there's no video",
+    ]) {
+        // A post of images only, such as an Instagram photo: gallery-dl may download it.
+        PreviewError::NoVideo { detail }
     } else if mentions(&[
         "will begin in",
         "premieres in",
@@ -359,7 +396,10 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
         PreviewError::Network { detail }
     } else if detail.starts_with('[') {
         // "[youtube] abc: …": the site's extractor failed in a way yt-dlp didn't expect.
-        PreviewError::SiteError { detail }
+        PreviewError::SiteError {
+            tool: ToolId::YtDlp,
+            detail,
+        }
     } else {
         PreviewError::Failed { detail }
     }
