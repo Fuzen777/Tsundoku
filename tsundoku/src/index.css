@@ -79,3 +79,14 @@ input,
 textarea {
   user-select: text;
 }
+
+/*
+  A native select's list is painted from its options' colors, not the theme's. The select's own
+  background (--color-input) is see-through, so in dark mode the list fell back to white under
+  light text. Opaque theme colors keep it readable either way; the hovered option keeps Windows' highlight.
+*/
+option,
+optgroup {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+}

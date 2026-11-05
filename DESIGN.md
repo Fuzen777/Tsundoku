@@ -127,7 +127,7 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 ## Forms
 
 - Each field is a `Field`: a medium-weight label, the control, then a hint in 12 px muted text, or its error in the danger color instead.
-- Text fields and selects share one look (`INPUT_CLASSES` in `components/styles.ts`): 32 px tall, `--color-input`, a line border, the accent border when focused. Selects are native, so their list follows Windows' theme.
+- Text fields and selects share one look (`INPUT_CLASSES` in `components/styles.ts`): 32 px tall, `--color-input`, a line border, the accent border when focused. Selects are native, so their list follows Windows' theme; its options get `--color-bg` and `--color-fg` (`index.css`), since the select's see-through background would otherwise leave the list white in dark mode.
 - Code-like values (file name templates, yt-dlp arguments, languages) use the monospace font, Cascadia Mono.
 - Edits that take effect at once (a toggle in Settings) save right away; an editor with many fields (a preset) keeps a draft until Save, with Discard beside it, and asks before leaving unsaved changes.
 - Confirmations (overwriting a file, deleting a preset, closing while downloading) use Windows' own dialog (`confirmWithUser`), with the action as its button label.
