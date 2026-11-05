@@ -40,6 +40,31 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Fuzen777",
+    "copyright": "Copyright (c) 2026 Fuzen777",
+    "homepage": "https://github.com/Fuzen777/Tsundoku",
+    "shortDescription": "Downloads videos with yt-dlp and remembers what you already have.",
+    "longDescription": "Tsundoku downloads videos with yt-dlp and keeps a history of everything it has downloaded, so it warns before downloading the same video twice.",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVBQUNBMkQ2QkQwQjUyNzIKUldSeVVndTkxcUtzNnR6cVNwZzZhQmxBZUE4Nm1zUmlwOVpiNTdMOXY5SHJjbzRjRnZrVHNydnYK",
+      "endpoints": [
+        "https://github.com/Fuzen777/Tsundoku/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

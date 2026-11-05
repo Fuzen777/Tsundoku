@@ -18,9 +18,13 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tsundoku-core = { path = "../core" }
+# generate_context! writes plugins' settings from tauri.conf.json as serde_json values.
+serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2.5.5"
 tauri-plugin-window-state = "2.5.0"
 window-vibrancy = "0.8.1"
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"

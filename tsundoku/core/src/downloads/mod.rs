@@ -369,11 +369,11 @@ impl DownloadQueue {
         if item.state == QueueState::Done {
             return Err(DownloadError::WrongState);
         }
-        let temp_folder = temp_folder(item);
+        // The files go first, so once the item is gone, they are too.
+        remove_folder(&temp_folder(item));
         state.items.retain(|item| item.id != id);
         self.store.delete(id)?;
         drop(state);
-        remove_folder(&temp_folder);
         self.notify();
         Ok(())
     }
@@ -517,10 +517,11 @@ impl DownloadQueue {
             .remove(&job.id)
             .and_then(|running| running.end_request);
         if end_request == Some(EndRequest::Cancel) {
+            // The files go first, so once the item is gone, they are too.
+            remove_folder(&job.temp_folder);
             state.items.retain(|item| item.id != job.id);
             let _ = self.store.delete(job.id);
             drop(state);
-            remove_folder(&job.temp_folder);
         } else if let Ok(item) = find(&mut state.items, job.id) {
             item.progress = None;
             match (end_request, outcome) {

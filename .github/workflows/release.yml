@@ -1,0 +1,98 @@
+# Builds Tsundoku on GitHub's Windows machines and publishes it.
+# - Pushing a version tag (v0.1.0, matching "version" in tsundoku/package.json and tsundoku/Cargo.toml) checks, builds
+#   and publishes a GitHub release with the installer and the updater's latest.json, signed with the key in the
+#   TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets.
+# - Running it by hand (Actions > Release > Run workflow) checks and builds without publishing or signing: the
+#   installer is kept with the run, to try a build.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: tsundoku/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tsundoku
+
+      - name: Read the version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content tsundoku/package.json -Raw | ConvertFrom-Json).version
+          $cargoVersion = (Select-String -Path tsundoku/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ($cargoVersion -ne $version) {
+            throw "tsundoku/Cargo.toml has version $cargoVersion but package.json has $version: bump both together."
+          }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "The tag $env:GITHUB_REF_NAME doesn't match the version $version in tsundoku/package.json."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Install the UI's packages
+        working-directory: tsundoku
+        run: npm ci
+
+      - name: Check formatting, lint and test
+        shell: cmd
+        run: Scripts\Check.cmd
+
+      # The Rust tests rewrite src/bindings from the Rust types; they must match what's committed.
+      - name: Check the TypeScript bindings are committed
+        shell: pwsh
+        run: |
+          # Each exit code is read right away: a pwsh step only fails on its last command's.
+          git diff --exit-code -- tsundoku/src/bindings
+          $changed = $LASTEXITCODE -ne 0
+          $untracked = git ls-files --others --exclude-standard -- tsundoku/src/bindings
+          if ($changed -or $untracked) { throw "The bindings differ from what's committed: commit the regenerated ones. $untracked" }
+
+      # Not pre-releases, even for 0.x: the updater reads releases/latest, which skips pre-releases.
+      - name: Build and publish the release
+        if: github.event_name == 'push'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: tsundoku
+          tagName: ${{ github.ref_name }}
+          releaseName: Tsundoku ${{ steps.version.outputs.version }}
+          releaseBodyPath: .github/release-notes.md
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config src-tauri/tauri.release.conf.json
+
+      - name: Build without publishing
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: tsundoku
+        run: npm run tauri build
+
+      - name: Keep the installer with the run
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tsundoku-${{ steps.version.outputs.version }}-setup
+          path: tsundoku/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

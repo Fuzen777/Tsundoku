@@ -2,43 +2,19 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
-## 0.0.5 · 2026-11-05
+## 0.1.0 · 2026-11-05
+
+The first release.
 
 ### New
 
-- The History view: every download, with search, site and preset filters, sorting on any column, each video's downloads when it has several, Open File, Show in Folder, Open Source Page, Download Again and Forget. Moved or deleted files show as missing.
-- Settings → Downloads: how many downloads run at once, a speed limit and the default preset. Settings → Cookies: a browser for yt-dlp to read cookies from, for videos that need a signed-in account, used by previews and downloads.
-- Failures offer their fix: Update yt-dlp or Try Nightly when a site's page couldn't be read, Set Up Cookies when a video needs a signed-in account.
-
-## 0.0.4 · 2026-11-05
-
-### New
-
-- Downloads: pick a preset on the preview card and Download. The queue runs two at a time, with each one's stage, size, speed and time left, and Stop, Resume, Cancel, Retry, Open File, Show in Folder and Open Log. It comes back after a restart, and closing while downloading asks first.
-- Presets: Best Video, 1080p MP4, Best Audio and Audio MP3 to start with, and an editor for the quality, container or audio format, file name, folder, embedding, SponsorBlock and extra yt-dlp arguments, showing the arguments it gives.
-- Every finished download is recorded in the history and in `archive.txt`, so the duplicate warning now works on its own. Download Again with the same preset asks before replacing the file.
-
-## 0.0.3 · 2026-11-05
-
-### New
-
-- Paste a link (or drop one on the window) to see the video's thumbnail, title, uploader, site, length, upload date and best quality, with Cancel while it loads.
-- A warning when the video was already downloaded, with when, which preset, and Open File and Show in Folder. It works whatever the link: `youtu.be`, Shorts, a timestamp or a playlist it's in.
-- Playlists, channels, live streams and premieres are refused with a plain message, as are unsupported sites, unavailable videos and videos needing a sign-in, with yt-dlp's error underneath.
-- The history database (`tsundoku.db`) and yt-dlp's download archive (`archive.txt`), kept in sync. Downloads fill them once they arrive.
-
-## 0.0.2 · 2026-11-05
-
-### New
-
-- First-run setup: Tsundoku finds yt-dlp, ffmpeg and Deno on this PC and offers to use them, or downloads the official builds into its own folder, checked against their published SHA-256, with each download's size and progress.
-- Settings → Tools: each tool's version, path and source, Choose File… to use any copy, and switching to Tsundoku's own copy.
-- yt-dlp updates: at startup at most once a day and with Update Now, on the Stable or Nightly channel. ffmpeg and Deno: Check for Updates, and Update when a newer build exists.
-- Settings are saved in `settings.json` in the data folder.
-
-## 0.0.1 · 2026-11-05
-
-### New
-
-- The app's window, with Windows 11's Mica backdrop and light and dark themes following Windows. It reopens at its last size and position, and opening Tsundoku again brings it to the front.
-- Navigation between Queue, History, Presets and Settings, with the link field across the top (it can't fetch links yet). Settings shows the app's version.
+- **Install and update**: a per-user installer, so no administrator rights are needed. Tsundoku checks GitHub for a newer version at startup and offers to install it, and Settings → About checks on demand.
+- **Tools**: the first start finds yt-dlp, ffmpeg and Deno on this PC and offers to use them, or downloads the official builds, checked against their published SHA-256. Settings → Tools shows each one's version and source, uses any copy you pick, and updates Tsundoku's own: yt-dlp at most once a day at startup or with Update Now, on the Stable or Nightly channel; ffmpeg and Deno when you check.
+- **Preview**: paste a link, or drop one on the window, to see the video's thumbnail, title, uploader, site, length, upload date and best quality. Playlists, channels, live streams and premieres are refused with a plain message, as are unsupported sites, unavailable videos and videos needing a sign-in, with yt-dlp's error underneath.
+- **Duplicate warning**: a video downloaded before shows when, with which preset and where the file is, with Open File and Show in Folder, whatever the link (`youtu.be`, Shorts, a timestamp, a playlist it's in). Download Again with the same preset asks before replacing the file.
+- **Downloads**: pick a preset and Download. The queue runs two at a time, with each one's stage, size, speed and time left, and Stop, Resume, Cancel, Retry, Open File, Show in Folder and Open Log. It comes back after a restart, and closing while downloading asks first.
+- **Presets**: Best Video, 1080p MP4, Best Audio and Audio MP3 to start with, and an editor for the quality, container or audio format, file name, folder, embedding, SponsorBlock and extra yt-dlp arguments, showing the arguments it gives.
+- **History**: every download in a searchable list, with site and preset filters, sorting, each video's downloads when it has several, Open Source Page, Download Again and Forget. yt-dlp's `archive.txt` is kept in sync.
+- **Settings**: downloads at once, a speed limit, the default preset, and a browser to read cookies from for videos that need a signed-in account.
+- **Fixes on failures**: Update yt-dlp or Try Nightly when a site's page couldn't be read, Set Up Cookies when a video needs a signed-in account.
+- **Window**: Windows 11's Mica backdrop, light and dark themes following Windows, its last size and position remembered, and a second start bringing the open window to the front.

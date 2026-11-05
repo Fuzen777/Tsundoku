@@ -1,6 +1,7 @@
 import { useCallback } from "react"
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
+  checkForAppUpdate,
   detectTools,
   getAppInfo,
   getDownloadOptions,
@@ -138,5 +139,13 @@ export function useVideoDownloads(videoId: number, enabled: boolean) {
 
 export function useDownloadOptions() {
   return useQuery({ queryKey: queryKeys.downloadOptions, queryFn: getDownloadOptions, staleTime: Infinity })
+}
+
+/**
+ * A newer release of Tsundoku, checked once at startup; Settings → About checks again. Not retried: while the
+ * repository is private, GitHub refuses, and that says nothing worth showing.
+ */
+export function useAppUpdate() {
+  return useQuery({ queryKey: queryKeys.appUpdate, queryFn: checkForAppUpdate, staleTime: Infinity, retry: false })
 }
 

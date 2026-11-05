@@ -3,6 +3,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open } from "@tauri-apps/plugin-dialog"
 import { openUrl } from "@tauri-apps/plugin-opener"
+import { relaunch } from "@tauri-apps/plugin-process"
+import { check } from "@tauri-apps/plugin-updater"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
@@ -44,6 +46,7 @@ export const queryKeys = {
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
   downloadOptions: ["download-options"],
+  appUpdate: ["app-update"],
 } as const
 
 /** Sent by the core while a tool is installed or updated. */
@@ -335,4 +338,38 @@ export function getDownloadOptions(): Promise<DownloadSettings> {
 export function saveDownloadOptions(options: DownloadSettings): Promise<DownloadSettings> {
   if (!isTauri()) return outsideTauri()
   return invoke<DownloadSettings>("save_download_options", { options })
+}
+
+/** A newer release of Tsundoku, found on GitHub. */
+export interface AppUpdate {
+  version: string
+  /** Downloads the update, reporting bytes received, then installs it and restarts the app. */
+  install: (onProgress: (received: number, total: number | null) => void) => Promise<void>
+}
+
+/**
+ * Asks GitHub for a newer release, through the updater's latest.json. Resolves to null when there's none, and always
+ * in development or a browser. Rejects when GitHub can't be asked, as while the repository is private.
+ */
+export async function checkForAppUpdate(): Promise<AppUpdate | null> {
+  if (!isTauri() || import.meta.env.DEV) return null
+  const update = await check()
+  if (!update) return null
+  return {
+    version: update.version,
+    install: async (onProgress) => {
+      let received = 0
+      let total: number | null = null
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          total = event.data.contentLength ?? null
+        } else if (event.event === "Progress") {
+          received += event.data.chunkLength
+          onProgress(received, total)
+        }
+      })
+      // On Windows the installer closes the app itself; elsewhere it has to restart.
+      await relaunch()
+    },
+  }
 }

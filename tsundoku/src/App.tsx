@@ -4,6 +4,7 @@ import { AddBar } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
 import { PreviewCard } from "./components/PreviewCard"
 import { Sidebar } from "./components/Sidebar"
+import { UpdateBanner } from "./components/UpdateBanner"
 import { AppActionsContext, type ViewId } from "./navigation"
 import { useQueue, useToolsNeedSetup } from "./queries"
 import { useLinkDrop, usePreview } from "./usePreview"
@@ -54,8 +55,10 @@ export function App() {
           counts={{ queue: unfinished }}
           onSelect={setView}
         />
-        {preview.state.stage !== "idle" && (
-          <div className="col-start-2 row-start-2 pr-4 pb-3">
+        {/* Hidden while it has nothing to show, so the row takes no room. */}
+        <div className="col-start-2 row-start-2 flex flex-col gap-3 pr-4 pb-3 empty:hidden">
+          <UpdateBanner />
+          {preview.state.stage !== "idle" && (
             <PreviewCard
               state={preview.state}
               onClose={preview.close}
@@ -64,8 +67,8 @@ export function App() {
                 setLink("")
               }}
             />
-          </div>
-        )}
+          )}
+        </div>
         <main className="col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
           <CurrentView view={view} />
         </main>

@@ -63,8 +63,9 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 10. The preview card opens between the add bar and the current view when a link is submitted or dropped, and closes with its × (or Cancel, or Dismiss). It's a `Card`: the thumbnail (176 px wide, 16:9, an empty `--color-input` tile when there's none), then the title (two lines at most), uploader and site, and a line of details (length, upload date, best quality), with × at the top right; then its notices as status messages; then the preset picker and Download at the bottom right.
 11. A queue row is a `Card`: the thumbnail (96 px), then the title, a line of details (preset, stage, size, speed, time left), the progress bar while it runs and its error if it failed; its actions on the right, `sm` size, the main one (Stop, Resume, Retry, Open File) `secondary` and the rest `ghost`.
 12. The history view is a toolbar (search, the site and preset filters, the sort and its direction), a count, then one `Card` per video: the thumbnail (112 px), the title, "uploader · site · length", "preset · date · size" for the latest download, and a "File Missing" pill when its file is gone; Open File and Show in Folder as icon buttons, then a `Menu` for the rest. A video with several downloads has an accent "N Downloads" toggle that lists them under it, indented to the text. It's a list rather than a table: at the window's minimum width, eight columns leave no room for titles.
-13. Settings is a column of sections: Downloads, Cookies, Tools, About.
-14. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right.
+13. When a newer Tsundoku is out, its banner is the first thing under the add bar, above the preview card: a `Card` with an accent arrow icon, "Tsundoku X is available.", Later (`ghost`) and Install and Restart (`primary`), then a progress bar while it downloads.
+14. Settings is a column of sections: Downloads, Cookies, Tools, About.
+15. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right.
 
 ---
 
@@ -146,6 +147,13 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 - Sizes in 1024-based units with one decimal from KB up ("22.5 MB"), as Windows shows them (`formatBytes`).
 - Lengths as a player shows them ("0:19", "1:02:03") (`formatDuration`).
 - Dates in the reader's own format, medium style ("Apr 24, 2005") (`formatCalendarDate` for a calendar date, `formatDay` for a moment).
+
+---
+
+## App Icon
+
+- A placeholder: three books piled up (積ん読) on an ai-iro rounded square, cream, amber and light indigo, drawn bold enough to read at 16 px.
+- `tsundoku/src-tauri/icons/source.svg` is the source; `npm run tauri icon src-tauri/icons/source.svg` in `tsundoku/` makes every size (delete the `android` and `ios` folders it adds). A designed icon is in [TODO](./TODO.md).
 
 ---
 

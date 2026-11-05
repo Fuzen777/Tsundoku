@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Placeholder icon: a pile of unread books (積ん読) on ai-iro. `npm run tauri icon src-tauri/icons/source.svg`
+       makes every icon size from it. -->
+  <rect x="48" y="48" width="928" height="928" rx="208" fill="#165e83"/>
+  <!-- Bottom book -->
+  <rect x="216" y="664" width="592" height="140" rx="30" fill="#f3ead7"/>
+  <rect x="700" y="690" width="84" height="88" rx="10" fill="#d8ccb4"/>
+  <!-- Middle book, shifted right -->
+  <rect x="268" y="508" width="540" height="140" rx="30" fill="#e8b04a"/>
+  <rect x="700" y="534" width="84" height="88" rx="10" fill="#f8e6b8"/>
+  <!-- Top book, tilted -->
+  <g transform="rotate(-7 500 420)">
+    <rect x="232" y="352" width="540" height="140" rx="30" fill="#79b4da"/>
+    <rect x="664" y="378" width="84" height="88" rx="10" fill="#d7ebf7"/>
+  </g>
+</svg>

@@ -18,6 +18,10 @@ rules:
 
 ## Features
 
+### Look
+
+- [ ] **A designed app icon.** The current one is a placeholder: three books piled up, drawn in `tsundoku/src-tauri/icons/source.svg`, from which `npm run tauri icon` makes every size.
+
 ### Playlists and Channels
 
 - [ ] **Playlist entry picker.** Pasting a playlist or channel link lists its videos (`--flat-playlist`), with the ones already downloaded greyed out and unchecked, and queues the checked ones. This lifts v1's single-video rule. From here yt-dlp also reads `archive.txt` (`--download-archive`), so it skips known videos itself.
@@ -41,6 +45,11 @@ rules:
 
 - [ ] **Dropping a link from a browser.** Drag a link, or the address bar's padlock, from Firefox, Chrome and Edge onto the window. The drop handler was tested with a synthetic drop, not a real drag between apps.
 - [ ] **Open File and Show in Folder** on the duplicate warning and the queue, and **Open Log**: that they open the right file, folder and log. Their errors (file gone, unknown download) are tested.
+
+### Install and Updates
+
+- [ ] **Updating from one release to the next**: the banner's Install and Restart, end to end. It needs two published releases and the repository public, since the updater can't read a private repository's releases.
+- [ ] **Windows 10**: the installer, the plain background without Mica, and WebView2 being downloaded where it's missing.
 
 ### Downloads
 

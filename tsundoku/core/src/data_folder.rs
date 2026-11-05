@@ -1,4 +1,4 @@
-//! Where the app keeps its data: `settings.json` and `tools\`, and later the history and logs.
+//! Where the app keeps its data: `settings.json`, `tools\`, the history, the queue and the logs.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -13,12 +13,14 @@ pub enum BuildKind {
     Release,
 }
 
-/// The data folder for this build: `%LocalAppData%\Tsundoku` for a release build, and for a development build the
-/// folder named by `TSUNDOKU_DATA_DIR`, or `%LocalAppData%\Tsundoku Dev` without it. `None` only if Windows has no
-/// local app data folder.
-pub fn resolve(build: BuildKind) -> Option<PathBuf> {
+/// The data folder for this build. A release build uses `release_folder`: the app's own folder in `%LocalAppData%`,
+/// named after its identifier, which the uninstaller offers to delete. (`%LocalAppData%\Tsundoku` is where the
+/// installer puts the app itself.) A development build uses the folder named by `TSUNDOKU_DATA_DIR`, or
+/// `%LocalAppData%\Tsundoku Dev` without it. `None` only if Windows has no local app data folder.
+pub fn resolve(build: BuildKind, release_folder: PathBuf) -> Option<PathBuf> {
     resolve_from(
         build,
+        release_folder,
         std::env::var_os(DATA_FOLDER_VARIABLE),
         dirs::data_local_dir(),
     )
@@ -26,11 +28,12 @@ pub fn resolve(build: BuildKind) -> Option<PathBuf> {
 
 fn resolve_from(
     build: BuildKind,
+    release_folder: PathBuf,
     folder_override: Option<OsString>,
     local_app_data: Option<PathBuf>,
 ) -> Option<PathBuf> {
     match build {
-        BuildKind::Release => local_app_data.map(|folder| folder.join("Tsundoku")),
+        BuildKind::Release => Some(release_folder),
         BuildKind::Development => folder_override
             .filter(|folder| !folder.is_empty())
             // Rebuilt from its parts, so "D:/Dev/data" gets Windows' separators like the paths joined to it.
@@ -87,23 +90,26 @@ mod tests {
         Some(PathBuf::from(r"C:\Users\Someone\AppData\Local"))
     }
 
+    fn release_folder() -> PathBuf {
+        PathBuf::from(r"C:\Users\Someone\AppData\Local\io.github.fuzen777.tsundoku")
+    }
+
     #[test]
-    fn release_builds_ignore_the_override() {
+    fn release_builds_use_the_apps_own_folder_and_ignore_the_override() {
         let folder = resolve_from(
             BuildKind::Release,
+            release_folder(),
             Some(r"D:\Dev\data".into()),
             local_app_data(),
         );
-        assert_eq!(
-            folder,
-            Some(PathBuf::from(r"C:\Users\Someone\AppData\Local\Tsundoku"))
-        );
+        assert_eq!(folder, Some(release_folder()));
     }
 
     #[test]
     fn development_builds_use_the_override() {
         let folder = resolve_from(
             BuildKind::Development,
+            release_folder(),
             Some(r"D:\Dev\data".into()),
             local_app_data(),
         );
@@ -115,6 +121,7 @@ mod tests {
     fn an_override_gets_windows_separators() {
         let folder = resolve_from(
             BuildKind::Development,
+            release_folder(),
             Some("D:/Dev/data".into()),
             local_app_data(),
         );
@@ -127,11 +134,21 @@ mod tests {
             r"C:\Users\Someone\AppData\Local\Tsundoku Dev",
         ));
         assert_eq!(
-            resolve_from(BuildKind::Development, None, local_app_data()),
+            resolve_from(
+                BuildKind::Development,
+                release_folder(),
+                None,
+                local_app_data()
+            ),
             expected
         );
         assert_eq!(
-            resolve_from(BuildKind::Development, Some("".into()), local_app_data()),
+            resolve_from(
+                BuildKind::Development,
+                release_folder(),
+                Some("".into()),
+                local_app_data()
+            ),
             expected
         );
     }

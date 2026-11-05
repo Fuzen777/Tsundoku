@@ -30,6 +30,7 @@ title: AGENTS
 | `tsundoku/src-tauri` | The Tauri app: window, plugins, `tools.rs` (the tool commands), `history.rs` (the preview and history commands), `downloads.rs` (the preset and queue commands, and the queue's events), `tauri.conf.json`, `capabilities/` |
 | `DOCUMENTATION/Docs` | How parts of the app work: `Download Pipeline.md` |
 | `Scripts` | Dev, check and build scripts |
+| `.github` | `workflows/release.yml` (the release build) and `release-notes.md` (the text of every release) |
 
 ## Building and Testing
 
@@ -50,8 +51,9 @@ title: AGENTS
 
 ## Data and Testing
 
-- The data folder holds `settings.json`, `tools\` (one folder each for `yt-dlp`, `ffmpeg` and `deno`: Tsundoku's own copies), the history and the queue's `tsundoku.db` (with its `-wal` and `-shm` files while the app runs), `archive.txt`, and `logs\` (one log per download). Dev builds use their own: `TSUNDOKU_DATA_DIR` when set (this PC's `.cargo/config.toml` sets `D:\Dev\tsundoku\data`), otherwise `%LocalAppData%\Tsundoku Dev`. Release builds use `%LocalAppData%\Tsundoku` and ignore the variable.
-- `D:\Dev\tsundoku\` is the disposable sandbox: `data\` (the dev data folder), `downloads\` (test downloads) and `target\`. Anything under it can be changed or deleted freely for a test. Never test against an installed copy's `%LocalAppData%\Tsundoku`.
+- The data folder holds `settings.json`, `tools\` (one folder each for `yt-dlp`, `ffmpeg` and `deno`: Tsundoku's own copies), the history and the queue's `tsundoku.db` (with its `-wal` and `-shm` files while the app runs), `archive.txt`, and `logs\` (one log per download). Dev builds use their own: `TSUNDOKU_DATA_DIR` when set (this PC's `.cargo/config.toml` sets `D:\Dev\tsundoku\data`), otherwise `%LocalAppData%\Tsundoku Dev`. Release builds use Tauri's app folder, `%LocalAppData%\io.github.fuzen777.tsundoku`, and ignore the variable.
+- The release data folder isn't `%LocalAppData%\Tsundoku`, as PROJECT.md first had it: that's where the per-user installer puts the app itself. The identifier folder already holds the WebView's data (`EBWebView`, shared with dev builds), and it's the folder the uninstaller's "Delete the application data" removes.
+- `D:\Dev\tsundoku\` is the disposable sandbox: `data\` (the dev data folder), `downloads\` (test downloads) and `target\`. Anything under it can be changed or deleted freely for a test. Never test against an installed copy's data folder (`%LocalAppData%\io.github.fuzen777.tsundoku`), apart from its `EBWebView`, which dev builds use too.
 - The first-run setup shows while `settings.json` has no yt-dlp or ffmpeg: delete it, with the app closed, to see it again. With `tools\` left in place, the setup offers those copies; delete `tools\` too for a first run from nothing. Setting `ytDlpLastUpdateCheck` to an old value makes the startup update of yt-dlp run.
 - In the dev data folder, every preset's folder is set to `D:\Dev\tsundoku\downloads`, so test downloads never land in Videos or Music. A preset that's reset goes back to the default folder; set it again in the editor before downloading with it.
 - The queue's tests (`core/src/downloads/tests.rs`) run against `FakeRunner`, which finishes, fails or is cancelled when a test says, so the state machine is tested without yt-dlp. Real downloads were tried with `jNQXAC9IVRw` (19 s) and, to stop and resume mid-download, `aqz-KE-bpKQ` (Big Buck Bunny, 250 MB at 1080p).
@@ -62,6 +64,16 @@ title: AGENTS
 - `single-instance` is the first plugin registered, as it requires: a second launch focuses the running window. `window-state` restores size, position and maximized state, never visibility.
 - Every Tauri permission the UI uses is listed in `src-tauri/capabilities/default.json`; `core:window:allow-show` is there for the hidden start.
 - The CSP in `tauri.conf.json` allows `https:` images, for video thumbnails. Network requests (GitHub) come from Rust, never from the UI.
+
+### Releases
+
+- A release is a version tag pushed to GitHub: `.github/workflows/release.yml` checks that the tag matches `package.json` and `Cargo.toml`, runs `Scripts\Check.cmd`, checks the committed bindings are current, then `tauri-action` builds the installer, signs it and publishes a release with `latest.json` for the updater. Running the workflow by hand builds without publishing or signing.
+- Releases aren't marked pre-release, even for 0.x: the updater reads `releases/latest/download/latest.json`, and GitHub's "latest" skips pre-releases.
+- Signing: the private key and its password are the repository's `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets; the user keeps the key file outside the repository. Only the public key is in `tauri.conf.json` (`plugins.updater.pubkey`). Losing the private key means installed copies can't update anymore: a new key needs a new install.
+- `src-tauri/tauri.release.conf.json` turns on the updater's files (`createUpdaterArtifacts`) for the release build only, since making them needs the private key. `Scripts\Build.cmd` builds the installer without them.
+- `requireSignedVersion` is on: the updater refuses a release whose signature names another version, so an older signed release can't be served as a newer one.
+- The installer is NSIS, per-user (`installMode: currentUser`), into `%LocalAppData%\Tsundoku`. Updates install in passive mode: a progress bar, no questions.
+- While the repository is private, the update check fails (GitHub won't serve its release files without signing in) and the app shows nothing; Settings → About shows the error.
 
 ### Running Programs
 

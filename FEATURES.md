@@ -6,6 +6,13 @@ type: Features
 > [!abstract]
 > What the app does today. The full v1 design is in [PROJECT](./PROJECT.md).
 
+## Install and Updates
+
+- **Per-user installer**: installs for your account only, in `%LocalAppData%\Tsundoku`, without administrator rights, with a Start menu shortcut. WebView2 is downloaded if it's missing (it comes with Windows 11).
+- **Updates**: Tsundoku checks GitHub for a newer version at startup. When there is one, a banner under the add bar offers Install and Restart, which downloads it with its progress, installs it and restarts; Later hides it until the next start. Updates are signed, and an older version is never installed in place of a newer one.
+- **Check for Updates**: in Settings → About, with "up to date" or the new version as the answer.
+- **Your data stays**: the history, presets, settings and Tsundoku's copies of the tools live in `%LocalAppData%\io.github.fuzen777.tsundoku`, kept through updates and uninstalls unless you tick the uninstaller's **Delete the application data**.
+
 ## Window
 
 - **Mica**: Windows 11's backdrop shows through the window, which follows Windows' light or dark theme. Windows 10 gets a plain background.

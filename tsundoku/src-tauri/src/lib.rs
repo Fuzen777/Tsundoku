@@ -69,7 +69,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     } else {
         BuildKind::Release
     };
-    let root = data_folder::resolve(build).ok_or("Windows has no local app data folder")?;
+    let root = data_folder::resolve(build, app.path().app_local_data_dir()?)
+        .ok_or("Windows has no local app data folder")?;
     let paths = DataPaths::new(root);
     fs::create_dir_all(paths.root())?;
 
@@ -120,6 +121,10 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // Updates from the GitHub releases' latest.json, signed with the key whose public half is in tauri.conf.json.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        // Restarts the app once an update is installed.
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let window = app
                 .get_webview_window("main")

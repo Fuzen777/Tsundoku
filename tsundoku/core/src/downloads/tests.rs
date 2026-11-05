@@ -206,7 +206,10 @@ fn runs_two_at_a_time_in_order() {
     let test = Test::new();
     let [first, second, third] = ["a", "b", "c"].map(|id| test.add(id));
     wait_until("two run", || test.runner.started().len() == 2);
-    assert_eq!(test.runner.started(), [first, second]);
+    // The two start on threads of their own at once, so which records itself first varies.
+    let mut running = test.runner.started();
+    running.sort_unstable();
+    assert_eq!(running, [first, second]);
     assert_eq!(test.state(third), Some(QueueState::Waiting));
 
     test.runner.complete(first, test.finished_file("a.mkv"));

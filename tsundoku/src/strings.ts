@@ -122,6 +122,17 @@ export const strings = {
       openFailed: "Windows couldn't open it.",
     },
   },
+  appUpdate: {
+    available: (version: string) => `Tsundoku ${version} is available.`,
+    install: "Install and Restart",
+    later: "Later",
+    downloading: (received: string, total: string | null) =>
+      total === null ? `Downloading the update… ${received}` : `Downloading the update… ${received} of ${total}`,
+    failed: "Couldn't install the update.",
+    check: "Check for Updates",
+    upToDate: "Tsundoku is up to date.",
+    checkFailed: "Couldn't check for updates.",
+  },
   preview: {
     fetching: "Fetching the video's details…",
     cancel: "Cancel",
