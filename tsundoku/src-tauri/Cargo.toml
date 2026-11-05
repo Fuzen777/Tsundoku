@@ -1,0 +1,25 @@
+[package]
+name = "tsundoku"
+description = "Downloads videos with yt-dlp and remembers what you already have."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+# The `_lib` suffix keeps the lib name apart from the bin name, which clash on Windows: https://github.com/rust-lang/cargo/issues/8519
+name = "tsundoku_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tsundoku-core = { path = "../core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2.5.5"
+tauri-plugin-window-state = "2.5.0"
+window-vibrancy = "0.8.1"

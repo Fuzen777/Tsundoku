@@ -1,0 +1,6 @@
+# Windows line endings in every checkout, as in the user's other Windows apps; .cmd scripts need them.
+* text=auto eol=crlf
+*.ico binary
+*.icns binary
+*.png binary
+*.zip binary

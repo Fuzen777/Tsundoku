@@ -1,0 +1,13 @@
+[package]
+name = "tsundoku-core"
+description = "Tsundoku's logic, with no Tauri dependency."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+ts-rs = "12.0.1"

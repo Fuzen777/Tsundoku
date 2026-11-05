@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/*
+  Theme tokens (DESIGN.md → Color). Each value is light-dark(light, dark), so the UI follows Windows' theme.
+  Defining them in @theme makes Tailwind generate utilities from them: bg-surface, text-fg-muted, border-line…
+*/
+@theme {
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+
+  /* Window background, only painted without Mica (Windows 10) */
+  --color-bg: light-dark(#f3f3f3, #202020);
+  /* Raised layer over the backdrop: the content area, cards, panels */
+  --color-surface: light-dark(rgb(255 255 255 / 0.6), rgb(255 255 255 / 0.04));
+  /* Inputs, secondary buttons, hovered and selected rows */
+  --color-input: light-dark(rgb(255 255 255 / 0.85), rgb(255 255 255 / 0.07));
+  --color-input-hover: light-dark(rgb(250 250 250 / 0.95), rgb(255 255 255 / 0.11));
+  /* Borders and dividers */
+  --color-line: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.08));
+  --color-line-strong: light-dark(rgb(0 0 0 / 0.18), rgb(255 255 255 / 0.18));
+  /* Text: primary, secondary (supporting details), muted (labels, empty states, placeholders) */
+  --color-fg: light-dark(#1b1b1b, #f2f2f2);
+  --color-fg-secondary: light-dark(#5d5d5d, #c8c8c8);
+  --color-fg-muted: light-dark(#8b8b8b, #8e8e8e);
+  /* Accent, ai-iro (藍色, Japanese indigo): primary buttons, the selected navigation item, focus rings */
+  --color-accent: light-dark(#165e83, #79b4da);
+  --color-accent-hover: light-dark(#124d6c, #93c3e3);
+  --color-on-accent: light-dark(#ffffff, #0b1d29);
+  /* Destructive actions */
+  --color-danger: light-dark(#b3261e, #f2847a);
+  --color-danger-hover: light-dark(#931f19, #f59c94);
+  --color-on-danger: light-dark(#ffffff, #2b0906);
+  /* Needs attention without blocking, such as the duplicate warning */
+  --color-warning: light-dark(#9a5b00, #e8b04a);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-fg);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  /* An app, not a document: text isn't selectable unless a component opts in with select-text. */
+  user-select: none;
+  cursor: default;
+}
+
+/* With Mica the window itself is the background (src-tauri/src/lib.rs, src/main.tsx). */
+:root[data-backdrop="mica"] body {
+  background: transparent;
+}
+
+input,
+textarea {
+  user-select: text;
+}
