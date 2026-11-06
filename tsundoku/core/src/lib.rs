@@ -7,6 +7,7 @@ pub mod app_info;
 pub mod atomic_file;
 pub mod backup;
 pub mod browsers;
+pub mod bug_report;
 pub mod cancel;
 #[cfg(windows)]
 pub mod clipboard;
@@ -28,4 +29,5 @@ pub mod settings;
 pub mod sites;
 pub mod supported_sites;
 mod sync;
+pub mod system;
 pub mod tools;

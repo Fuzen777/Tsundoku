@@ -7,6 +7,7 @@ mod downloads;
 mod history;
 mod pending;
 mod queue_status;
+mod report;
 mod tools;
 
 use std::error::Error;
@@ -304,6 +305,7 @@ pub fn run() {
             downloads::download_next,
             downloads::clear_finished_downloads,
             downloads::open_download_log,
+            report::download_details,
             downloads::list_arrangements,
             downloads::save_list_arrangements,
             pending::pending_links,

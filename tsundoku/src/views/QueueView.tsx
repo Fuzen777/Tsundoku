@@ -22,6 +22,7 @@ import type { QueueState } from "../bindings/QueueState"
 import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
+import { CopyDetailsButton } from "../components/CopyDetailsButton"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { IconButton } from "../components/IconButton"
@@ -195,6 +196,9 @@ function QueueRow({ item }: { item: QueueItem }) {
         )}
         {(item.state === "failed" || item.state === "done") && (
           <IconButton label={strings.queue.openLog} icon={FileText} onClick={() => act(openDownloadLog)} />
+        )}
+        {item.state === "failed" && item.error && (
+          <CopyDetailsButton id={item.id} error={describeDownloadError(item.error)} onError={setActionError} />
         )}
         {item.state !== "done" && (
           <IconButton label={strings.queue.cancel} icon={X} onClick={() => act(cancelDownload)} />

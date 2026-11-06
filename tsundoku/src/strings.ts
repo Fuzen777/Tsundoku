@@ -631,6 +631,12 @@ export const strings = {
     notify: "Show Notifications",
     notifyHint:
       "While Tsundoku's window isn't in front: when a copied link is added or starts downloading, and when the shortcut or your browser adds links. Clicking one opens Tsundoku.",
+    notifyFailures: "Notify When a Download Fails",
+    notifyFailuresHint:
+      "While Tsundoku's window isn't in front, with the download's title. Downloads that fail together are one notification.",
+    notifyFinished: "Notify When Downloads Finish",
+    notifyFinishedHint:
+      "While Tsundoku's window isn't in front: once every download started has ended, with how many finished and how many failed.",
     background: "Running in the Background",
     keepInTray: "Keep Running in the Tray",
     keepInTrayHint:

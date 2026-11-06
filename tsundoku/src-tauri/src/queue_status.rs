@@ -1,6 +1,7 @@
 //! The queue's run outside the window: Tsundoku's taskbar button fills with its overall progress (yellow while
 //! stopped, red once a download failed), and the tray icon's tooltip sums it up ("3 downloading · 45% · 1 failed").
-//! Both follow the queue's changes at once, and its progress at most four times a second.
+//! Both follow the queue's changes at once, and its progress at most four times a second. Its failures and its end go
+//! on to the notifications (`background::queue_events`).
 
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -47,11 +48,14 @@ impl Default for Shown {
 }
 
 impl QueueStatus {
-    /// The queue's items changed.
+    /// The queue's items changed. Failures and the run's end go on to the notifications.
     pub fn changed(&self, app: &AppHandle, items: &[QueueItem]) {
         let mut state = self.lock();
-        state.run.update(items);
+        let events = state.run.update(items);
         self.work_out(app, state);
+        if !events.is_empty() {
+            background::queue_events(app, events);
+        }
     }
 
     /// A running download's progress.

@@ -85,6 +85,11 @@ pub struct AddingSettings {
     /// Windows notifications while the window isn't in front: for each copied link added or started, for what the
     /// shortcut adds, and for the tray's Start All Pending.
     pub notify: bool,
+    /// A Windows notification while the window isn't in front when a download fails; several failing together are one.
+    pub notify_failures: bool,
+    /// A Windows notification while the window isn't in front when every download started has ended
+    /// (`downloads::run`).
+    pub notify_finished: bool,
 }
 
 impl Default for AddingSettings {
@@ -94,6 +99,8 @@ impl Default for AddingSettings {
             download_right_away: false,
             clipboard_shortcut: None,
             notify: true,
+            notify_failures: true,
+            notify_finished: true,
         }
     }
 }
@@ -633,6 +640,8 @@ mod tests {
                 download_right_away: true,
                 clipboard_shortcut: None,
                 notify: true,
+                notify_failures: true,
+                notify_finished: true,
             }
         );
         assert_eq!(settings.background, BackgroundSettings::default());

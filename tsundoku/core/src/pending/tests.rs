@@ -860,6 +860,8 @@ fn saved_options_are_announced_and_kept() {
             download_right_away: false,
             clipboard_shortcut: None,
             notify: true,
+            notify_failures: true,
+            notify_finished: true,
         },
         "everything starts off but notifications"
     );

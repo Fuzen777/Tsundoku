@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.41 · 2026-11-06
+
+### Added
+
+- **Copy Details for a bug report**: a failed download in the queue has a Copy Details button. It copies what a bug report needs as plain text: Tsundoku's version, each tool's version, Windows' version and build, the link, the error shown and the last 50 lines of the download's log. Your user name is blanked out everywhere in it, in paths such as C:\Users\<user> and on its own, so it can be pasted into an issue as it is. The button shows Copied for a moment once it's done.
+
 ## 0.1.40 · 2026-11-06
 
 ### Added

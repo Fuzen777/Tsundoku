@@ -1,10 +1,12 @@
 //! Tsundoku in the background: the tray icon and its menu, starting with Windows, the clipboard shortcut, pages sent
-//! from a browser (`tsundoku://add?url=…`), and the notifications for links added while the window isn't in front.
+//! from a browser (`tsundoku://add?url=…`), and the notifications for links added, downloads that failed and a queue
+//! that finished, while the window isn't in front.
 //! Settings → Running in the Background and Adding Links turn them on; each is off until then, except notifications
 //! and the browser's links.
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
+use std::time::Duration;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -17,7 +19,9 @@ use tauri_plugin_global_shortcut::{
 };
 use tauri_plugin_notification::NotificationExt;
 use tsundoku_core::data_folder;
-use tsundoku_core::downloads::{DownloadError, DownloadQueue, QueueItem, WholeQueueAction};
+use tsundoku_core::downloads::{
+    DownloadError, DownloadQueue, QueueItem, RunEvent, WholeQueueAction, notices,
+};
 use tsundoku_core::pending::{self, PendingLink, PendingLinks};
 use tsundoku_core::presets::PresetManager;
 use tsundoku_core::settings::{BackgroundSettings, ClipboardShortcut, SettingsStore};
@@ -168,6 +172,7 @@ pub fn start(app: &AppHandle, settings: &SettingsStore) {
         in_tray && (sent.is_some() || std::env::args().any(|arg| arg == IN_TRAY_ARG)),
     ));
     app.manage(TrayMenu::default());
+    app.manage(GatheredEvents::default());
     if in_tray {
         // Without a tray icon the window still opens and closes as before, so a failure here isn't worth stopping
         // the app for.
@@ -548,12 +553,62 @@ pub fn copied_link_read(app: &AppHandle, title: &str, started: bool) {
     announce(app, heading, title);
 }
 
-/// A Windows notification, when Settings → Adding Links has them on and the window isn't in front.
+/// A Windows notification about links added, when Settings → Adding Links has them on and the window isn't in front.
 fn announce(app: &AppHandle, title: &str, body: &str) {
-    if !app.state::<Arc<PendingLinks>>().options().notify || window_in_front(app) {
+    if app.state::<Arc<PendingLinks>>().options().notify {
+        tell(app, title, body);
+    }
+}
+
+/// A Windows notification, unless the window is in front.
+fn tell(app: &AppHandle, title: &str, body: &str) {
+    if window_in_front(app) {
         return;
     }
     let _ = app.notification().builder().title(title).body(body).show();
+}
+
+/// How long the queue's run events are gathered before they're told, so failures that come together make one
+/// notification, followed by the run's end if it came with them.
+const GATHERING_TIME: Duration = Duration::from_millis(1500);
+
+/// The queue's run events waiting to be told (`queue_events`).
+#[derive(Default)]
+pub struct GatheredEvents {
+    events: Mutex<Vec<RunEvent>>,
+}
+
+/// A download failed or the queue's run ended: told after a moment, with whatever else happens meanwhile, as
+/// Settings → Adding Links asks, while the window isn't in front.
+pub fn queue_events(app: &AppHandle, events: Vec<RunEvent>) {
+    let Some(gathered) = app.try_state::<GatheredEvents>() else {
+        return;
+    };
+    let mut waiting = gathered
+        .events
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let first = waiting.is_empty();
+    waiting.extend(events);
+    if !first || waiting.is_empty() {
+        return;
+    }
+    drop(waiting);
+    let app = app.clone();
+    thread::spawn(move || {
+        thread::sleep(GATHERING_TIME);
+        let events = std::mem::take(
+            &mut *app
+                .state::<GatheredEvents>()
+                .events
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+        let options = app.state::<Arc<PendingLinks>>().options();
+        for notice in notices(&events, options.notify_failures, options.notify_finished) {
+            tell(&app, &notice.title, &notice.body);
+        }
+    });
 }
 
 fn window_in_front(app: &AppHandle) -> bool {

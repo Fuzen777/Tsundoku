@@ -315,6 +315,8 @@ export const standIns = {
     downloadRightAway: false,
     clipboardShortcut: "ctrlAltD",
     notify: true,
+    notifyFailures: true,
+    notifyFinished: true,
   } satisfies AddingSettings,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
   appearanceOptions: { theme: "auto" } satisfies AppearanceSettings,

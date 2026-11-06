@@ -19,7 +19,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub use self::run::{QueueRun, RunSummary, TaskbarProgress};
+pub use self::run::{Notice, QueueRun, RunEvent, RunSummary, TaskbarProgress, notices};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
 use crate::browsers;

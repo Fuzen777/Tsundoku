@@ -55,7 +55,7 @@ The downloads started since the queue was last idle make up its run (`downloads:
 
 - An item waiting or running joins the run; when there's none, that starts one. Items added or resumed meanwhile join it.
 - An item removed from the queue leaves the run, unless it was done (Clear Finished), which still counts. A cancelled one doesn't.
-- The run ends once none of its items is waiting, running or stopped.
+- The run ends once none of its items is waiting, running or stopped. `QueueRun::update` then answers `RunEvent::Ended` with how many finished and failed, as it answers `RunEvent::Failed` with the title each time one of its items fails (again if a retried one fails again); these become the notifications for failed and finished downloads (`downloads::notices`).
 - Its progress is by bytes when every item's size is known (a file host's link from the start, a single file once it downloads, any download once done), otherwise the average of each item's share. Done and failed items count as whole, waiting ones as nothing. yt-dlp reports a fraction per file, so a video downloaded as two files counts its video file as 90% and its audio as the rest; merging and converting keep what the download reached.
 - The taskbar is red (`Error`) once an item failed, yellow (`Paused`) while every item left is stopped, an indeterminate bar while nothing is known yet, and cleared once the run ends. Progress alone updates it at most every 250 ms; changes update it at once. Both are applied on the main thread, which the tray's setters wait for.
 

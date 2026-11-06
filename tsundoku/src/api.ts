@@ -27,6 +27,7 @@ import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { ShownError } from "./bindings/ShownError"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolCaches } from "./bindings/ToolCaches"
 import type { ToolDownload } from "./bindings/ToolDownload"
@@ -394,6 +395,15 @@ export async function clearFinishedDownloads(): Promise<void> {
 export async function openDownloadLog(id: number): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("open_download_log", { id })
+}
+
+/**
+ * What a bug report about a failed download needs, as plain text with the user's name blanked out: the versions, the
+ * link, the error as the row shows it and the end of its log. Takes a moment. Rejects with a DownloadError.
+ */
+export function getDownloadDetails(id: number, shownError: ShownError): Promise<string> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<string>("download_details", { id, shownError })
 }
 
 export function onQueueChanged(handler: (items: QueueItem[]) => void): Promise<UnlistenFn> {

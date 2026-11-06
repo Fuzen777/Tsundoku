@@ -89,6 +89,7 @@ type: Features
 - **Failed downloads**: the reason, in plain words with yt-dlp's error under it, and Retry, which continues where it failed.
 - **Finished downloads**: Open File, Show in Folder and Open Log, until Clear Finished. They stay in the history.
 - **Logs**: each download keeps yt-dlp's full output, kept for 30 days.
+- **Copy Details**: a failed download's Copy Details puts what a bug report needs on the clipboard as plain text: Tsundoku's version, each tool's version as Settings → Tools reads it, Windows' version and build, the link, the error as the row shows it and the last 50 lines of its log. The user's name is blanked out everywhere, in paths (C:\Users\<user>, however the slashes are written) and as a word of its own; a name shorter than three letters only in paths, so ordinary words stay. The button says Copied for two seconds.
 - **After a restart**: the queue comes back; downloads that were running come back stopped, and waiting ones start.
 - **Closing while downloading**: asks first. Downloads continue where they stopped next time.
 - **Sidebar count**: the number of downloads not done yet, beside Queue.

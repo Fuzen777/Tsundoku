@@ -74,6 +74,24 @@ export function AddingSection() {
           />
           <p className="pl-6 text-xs text-fg-muted">{text.notifyHint}</p>
         </div>
+        <div className="flex flex-col gap-1">
+          <Checkbox
+            label={text.notifyFailures}
+            checked={options?.notifyFailures ?? true}
+            disabled={!options}
+            onChange={(checked) => void save({ notifyFailures: checked })}
+          />
+          <p className="pl-6 text-xs text-fg-muted">{text.notifyFailuresHint}</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Checkbox
+            label={text.notifyFinished}
+            checked={options?.notifyFinished ?? true}
+            disabled={!options}
+            onChange={(checked) => void save({ notifyFinished: checked })}
+          />
+          <p className="pl-6 text-xs text-fg-muted">{text.notifyFinishedHint}</p>
+        </div>
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
     </Section>

@@ -23,4 +23,13 @@ clipboardShortcut: ClipboardShortcut | null,
  * Windows notifications while the window isn't in front: for each copied link added or started, for what the
  * shortcut adds, and for the tray's Start All Pending.
  */
-notify: boolean, };
+notify: boolean, 
+/**
+ * A Windows notification while the window isn't in front when a download fails; several failing together are one.
+ */
+notifyFailures: boolean, 
+/**
+ * A Windows notification while the window isn't in front when every download started has ended
+ * (`downloads::run`).
+ */
+notifyFinished: boolean, };
