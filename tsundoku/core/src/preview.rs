@@ -44,7 +44,8 @@ impl PreviewService {
     }
 
     /// Reads what `text` links to (see `read_with_tools`), asks the history whether it was downloaded before, and the
-    /// queue whether it's in it.
+    /// queue whether it's in it. A site that answered "too many requests" isn't read until its wait ends
+    /// (`DownloadQueue::site_wait`), and an answer of that kind starts one.
     pub fn fetch(
         &self,
         tools: &ToolManager,
@@ -57,14 +58,28 @@ impl PreviewService {
         if let Some(previous) = lock(&self.current).replace(cancel.clone()) {
             previous.cancel();
         }
-        let fetched = read_with_tools(tools, queue.options().cookies_browser, &link, true, &cancel);
+        let fetched = match queue.site_wait(&link) {
+            Some(_) => Err(PreviewError::too_many_requests(String::new())),
+            None => read_with_tools(tools, queue.options().cookies_browser, &link, true, &cancel),
+        };
         {
             let mut current = lock(&self.current);
             if current.as_ref().is_some_and(|token| token.is_same(&cancel)) {
                 *current = None;
             }
         }
-        let fetched = fetched?;
+        let fetched = fetched.map_err(|error| match error {
+            PreviewError::TooManyRequests { detail, .. } => {
+                let wait = queue.site_wait(&link).or_else(|| queue.slow_down(&link));
+                PreviewError::TooManyRequests {
+                    detail,
+                    site: wait.as_ref().map(|wait| wait.site.clone()),
+                    until: wait.map(|wait| wait.until),
+                }
+            }
+            other => other,
+        })?;
+        queue.site_worked(&link);
         let last_download = history
             .last_download(&fetched.video.site, &fetched.video.video_id)
             .map_err(|error| PreviewError::Failed {

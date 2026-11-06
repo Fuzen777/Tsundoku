@@ -34,6 +34,7 @@ import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
+import { describeHold, useTimeLeft } from "../holds"
 import { useListArrangement, useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
 import { strings } from "../strings"
@@ -141,6 +142,8 @@ function QueueRow({ item }: { item: QueueItem }) {
   const progress = useDownloadProgress(item)
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const stage = stageLabel(item, progress)
+  const hold = item.state === "waiting" ? item.hold : null
+  const holdTimeLeft = useTimeLeft(hold?.until ?? null)
 
   const act = (action: (id: number) => Promise<void>, describe = describeDownloadError) => {
     setActionError(null)
@@ -167,6 +170,7 @@ function QueueRow({ item }: { item: QueueItem }) {
           ])}
         </p>
         {item.state === "running" && <ProgressBar value={progress?.fraction ?? undefined} label={stage} />}
+        {hold && <StatusMessage tone="neutral" message={describeHold(hold)} detail={holdTimeLeft ?? undefined} />}
         {item.state === "failed" && item.error && (
           <StatusMessage tone="danger" {...describeDownloadError(item.error)}>
             {fixFor(item.error) && <FailureFixes error={item.error} />}

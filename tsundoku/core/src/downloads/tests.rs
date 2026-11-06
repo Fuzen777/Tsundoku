@@ -467,6 +467,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         result: None,
         error: None,
         progress: None,
+        hold: None,
     }
 }
 
@@ -637,9 +638,11 @@ fn checks_and_saves_the_options() {
             cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
             post_file_name: "  {site} {post} {number} ".to_owned(),
             post_pause: crate::settings::PauseRange { min: 30, max: 5 },
+            hourly_file_limit: Some(0),
         })
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
+    assert_eq!(saved.hourly_file_limit, None, "0 is no limit");
     assert_eq!(saved.post_file_name, "{site} {post} {number}", "trimmed");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
     assert_eq!(saved.folder, None, "blank is the default folder");
@@ -845,6 +848,150 @@ fn only_paces_sites_that_need_it() {
     assert!(job.folder.ends_with("X"));
     assert_eq!(job.post.unwrap().pause, None);
     test.queue.cancel(id).unwrap();
+}
+
+fn too_many_requests() -> JobOutcome {
+    JobOutcome::Failed(DownloadError::YtDlp {
+        error: PreviewError::too_many_requests(
+            "HttpError: '429 Too Many Requests' for 'https://www.instagram.com/api/'".to_owned(),
+        ),
+    })
+}
+
+impl Test {
+    fn item(&self, id: i64) -> QueueItem {
+        self.queue
+            .items()
+            .into_iter()
+            .find(|item| item.id == id)
+            .unwrap()
+    }
+
+    fn times_started(&self, id: i64) -> usize {
+        self.runner
+            .started()
+            .iter()
+            .filter(|started| **started == id)
+            .count()
+    }
+
+    fn cancel_all(&self) {
+        for item in self.queue.items() {
+            if item.state != QueueState::Done {
+                self.queue.cancel(item.id).unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn a_site_that_asks_to_slow_down_waits_while_others_go_on() {
+    let test = Test::new();
+    let first = test.queue.add_post(post("First")).unwrap().id;
+    let video_a = test.add("a");
+    wait_until("both run", || test.runner.started().len() == 2);
+
+    test.runner.complete(first, too_many_requests());
+    wait_until("the post waits again", || {
+        test.state(first) == Some(QueueState::Waiting)
+    });
+    let item = test.item(first);
+    assert_eq!(item.error, None, "it didn't fail");
+    let Some(Hold::SlowDown { site, until }) = item.hold else {
+        panic!("{:?}", item.hold);
+    };
+    assert_eq!(site, "Instagram");
+    let minutes = (until - now_ms()) as f64 / 60_000.0;
+    assert!((4.9..=5.0).contains(&minutes), "{minutes} minutes");
+    assert!(
+        temp_folder(&test.item(first)).exists(),
+        "its partial files are kept"
+    );
+    assert!(
+        test.queue
+            .site_wait("https://www.instagram.com/p/Other/")
+            .is_some(),
+        "reads of the site wait too"
+    );
+
+    let second = test.queue.add_post(post("Second")).unwrap().id;
+    let video_b = test.add("b");
+    wait_until("another site's download starts", || {
+        test.runner.started().contains(&video_b)
+    });
+    assert!(matches!(
+        test.item(second).hold,
+        Some(Hold::SlowDown { .. })
+    ));
+    assert_eq!(test.times_started(first), 1, "it doesn't start meanwhile");
+    assert_eq!(test.times_started(second), 0);
+
+    test.runner.complete(video_a, test.finished_file("a.mkv"));
+    wait_until("a slot frees", || {
+        test.state(video_a) == Some(QueueState::Done)
+    });
+    assert_eq!(test.times_started(first), 1, "still waiting");
+    test.queue.end_site_waits();
+    wait_until("it starts again once the wait ends", || {
+        test.times_started(first) == 2
+    });
+    assert_eq!(test.item(first).hold, None);
+    assert_eq!(
+        test.state(second),
+        Some(QueueState::Waiting),
+        "one Instagram post at a time still"
+    );
+    test.cancel_all();
+}
+
+#[test]
+fn the_hourly_limit_holds_instagram_until_its_old_files_are_an_hour_old() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.hourly_file_limit = Some(4))
+        .unwrap();
+    let ten_minutes_ago = seconds_since_epoch() - 600;
+    let before = NewDownload {
+        preset: String::new(),
+        file_path: "1.jpg".to_owned(),
+        files: ["1.jpg", "2.jpg", "3.mp4"]
+            .iter()
+            .map(|name| SavedFile {
+                path: (*name).to_owned(),
+                size: None,
+            })
+            .collect(),
+        file_size: None,
+        format: None,
+        downloaded_at: ten_minutes_ago,
+    };
+    test.history.record(&post("Before"), &before).unwrap();
+
+    // Three files more would make six.
+    let id = test.queue.add_post(post("Next")).unwrap().id;
+    let video = test.add("a");
+    wait_until("another site's download starts", || {
+        test.runner.started().contains(&video)
+    });
+    assert_eq!(
+        test.item(id).hold,
+        Some(Hold::HourlyLimit {
+            site: "Instagram".to_owned(),
+            limit: 4,
+            until: (ten_minutes_ago + 3600) * 1000,
+        })
+    );
+    assert_eq!(test.times_started(id), 0);
+
+    let options = DownloadSettings {
+        hourly_file_limit: Some(6),
+        ..test.queue.options()
+    };
+    test.queue.set_options(options).unwrap();
+    wait_until("it starts once there's room", || {
+        test.times_started(id) == 1
+    });
+    test.cancel_all();
 }
 
 #[test]

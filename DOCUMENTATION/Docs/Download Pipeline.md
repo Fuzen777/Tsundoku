@@ -33,6 +33,7 @@ stateDiagram-v2
     Waiting --> Stopped: Stop
     Running --> Done: the file is in place
     Running --> Failed: yt-dlp failed
+    Running --> Waiting: the site asked to slow down
     Running --> Stopped: Stop, or the app closed
     Stopped --> Waiting: Resume
     Failed --> Waiting: Retry
@@ -58,6 +59,12 @@ The downloads started since the queue was last idle make up its run (`downloads:
 - The run ends once none of its items is waiting, running or stopped. `QueueRun::update` then answers `RunEvent::Ended` with how many finished and failed, as it answers `RunEvent::Failed` with the title each time one of its items fails (again if a retried one fails again); these become the notifications for failed and finished downloads (`downloads::notices`).
 - Its progress is by bytes when every item's size is known (a file host's link from the start, a single file once it downloads, any download once done), otherwise the average of each item's share. Done and failed items count as whole, waiting ones as nothing. yt-dlp reports a fraction per file, so a video downloaded as two files counts its video file as 90% and its audio as the rest; merging and converting keep what the download reached.
 - The taskbar is red (`Error`) once an item failed, yellow (`Paused`) while every item left is stopped, an indeterminate bar while nothing is known yet, and cleared once the run ends. Progress alone updates it at most every 250 ms; changes update it at once. Both are applied on the main thread, which the tray's setters wait for.
+
+## When a Site Asks to Slow Down
+
+- A run that fails because its site answered "too many requests" (HTTP 429, `PreviewError::TooManyRequests`) goes back to Waiting with its partial files, instead of Failed. Its site (`sites::site_of`) then waits: 5 minutes, doubled for each 429 in a row, up to an hour, and back to 5 once something from the site works (`site_limits`).
+- While it waits, none of the site's downloads start, Pending doesn't read its links and the preview card refuses them; other sites go on. Each waiting item carries its `Hold` (`slowDown`, or `hourlyLimit` when Settings → Instagram's hourly limit on Instagram's files is reached), worked out whenever the queue schedules, and a thread schedules again once one ends.
+- Neither tool passes on the site's Retry-After, so the waits are Tsundoku's own. They live in memory: after a restart, a waiting download tries once more.
 
 ## Arguments
 

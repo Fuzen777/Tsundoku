@@ -8,7 +8,7 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::cancel::CancelToken;
-use crate::metadata::{PostContents, PreviewError, VideoInfo};
+use crate::metadata::{PostContents, PreviewError, TOO_MANY_REQUESTS_PHRASES, VideoInfo};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::tools::{ToolCacheFolder, ToolId, start_error};
 
@@ -258,7 +258,9 @@ fn classify_message(kind: &str, message: &str) -> PreviewError {
         PreviewError::Unavailable { detail }
     } else if mentions(&["'401", "'403"]) {
         PreviewError::sign_in(detail)
-    } else if mentions(&["'429", "rate limit", "timed out", "connection"]) {
+    } else if mentions(&TOO_MANY_REQUESTS_PHRASES) {
+        PreviewError::too_many_requests(detail)
+    } else if mentions(&["timed out", "connection"]) {
         PreviewError::Network { detail }
     } else {
         // The site answered in a way gallery-dl didn't expect, which an update of gallery-dl often fixes.
@@ -556,6 +558,17 @@ mod tests {
                 "HttpError",
                 "'429 Too Many Requests' for 'https://x.com/i/api'"
             ),
+            PreviewError::TooManyRequests { .. }
+        ));
+        assert!(matches!(
+            error(
+                "HttpError",
+                "Please wait a few minutes before you try again."
+            ),
+            PreviewError::TooManyRequests { .. }
+        ));
+        assert!(matches!(
+            error("HttpError", "Connection reset by peer"),
             PreviewError::Network { .. }
         ));
         assert_eq!(
@@ -584,7 +597,7 @@ mod tests {
                 Some(4),
                 &["[instagram][error] HttpError: '429 Too Many Requests' for 'https://x'"]
             ),
-            PreviewError::Network { .. }
+            PreviewError::TooManyRequests { .. }
         ));
         assert_eq!(
             classify_download_failure(Some(64), &["[gallery-dl][error] Unsupported URL 'x'"]),

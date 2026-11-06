@@ -266,7 +266,8 @@ export function PostsSection() {
   )
 }
 
-/** Settings → Instagram: the pause before each Instagram file, and between Instagram links in Pending. */
+/** Settings → Instagram: the pause before each Instagram file, and between Instagram links in Pending, and the hourly
+ * limit on Instagram's files. */
 export function InstagramSection() {
   const { options, save, error } = useSaveOptions()
   // The pause is saved when a field is left or Enter is pressed, not at every key.
@@ -282,6 +283,18 @@ export function InstagramSection() {
     }
     const changed: PauseRange = { min: read(pause.min, savedPause.min), max: read(pause.max, savedPause.max) }
     if (await save({ postPause: changed })) setPause(null)
+  }
+
+  // The hourly limit too, empty for none.
+  const [hourlyLimit, setHourlyLimit] = useState<string | null>(null)
+  const savedLimit = options?.hourlyFileLimit ?? null
+  const shownLimit = hourlyLimit ?? (savedLimit === null ? "" : String(savedLimit))
+
+  async function saveHourlyLimit() {
+    if (hourlyLimit === null) return
+    const number = Number.parseInt(hourlyLimit, 10)
+    const changed = Number.isNaN(number) || number <= 0 ? null : number
+    if (await save({ hourlyFileLimit: changed })) setHourlyLimit(null)
   }
 
   const pauseInput = (end: "min" | "max", label: string) => (
@@ -310,6 +323,24 @@ export function InstagramSection() {
             <span>{text.pauseTo}</span>
             {pauseInput("max", text.pauseTo)}
             <span>{text.seconds}</span>
+          </div>
+        </Field>
+        <Field label={text.hourlyLimit} hint={text.hourlyLimitHint} htmlFor="settings-hourly-limit">
+          <div className="flex items-center gap-2 text-fg-secondary">
+            <TextInput
+              id="settings-hourly-limit"
+              inputMode="numeric"
+              className="w-24 text-right tabular-nums"
+              placeholder={text.hourlyLimitPlaceholder}
+              value={shownLimit}
+              disabled={!options}
+              onChange={(event) => setHourlyLimit(event.target.value)}
+              onBlur={() => void saveHourlyLimit()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void saveHourlyLimit()
+              }}
+            />
+            <span>{text.files}</span>
           </div>
         </Field>
         {error && <StatusMessage tone="danger" {...error} />}

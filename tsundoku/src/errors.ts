@@ -8,6 +8,7 @@ import type { RuleError } from "./bindings/RuleError"
 import type { SignInCookies } from "./bindings/SignInCookies"
 import type { ToolError } from "./bindings/ToolError"
 import type { ToolId } from "./bindings/ToolId"
+import { formatClockTime } from "./format"
 import { strings } from "./strings"
 
 /*
@@ -109,6 +110,11 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.linkNotRecognized(error.site) }
     case "network":
       return { message: text.network, detail: error.detail }
+    case "tooManyRequests":
+      return {
+        message: text.tooManyRequests(error.site, error.until === null ? null : formatClockTime(error.until)),
+        detail: error.detail || undefined,
+      }
     case "siteError":
       return { message: text.siteError, detail: error.detail }
     case "failed":

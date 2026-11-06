@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { describeHistoryError, describePreviewError, describeToolError, fixFor, isCancelled } from "./errors"
+import { formatClockTime } from "./format"
 import { strings } from "./strings"
 
 describe("describeToolError", () => {
@@ -111,6 +112,20 @@ describe("file host errors", () => {
     expect(describePreviewError({ kind: "limitReached", site: "MEGA", detail: "MEGA answered -17" })).toEqual({
       message: strings.preview.errors.limitReached("MEGA"),
       detail: "MEGA answered -17",
+    })
+  })
+})
+
+describe("a site that asks to slow down", () => {
+  it("says which site and from when to try again, without naming the tool", () => {
+    const until = Date.UTC(2026, 10, 6, 14, 32)
+    const message = describePreviewError({ kind: "tooManyRequests", detail: "HTTP Error 429", site: "Instagram", until })
+      .message
+    expect(message).toBe(strings.preview.errors.tooManyRequests("Instagram", formatClockTime(until)))
+    expect(message).toMatch(/^Instagram asked to slow down\. Try again after /)
+    expect(describePreviewError({ kind: "tooManyRequests", detail: "", site: null, until: null })).toEqual({
+      message: "The site asked to slow down. Try again in a few minutes.",
+      detail: undefined,
     })
   })
 })

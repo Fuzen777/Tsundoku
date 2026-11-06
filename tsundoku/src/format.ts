@@ -61,3 +61,17 @@ export function formatContents({ post, files }: { post: PostContents | null; fil
   if (files) return strings.preview.fileContents(files.count, formatBytes(files.bytes))
   return null
 }
+
+/** When a wait ends, given in milliseconds since 1970, in the reader's format: its time ("2:32 PM", "14:32"), with the
+ * day's name before it when it isn't today ("Sat 9:05 AM"). */
+export function formatClockTime(millisecondsSinceEpoch: number, locale?: string, timeZone?: string, now = Date.now()): string {
+  const moment = new Date(millisecondsSinceEpoch)
+  const day = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeZone })
+  const today = day.format(moment) === day.format(new Date(now))
+  return new Intl.DateTimeFormat(locale, {
+    weekday: today ? undefined : "short",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  }).format(moment)
+}

@@ -34,4 +34,9 @@ postFileName: string,
  * How long to wait before each file of a post on a site that limits how fast it's read
  * (`sites::paces_downloads`, Instagram), so the account isn't blocked.
  */
-postPause: PauseRange, };
+postPause: PauseRange, 
+/**
+ * The most files from that site (Instagram) downloaded in an hour, or `None` for no limit: once the past hour
+ * holds this many, its next download waits (`site_limits::hourly_limit_end`).
+ */
+hourlyFileLimit: number | null, };

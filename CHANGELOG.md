@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.49 · 2026-11-06
+
+### Added
+
+- **Waiting when a site asks to slow down**: when Instagram, or any other site, answers that it's getting too many requests, the download no longer fails, and neither do the site's next ones. It goes back to waiting, keeping what it got, and the site's other downloads, the links Pending reads and the preview card wait with it, while other sites carry on. Each row says so, such as "Instagram asked to slow down. Continuing at 2:32 PM.", with the time left counting down, then it continues by itself. The first wait is 5 minutes, then 10, 20, 40 and at most an hour each time the site asks again before anything from it works.
+- **An hourly limit for Instagram**: Settings → Instagram → Hourly Limit, off to start with, keeps you further from Instagram's limits. Once the past hour holds that many Instagram files, the next Instagram download waits until older ones are an hour old, says so on its row, then starts by itself.
+
 ## 0.1.48 · 2026-11-06
 
 ### Added

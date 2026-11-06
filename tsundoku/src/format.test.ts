@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   formatBytes,
   formatCalendarDate,
+  formatClockTime,
   formatContents,
   formatDay,
   formatDuration,
@@ -83,5 +84,19 @@ describe("formatContents", () => {
 
   it("has nothing to say about a video", () => {
     expect(formatContents({ post: null, files: null })).toBeNull()
+  })
+})
+
+describe("formatClockTime", () => {
+  // 2026-11-06 14:32 UTC.
+  const moment = Date.UTC(2026, 10, 6, 14, 32)
+
+  it("gives the time of a moment later today", () => {
+    expect(formatClockTime(moment, "en-GB", "UTC", Date.UTC(2026, 10, 6, 14, 0))).toBe("14:32")
+    expect(formatClockTime(moment, "en-US", "UTC", Date.UTC(2026, 10, 6, 9, 0))).toBe("2:32 PM")
+  })
+
+  it("names the day of a moment on another day", () => {
+    expect(formatClockTime(moment, "en-GB", "UTC", Date.UTC(2026, 10, 5, 23, 0))).toBe("Fri 14:32")
   })
 })

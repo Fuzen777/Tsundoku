@@ -64,6 +64,7 @@ impl QueueStore {
                 result: result.and_then(|json| serde_json::from_str(&json).ok()),
                 error: error.and_then(|json| serde_json::from_str(&json).ok()),
                 progress: None,
+                hold: None,
             });
         }
         Ok(items)

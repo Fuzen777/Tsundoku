@@ -291,6 +291,25 @@ impl History {
         Ok(download)
     }
 
+    /// The downloads from `site` (as the history names it, "instagram") that finished since `since`, in seconds since
+    /// 1970: when each finished and how many files it made, for the hourly limit on a paced site's files.
+    pub fn recent_downloads(
+        &self,
+        site: &str,
+        since: i64,
+    ) -> Result<Vec<(i64, u32)>, HistoryError> {
+        let connection = self.database.lock();
+        let mut statement = connection.prepare(
+            "SELECT d.downloaded_at, MAX(1, (SELECT COUNT(*) FROM download_files f WHERE f.download = d.id))
+            FROM downloads d JOIN videos v ON v.id = d.video
+            WHERE v.site = ?1 AND d.downloaded_at >= ?2 ORDER BY d.downloaded_at",
+        )?;
+        let downloads = statement
+            .query_map(params![site, since], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        Ok(downloads)
+    }
+
     /// Whether a video downloaded before has exactly this address (its page's, as the tool that read it gave it).
     pub fn has_link(&self, url: &str) -> Result<bool, HistoryError> {
         let connection = self.database.lock();
@@ -1022,6 +1041,44 @@ mod tests {
             Err(HistoryError::FileMissing { .. })
         ));
         assert_eq!(test.history.download_path(999), Err(HistoryError::NotFound));
+    }
+
+    #[test]
+    fn counts_a_sites_recent_files() {
+        let test = TestHistory::new();
+        let mut post = video("instagram", "Abc123", "A post", "someone", 0.0);
+        post.post = Some(PostContents {
+            images: 2,
+            videos: 1,
+        });
+        let three_files = NewDownload {
+            files: ["1.jpg", "2.mp4", "3.jpg"]
+                .iter()
+                .map(|name| SavedFile {
+                    path: (*name).to_owned(),
+                    size: Some(5),
+                })
+                .collect(),
+            ..download("", 200, 15)
+        };
+        test.history.record(&post, &three_files).unwrap();
+        let reel = video("instagram", "Reel1", "A reel", "someone", 9.0);
+        test.history
+            .record(&reel, &download("Best Video", 300, 5))
+            .unwrap();
+        test.history
+            .record(&reel, &download("Best Video", 50, 5))
+            .unwrap();
+        let other = video("youtube", "a", "A video", "someone", 9.0);
+        test.history
+            .record(&other, &download("Best Video", 250, 5))
+            .unwrap();
+
+        assert_eq!(
+            test.history.recent_downloads("instagram", 100).unwrap(),
+            [(200, 3), (300, 1)],
+            "a post's files, one for a video, only since then and only that site's"
+        );
     }
 
     #[test]

@@ -3,6 +3,7 @@
 //! `DOCUMENTATION/Docs/Download Pipeline.md`.
 
 mod file_runner;
+mod holds;
 mod post_runner;
 mod progress;
 mod run;
@@ -19,6 +20,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub use self::holds::Hold;
+use self::holds::{asked_to_slow_down, watch_holds};
 pub use self::run::{Notice, QueueRun, RunEvent, RunSummary, TaskbarProgress, notices};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
@@ -31,6 +34,7 @@ use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::rules::{self, Destination, RuleSubject};
 use crate::settings::{DownloadSettings, SettingsStore};
+use crate::site_limits::{SiteLimits, now_ms};
 use crate::sites;
 use crate::sync::lock;
 use crate::tools::{ToolId, ToolManager};
@@ -76,6 +80,10 @@ pub struct QueueItem {
     pub error: Option<DownloadError>,
     /// The latest progress, while running.
     pub progress: Option<DownloadProgress>,
+    /// Why it waits instead of starting, and until when: its site asked to slow down, or the hourly limit is reached.
+    /// Worked out again whenever the queue schedules, so it isn't saved.
+    #[serde(default)]
+    pub hold: Option<Hold>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -278,6 +286,8 @@ pub struct DownloadQueue {
     logs_folder: PathBuf,
     runner: Arc<dyn JobRunner>,
     listener: Arc<dyn QueueListener>,
+    /// Each site's wait after it answered "too many requests", which the pending links and the preview card follow too.
+    limits: SiteLimits,
     /// The queue's own `Arc`, for the threads it starts.
     myself: Weak<DownloadQueue>,
 }
@@ -310,9 +320,12 @@ impl DownloadQueue {
             logs_folder: services.logs_folder,
             runner: services.runner,
             listener: services.listener,
+            limits: SiteLimits::new(),
             myself: myself.clone(),
         });
         queue.schedule();
+        let watching = Arc::downgrade(&queue);
+        thread::spawn(move || watch_holds(&watching));
         Ok(queue)
     }
 
@@ -369,6 +382,7 @@ impl DownloadQueue {
             result: None,
             error: None,
             progress: None,
+            hold: None,
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -398,6 +412,7 @@ impl DownloadQueue {
             result: None,
             error: None,
             progress: None,
+            hold: None,
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -659,6 +674,7 @@ impl DownloadQueue {
             post_file_name: post_names::check(&options.post_file_name)
                 .map_err(|error| DownloadError::PostFileName { error })?,
             post_pause: options.post_pause.normalized(),
+            hourly_file_limit: DownloadSettings::normalized_hourly_limit(options.hourly_file_limit),
         };
         self.settings
             .update(|settings| settings.downloads = options.clone())
@@ -677,7 +693,8 @@ impl DownloadQueue {
     /// Starts waiting items while there's room, in the queue's order: the order they were added, apart from those
     /// Download Next moved to the front. A post on a site that limits how fast it's read (Instagram) waits while another
     /// of that site's posts runs, since each pauses between its files on its own and two at once would read twice as
-    /// fast; downloads from other sites go ahead of it meanwhile.
+    /// fast; downloads from other sites go ahead of it meanwhile. One that's held (`Hold`: its site asked to slow down,
+    /// or the hourly limit is reached) waits too, until a thread schedules again once its hold ends (`watch_holds`).
     fn schedule(&self) {
         let at_once = self.settings.get().downloads.at_once.max(1) as usize;
         let mut started = Vec::new();
@@ -685,16 +702,17 @@ impl DownloadQueue {
             let mut state = lock(&self.state);
             // Through a plain reference, so the items and the running map can be borrowed at once.
             let contents = &mut *state;
+            self.settle_holds(&mut contents.items, now_ms());
             while contents.running.len() < at_once {
                 let pacing = contents
                     .items
                     .iter()
                     .any(|item| item.state == QueueState::Running && is_paced(item));
-                let Some(item) = contents
-                    .items
-                    .iter_mut()
-                    .find(|item| item.state == QueueState::Waiting && !(pacing && is_paced(item)))
-                else {
+                let Some(item) = contents.items.iter_mut().find(|item| {
+                    item.state == QueueState::Waiting
+                        && item.hold.is_none()
+                        && !(pacing && is_paced(item))
+                }) else {
                     break;
                 };
                 item.state = QueueState::Running;
@@ -791,6 +809,14 @@ impl DownloadQueue {
                 (Some(EndRequest::Stop), _) | (_, JobOutcome::Cancelled) => {
                     item.state = QueueState::Stopped
                 }
+                // The site answered "too many requests": its downloads wait, this one with them, keeping its partial
+                // files.
+                (_, JobOutcome::Failed(error))
+                    if asked_to_slow_down(&error) && sites::site_of(&item.video.url).is_some() =>
+                {
+                    self.note_slow_down(&item.video.url);
+                    item.state = QueueState::Waiting;
+                }
                 (_, JobOutcome::Failed(error)) => {
                     item.state = QueueState::Failed;
                     item.error = Some(error);
@@ -806,6 +832,7 @@ impl DownloadQueue {
                             item.state = QueueState::Done;
                             item.result = Some(result);
                             remove_folder(&job.temp_folder);
+                            self.site_worked(&item.video.url);
                         }
                         Err(error) => {
                             item.state = QueueState::Failed;

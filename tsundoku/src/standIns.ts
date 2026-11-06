@@ -89,6 +89,7 @@ function queueStandIn(id: number, state: QueueItem["state"], title: string, extr
     result: null,
     error: null,
     progress: null,
+    hold: null,
     ...extra,
   }
 }
@@ -206,6 +207,7 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
     startWhenRead: false,
     addedAt: 1_793_876_473 + id * 60,
     caught: false,
+    hold: null,
     ...fields,
   }
 }
@@ -310,6 +312,7 @@ export const standIns = {
     cookiesBrowser: "automatic",
     postFileName: "{account} {date} {post} {number}",
     postPause: { min: 5, max: 10 },
+    hourlyFileLimit: null,
   } satisfies DownloadSettings,
   addingOptions: {
     watchClipboard: true,
@@ -388,7 +391,9 @@ export const standIns = {
     queueStandIn(2, "running", "A Merging Example", {
       progress: { stage: "merging", fraction: null, downloadedBytes: null, totalBytes: null, speed: null, eta: null },
     }),
-    queueStandIn(3, "waiting", "Next in Line"),
+    queueStandIn(3, "waiting", "Next in Line", {
+      hold: { kind: "slowDown", site: "YouTube", until: Date.now() + 12 * 60_000 },
+    }),
     queueStandIn(4, "stopped", "Stopped Halfway"),
     queueStandIn(5, "failed", "A Video That Failed", {
       error: { kind: "ytDlp", error: { kind: "unavailable", detail: "[youtube] video5: This video is unavailable" } },
@@ -415,7 +420,11 @@ export const standIns = {
     pendingStandIn(3, "https://www.youtube.com/watch?v=jNQXAC9IVRw", { preview: previewStandIn }),
     pendingStandIn(7, "https://mega.nz/folder/AbCdEfGh#key", { preview: sharedFolderStandIn }),
     pendingStandIn(4, "https://www.instagram.com/p/Another1/", { state: "reading" }),
-    pendingStandIn(5, "https://www.instagram.com/p/Another2/", { state: "waiting", startWhenRead: true }),
+    pendingStandIn(5, "https://www.instagram.com/p/Another2/", {
+      state: "waiting",
+      startWhenRead: true,
+      hold: { site: "Instagram", until: Date.now() + 8 * 60_000 },
+    }),
     pendingStandIn(6, "https://www.instagram.com/p/Private1/", {
       state: "failed",
       error: { kind: "signInRequired", detail: "login required", site: "Instagram", cookies: "notSignedIn" },

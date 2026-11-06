@@ -26,6 +26,7 @@ pub mod preview;
 pub mod process;
 pub mod rules;
 pub mod settings;
+pub mod site_limits;
 pub mod sites;
 pub mod supported_sites;
 mod sync;

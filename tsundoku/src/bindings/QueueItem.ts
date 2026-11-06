@@ -2,6 +2,7 @@
 import type { DownloadError } from "./DownloadError";
 import type { DownloadProgress } from "./DownloadProgress";
 import type { DownloadResult } from "./DownloadResult";
+import type { Hold } from "./Hold";
 import type { Preset } from "./Preset";
 import type { QueueState } from "./QueueState";
 import type { VideoInfo } from "./VideoInfo";
@@ -35,4 +36,9 @@ error: DownloadError | null,
 /**
  * The latest progress, while running.
  */
-progress: DownloadProgress | null, };
+progress: DownloadProgress | null, 
+/**
+ * Why it waits instead of starting, and until when: its site asked to slow down, or the hourly limit is reached.
+ * Worked out again whenever the queue schedules, so it isn't saved.
+ */
+hold: Hold | null, };

@@ -29,6 +29,7 @@ use crate::presets::{Preset, PresetError, PresetManager};
 use crate::preview::VideoPreview;
 use crate::rules::{self, RuleSubject};
 use crate::settings::{AddingSettings, PauseRange, SettingsStore};
+use crate::site_limits::SiteWait;
 use crate::sites;
 use crate::sync::lock;
 
@@ -73,6 +74,8 @@ pub struct PendingLink {
     /// Copied in another app and caught by the clipboard watcher. Until it's read, the UI only counts it, since it may
     /// turn out to be nothing to download and leave.
     pub caught: bool,
+    /// While it waits to be read, the wait of its site, which answered "too many requests".
+    pub hold: Option<SiteWait>,
 }
 
 /// What adding links did.
@@ -569,7 +572,7 @@ impl PendingLinks {
     /// marked as being read.
     fn next_to_read(&self) -> Option<Turn> {
         let mut state = lock(&self.state);
-        let index = readable(&state, Instant::now())?;
+        let index = readable(&state, Instant::now(), |link| self.site_waits(link))?;
         let entry = &mut state.entries[index];
         entry.state = PendingState::Reading;
         let turn = Turn {
@@ -588,7 +591,7 @@ impl PendingLinks {
     fn wait_for_work(&self) {
         let state = lock(&self.state);
         let now = Instant::now();
-        if readable(&state, now).is_some() {
+        if readable(&state, now, |link| self.site_waits(link)).is_some() {
             return;
         }
         let wait = match state.paced_until {
@@ -605,9 +608,17 @@ impl PendingLinks {
     /// Reads a link and keeps what was found. A link on a paced site makes the next one wait. A link to a video
     /// that another link here already found is dropped, and one started before it was read goes to the queue. A
     /// copied link also leaves when there's nothing to download or the history or the queue has it, and starts once
-    /// read with Download Right Away on.
+    /// read with Download Right Away on. A site that answers "too many requests" waits (`DownloadQueue::slow_down`),
+    /// and its links are read again once the wait ends.
     fn read(&self, turn: &Turn) {
         let outcome = self.reader.read(&turn.link, !turn.caught, &turn.cancel);
+        match &outcome {
+            Err(PreviewError::TooManyRequests { .. }) => {
+                self.queue.slow_down(&turn.link);
+            }
+            Ok(_) => self.queue.site_worked(&turn.link),
+            Err(_) => {}
+        }
         let settings = self.settings.get();
         let mut announce = None;
         {
@@ -672,8 +683,12 @@ impl PendingLinks {
                 }
                 Err(error) => {
                     let entry = &mut state.entries[index];
-                    // Only removing a link cancels its read, so this is the app closing: read it next time.
-                    if error == PreviewError::Cancelled {
+                    // Only removing a link cancels its read, so this is the app closing: read it next time. A site
+                    // that asked to slow down is read again once its wait ends.
+                    if matches!(
+                        error,
+                        PreviewError::Cancelled | PreviewError::TooManyRequests { .. }
+                    ) {
                         entry.state = PendingState::Waiting;
                     } else {
                         entry.state = PendingState::Failed;
@@ -723,6 +738,9 @@ impl PendingLinks {
     }
 
     fn present(&self, entry: Entry) -> PendingLink {
+        let hold = (entry.state == PendingState::Waiting)
+            .then(|| self.queue.site_wait(&entry.link))
+            .flatten();
         let preview = entry.fetched.map(|fetched| VideoPreview {
             last_download: self
                 .history
@@ -745,7 +763,13 @@ impl PendingLinks {
             start_when_read: self.shows_starting_once_read(entry.start_when_read),
             added_at: entry.added_at,
             caught: entry.caught,
+            hold,
         }
+    }
+
+    /// Whether the link's site waits after answering "too many requests".
+    fn site_waits(&self, link: &str) -> bool {
+        self.queue.site_wait(link).is_some()
     }
 
     fn notify(&self) {
@@ -801,12 +825,14 @@ fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
     }
 }
 
-/// Where the next link to read is: the oldest waiting one, leaving paced sites for later while their pause runs.
-fn readable(state: &Contents, now: Instant) -> Option<usize> {
+/// Where the next link to read is: the oldest waiting one, leaving paced sites for later while their pause runs, and
+/// sites that asked to slow down while they wait (`site_waits`).
+fn readable(state: &Contents, now: Instant, site_waits: impl Fn(&str) -> bool) -> Option<usize> {
     let paced_ready = state.paced_until.is_none_or(|until| until <= now);
     state.entries.iter().position(|entry| {
         entry.state == PendingState::Waiting
             && (paced_ready || !sites::paces_downloads(&entry.link))
+            && !site_waits(&entry.link)
     })
 }
 

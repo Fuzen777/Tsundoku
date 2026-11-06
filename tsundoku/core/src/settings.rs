@@ -184,6 +184,9 @@ pub struct DownloadSettings {
     /// How long to wait before each file of a post on a site that limits how fast it's read
     /// (`sites::paces_downloads`, Instagram), so the account isn't blocked.
     pub post_pause: PauseRange,
+    /// The most files from that site (Instagram) downloaded in an hour, or `None` for no limit: once the past hour
+    /// holds this many, its next download waits (`site_limits::hourly_limit_end`).
+    pub hourly_file_limit: Option<u32>,
 }
 
 impl Default for DownloadSettings {
@@ -195,11 +198,22 @@ impl Default for DownloadSettings {
             cookies_browser: Some(CookiesBrowser::Automatic),
             post_file_name: post_names::DEFAULT_POST_FILE_NAME.to_owned(),
             post_pause: PauseRange::default(),
+            hourly_file_limit: None,
         }
     }
 }
 
 impl DownloadSettings {
+    /// The highest hourly limit on a paced site's files that can be set.
+    pub const HIGHEST_HOURLY_LIMIT: u32 = 10_000;
+
+    /// An hourly limit within 1 to `HIGHEST_HOURLY_LIMIT`, or none for 0.
+    pub fn normalized_hourly_limit(limit: Option<u32>) -> Option<u32> {
+        limit
+            .filter(|limit| *limit > 0)
+            .map(|limit| limit.min(Self::HIGHEST_HOURLY_LIMIT))
+    }
+
     /// The download folder: the chosen one, or a Tsundoku folder in Downloads. A portable copy's folder that isn't a
     /// full path (`BESIDE_APP_DOWNLOADS`) is inside the copy's own folder.
     pub fn resolved_folder(&self) -> PathBuf {

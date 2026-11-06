@@ -99,6 +99,12 @@ export const strings = {
       failed: "Failed",
       done: "Done",
     },
+    /** Why a waiting download, or a link waiting in Pending, doesn't start yet. */
+    holds: {
+      slowDown: (site: string, time: string) => `${site} asked to slow down. Continuing at ${time}.`,
+      hourlyLimit: (site: string, limit: number, time: string) =>
+        `${limit} ${site} ${limit === 1 ? "file" : "files"} in the past hour, the limit set in Settings. Continuing at ${time}.`,
+    },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>
       `${count === 1 ? "A download is" : `${count} downloads are`} still running. Close Tsundoku anyway? Next time, ${
@@ -306,6 +312,8 @@ export const strings = {
       linkNotRecognized: (site: string) =>
         `This ${site} link isn't one Tsundoku recognizes. Try the link to the file or folder itself.`,
       network: "Couldn't reach the site. Check your connection, then try again.",
+      tooManyRequests: (site: string | null, time: string | null) =>
+        `${site ?? "The site"} asked to slow down. ${time ? `Try again after ${time}.` : "Try again in a few minutes."}`,
       siteError: "Couldn't read this site's page. An update often fixes this.",
       failed: "Couldn't read this link.",
     },
@@ -765,6 +773,11 @@ export const strings = {
     pauseFrom: "From",
     pauseTo: "to",
     seconds: "seconds",
+    hourlyLimit: "Hourly Limit",
+    hourlyLimitHint:
+      "Leave empty for no limit. Once the past hour holds this many Instagram files, the next Instagram download waits, then continues by itself.",
+    hourlyLimitPlaceholder: "No Limit",
+    files: "files",
     cookies: "Cookies",
     cookiesBrowser: "Read Cookies From",
     cookiesNone: "None",

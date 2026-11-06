@@ -121,6 +121,37 @@ pub fn sign_in_site(link: &str) -> Option<&'static SignInSite> {
         .find(|site| site.domains.iter().any(|domain| on_domain(&host, domain)))
 }
 
+/// A site as far as its limits go (`site_limits`): what a "too many requests" from one of its links holds back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Site {
+    /// The same for every domain the site goes by: "x.com" for a twitter.com link too.
+    pub key: String,
+    /// What the user knows it by: "Instagram", "MEGA", or its domain ("vimeo.com").
+    pub name: String,
+}
+
+/// The site `link` belongs to: a sign-in site or a file host by its name, any other by its domain's last two labels
+/// ("player.vimeo.com" → "vimeo.com"). `link` must come from `metadata::normalize_link`.
+pub fn site_of(link: &str) -> Option<Site> {
+    if let Some(site) = sign_in_site(link) {
+        return Some(Site {
+            key: site.domains[0].to_owned(),
+            name: site.name.to_owned(),
+        });
+    }
+    if let Some(host) = crate::hosts::Host::of(link) {
+        return Some(Site {
+            key: host.site().to_owned(),
+            name: host.name().to_owned(),
+        });
+    }
+    let domain = cookie_domains(link).pop()?;
+    (!domain.is_empty()).then(|| Site {
+        key: domain.clone(),
+        name: domain,
+    })
+}
+
 /// Whether `host` is `domain` or one of its subdomains. A cookie host's leading dot is ignored.
 pub(crate) fn on_domain(host: &str, domain: &str) -> bool {
     let host = host.strip_prefix('.').unwrap_or(host);
@@ -211,6 +242,30 @@ mod tests {
         assert_eq!(name("https://youtu.be/jNQXAC9IVRw"), Some("YouTube"));
         assert_eq!(name("https://soundcloud.com/a/b"), None);
         assert_eq!(name("https://notinstagram.com/p/1"), None);
+    }
+
+    #[test]
+    fn names_the_site_a_limit_holds_back() {
+        let site = |link| site_of(link).map(|site| (site.key, site.name));
+        let pair = |key: &str, name: &str| Some((key.to_owned(), name.to_owned()));
+        assert_eq!(
+            site("https://www.instagram.com/p/DfPQchkG1tg/"),
+            pair("instagram.com", "Instagram")
+        );
+        assert_eq!(
+            site("https://mobile.twitter.com/NASA/status/1"),
+            site("https://x.com/NASA/status/2"),
+            "one site under both its domains"
+        );
+        assert_eq!(
+            site("https://mega.nz/file/AbCdEf12#key"),
+            pair("mega", "MEGA")
+        );
+        assert_eq!(
+            site("https://player.vimeo.com/video/1"),
+            pair("vimeo.com", "vimeo.com")
+        );
+        assert_eq!(site("not a link"), None);
     }
 
     #[test]

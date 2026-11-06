@@ -118,6 +118,19 @@ pub enum PreviewError {
     LinkNotRecognized { site: String },
     #[error("network error: {detail}")]
     Network { detail: String },
+    /// The site answered "too many requests" (HTTP 429): its downloads and reads wait a while (`site_limits`). The
+    /// preview card fills in the site and until when, for its message; the queue and the pending links wait instead
+    /// of failing.
+    #[error("too many requests: {detail}")]
+    TooManyRequests {
+        detail: String,
+        #[serde(default)]
+        site: Option<String>,
+        /// In milliseconds since 1970.
+        #[serde(default)]
+        #[ts(type = "number | null")]
+        until: Option<i64>,
+    },
     /// The tool couldn't read the site's page, which an update of the tool often fixes.
     #[error("site error: {detail}")]
     SiteError {
@@ -167,7 +180,28 @@ impl PreviewError {
             cookies: SignInCookies::Unknown,
         }
     }
+
+    /// A "too many requests" with only the tool's message; the preview fills in the rest.
+    pub fn too_many_requests(detail: String) -> Self {
+        Self::TooManyRequests {
+            detail,
+            site: None,
+            until: None,
+        }
+    }
 }
+
+/// What yt-dlp's and gallery-dl's errors say when a site answered "too many requests", in lowercase. A message that
+/// could also mean a missing sign-in ("rate-limit reached or login required") is sorted as one first.
+pub(crate) const TOO_MANY_REQUESTS_PHRASES: [&str; 7] = [
+    "error 429",
+    "'429",
+    "429 too many",
+    "too many requests",
+    "rate limit",
+    "rate-limit",
+    "please wait a few minutes before you try again",
+];
 
 /// The programs a fetch runs: yt-dlp, and Deno and ffmpeg when they're set up, and where to read cookies from.
 #[derive(Debug, Clone, Default)]
@@ -447,6 +481,10 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
         "private video",
     ]) {
         PreviewError::sign_in(detail)
+    } else if mentions(&TOO_MANY_REQUESTS_PHRASES) {
+        // Before "unavailable": YouTube's says "This content isn't available, try again later. The current session
+        // has been rate-limited…".
+        PreviewError::too_many_requests(detail)
     } else if mentions(&[
         "unavailable",
         "not available",
@@ -649,6 +687,31 @@ mod tests {
             classify("ERROR: [youtube] abc: Failed to extract any player response"),
             PreviewError::SiteError { .. }
         ));
+        assert!(matches!(
+            classify("ERROR: unable to download video data: HTTP Error 429: Too Many Requests"),
+            PreviewError::TooManyRequests { .. }
+        ));
+        assert!(matches!(
+            classify(
+                "ERROR: [instagram] DfH-Y3JugI4: Unable to download webpage: HTTP Error 429: Too Many Requests (caused by <HTTPError 429: Too Many Requests>)"
+            ),
+            PreviewError::TooManyRequests { .. }
+        ));
+        assert!(matches!(
+            classify(
+                "ERROR: [youtube] abc: This content isn't available, try again later. The current session has been rate-limited by YouTube for up to an hour."
+            ),
+            PreviewError::TooManyRequests { .. }
+        ));
+        assert!(
+            matches!(
+                classify(
+                    "ERROR: [instagram] abc: Requested content is not available, rate-limit reached or login required. Use --cookies"
+                ),
+                PreviewError::SignInRequired { .. }
+            ),
+            "a message that may mean a missing sign-in asks for one"
+        );
         assert!(matches!(
             classify("Traceback (most recent call last):"),
             PreviewError::Failed { .. }

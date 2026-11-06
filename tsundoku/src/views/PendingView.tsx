@@ -29,6 +29,7 @@ import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
+import { describeSiteWait, useTimeLeft } from "../holds"
 import { shownPendingLinks } from "../pendingLinks"
 import {
   useDownloadDestination,
@@ -286,6 +287,8 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
   const preview = link.preview
   const video = preview?.video ?? null
   const presetId = link.presetId ?? allPresetId
+  const hold = link.state === "waiting" ? link.hold : null
+  const holdTimeLeft = useTimeLeft(hold?.until ?? null)
 
   const act = (action: () => Promise<void>) => {
     setActionError(null)
@@ -321,6 +324,7 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
         ) : (
           <ReadingStatus link={link} />
         )}
+        {hold && <StatusMessage tone="neutral" message={describeSiteWait(hold)} detail={holdTimeLeft ?? undefined} />}
         {video && !preview?.inQueue && <PendingDestination video={video} presetId={presetId} />}
         {preview?.lastDownload && (
           <StatusMessage

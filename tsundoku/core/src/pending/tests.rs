@@ -770,6 +770,48 @@ fn a_paced_sites_links_wait_while_others_are_read() {
 }
 
 #[test]
+fn a_site_that_asks_to_slow_down_is_read_again_once_its_wait_ends() {
+    let test = Test::new();
+    let busy = "https://www.instagram.com/p/Busy/";
+    let next = "https://www.instagram.com/p/Next/";
+    test.reader.answer(
+        busy,
+        Err(PreviewError::too_many_requests(
+            "HttpError: '429 Too Many Requests'".to_owned(),
+        )),
+    );
+    test.add(&[busy, next, FIRST]);
+    test.wait_until_read(FIRST);
+    let pending = test.link(busy).unwrap();
+    assert_eq!(pending.state, PendingState::Waiting, "it didn't fail");
+    assert_eq!(pending.error, None);
+    assert_eq!(
+        pending.hold.map(|wait| wait.site),
+        Some("Instagram".to_owned())
+    );
+    assert!(
+        test.link(next).unwrap().hold.is_some(),
+        "the site's other links wait too"
+    );
+    assert_eq!(
+        test.reader.reads(),
+        [busy, FIRST],
+        "other sites' links are read meanwhile"
+    );
+    assert!(test.link(FIRST).unwrap().hold.is_none());
+    assert!(
+        test.queue.site_wait(next).is_some(),
+        "the site's downloads wait too"
+    );
+
+    lock(&test.reader.answers).remove(busy);
+    test.queue.end_site_waits();
+    test.wait_until_read(busy);
+    test.wait_until_read(next);
+    assert_eq!(test.state(busy), Some(PendingState::Ready));
+}
+
+#[test]
 fn the_same_video_from_two_links_is_kept_once() {
     let test = Test::new();
     let short = "https://youtu.be/first";
