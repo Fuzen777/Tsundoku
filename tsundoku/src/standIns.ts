@@ -164,6 +164,17 @@ function manyHistoryStandIns(count: number): HistoryVideo[] {
   })
 }
 
+/** The stand-in history the query matches, by the title, whether it's a post (any other kind is a video), and its
+ * file being missing. */
+function matchingHistory(query: HistoryQuery, count: number | null): HistoryVideo[] {
+  return (count === null ? historyStandIns : manyHistoryStandIns(count)).filter(
+    (video) =>
+      video.title.toLowerCase().includes((query.search ?? "").toLowerCase()) &&
+      (query.kind === null || (query.kind === "post") === (video.post !== null)) &&
+      (!query.onlyMissing || !video.lastDownload.fileExists),
+  )
+}
+
 const pastDownloadStandIns: PastDownload[] = [
   historyStandIns[0].lastDownload,
   { ...historyStandIns[0].lastDownload, id: 9, preset: "Best Audio", format: "opus", downloadedAt: 1_792_800_000 },
@@ -323,13 +334,13 @@ export const standIns = {
     defaultFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   } satisfies PresetsOverview,
   presetArguments: ["-f", "bv*+ba/b", "--merge-output-format", "mkv", "-o", "%(title).150B [%(id)s].%(ext)s"],
-  /** A page of the history, searched by title only: a few videos, or `count` of them. */
+  /** A page of the history, searched by title, posts or not, and missing files: a few videos, or `count` of them. */
   historyPage: (query: HistoryQuery, offset: number, limit: number, count: number | null): HistoryPage => {
-    const found = (count === null ? historyStandIns : manyHistoryStandIns(count)).filter((video) =>
-      video.title.toLowerCase().includes((query.search ?? "").toLowerCase()),
-    )
+    const found = matchingHistory(query, count)
     return { videos: found.slice(offset, offset + limit), total: found.length }
   },
+  historyIds: (query: HistoryQuery, count: number | null): number[] =>
+    matchingHistory(query, count).map((video) => video.id),
   historyFilters: {
     sites: [{ site: "youtube", siteName: "youtube.com" }],
     presets: ["1080p MP4", "Audio MP3", "Best Audio", "Best Video"],

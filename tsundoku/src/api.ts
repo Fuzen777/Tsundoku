@@ -640,6 +640,30 @@ export async function forgetVideo(videoId: number): Promise<void> {
   await invoke("forget_video", { videoId })
 }
 
+/** The IDs of every video a query matches, for ticking them all. */
+export function getHistoryIds(query: HistoryQuery): Promise<number[]> {
+  if (!isTauri()) return Promise.resolve(standIns.historyIds(query, addressNumber("history")))
+  return invoke<number[]>("history_ids", { query })
+}
+
+/** Forgets several videos, as forgetVideo does each, and resolves to how many were in the history. */
+export function forgetVideos(videoIds: number[]): Promise<number> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<number>("forget_videos", { videoIds })
+}
+
+/** How many folders hold the videos' files that are still there. */
+export function countHistoryFolders(videoIds: number[]): Promise<number> {
+  if (!isTauri()) return Promise.resolve(videoIds.length === 0 ? 0 : Math.min(videoIds.length, 7))
+  return invoke<number>("history_folder_count", { videoIds })
+}
+
+/** Opens each folder holding the videos' files once, with those files selected. Rejects with a HistoryError. */
+export async function showVideosInFolders(videoIds: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("show_videos_in_folders", { videoIds })
+}
+
 /** Opens a web page, such as a video's own page, in the default browser. */
 export async function openWebPage(url: string): Promise<void> {
   if (!isTauri()) {

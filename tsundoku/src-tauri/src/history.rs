@@ -7,6 +7,7 @@ use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
     History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, PastDownload,
+    folder_count,
 };
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::preview::{PreviewService, VideoPreview};
@@ -146,6 +147,65 @@ pub fn video_downloads(
 #[tauri::command]
 pub fn forget_video(history: State<'_, Arc<History>>, video_id: i64) -> Result<(), HistoryError> {
     history.forget(video_id)
+}
+
+/// The IDs of every video the history view's query matches, for ticking them all. Off the async runtime's threads,
+/// since Only Missing Files checks each file.
+#[tauri::command]
+pub async fn history_ids(
+    history: State<'_, Arc<History>>,
+    query: HistoryQuery,
+) -> Result<Vec<i64>, HistoryError> {
+    let history = Arc::clone(&history);
+    blocking(move || history.ids(&query)).await
+}
+
+/// Forgets several videos at once, as `forget_video` does each, and answers how many were in the history.
+#[tauri::command]
+pub fn forget_videos(
+    history: State<'_, Arc<History>>,
+    video_ids: Vec<i64>,
+) -> Result<u32, HistoryError> {
+    history.forget_all(&video_ids)
+}
+
+/// How many folders hold the videos' files that are still there, to ask before opening many.
+#[tauri::command]
+pub async fn history_folder_count(
+    history: State<'_, Arc<History>>,
+    video_ids: Vec<i64>,
+) -> Result<u32, HistoryError> {
+    let history = Arc::clone(&history);
+    blocking(move || {
+        let files = history.latest_files(&video_ids)?;
+        Ok(folder_count(&files) as u32)
+    })
+    .await
+}
+
+/// Opens each folder holding the videos' files in File Explorer once, with those files selected.
+#[tauri::command]
+pub async fn show_videos_in_folders(
+    app: AppHandle,
+    history: State<'_, Arc<History>>,
+    video_ids: Vec<i64>,
+) -> Result<(), HistoryError> {
+    let history = Arc::clone(&history);
+    let files = blocking(move || history.latest_files(&video_ids)).await?;
+    app.opener().reveal_items_in_dir(files).map_err(open_failed)
+}
+
+/// Runs `work` off the async runtime's threads, which must never wait on the disk.
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, HistoryError> + Send + 'static,
+) -> Result<T, HistoryError> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .unwrap_or_else(|error| {
+            Err(HistoryError::Database {
+                detail: error.to_string(),
+            })
+        })
 }
 
 fn open_failed(error: tauri_plugin_opener::Error) -> HistoryError {

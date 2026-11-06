@@ -82,6 +82,19 @@ const MIGRATIONS: &[&str] = &[
     // 7: the queue's order. Items are added at 0 and start by position, then ID; Download Next gives one a position
     // below every other.
     "ALTER TABLE queue_items ADD COLUMN position INTEGER NOT NULL DEFAULT 0;",
+    // 8: what each download is (`DownloadKind`: video, audio, post or file), for the history's Kind filter. Downloads
+    // from before are worked out from their video and format: a post or a file host's files by what the video held,
+    // and audio when the format is only an audio file's type, or names no codecs and the preset says audio.
+    "ALTER TABLE downloads ADD COLUMN kind TEXT NOT NULL DEFAULT 'video';
+    UPDATE downloads SET kind = CASE
+        WHEN (SELECT post_images FROM videos v WHERE v.id = downloads.video) IS NOT NULL THEN 'post'
+        WHEN (SELECT file_count FROM videos v WHERE v.id = downloads.video) IS NOT NULL THEN 'file'
+        WHEN lower(coalesce(format, '')) IN ('mp3', 'm4a', 'opus', 'ogg', 'oga', 'flac', 'wav', 'aac', 'alac', 'mka')
+            THEN 'audio'
+        WHEN instr(coalesce(format, ''), ' · ') = 0 AND instr(coalesce(format, ''), ' + ') = 0
+            AND lower(preset) LIKE '%audio%' THEN 'audio'
+        ELSE 'video'
+    END;",
 ];
 
 pub struct Database {
@@ -171,6 +184,56 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM videos", [], |row| row.get(0))
             .unwrap();
         assert_eq!(videos, 1, "the data survives");
+    }
+
+    #[test]
+    fn works_out_what_older_downloads_were() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("tsundoku.db");
+        let kinds_migration = MIGRATIONS
+            .iter()
+            .position(|migration| migration.contains("ADD COLUMN kind"))
+            .unwrap();
+        {
+            let connection = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..kinds_migration] {
+                connection.execute_batch(migration).unwrap();
+            }
+            connection
+                .pragma_update(None, "user_version", kinds_migration as i64)
+                .unwrap();
+            connection
+                .execute_batch(
+                    "INSERT INTO videos (id, site, site_name, video_id, url, title, first_downloaded_at, post_images,
+                        post_videos, file_count, file_bytes)
+                    VALUES (1, 'youtube', 'YouTube', 'a', 'https://a', 'A', 1, NULL, NULL, NULL, NULL),
+                        (2, 'instagram', 'Instagram', 'b', 'https://b', 'B', 1, 2, 0, NULL, NULL),
+                        (3, 'mega', 'MEGA', 'c', 'https://c', 'C', 1, NULL, NULL, 2, 10);
+                    INSERT INTO downloads (id, video, preset, file_path, format, downloaded_at) VALUES
+                        (1, 1, 'Best Video', 'a.mkv', '1080p · avc1 + mp4a', 1),
+                        (2, 1, 'Audio MP3', 'a.mp3', 'mp3', 2),
+                        (3, 1, 'Best Audio', 'a.webm', 'webm', 3),
+                        (4, 1, 'My Audio Copy', 'a.m4a', NULL, 4),
+                        (5, 1, 'Old Videos', 'a.mp4', 'mp4', 5),
+                        (6, 2, '', 'b.jpg', NULL, 6),
+                        (7, 3, '', 'c.zip', NULL, 7);",
+                )
+                .unwrap();
+        }
+        let database = Database::open(&path).unwrap();
+        let connection = database.lock();
+        let mut statement = connection
+            .prepare("SELECT kind FROM downloads ORDER BY id")
+            .unwrap();
+        let kinds: Vec<String> = statement
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            kinds,
+            ["video", "audio", "audio", "audio", "video", "post", "file"]
+        );
     }
 
     #[test]

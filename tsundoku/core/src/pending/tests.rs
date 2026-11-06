@@ -11,6 +11,7 @@ use crate::downloads::{
 };
 use crate::history::NewDownload;
 use crate::metadata::{FileContents, PostContents, SignInCookies};
+use crate::rules::DownloadKind;
 use crate::settings::ClipboardShortcut;
 use crate::tools::ToolManager;
 
@@ -265,6 +266,7 @@ impl Test {
                     file_size: None,
                     format: None,
                     downloaded_at: 1,
+                    kind: DownloadKind::Video,
                 },
             )
             .unwrap();

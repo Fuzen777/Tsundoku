@@ -11,21 +11,28 @@ import {
 } from "lucide-react"
 import {
   confirmWithUser,
+  countHistoryFolders,
   forgetVideo,
+  forgetVideos,
+  getHistoryIds,
   openDownload,
   openDownloadFile,
   openWebPage,
   queryKeys,
   showDownloadFileInFolder,
   showDownloadInFolder,
+  showVideosInFolders,
 } from "../api"
+import type { DownloadKind } from "../bindings/DownloadKind"
+import type { HistoryQuery } from "../bindings/HistoryQuery"
 import type { HistorySort } from "../bindings/HistorySort"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { PastDownload } from "../bindings/PastDownload"
+import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
 import { ExpandToggle } from "../components/LinkButton"
-import { SelectInput, TextInput } from "../components/Field"
+import { Checkbox, SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
@@ -33,6 +40,7 @@ import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeHistoryError, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDay, formatDuration, joinDetails } from "../format"
+import { DATE_RANGES, dateBounds, type DateBounds, type DateRange } from "../historyDates"
 import { useAppActions } from "../navigation"
 import { useDownloadFiles, useHistory, useHistoryFilters, useVideoDownloads } from "../queries"
 import { strings } from "../strings"
@@ -42,6 +50,9 @@ import { useVirtualRows } from "../virtualRows"
 const text = strings.history
 
 const SORTS: readonly HistorySort[] = ["downloaded", "title", "uploader", "site", "duration", "size", "preset"]
+const KINDS: readonly DownloadKind[] = ["video", "audio", "post", "file"]
+/** Showing more folders than this asks first, since each opens a window. */
+const FOLDERS_WITHOUT_ASKING = 5
 
 /** A row's height before it's measured: a card with a 112 px thumbnail, and the 12 px under it (`pb-3`). */
 const ROW_ESTIMATE = 102
@@ -56,17 +67,41 @@ const LOAD_AHEAD = 30
  * kept here, so a row scrolled away and back keeps its lists open.
  */
 export function HistoryView() {
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState("")
   const [site, setSite] = useState<string | null>(null)
   const [preset, setPreset] = useState<string | null>(null)
+  const [kind, setKind] = useState<DownloadKind | null>(null)
+  const [onlyMissing, setOnlyMissing] = useState(false)
+  const [dates, setDates] = useState<{ range: DateRange; from: string; to: string; bounds: DateBounds }>({
+    range: "any",
+    from: "",
+    to: "",
+    bounds: { from: null, until: null },
+  })
   const [sort, setSort] = useState<HistorySort>("downloaded")
   const [descending, setDescending] = useState(true)
   // The search runs once typing pauses rather than on every key.
   const settledSearch = useDebouncedValue(search.trim(), 250)
-  const query = { search: settledSearch || null, site, preset, sort, descending }
+  const query: HistoryQuery = {
+    search: settledSearch || null,
+    site,
+    preset,
+    kind,
+    onlyMissing,
+    downloadedFrom: dates.bounds.from,
+    downloadedUntil: dates.bounds.until,
+    sort,
+    descending,
+  }
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useHistory(query)
   const { data: filters } = useHistoryFilters()
-  const isFiltered = query.search !== null || site !== null || preset !== null
+  const isFiltered =
+    query.search !== null || site !== null || preset !== null || kind !== null || onlyMissing || dates.range !== "any"
+
+  // The dates are worked out when they're picked, so the query doesn't change while the view is open.
+  const changeDates = (range: DateRange, from = dates.from, to = dates.to) =>
+    setDates({ range, from, to, bounds: dateBounds(range, new Date(), from, to) })
   const videos = useMemo(() => uniqueVideos(data?.pages.flatMap((page) => page.videos) ?? []), [data])
   const videoIds = useMemo(() => videos.map((video) => video.id), [videos])
   const total = data?.pages[0]?.total
@@ -104,14 +139,97 @@ export function HistoryView() {
     if (hasNextPage && !isFetchingNextPage && rows.last >= videos.length - LOAD_AHEAD) void fetchNextPage()
   }, [hasNextPage, isFetchingNextPage, rows.last, videos.length, fetchNextPage])
 
-  // A new search, filter or sort starts from the top of its results.
+  // A new search, filter or sort starts from the top of its results, with nothing ticked: ticked rows the new results
+  // don't show could otherwise be forgotten unseen.
   const queryKey = JSON.stringify(query)
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 })
   }, [queryKey])
+  const [ticked, setTicked] = useState<{ queryKey: string; ids: ReadonlySet<number> }>({ queryKey, ids: new Set() })
+  const selected = ticked.queryKey === queryKey ? ticked.ids : NOTHING_TICKED
+  const allSelected = total !== undefined && total > 0 && selected.size === total
+  const tick = useCallback(
+    (id: number, on: boolean) =>
+      setTicked((current) => {
+        const ids = new Set(current.queryKey === queryKey ? current.ids : [])
+        if (on) ids.add(id)
+        else ids.delete(id)
+        return { queryKey, ids }
+      }),
+    [queryKey],
+  )
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<ErrorDescription | null>(null)
+
+  async function act(action: () => Promise<void>) {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+    } catch (caught) {
+      setError(describeHistoryError(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const tickAll = (on: boolean) =>
+    act(async () => {
+      const ids = on ? await getHistoryIds(query) : []
+      setTicked({ queryKey, ids: new Set(ids) })
+    })
+
+  const forgetSelected = () =>
+    act(async () => {
+      const ids = [...selected]
+      const confirmed = await confirmWithUser({
+        title: text.forgetManyTitle(ids.length),
+        message: text.forgetManyMessage,
+        confirmLabel: text.forget,
+        cancelLabel: strings.dialogs.cancel,
+      })
+      if (!confirmed) return
+      await forgetVideos(ids)
+      setTicked({ queryKey, ids: new Set() })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.history })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
+    })
+
+  const showSelected = () =>
+    act(async () => {
+      const ids = [...selected]
+      const folders = await countHistoryFolders(ids)
+      if (folders === 0) {
+        setError({ message: text.noFilesLeft })
+        return
+      }
+      if (
+        folders > FOLDERS_WITHOUT_ASKING &&
+        !(await confirmWithUser({
+          title: text.openFoldersTitle(folders),
+          message: text.openFoldersMessage(folders),
+          confirmLabel: text.openFolders,
+          cancelLabel: strings.dialogs.cancel,
+        }))
+      ) {
+        return
+      }
+      await showVideosInFolders(ids)
+    })
+
+  const selectionButtons = selected.size > 0 && (
+    <>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void forgetSelected()}>
+        {text.forgetSelected}
+      </Button>
+      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void showSelected()}>
+        {text.showSelectedInFolder}
+      </Button>
+    </>
+  )
 
   return (
-    <Page title={strings.nav.history} scrollRef={scroller}>
+    <Page title={strings.nav.history} actions={selectionButtons} scrollRef={scroller}>
       <div className="flex flex-col gap-3">
         <div ref={head} className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -129,6 +247,26 @@ export function HistoryView() {
                 className="w-full pl-8"
               />
             </div>
+            <SelectInput
+              aria-label={text.sortBy}
+              title={text.sortBy}
+              value={sort}
+              onChange={(event) => setSort(event.target.value as HistorySort)}
+            >
+              {SORTS.map((option) => (
+                <option key={option} value={option}>
+                  {text.sorts[option]}
+                </option>
+              ))}
+            </SelectInput>
+            <IconButton
+              label={descending ? text.descending : text.ascending}
+              icon={descending ? ArrowDownWideNarrow : ArrowUpNarrowWide}
+              variant="secondary"
+              onClick={() => setDescending((isDescending) => !isDescending)}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <SelectInput
               aria-label={text.allSites}
               value={site ?? ""}
@@ -154,26 +292,69 @@ export function HistoryView() {
               ))}
             </SelectInput>
             <SelectInput
-              aria-label={text.sortBy}
-              title={text.sortBy}
-              value={sort}
-              onChange={(event) => setSort(event.target.value as HistorySort)}
+              aria-label={text.allKinds}
+              value={kind ?? ""}
+              onChange={(event) => setKind((event.target.value || null) as DownloadKind | null)}
             >
-              {SORTS.map((option) => (
+              <option value="">{text.allKinds}</option>
+              {KINDS.map((option) => (
                 <option key={option} value={option}>
-                  {text.sorts[option]}
+                  {text.kinds[option]}
                 </option>
               ))}
             </SelectInput>
-            <IconButton
-              label={descending ? text.descending : text.ascending}
-              icon={descending ? ArrowDownWideNarrow : ArrowUpNarrowWide}
-              variant="secondary"
-              onClick={() => setDescending((isDescending) => !isDescending)}
-            />
+            <SelectInput
+              aria-label={text.dateRange}
+              title={text.dateRange}
+              value={dates.range}
+              onChange={(event) => changeDates(event.target.value as DateRange)}
+            >
+              {DATE_RANGES.map((option) => (
+                <option key={option} value={option}>
+                  {text.dateRanges[option]}
+                </option>
+              ))}
+            </SelectInput>
+            {dates.range === "custom" && (
+              <>
+                <TextInput
+                  type="date"
+                  aria-label={text.dateFrom}
+                  title={text.dateFrom}
+                  value={dates.from}
+                  max={dates.to || undefined}
+                  onChange={(event) => changeDates("custom", event.target.value, dates.to)}
+                />
+                <TextInput
+                  type="date"
+                  aria-label={text.dateTo}
+                  title={text.dateTo}
+                  value={dates.to}
+                  min={dates.from || undefined}
+                  onChange={(event) => changeDates("custom", dates.from, event.target.value)}
+                />
+              </>
+            )}
+            <span className="ml-1 text-fg-secondary">
+              <Checkbox label={text.onlyMissing} checked={onlyMissing} onChange={setOnlyMissing} />
+            </span>
           </div>
 
-          {total !== undefined && total > 0 && <p className="text-xs text-fg-muted">{text.videoCount(total)}</p>}
+          {total !== undefined && total > 0 && (
+            <label className="flex w-fit items-center gap-2 text-xs text-fg-muted">
+              <input
+                type="checkbox"
+                className="size-4 accent-accent"
+                aria-label={text.selectAll}
+                title={text.selectAll}
+                checked={allSelected}
+                disabled={busy}
+                onChange={(event) => void tickAll(event.target.checked)}
+              />
+              {joinDetails([text.videoCount(total), selected.size > 0 && text.selectedCount(selected.size)])}
+            </label>
+          )}
+          {error && <StatusMessage tone="danger" {...error} />}
           {total === 0 &&
             (isFiltered ? (
               <EmptyState icon={Search} title={text.noMatchesTitle} body={text.noMatchesBody} />
@@ -188,6 +369,8 @@ export function HistoryView() {
             <div key={video.id} data-row-key={video.id} ref={rows.measure} className="pb-3">
               <HistoryRow
                 video={video}
+                selected={selected.has(video.id)}
+                onSelect={tick}
                 filesOpen={openFiles.has(video.id)}
                 onToggleFiles={toggleFiles}
                 downloadsOpen={openDownloads.has(video.id)}
@@ -201,6 +384,9 @@ export function HistoryView() {
     </Page>
   )
 }
+
+/** What's ticked under a query other than the one that ticked it. */
+const NOTHING_TICKED: ReadonlySet<number> = new Set()
 
 /** The videos of every page read, each once: a video can move from one page to the next while they're read again. */
 function uniqueVideos(videos: readonly HistoryVideo[]): HistoryVideo[] {
@@ -227,6 +413,9 @@ function useToggledIds(): [ReadonlySet<number>, (id: number) => void] {
 
 interface HistoryRowProps {
   video: HistoryVideo
+  /** Whether its tick box is ticked, for acting on several videos at once. */
+  selected: boolean
+  onSelect: (videoId: number, selected: boolean) => void
   /** Whether the list of a post's files is open. */
   filesOpen: boolean
   onToggleFiles: (videoId: number) => void
@@ -238,6 +427,8 @@ interface HistoryRowProps {
 /** A video in the history. Drawn again only when its own props change, not each time the list scrolls. */
 const HistoryRow = memo(function HistoryRow({
   video,
+  selected,
+  onSelect,
   filesOpen,
   onToggleFiles,
   downloadsOpen,
@@ -269,6 +460,14 @@ const HistoryRow = memo(function HistoryRow({
   return (
     <Card className="flex flex-col gap-2 p-3">
       <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          className="mt-1 size-4 shrink-0 accent-accent"
+          aria-label={text.select}
+          title={text.select}
+          checked={selected}
+          onChange={(event) => onSelect(video.id, event.target.checked)}
+        />
         <Thumbnail key={video.thumbnailUrl} url={video.thumbnailUrl} className="w-28" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <p className="truncate font-medium select-text" title={video.title}>
@@ -340,7 +539,7 @@ function FileList({ downloadId, onError }: { downloadId: number; onError: (error
   const run = (action: (downloadId: number, position: number) => Promise<void>, position: number) =>
     action(downloadId, position).catch((error: unknown) => onError(describeHistoryError(error)))
   return (
-    <div className="ml-31 flex flex-col divide-y divide-line border-t border-line">
+    <div className="ml-38 flex flex-col divide-y divide-line border-t border-line">
       {files?.map((file) => (
         <div key={file.position} className="flex items-center gap-3 py-1.5">
           <div className="min-w-0 flex-1">
@@ -379,7 +578,7 @@ function fileName(path: string): string {
 function DownloadList({ videoId, onError }: { videoId: number; onError: (error: ErrorDescription) => void }) {
   const { data: downloads } = useVideoDownloads(videoId, true)
   return (
-    <div className="ml-31 flex flex-col divide-y divide-line border-t border-line">
+    <div className="ml-38 flex flex-col divide-y divide-line border-t border-line">
       {downloads?.map((download) => (
         <div key={download.id} className="flex items-center gap-3 py-1.5">
           <div className="min-w-0 flex-1">

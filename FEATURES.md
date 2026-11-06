@@ -128,12 +128,13 @@ type: Features
 ## History
 
 - **History view**: every video downloaded, newest first: thumbnail, title, uploader, site, length, and its latest download's preset, date and size.
-- **Search, filters, sorting**: search titles and uploaders word by word, as soon as typing pauses; filter by site and by preset; sort by date downloaded, title, uploader, site, length, size or preset, either way.
+- **Search, filters, sorting**: search titles and uploaders word by word, as soon as typing pauses; filter by site, preset, kind (videos, audio, posts or shared files) and when it was last downloaded (today, the past 7 or 30 days, the past year, or between two dates), or show only the downloads whose file is missing; sort by date downloaded, title, uploader, site, length, size or preset, either way.
+- **Act on several**: tick rows, or all of them with the box above the list (every download the search and filters show, not only those on screen), then Forget Selected, which asks once, or Show Selected in Folder, which opens each folder once with its files selected and asks first when that's more than 5 folders. Changing the search or a filter unticks them.
 - **Quick at any size**: the history reads more as you scroll and draws only what's on screen, so opening it, searching and scrolling stay instant with thousands of downloads. A row you expanded is still expanded when you scroll back to it.
 - **Several downloads**: a video downloaded more than once (as video, then as audio) expands to list each download, with its format, path, Open File and Show in Folder.
 - **Posts**: a downloaded post shows what it held ("2 images, 1 video") and expands to list every file it saved, each with its size, Open File and Show in Folder, or File Missing.
 - **Actions**: Open File, Show in Folder and Open Source Page, and in its menu Download Again (the link goes in the add bar and its preview opens) and Forget.
-- **Forget**: after asking, removes the video from the history and from `archive.txt`, so it can be downloaded again. Its files stay where they are.
+- **Forget**: after asking, removes the video from the history and from `archive.txt`, so Tsundoku no longer warns before it's downloaded again. Its files stay where they are.
 - **File Missing**: a download whose file was moved or deleted says so, and its Open File is off.
 - **Kept for good**: every finished download is recorded, with the video's details, the preset, the file's path, size and format ("1080p · avc1 + mp4a", or "mp3"), and the date. A file yt-dlp found already there is recorded too.
 - **yt-dlp's archive**: `archive.txt` lists every video in yt-dlp's own format (`youtube jNQXAC9IVRw`), kept up to date, so yt-dlp on the command line skips them too with `--download-archive`.

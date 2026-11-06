@@ -12,6 +12,7 @@ use ts_rs::TS;
 use crate::atomic_file::write_atomically;
 use crate::database::Database;
 use crate::metadata::{FileContents, PostContents, VideoInfo};
+use crate::rules::DownloadKind;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -57,6 +58,8 @@ pub struct NewDownload {
     pub format: Option<String>,
     /// In seconds since 1970.
     pub downloaded_at: i64,
+    /// Video or audio by its preset, a post, or a file host's files: what the history's Kind filter matches.
+    pub kind: DownloadKind,
 }
 
 /// One file of a post, to record.
@@ -160,6 +163,16 @@ pub struct HistoryQuery {
     pub site: Option<String>,
     /// Only videos downloaded at least once with this preset.
     pub preset: Option<String>,
+    /// Only videos downloaded at least once as this kind: video, audio, a post or a file host's files.
+    pub kind: Option<DownloadKind>,
+    /// Only videos whose latest download's file isn't there anymore: those showing File Missing.
+    pub only_missing: bool,
+    /// Only videos last downloaded at or after this time, in seconds since 1970.
+    #[ts(type = "number | null")]
+    pub downloaded_from: Option<i64>,
+    /// Only videos last downloaded before this time, in seconds since 1970.
+    #[ts(type = "number | null")]
+    pub downloaded_until: Option<i64>,
     pub sort: HistorySort,
     pub descending: bool,
 }
@@ -223,7 +236,15 @@ impl History {
             database,
             archive_path,
         };
-        history.write_archive(&history.database.lock())?;
+        {
+            let connection = history.database.lock();
+            // The downloads last found without their file, for Only Missing Files: a temporary table, kept only
+            // while the app runs, since a file can come back at any time.
+            connection.execute_batch(
+                "CREATE TEMP TABLE IF NOT EXISTS missing_files (download INTEGER PRIMARY KEY)",
+            )?;
+            history.write_archive(&connection)?;
+        }
         Ok(history)
     }
 
@@ -263,8 +284,8 @@ impl History {
             |row| row.get(0),
         )?;
         let download_id: i64 = transaction.query_row(
-            "INSERT INTO downloads (video, preset, file_path, file_size, format, downloaded_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id",
+            "INSERT INTO downloads (video, preset, file_path, file_size, format, downloaded_at, kind)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING id",
             params![
                 video_row,
                 download.preset,
@@ -272,6 +293,7 @@ impl History {
                 download.file_size,
                 download.format,
                 download.downloaded_at,
+                download.kind.as_str(),
             ],
             |row| row.get(0),
         )?;
@@ -356,13 +378,17 @@ impl History {
 
     /// One page of the videos matching the query, each with its latest download, from the `offset`th on, and how
     /// many match in all. Whether each file is still there is checked for this page's videos only, once the database
-    /// is free again.
+    /// is free again. With `only_missing`, the first page checks every video the other filters take (`note_missing`),
+    /// and the pages after it go by that.
     pub fn page(
         &self,
         query: &HistoryQuery,
         offset: u32,
         limit: u32,
     ) -> Result<HistoryPage, HistoryError> {
+        if query.only_missing && offset == 0 {
+            self.note_missing(query)?;
+        }
         let (filter, mut values) = filter_of(query);
         let direction = if query.descending { "DESC" } else { "ASC" };
         let (videos, total): (Vec<HistoryVideo>, u32) = {
@@ -405,6 +431,85 @@ impl History {
             })
             .collect();
         Ok(HistoryPage { videos, total })
+    }
+
+    /// The IDs of every video matching the query, in its order: what ticking them all in the history view ticks.
+    pub fn ids(&self, query: &HistoryQuery) -> Result<Vec<i64>, HistoryError> {
+        if query.only_missing {
+            self.note_missing(query)?;
+        }
+        let (filter, values) = filter_of(query);
+        let connection = self.database.lock();
+        let mut statement = connection.prepare(&format!(
+            "SELECT v.id {VIDEOS_WITH_LATEST_DOWNLOAD} {filter}
+            ORDER BY {column} {direction}, d.downloaded_at DESC, v.id DESC",
+            column = query.sort.column(),
+            direction = if query.descending { "DESC" } else { "ASC" },
+        ))?;
+        let ids = statement
+            .query_map(params_from_iter(&values), |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        Ok(ids)
+    }
+
+    /// Notes, in `missing_files`, which of the videos the query's other filters take have lost their latest
+    /// download's file. The disk is asked for each, several at a time, once the database is free.
+    fn note_missing(&self, query: &HistoryQuery) -> Result<(), HistoryError> {
+        let others = HistoryQuery {
+            only_missing: false,
+            ..query.clone()
+        };
+        let (filter, values) = filter_of(&others);
+        let candidates: Vec<(i64, String)> = {
+            let connection = self.database.lock();
+            let mut statement = connection.prepare(&format!(
+                "SELECT d.id, d.file_path {VIDEOS_WITH_LATEST_DOWNLOAD} {filter}"
+            ))?;
+            statement
+                .query_map(params_from_iter(&values), |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?
+                .collect::<Result<_, _>>()?
+        };
+        let missing = missing_files(&candidates);
+        let mut connection = self.database.lock();
+        let transaction = connection.transaction()?;
+        transaction.execute("DELETE FROM temp.missing_files", [])?;
+        {
+            let mut insert =
+                transaction.prepare("INSERT INTO temp.missing_files (download) VALUES (?1)")?;
+            for download in missing {
+                insert.execute([download])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    /// The files of the videos' latest downloads that are still there, for showing them in their folders: a post's
+    /// first file stands for it, as on its row.
+    pub fn latest_files(&self, video_rows: &[i64]) -> Result<Vec<PathBuf>, HistoryError> {
+        let paths: Vec<String> = {
+            let connection = self.database.lock();
+            let mut statement = connection.prepare(&format!(
+                "SELECT d.file_path {VIDEOS_WITH_LATEST_DOWNLOAD} WHERE v.id = ?1"
+            ))?;
+            let mut paths = Vec::new();
+            for video_row in video_rows {
+                if let Some(path) = statement
+                    .query_row([video_row], |row| row.get(0))
+                    .optional()?
+                {
+                    paths.push(path);
+                }
+            }
+            paths
+        };
+        Ok(paths
+            .into_iter()
+            .map(PathBuf::from)
+            .filter(|path| path.exists())
+            .collect())
     }
 
     /// The sites and presets in the history, for the history view's filters.
@@ -504,12 +609,27 @@ impl History {
     /// Removes a video and its downloads from the history and from `archive.txt`, so it can be downloaded again.
     /// Its files stay where they are.
     pub fn forget(&self, video_row: i64) -> Result<(), HistoryError> {
-        let connection = self.database.lock();
-        let removed = connection.execute("DELETE FROM videos WHERE id = ?1", [video_row])?;
-        if removed == 0 {
-            return Err(HistoryError::NotFound);
+        match self.forget_all(&[video_row])? {
+            0 => Err(HistoryError::NotFound),
+            _ => Ok(()),
         }
-        self.write_archive(&connection)
+    }
+
+    /// Forgets several videos at once, as `forget` does each, with `archive.txt` rewritten once, and answers how many
+    /// were in the history.
+    pub fn forget_all(&self, video_rows: &[i64]) -> Result<u32, HistoryError> {
+        let mut connection = self.database.lock();
+        let transaction = connection.transaction()?;
+        let mut removed = 0;
+        {
+            let mut delete = transaction.prepare("DELETE FROM videos WHERE id = ?1")?;
+            for video_row in video_rows {
+                removed += delete.execute([video_row])?;
+            }
+        }
+        transaction.commit()?;
+        self.write_archive(&connection)?;
+        Ok(removed as u32)
     }
 
     /// Rewrites `archive.txt` from the database: one `<site> <id>` line per video, in the order they were first
@@ -587,12 +707,63 @@ fn filter_of(query: &HistoryQuery) -> (String, Vec<Value>) {
             values.len()
         ));
     }
+    if let Some(kind) = query.kind {
+        values.push(Value::Text(kind.as_str().to_owned()));
+        conditions.push(format!(
+            "EXISTS (SELECT 1 FROM downloads k WHERE k.video = v.id AND k.kind = ?{})",
+            values.len()
+        ));
+    }
+    if query.only_missing {
+        conditions.push("d.id IN (SELECT download FROM temp.missing_files)".to_owned());
+    }
+    if let Some(from) = query.downloaded_from {
+        values.push(Value::Integer(from));
+        conditions.push(format!("d.downloaded_at >= ?{}", values.len()));
+    }
+    if let Some(until) = query.downloaded_until {
+        values.push(Value::Integer(until));
+        conditions.push(format!("d.downloaded_at < ?{}", values.len()));
+    }
     let filter = if conditions.is_empty() {
         String::new()
     } else {
         format!("WHERE {}", conditions.join(" AND "))
     };
     (filter, values)
+}
+
+/// The IDs of the files that aren't there anymore. The disk is asked about several at a time, since a slow or network
+/// drive answers each slowly.
+fn missing_files(files: &[(i64, String)]) -> Vec<i64> {
+    let chunk = files.len().div_ceil(8).max(1);
+    std::thread::scope(|scope| {
+        let checks: Vec<_> = files
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .filter(|(_, path)| !Path::new(path).exists())
+                        .map(|(id, _)| *id)
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        checks
+            .into_iter()
+            .flat_map(|check| check.join().unwrap_or_default())
+            .collect()
+    })
+}
+
+/// How many folders the files are in, each counted once, ignoring letter case as Windows does.
+pub fn folder_count(files: &[PathBuf]) -> usize {
+    let folders: std::collections::HashSet<String> = files
+        .iter()
+        .filter_map(|file| file.parent())
+        .map(|folder| folder.to_string_lossy().to_lowercase())
+        .collect();
+    folders.len()
 }
 
 impl PastDownload {
@@ -683,6 +854,7 @@ mod tests {
             format: Some("1080p · avc1 + mp4a".to_owned()),
             files: Vec::new(),
             downloaded_at,
+            kind: DownloadKind::Video,
         }
     }
 
@@ -1177,6 +1349,7 @@ mod tests {
             file_size: Some(15),
             format: None,
             downloaded_at: 1,
+            kind: DownloadKind::Post,
         };
         let id = test.history.record(&post, &saved).unwrap();
 
@@ -1244,6 +1417,7 @@ mod tests {
             file_size: Some(6),
             format: None,
             downloaded_at: 1,
+            kind: DownloadKind::File,
         };
         let id = test.history.record(&share, &saved).unwrap();
 
@@ -1321,8 +1495,8 @@ mod tests {
                 }
                 let download_id: i64 = transaction
                     .query_row(
-                        "INSERT INTO downloads (video, preset, file_path, file_size, format, downloaded_at)
-                        VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id",
+                        "INSERT INTO downloads (video, preset, file_path, file_size, format, downloaded_at, kind)
+                        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING id",
                         params![
                             video_row,
                             if is_post { "" } else if download == 0 { "Best Video" } else { "Best Audio" },
@@ -1330,6 +1504,7 @@ mod tests {
                             1_000_000 + index as i64,
                             (!is_post).then_some("1080p · avc1 + mp4a"),
                             downloaded_at + download as i64 * 1000,
+                            if is_post { "post" } else if download == 0 { "video" } else { "audio" },
                         ],
                         |row| row.get(0),
                     )
@@ -1392,6 +1567,28 @@ mod tests {
             ),
             ("everything, by title", query(None, HistorySort::Title)),
             ("everything, by size", query(None, HistorySort::Size)),
+            (
+                "only posts",
+                HistoryQuery {
+                    kind: Some(DownloadKind::Post),
+                    ..query(None, HistorySort::Downloaded)
+                },
+            ),
+            (
+                "only missing files (each first page checks them all)",
+                HistoryQuery {
+                    only_missing: true,
+                    ..query(None, HistorySort::Downloaded)
+                },
+            ),
+            (
+                "downloaded in a year",
+                HistoryQuery {
+                    downloaded_from: Some(1_700_000_000),
+                    downloaded_until: Some(1_731_536_000),
+                    ..query(None, HistorySort::Downloaded)
+                },
+            ),
         ] {
             let mut found = 0;
             let whole =
@@ -1450,6 +1647,215 @@ mod tests {
         let past_the_end = test.history.page(&query, 9, 3).unwrap();
         assert!(past_the_end.videos.is_empty());
         assert_eq!(past_the_end.total, 7);
+    }
+
+    /// Records a video of `kind` downloaded at `downloaded_at`, its file made in the test's folder unless `missing`.
+    fn record_kind(
+        test: &TestHistory,
+        video_id: &str,
+        kind: DownloadKind,
+        downloaded_at: i64,
+        missing: bool,
+    ) -> i64 {
+        let mut subject = video("youtube", video_id, video_id, "x", 1.0);
+        match kind {
+            DownloadKind::Post => {
+                subject.post = Some(PostContents {
+                    images: 1,
+                    videos: 0,
+                })
+            }
+            DownloadKind::File => subject.files = Some(FileContents { count: 1, bytes: 1 }),
+            _ => {}
+        }
+        let file = test.folder.path().join(format!("{video_id}.bin"));
+        if !missing {
+            fs::write(&file, b"x").unwrap();
+        }
+        let mut saved = download("p", downloaded_at, 1);
+        saved.file_path = file.display().to_string();
+        saved.kind = kind;
+        test.history.record(&subject, &saved).unwrap();
+        test.history
+            .search(&HistoryQuery::default())
+            .unwrap()
+            .iter()
+            .find(|found| found.video.video_id == video_id)
+            .unwrap()
+            .id
+    }
+
+    fn sorted_titles(test: &TestHistory, query: HistoryQuery) -> Vec<String> {
+        let query = HistoryQuery {
+            sort: HistorySort::Title,
+            ..query
+        };
+        titles(&test.history.search(&query).unwrap())
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    #[test]
+    fn filters_by_kind() {
+        let test = TestHistory::new();
+        record_kind(&test, "a-video", DownloadKind::Video, 1, false);
+        record_kind(&test, "b-audio", DownloadKind::Audio, 2, false);
+        record_kind(&test, "c-post", DownloadKind::Post, 3, false);
+        record_kind(&test, "d-file", DownloadKind::File, 4, false);
+        // Downloaded again as audio: it's both.
+        let mut again = download("Best Audio", 5, 1);
+        again.kind = DownloadKind::Audio;
+        test.history
+            .record(&video("youtube", "a-video", "a-video", "x", 1.0), &again)
+            .unwrap();
+
+        let of_kind = |kind| {
+            sorted_titles(
+                &test,
+                HistoryQuery {
+                    kind: Some(kind),
+                    ..HistoryQuery::default()
+                },
+            )
+        };
+        assert_eq!(of_kind(DownloadKind::Video), ["a-video"]);
+        assert_eq!(of_kind(DownloadKind::Audio), ["a-video", "b-audio"]);
+        assert_eq!(of_kind(DownloadKind::Post), ["c-post"]);
+        assert_eq!(of_kind(DownloadKind::File), ["d-file"]);
+    }
+
+    #[test]
+    fn filters_by_when_it_was_last_downloaded() {
+        let test = TestHistory::new();
+        record_kind(&test, "a", DownloadKind::Video, 100, false);
+        record_kind(&test, "b", DownloadKind::Video, 200, false);
+        record_kind(&test, "c", DownloadKind::Video, 300, false);
+        // Its latest download is the one that counts.
+        test.history
+            .record(
+                &video("youtube", "a", "a", "x", 1.0),
+                &download("p", 400, 1),
+            )
+            .unwrap();
+        let between = |from: Option<i64>, until: Option<i64>| {
+            sorted_titles(
+                &test,
+                HistoryQuery {
+                    downloaded_from: from,
+                    downloaded_until: until,
+                    ..HistoryQuery::default()
+                },
+            )
+        };
+        assert_eq!(between(Some(200), None), ["a", "b", "c"]);
+        assert_eq!(between(Some(201), None), ["a", "c"]);
+        assert_eq!(between(None, Some(300)), ["b"], "the end is left out");
+        assert_eq!(between(Some(250), Some(350)), ["c"]);
+    }
+
+    #[test]
+    fn lists_only_videos_whose_file_is_missing_page_after_page() {
+        let test = TestHistory::new();
+        for index in 0..5 {
+            record_kind(
+                &test,
+                &format!("gone{index}"),
+                DownloadKind::Video,
+                index,
+                true,
+            );
+            record_kind(
+                &test,
+                &format!("here{index}"),
+                DownloadKind::Video,
+                index,
+                false,
+            );
+        }
+        let query = HistoryQuery {
+            only_missing: true,
+            sort: HistorySort::Title,
+            ..HistoryQuery::default()
+        };
+        let first = test.history.page(&query, 0, 3).unwrap();
+        let second = test.history.page(&query, 3, 3).unwrap();
+        assert_eq!((first.total, second.total), (5, 5));
+        let paged: Vec<_> = first
+            .videos
+            .iter()
+            .chain(&second.videos)
+            .map(|video| video.video.title.as_str())
+            .collect();
+        assert_eq!(paged, ["gone0", "gone1", "gone2", "gone3", "gone4"]);
+        assert!(paged.iter().all(|title| title.starts_with("gone")));
+
+        // A file that comes back leaves the list from the next first page on, and one that goes joins it.
+        fs::write(test.folder.path().join("gone0.bin"), b"x").unwrap();
+        fs::remove_file(test.folder.path().join("here4.bin")).unwrap();
+        let again = test.history.page(&query, 0, 10).unwrap();
+        assert_eq!(
+            titles(&again.videos),
+            ["gone1", "gone2", "gone3", "gone4", "here4"]
+        );
+        assert_eq!(
+            test.history.ids(&query).unwrap().len(),
+            5,
+            "ticking them all ticks those"
+        );
+    }
+
+    #[test]
+    fn gives_every_matching_videos_id_in_order() {
+        let test = TestHistory::new();
+        let a = record_kind(&test, "a", DownloadKind::Video, 1, false);
+        let b = record_kind(&test, "b", DownloadKind::Audio, 2, false);
+        let c = record_kind(&test, "c", DownloadKind::Video, 3, false);
+        let query = HistoryQuery {
+            sort: HistorySort::Downloaded,
+            descending: true,
+            ..HistoryQuery::default()
+        };
+        assert_eq!(test.history.ids(&query).unwrap(), [c, b, a]);
+        let videos_only = HistoryQuery {
+            kind: Some(DownloadKind::Video),
+            ..query
+        };
+        assert_eq!(test.history.ids(&videos_only).unwrap(), [c, a]);
+    }
+
+    #[test]
+    fn forgets_several_videos_at_once() {
+        let test = TestHistory::new();
+        let a = record_kind(&test, "a", DownloadKind::Video, 1, false);
+        let b = record_kind(&test, "b", DownloadKind::Video, 2, false);
+        record_kind(&test, "c", DownloadKind::Video, 3, false);
+
+        assert_eq!(test.history.forget_all(&[a, b, 12345]).unwrap(), 2);
+        assert_eq!(test.archive(), "youtube c\n");
+        assert!(test.folder.path().join("a.bin").exists(), "files stay");
+        assert_eq!(test.history.forget(a), Err(HistoryError::NotFound));
+    }
+
+    #[test]
+    fn finds_the_files_to_show_in_their_folders() {
+        let test = TestHistory::new();
+        let a = record_kind(&test, "a", DownloadKind::Video, 1, false);
+        let gone = record_kind(&test, "gone", DownloadKind::Video, 2, true);
+        let files = test.history.latest_files(&[a, gone, 999]).unwrap();
+        assert_eq!(
+            files,
+            [test.folder.path().join("a.bin")],
+            "only files still there"
+        );
+
+        let in_folders = [
+            PathBuf::from(r"C:\One\a.mkv"),
+            PathBuf::from(r"C:\one\b.mkv"),
+            PathBuf::from(r"C:\Two\c.mkv"),
+        ];
+        assert_eq!(folder_count(&in_folders), 2, "ignoring letter case");
+        assert_eq!(folder_count(&[]), 0);
     }
 
     #[test]

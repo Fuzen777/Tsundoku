@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.54 · 2026-11-06
+
+### Added
+
+- **More History filters**: show only videos, audio, posts or shared files; only what you downloaded today, in the past 7 or 30 days, in the past year or between two dates; or only the downloads whose file is missing.
+- **Act on several downloads at once**: tick rows in History, or all of them with the box above the list (everything the search and filters show, even what isn't on screen yet), then Forget Selected, which asks once, or Show Selected in Folder, which opens each folder once with its files selected and asks first when that's more than 5 folders. Changing the search or a filter unticks them.
+
+### Changed
+
+- **Forget says what it does**: the confirmation explains that Tsundoku won't warn before the video is downloaded again, instead of naming a file only the tools use.
+
 ## 0.1.53 · 2026-11-06
 
 ### Added

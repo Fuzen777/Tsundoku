@@ -965,6 +965,7 @@ fn the_hourly_limit_holds_instagram_until_its_old_files_are_an_hour_old() {
         file_size: None,
         format: None,
         downloaded_at: ten_minutes_ago,
+        kind: DownloadKind::Post,
     };
     test.history.record(&post("Before"), &before).unwrap();
 

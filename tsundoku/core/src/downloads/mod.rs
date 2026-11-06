@@ -32,7 +32,7 @@ use crate::history::{History, NewDownload, SavedFile};
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
-use crate::rules::{self, Destination, RuleSubject};
+use crate::rules::{self, Destination, DownloadKind, RuleSubject};
 use crate::settings::{DownloadSettings, SettingsStore};
 use crate::site_limits::{SiteLimits, now_ms};
 use crate::sites;
@@ -844,7 +844,12 @@ impl DownloadQueue {
                         .as_ref()
                         .map(|preset| preset.name.clone())
                         .unwrap_or_default();
-                    match self.record(&item.video, &preset, &files, format) {
+                    let kind = RuleSubject {
+                        video: &item.video,
+                        preset: item.preset.as_ref(),
+                    }
+                    .kind();
+                    match self.record(&item.video, &preset, kind, &files, format) {
                         Ok(result) => {
                             item.state = QueueState::Done;
                             item.result = Some(result);
@@ -871,6 +876,7 @@ impl DownloadQueue {
         &self,
         video: &VideoInfo,
         preset_name: &str,
+        kind: DownloadKind,
         files: &[PathBuf],
         format: Option<String>,
     ) -> Result<DownloadResult, DownloadError> {
@@ -897,6 +903,7 @@ impl DownloadQueue {
             file_size,
             format,
             downloaded_at: seconds_since_epoch(),
+            kind,
         };
         let download_id =
             self.history
