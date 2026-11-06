@@ -7,6 +7,8 @@ pub mod app_info;
 pub mod atomic_file;
 pub mod browsers;
 pub mod cancel;
+#[cfg(windows)]
+pub mod clipboard;
 pub mod data_folder;
 pub mod database;
 pub mod downloads;

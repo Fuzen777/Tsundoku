@@ -285,6 +285,14 @@ impl DownloadQueue {
         })
     }
 
+    /// Whether a download not done yet has exactly this address (its page's, as the tool that read it gave it).
+    pub fn has_link(&self, url: &str) -> bool {
+        lock(&self.state)
+            .items
+            .iter()
+            .any(|item| item.state != QueueState::Done && item.video.url == url)
+    }
+
     pub fn running_count(&self) -> usize {
         lock(&self.state).running.len()
     }

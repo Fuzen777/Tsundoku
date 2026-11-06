@@ -148,6 +148,11 @@ export const strings = {
   pending: {
     emptyTitle: "Nothing Pending",
     emptyBody: "Paste or drop several links at once, and they wait here until you start them.",
+    emptyBodyWatching: "Copy links in your browser, or paste or drop several at once, and they wait here until you start them.",
+    emptyBodyRightAway: "Links you copy in your browser start downloading once they're read. Links pasted or dropped several at once wait here until you start them.",
+    watchClipboard: "Watch Clipboard",
+    watchClipboardHint: "Catch links you copy in any app",
+    checkingCopied: (count: number) => (count === 1 ? "Checking a copied link…" : `Checking ${count} copied links…`),
     count: (count: number) => `${count} ${count === 1 ? "link" : "links"}`,
     selectAll: "Select All",
     select: "Select",
@@ -488,6 +493,13 @@ export const strings = {
     },
     channelHint: "Nightly gets fixes for sites sooner, but is tested less.",
     downloads: "Downloads",
+    adding: "Adding Links",
+    watchClipboard: "Watch Clipboard",
+    watchClipboardHint:
+      "Links you copy in any app go to Pending while Tsundoku is open, even minimized. Copies holding anything besides links are left alone, and so are links to sites Tsundoku can't download from and links already downloaded or in the queue.",
+    downloadRightAway: "Download Right Away",
+    downloadRightAwayHint:
+      "Copied links start downloading once they're read, with the default preset, instead of waiting in Pending. A link that needs something from you first, such as signing in, still waits there.",
     folder: "Download Folder",
     folderHint: "Where downloads go, unless a rule or their preset picks another folder.",
     folderTitle: "Choose Where Downloads Go",

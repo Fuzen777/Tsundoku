@@ -43,13 +43,16 @@ type: Features
 
 ## Pending
 
-- **Links waiting to start**: the Pending tab holds links pasted or dropped several at once, oldest first, until they're started. They're kept through a restart.
+- **Links waiting to start**: the Pending tab holds links pasted or dropped several at once, or copied while Watch Clipboard is on, oldest first, until they're started. They're kept through a restart.
+- **Watch Clipboard**: off to start with, turned on in Settings → Adding Links or with the box on the Pending tab. While Tsundoku is open, even minimized, links copied in any app go to Pending: one link, or several on their own, separated by spaces or lines. A copy holding anything else (a sentence with a link in it) is left alone, and so are direct links to a file (an image, a PDF), what's copied inside Tsundoku itself, what a password manager marks private, and what was copied before the watcher was turned on.
+- **Checking copied links**: a copied link is read before it shows, with "Checking 2 copied links…" meanwhile. One that no tool can download (a Google Doc, a shop, a news page without a video, a channel) leaves without a word, and so does one already downloaded or in the queue. One that needs a fix, such as signing in, shows with its message and fixes like any other.
+- **Download Right Away**: with the watcher on, copied links start downloading once they're read, with the default preset, instead of waiting to be started. Links pasted or dropped by hand still wait.
 - **Read in the background**: each link is read one at a time, so its row fills in with the thumbnail, title, uploader, site and what it holds, as the preview card shows them. Instagram links wait the same random 10 to 20 seconds between reads as between files, and links from other sites are read meanwhile.
 - **Already downloaded**: a link the history has says when and with which preset, and its Start becomes Download Again. Two links to the same video are kept once. A link already in the queue says so.
 - **Start All**: sends every link to the queue except those downloaded before, already in the queue or that couldn't be read. Videos start with the preset picked in Videos Start As (the default one to start with); a link's own preset picker overrides it. Links still being read start once they're read, unless they turn out to be downloaded already.
 - **Select**: with links ticked (or all of them, with the box at the top), Start Selected and Remove Selected act on those instead. Starting a video again with the preset it was downloaded with asks first, since the new file replaces the old one.
 - **Each row**: Start (or Download Again), Remove, and the preset picker for a video. A link that couldn't be read shows why, the same fixes as the preview card, and Try Again.
-- **Sidebar count**: the number of links waiting, beside Pending.
+- **Sidebar count**: the number of links waiting, beside Pending, leaving out copied links still being checked.
 
 ## Queue
 
@@ -102,6 +105,7 @@ type: Features
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
+- **Adding Links**: Watch Clipboard, and Download Right Away for the links it catches (see Pending).
 - **Posts of Images**: Open Rules, where the rule for posts' folders is, and the pause before each Instagram file: a random time in a range, 10 to 20 seconds to start with, up to 600.
 - **Cookies**: where to read cookies from, for links that need a signed-in account or an age check. It applies to previews and downloads. Automatic (the default) finds every browser profile on the PC and picks, for each link, the one signed in to its site (by which cookies exist, never their values), or for an unknown site the one that visited it last. A single browser (Firefox, Zen, LibreWolf, Floorp, Waterfox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium) uses its profile signed in to the site, else its default one. Choosing a Chromium browser warns that they lock and encrypt their cookies on Windows; Firefox and its forks work.
 - **Supported Sites**: every site yt-dlp and gallery-dl can read, merged into one searchable list without saying which tool reads which, each site once (its playlists, channels and other parts that the tools list on their own are left out). Sites that need an account (Instagram, X, YouTube, TikTok, Reddit, Facebook, Twitch, Niconico, Bilibili) come first, under Signed In with the browser profiles signed in to them, most recent first, or under Not Signed In. The list is read again when Settings opens after a minute, since sign-ins change in the browser.

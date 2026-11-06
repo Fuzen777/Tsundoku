@@ -6,6 +6,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tsundoku_core::downloads::DownloadError;
 use tsundoku_core::pending::{self, AddedLinks, PendingLink, PendingLinks, PendingListener};
+use tsundoku_core::settings::AddingSettings;
 
 /// Sent with every pending link when they change.
 const PENDING_CHANGED_EVENT: &str = "pending-changed";
@@ -70,4 +71,18 @@ pub fn start_pending_links(
     preset_id: String,
 ) -> Result<(), DownloadError> {
     pending.start(&ids, &preset_id)
+}
+
+/// How links get added besides pasting them: the clipboard watcher and Download Right Away.
+#[tauri::command]
+pub fn adding_options(pending: Pending<'_>) -> AddingSettings {
+    pending.options()
+}
+
+#[tauri::command]
+pub fn save_adding_options(
+    pending: Pending<'_>,
+    options: AddingSettings,
+) -> Result<AddingSettings, DownloadError> {
+    pending.set_options(options)
 }

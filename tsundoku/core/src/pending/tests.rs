@@ -10,14 +10,15 @@ use crate::downloads::{
     DownloadProgress, JobOutcome, JobRunner, JobSpec, QueueItem, QueueListener, QueueServices,
 };
 use crate::history::NewDownload;
-use crate::metadata::{FileContents, PostContents};
+use crate::metadata::{FileContents, PostContents, SignInCookies};
 use crate::tools::ToolManager;
 
 /// Answers what each link is: a YouTube video, an Instagram post or a MEGA folder named after the link's end, unless
 /// a test gave another answer. A held link isn't answered until it's let go, or its read is cancelled.
 #[derive(Default)]
 struct FakeReader {
-    reads: Mutex<Vec<(String, Instant)>>,
+    /// Each link read, when, and whether yt-dlp could look at any page.
+    reads: Mutex<Vec<(String, Instant, bool)>>,
     answers: Mutex<HashMap<String, Result<Fetched, PreviewError>>>,
     held: Mutex<HashSet<String>>,
 }
@@ -38,22 +39,35 @@ impl FakeReader {
     fn reads(&self) -> Vec<String> {
         lock(&self.reads)
             .iter()
-            .map(|(link, _)| link.clone())
+            .map(|(link, _, _)| link.clone())
             .collect()
     }
 
     fn read_at(&self, link: &str) -> Instant {
         lock(&self.reads)
             .iter()
-            .find(|(read, _)| read == link)
-            .map(|(_, at)| *at)
+            .find(|(read, _, _)| read == link)
+            .map(|(_, at, _)| *at)
+            .unwrap()
+    }
+
+    fn read_any_page(&self, link: &str) -> bool {
+        lock(&self.reads)
+            .iter()
+            .find(|(read, _, _)| read == link)
+            .map(|(_, _, any_page)| *any_page)
             .unwrap()
     }
 }
 
 impl LinkReader for FakeReader {
-    fn read(&self, link: &str, cancel: &CancelToken) -> Result<Fetched, PreviewError> {
-        lock(&self.reads).push((link.to_owned(), Instant::now()));
+    fn read(
+        &self,
+        link: &str,
+        any_page: bool,
+        cancel: &CancelToken,
+    ) -> Result<Fetched, PreviewError> {
+        lock(&self.reads).push((link.to_owned(), Instant::now(), any_page));
         while lock(&self.held).contains(link) {
             if cancel.is_cancelled() {
                 return Err(PreviewError::Cancelled);
@@ -203,6 +217,43 @@ impl Test {
     fn add(&self, links: &[&str]) -> AddedLinks {
         let links: Vec<String> = links.iter().map(|link| (*link).to_owned()).collect();
         self.links.add(&links).unwrap()
+    }
+
+    /// Links copied in another app, as the clipboard watcher hands them over.
+    fn copy(&self, links: &[&str]) -> AddedLinks {
+        let links: Vec<String> = links.iter().map(|link| (*link).to_owned()).collect();
+        self.links.catch(&links).unwrap()
+    }
+
+    fn download_right_away(&self, on: bool) {
+        let options = AddingSettings {
+            watch_clipboard: true,
+            download_right_away: on,
+        };
+        assert_eq!(self.links.set_options(options).unwrap(), options);
+    }
+
+    /// Waits until a link was read and then left.
+    fn wait_until_gone(&self, link: &str) {
+        wait_until(&format!("{link} is read and gone"), || {
+            self.reader.reads().iter().any(|read| read == link) && self.link(link).is_none()
+        });
+    }
+
+    fn record_download(&self, video: &VideoInfo) {
+        self.history
+            .record(
+                video,
+                &NewDownload {
+                    preset: "Best Video".to_owned(),
+                    file_path: format!("{}.mkv", video.video_id),
+                    files: Vec::new(),
+                    file_size: None,
+                    format: None,
+                    downloaded_at: 1,
+                },
+            )
+            .unwrap();
     }
 
     fn link(&self, link: &str) -> Option<PendingLink> {
@@ -408,19 +459,7 @@ fn a_link_started_before_it_is_read_joins_the_queue_once_read() {
 #[test]
 fn a_link_downloaded_before_waits_for_the_user_even_when_started() {
     let test = Test::new();
-    test.history
-        .record(
-            &video_at(FIRST),
-            &NewDownload {
-                preset: "Best Video".to_owned(),
-                file_path: "first.mkv".to_owned(),
-                files: Vec::new(),
-                file_size: None,
-                format: None,
-                downloaded_at: 1,
-            },
-        )
-        .unwrap();
+    test.record_download(&video_at(FIRST));
     test.reader.hold(FIRST);
     test.add(&[FIRST]);
     wait_until("it's being read", || {
@@ -538,4 +577,133 @@ fn removing_a_link_being_read_stops_reading_it() {
     test.wait_until_read(SECOND);
     assert!(test.link(FIRST).is_none(), "it doesn't come back once read");
     assert_eq!(test.reopen().list().len(), 1, "nor after a restart");
+}
+
+#[test]
+fn a_copied_link_is_read_only_by_sites_the_tools_know() {
+    let test = Test::new();
+    test.copy(&[FIRST]);
+    test.add(&[SECOND]);
+    test.wait_until_read(FIRST);
+    test.wait_until_read(SECOND);
+    assert!(!test.reader.read_any_page(FIRST));
+    assert!(
+        test.reader.read_any_page(SECOND),
+        "a link added by hand may be any page"
+    );
+    assert!(test.link(FIRST).unwrap().caught);
+    assert!(!test.link(SECOND).unwrap().caught);
+}
+
+#[test]
+fn a_copied_link_with_nothing_to_download_leaves_quietly() {
+    let test = Test::new();
+    let unsupported = "https://github.com/Fuzen777/Tsundoku";
+    let article = "https://www.bbc.com/news/articles/an-article";
+    let channel = "https://www.youtube.com/@someone";
+    test.reader
+        .answer(unsupported, Err(PreviewError::UnsupportedSite));
+    test.reader.answer(
+        article,
+        Err(PreviewError::NoVideo {
+            detail: "No video formats found".to_owned(),
+        }),
+    );
+    test.reader.answer(channel, Err(PreviewError::Playlist));
+    test.copy(&[unsupported, article, channel, FIRST]);
+    for link in [unsupported, article, channel] {
+        test.wait_until_gone(link);
+    }
+    test.wait_until_read(FIRST);
+    assert_eq!(test.links.list().len(), 1);
+    assert_eq!(test.reopen().list().len(), 1, "they're gone for good");
+
+    test.reader
+        .answer(SECOND, Err(PreviewError::UnsupportedSite));
+    test.add(&[SECOND]);
+    test.wait_until_read(SECOND);
+    assert_eq!(
+        test.state(SECOND),
+        Some(PendingState::Failed),
+        "a link added by hand stays to say why"
+    );
+}
+
+#[test]
+fn a_copied_link_that_needs_a_fix_stays_to_say_so() {
+    let test = Test::new();
+    let post = "https://www.instagram.com/p/Private/";
+    let error = PreviewError::SignInRequired {
+        detail: "login required".to_owned(),
+        site: Some("Instagram".to_owned()),
+        cookies: SignInCookies::NotSignedIn,
+    };
+    test.reader.answer(post, Err(error.clone()));
+    test.copy(&[post]);
+    test.wait_until_read(post);
+    let pending = test.link(post).unwrap();
+    assert_eq!(pending.state, PendingState::Failed);
+    assert_eq!(pending.error, Some(error));
+}
+
+#[test]
+fn a_copied_link_downloaded_or_queued_already_leaves_quietly() {
+    let test = Test::new();
+    // The history and the queue have these by the same address, so they're never read.
+    test.record_download(&video_at(FIRST));
+    test.queue
+        .add(video_at(THIRD), "best-video", false)
+        .unwrap();
+    assert_eq!(test.copy(&[FIRST, THIRD]).added, 0);
+
+    // This one is read to find it's the second video, downloaded before by another address.
+    test.record_download(&video_at(SECOND));
+    let short = "https://youtu.be/second";
+    test.copy(&[short]);
+    test.wait_until_gone(short);
+    assert!(test.links.list().is_empty());
+    assert_eq!(test.reader.reads(), [short]);
+}
+
+#[test]
+fn download_right_away_starts_copied_links_once_read() {
+    let test = Test::new();
+    test.download_right_away(true);
+    let post = "https://www.instagram.com/p/Post1/";
+    test.copy(&[FIRST, post]);
+    wait_until("both are in the queue", || {
+        test.queued("first").is_some() && test.queued("Post1").is_some()
+    });
+    assert!(test.links.list().is_empty());
+    let default_id = test.presets.overview().default_id;
+    assert_eq!(test.queued("first").unwrap().preset.unwrap().id, default_id);
+
+    test.add(&[SECOND]);
+    test.wait_until_read(SECOND);
+    assert_eq!(
+        test.state(SECOND),
+        Some(PendingState::Ready),
+        "a link added by hand waits to be started"
+    );
+
+    test.download_right_away(false);
+    test.copy(&[THIRD]);
+    test.wait_until_read(THIRD);
+    assert!(
+        test.queued("third").is_none(),
+        "without it, a copied link waits too"
+    );
+}
+
+#[test]
+fn a_copied_link_is_still_copied_after_a_restart() {
+    let test = Test::new();
+    test.reader.hold(FIRST);
+    test.copy(&[FIRST]);
+    wait_until("it's being read", || {
+        test.state(FIRST) == Some(PendingState::Reading)
+    });
+    test.reader.release(FIRST);
+    let reopened = test.reopen();
+    assert!(reopened.list()[0].caught);
 }

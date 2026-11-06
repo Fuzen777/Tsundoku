@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.15 · 2026-11-06
+
+### New
+
+- **Watch Clipboard**: a new Settings → Adding Links section, and a box on the Pending tab, turn on a clipboard watcher. While Tsundoku is open, links you copy in any app go to Pending, one or several at a time. Each is checked first ("Checking 2 copied links…"): links no tool can download, and links already downloaded or in the queue, leave without a word. Copies holding anything besides links, direct links to an image or a file, what you copy inside Tsundoku and what a password manager marks private are left alone.
+- **Download Right Away**: with the watcher on, copied links start downloading once they're read, with the default preset, instead of waiting in Pending. A link that needs a fix, such as signing in, still waits there.
+
 ## 0.1.14 · 2026-11-06
 
 ### New

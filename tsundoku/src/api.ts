@@ -6,6 +6,7 @@ import { openUrl } from "@tauri-apps/plugin-opener"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { check } from "@tauri-apps/plugin-updater"
 import type { AddedLinks } from "./bindings/AddedLinks"
+import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
@@ -56,6 +57,7 @@ export const queryKeys = {
   videoDownloads: ["video-downloads"],
   downloadFiles: ["download-files"],
   downloadOptions: ["download-options"],
+  addingOptions: ["adding-options"],
   defaultDownloadFolder: ["default-download-folder"],
   supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
@@ -353,6 +355,18 @@ export async function setPendingPreset(id: number, presetId: string | null): Pro
 export async function startPendingLinks(ids: number[], presetId: string): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("start_pending_links", { ids, presetId })
+}
+
+/** How links get added besides pasting them: the clipboard watcher and Download Right Away. */
+export function getAddingOptions(): Promise<AddingSettings> {
+  if (!isTauri()) return Promise.resolve(standIns.addingOptions)
+  return invoke<AddingSettings>("adding_options")
+}
+
+/** Saves how links get added, and resolves to the options as saved. Rejects with a DownloadError. */
+export function saveAddingOptions(options: AddingSettings): Promise<AddingSettings> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<AddingSettings>("save_adding_options", { options })
 }
 
 export function onPendingChanged(handler: (links: PendingLink[]) => void): Promise<UnlistenFn> {

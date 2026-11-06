@@ -10,6 +10,7 @@ import { StatusMessage } from "./components/StatusMessage"
 import { UpdateBanner } from "./components/UpdateBanner"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { AppActionsContext, type ViewId } from "./navigation"
+import { shownPendingLinks } from "./pendingLinks"
 import { usePendingLinks, useQueue, useToolsNeedSetup } from "./queries"
 import { strings } from "./strings"
 import { useLinkDrop, usePreview } from "./usePreview"
@@ -83,7 +84,7 @@ export function App() {
         <Sidebar
           className="col-start-1 row-span-2 row-start-2"
           current={view}
-          counts={{ queue: unfinished, pending: pending.length }}
+          counts={{ queue: unfinished, pending: shownPendingLinks(pending).length }}
           onSelect={setView}
         />
         {/* Hidden while it has nothing to show, so the row takes no room. */}

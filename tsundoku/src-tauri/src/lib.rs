@@ -135,6 +135,12 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
             app: app.handle().clone(),
         }),
     })?;
+    // Links copied in other apps, while Settings → Adding Links has the watcher on.
+    #[cfg(windows)]
+    tsundoku_core::pending::watcher::watch_clipboard(
+        tsundoku_core::clipboard::SystemClipboard::new(),
+        Arc::downgrade(&pending),
+    );
 
     app.manage(Arc::clone(&tools));
     app.manage(history);
@@ -232,6 +238,8 @@ pub fn run() {
             pending::read_pending_link_again,
             pending::set_pending_preset,
             pending::start_pending_links,
+            pending::adding_options,
+            pending::save_adding_options,
             downloads::download_options,
             downloads::save_download_options,
         ])

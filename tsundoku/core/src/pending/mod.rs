@@ -1,8 +1,14 @@
-//! Links waiting to be started: pasted or dropped several at once, read one at a time in the background so each shows
-//! what it is, then started into the download queue one by one or all at once. Kept in `tsundoku.db`
-//! (`pending_links`), so they come back after a restart.
+//! Links waiting to be started: pasted or dropped several at once, or copied in another app while the clipboard
+//! watcher is on (`watcher`), read one at a time in the background so each shows what it is, then started into the
+//! download queue one by one or all at once. Kept in `tsundoku.db` (`pending_links`), so they come back after a
+//! restart.
+//!
+//! A copied link is held to a stricter standard than one added by hand, since nobody chose it for Tsundoku: yt-dlp
+//! reads only sites it knows, and a link nothing can download, or that's downloaded or in the queue already, leaves
+//! without a word. With Download Right Away on, the rest start once read.
 
 mod store;
+pub mod watcher;
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
@@ -21,7 +27,7 @@ use crate::history::History;
 use crate::metadata::{self, Fetched, PreviewError, VideoInfo};
 use crate::presets::{PresetError, PresetManager};
 use crate::preview::VideoPreview;
-use crate::settings::{PauseRange, SettingsStore};
+use crate::settings::{AddingSettings, PauseRange, SettingsStore};
 use crate::sites;
 use crate::sync::lock;
 
@@ -63,6 +69,9 @@ pub struct PendingLink {
     /// In seconds since 1970.
     #[ts(type = "number")]
     pub added_at: i64,
+    /// Copied in another app and caught by the clipboard watcher. Until it's read, the UI only counts it, since it may
+    /// turn out to be nothing to download and leave.
+    pub caught: bool,
 }
 
 /// What adding links did.
@@ -95,7 +104,13 @@ pub fn links_in(text: &str) -> Vec<String> {
 
 /// Reads what a link is, as the preview card does (`preview::ToolReader`). Tests use a fake.
 pub trait LinkReader: Send + Sync {
-    fn read(&self, link: &str, cancel: &CancelToken) -> Result<Fetched, PreviewError>;
+    /// Without `any_page`, yt-dlp reads only sites it knows (`FetchTools::any_page`), turning others down at once.
+    fn read(
+        &self,
+        link: &str,
+        any_page: bool,
+        cancel: &CancelToken,
+    ) -> Result<Fetched, PreviewError>;
 }
 
 /// Told when the pending links change, to pass them on to the UI.
@@ -125,6 +140,7 @@ struct Entry {
     preset_id: Option<String>,
     start_when_read: bool,
     added_at: i64,
+    caught: bool,
 }
 
 #[derive(Default)]
@@ -185,6 +201,40 @@ impl PendingLinks {
 
     /// Adds links to read, skipping those already here and anything that isn't a link.
     pub fn add(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
+        self.insert(links, false)
+    }
+
+    /// Adds links copied in another app (`watcher`), skipping those already here and those the queue or the history
+    /// has by the same address. Reading them tells whether anything can download them, and whether it was
+    /// downloaded before by another address.
+    pub fn catch(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
+        let new: Vec<String> = links
+            .iter()
+            .filter(|link| {
+                !self.queue.has_link(link) && !self.history.has_link(link).unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+        self.insert(&new, true)
+    }
+
+    /// How links get added besides pasting them: the clipboard watcher and Download Right Away.
+    pub fn options(&self) -> AddingSettings {
+        self.settings.get().adding
+    }
+
+    /// Saves how links get added. Turning the watcher on leaves alone what's already copied; it catches what's
+    /// copied next.
+    pub fn set_options(&self, options: AddingSettings) -> Result<AddingSettings, DownloadError> {
+        self.settings
+            .update(|settings| settings.adding = options)
+            .map_err(|error| DownloadError::Storage {
+                detail: error.to_string(),
+            })?;
+        Ok(options)
+    }
+
+    fn insert(&self, links: &[String], caught: bool) -> Result<AddedLinks, DownloadError> {
         let mut outcome = AddedLinks {
             added: 0,
             already_pending: 0,
@@ -208,14 +258,17 @@ impl PendingLinks {
                     preset_id: None,
                     start_when_read: false,
                     added_at: seconds_since_epoch(),
+                    caught,
                 };
                 entry.id = self.store.insert(&entry)?;
                 state.entries.push(entry);
                 outcome.added += 1;
             }
         }
-        self.wake.notify_all();
-        self.notify();
+        if outcome.added > 0 {
+            self.wake.notify_all();
+            self.notify();
+        }
         Ok(outcome)
     }
 
@@ -343,17 +396,21 @@ impl PendingLinks {
 
     /// The first link to read: the oldest waiting one, skipping those on a paced site while its pause runs. It's
     /// marked as being read.
-    fn next_to_read(&self) -> Option<(i64, String, CancelToken)> {
+    fn next_to_read(&self) -> Option<Turn> {
         let mut state = lock(&self.state);
         let index = readable(&state, Instant::now())?;
         let entry = &mut state.entries[index];
         entry.state = PendingState::Reading;
-        let (id, link) = (entry.id, entry.link.clone());
-        let cancel = CancelToken::new();
-        state.reading = Some((id, cancel.clone()));
+        let turn = Turn {
+            id: entry.id,
+            link: entry.link.clone(),
+            caught: entry.caught,
+            cancel: CancelToken::new(),
+        };
+        state.reading = Some((turn.id, turn.cancel.clone()));
         drop(state);
         self.notify();
-        Some((id, link, cancel))
+        Some(turn)
     }
 
     /// Waits until there may be a link to read: one is added, a paced site's pause ends, or a second goes by.
@@ -375,46 +432,58 @@ impl PendingLinks {
     }
 
     /// Reads a link and keeps what was found. A link on a paced site makes the next one wait. A link to a video
-    /// that another link here already found is dropped, and one started before it was read goes to the queue.
-    fn read(&self, id: i64, link: &str, cancel: &CancelToken) {
-        let outcome = self.reader.read(link, cancel);
+    /// that another link here already found is dropped, and one started before it was read goes to the queue. A
+    /// copied link also leaves when there's nothing to download or the history or the queue has it, and starts once
+    /// read with Download Right Away on.
+    fn read(&self, turn: &Turn) {
+        let outcome = self.reader.read(&turn.link, !turn.caught, &turn.cancel);
+        let settings = self.settings.get();
+        let right_away = turn.caught && settings.adding.download_right_away;
         {
             let mut state = lock(&self.state);
             state.reading = None;
-            if sites::paces_downloads(link) {
-                let pause = random_pause(self.settings.get().downloads.post_pause);
+            if sites::paces_downloads(&turn.link) {
+                let pause = random_pause(settings.downloads.post_pause);
                 state.paced_until = Some(Instant::now() + pause);
             }
             // Removed while it was read.
-            if cancel.is_cancelled() {
+            if turn.cancel.is_cancelled() {
                 return;
             }
-            let Some(index) = state.entries.iter().position(|entry| entry.id == id) else {
+            let Some(index) = state.entries.iter().position(|entry| entry.id == turn.id) else {
                 return;
             };
-            match outcome {
+            let leaves = match &outcome {
                 Ok(fetched) => {
                     let duplicate = state.entries.iter().any(|other| {
-                        other.id != id
+                        other.id != turn.id
                             && other
                                 .fetched
                                 .as_ref()
                                 .is_some_and(|known| same_video(&known.video, &fetched.video))
                     });
-                    if duplicate {
+                    duplicate || (turn.caught && self.has_video(&fetched.video))
+                }
+                Err(error) => turn.caught && nothing_to_download(error, &turn.link),
+            };
+            if leaves {
+                state.entries.remove(index);
+                let _ = self.store.delete(turn.id);
+                drop(state);
+                self.notify();
+                return;
+            }
+            match outcome {
+                Ok(fetched) => {
+                    let entry = &mut state.entries[index];
+                    entry.state = PendingState::Ready;
+                    entry.fetched = Some(fetched);
+                    entry.error = None;
+                    if (entry.start_when_read || right_away) && self.start_once_read(entry) {
                         state.entries.remove(index);
-                        let _ = self.store.delete(id);
+                        let _ = self.store.delete(turn.id);
                     } else {
-                        let entry = &mut state.entries[index];
-                        entry.state = PendingState::Ready;
-                        entry.fetched = Some(fetched);
-                        entry.error = None;
-                        if entry.start_when_read && self.start_once_read(entry) {
-                            state.entries.remove(index);
-                            let _ = self.store.delete(id);
-                        } else {
-                            let _ = self.store.update(&state.entries[index]);
-                        }
+                        let _ = self.store.update(&state.entries[index]);
                     }
                 }
                 Err(error) => {
@@ -432,6 +501,17 @@ impl PendingLinks {
             }
         }
         self.notify();
+    }
+
+    /// Whether the queue or the history has the video already.
+    fn has_video(&self, video: &VideoInfo) -> bool {
+        self.queue.contains(&video.site, &video.video_id)
+            || self
+                .history
+                .last_download(&video.site, &video.video_id)
+                .ok()
+                .flatten()
+                .is_some()
     }
 
     /// Adds a link started before it was read to the queue, unless the history has it: then it stays, marked, for the
@@ -476,6 +556,7 @@ impl PendingLinks {
             preset_id: entry.preset_id,
             start_when_read: entry.start_when_read,
             added_at: entry.added_at,
+            caught: entry.caught,
         }
     }
 
@@ -489,9 +570,32 @@ impl PendingLinks {
 fn read_links(links: &Weak<PendingLinks>) {
     while let Some(links) = links.upgrade() {
         match links.next_to_read() {
-            Some((id, link, cancel)) => links.read(id, &link, &cancel),
+            Some(turn) => links.read(&turn),
             None => links.wait_for_work(),
         }
+    }
+}
+
+/// A link's turn to be read.
+struct Turn {
+    id: i64,
+    link: String,
+    caught: bool,
+    cancel: CancelToken,
+}
+
+/// Whether a copied link's error means there's nothing there to download, rather than something to fix such as
+/// signing in: then it leaves without a word.
+fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
+    match error {
+        PreviewError::InvalidLink
+        | PreviewError::UnsupportedSite
+        | PreviewError::NoVideo { .. }
+        | PreviewError::Playlist => true,
+        // Without gallery-dl, a page with no video may be images; on a site that isn't about images, it's more
+        // likely just a page.
+        PreviewError::ImagesNotSetUp => !sites::prefers_images(link),
+        _ => false,
     }
 }
 

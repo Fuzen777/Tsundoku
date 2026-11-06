@@ -1,8 +1,9 @@
-import { useCallback } from "react"
+import { useCallback, useState } from "react"
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   checkForAppUpdate,
   detectTools,
+  getAddingOptions,
   getAppInfo,
   getDefaultDownloadFolder,
   getDownloadDestination,
@@ -21,7 +22,9 @@ import {
   getToolsNeedSetup,
   getToolsOverview,
   queryKeys,
+  saveAddingOptions,
 } from "./api"
+import type { AddingSettings } from "./bindings/AddingSettings"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
@@ -29,6 +32,7 @@ import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
+import { describeDownloadError, type ErrorDescription } from "./errors"
 
 /*
   React Query hooks over api.ts. The tool queries never go stale on their own: they change only through the app's
@@ -185,6 +189,27 @@ export function useDefaultDownloadFolder() {
 
 export function useDownloadOptions() {
   return useQuery({ queryKey: queryKeys.downloadOptions, queryFn: getDownloadOptions, staleTime: Infinity })
+}
+
+export function useAddingOptions() {
+  return useQuery({ queryKey: queryKeys.addingOptions, queryFn: getAddingOptions, staleTime: Infinity })
+}
+
+/** Saves changes to how links get added, from Settings or the Pending view's switch, with the error if it failed. */
+export function useSaveAddingOptions() {
+  const queryClient = useQueryClient()
+  const { data: options } = useAddingOptions()
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const save = async (changes: Partial<AddingSettings>) => {
+    if (!options) return
+    setError(null)
+    try {
+      queryClient.setQueryData(queryKeys.addingOptions, await saveAddingOptions({ ...options, ...changes }))
+    } catch (caught) {
+      setError(describeDownloadError(caught))
+    }
+  }
+  return { options, save, error }
 }
 
 /**

@@ -23,4 +23,9 @@ startWhenRead: boolean,
 /**
  * In seconds since 1970.
  */
-addedAt: number, };
+addedAt: number, 
+/**
+ * Copied in another app and caught by the clipboard watcher. Until it's read, the UI only counts it, since it may
+ * turn out to be nothing to download and leave.
+ */
+caught: boolean, };

@@ -23,6 +23,7 @@ pub struct Settings {
     pub presets: PresetsSettings,
     pub downloads: DownloadSettings,
     pub rules: RulesSettings,
+    pub adding: AddingSettings,
 }
 
 impl Settings {
@@ -57,6 +58,17 @@ struct BeforeRules {
 #[serde(rename_all = "camelCase", default)]
 struct DownloadsBeforeRules {
     posts_folder: Option<String>,
+}
+
+/// How links get added besides pasting them. Settings → Adding Links edits it; both start off.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct AddingSettings {
+    /// Links copied in any app go to the pending links (`pending::watcher`) while Tsundoku runs.
+    pub watch_clipboard: bool,
+    /// Copied links start downloading once read, with the default preset, instead of waiting to be started.
+    pub download_right_away: bool,
 }
 
 /// How downloads run. Settings → Downloads edits it.

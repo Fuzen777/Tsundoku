@@ -291,6 +291,17 @@ impl History {
         Ok(download)
     }
 
+    /// Whether a video downloaded before has exactly this address (its page's, as the tool that read it gave it).
+    pub fn has_link(&self, url: &str) -> Result<bool, HistoryError> {
+        let connection = self.database.lock();
+        let found = connection.query_row(
+            "SELECT EXISTS (SELECT 1 FROM videos v JOIN downloads d ON d.video = v.id WHERE v.url = ?1)",
+            [url],
+            |row| row.get(0),
+        )?;
+        Ok(found)
+    }
+
     /// Every download of a video in the history, newest first.
     pub fn downloads_of(&self, video_row: i64) -> Result<Vec<PastDownload>, HistoryError> {
         let connection = self.database.lock();

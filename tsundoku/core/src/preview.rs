@@ -57,7 +57,7 @@ impl PreviewService {
         if let Some(previous) = lock(&self.current).replace(cancel.clone()) {
             previous.cancel();
         }
-        let fetched = read_with_tools(tools, queue.options().cookies_browser, &link, &cancel);
+        let fetched = read_with_tools(tools, queue.options().cookies_browser, &link, true, &cancel);
         {
             let mut current = lock(&self.current);
             if current.as_ref().is_some_and(|token| token.is_same(&cancel)) {
@@ -93,19 +93,25 @@ pub struct ToolReader {
 }
 
 impl LinkReader for ToolReader {
-    fn read(&self, link: &str, cancel: &CancelToken) -> Result<Fetched, PreviewError> {
+    fn read(
+        &self,
+        link: &str,
+        any_page: bool,
+        cancel: &CancelToken,
+    ) -> Result<Fetched, PreviewError> {
         let cookies_choice = self.settings.get().downloads.cookies_browser;
-        read_with_tools(&self.tools, cookies_choice, link, cancel)
+        read_with_tools(&self.tools, cookies_choice, link, any_page, cancel)
     }
 }
 
 /// Reads `link` (from `normalize_link`): a file host's itself (`hosts`), any other with the tools that are set up
-/// (`read_link`). When it needs a signed-in account, the error says which site and whether a browser is signed in
-/// to it.
+/// (`read_link`). Without `any_page`, yt-dlp only reads sites it knows (`FetchTools::any_page`). When it needs a
+/// signed-in account, the error says which site and whether a browser is signed in to it.
 fn read_with_tools(
     tools: &ToolManager,
     cookies_choice: Option<CookiesBrowser>,
     link: &str,
+    any_page: bool,
     cancel: &CancelToken,
 ) -> Result<Fetched, PreviewError> {
     let yt_dlp = tools.executable(ToolId::YtDlp);
@@ -118,6 +124,7 @@ fn read_with_tools(
         deno: deno.as_deref(),
         ffmpeg: ffmpeg.as_deref(),
         cookies: cookies.clone(),
+        any_page,
     };
     let gallery_tools = GalleryTools {
         gallery_dl: gallery_dl.as_deref(),

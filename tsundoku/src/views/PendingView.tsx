@@ -13,22 +13,28 @@ import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
-import { SelectInput } from "../components/Field"
+import { Checkbox, SelectInput } from "../components/Field"
 import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
-import { usePendingLinks, usePresets } from "../queries"
+import { shownPendingLinks } from "../pendingLinks"
+import { usePendingLinks, usePresets, useSaveAddingOptions } from "../queries"
 import { strings } from "../strings"
 
 /**
- * Links waiting to be started: pasted or dropped several at once, each read in the background to show what it is.
- * Start All sends every link not downloaded before to the queue (those still being read go once they're read); with
- * links selected, Start Selected and Remove Selected act on those instead.
+ * Links waiting to be started: pasted or dropped several at once, or copied while Watch Clipboard is on, each read in
+ * the background to show what it is. Copied links still being read are only counted, since they may turn out to be
+ * nothing to download. Start All sends every link not downloaded before to the queue (those still being read go once
+ * they're read); with links selected, Start Selected and Remove Selected act on those instead.
  */
 export function PendingView() {
-  const { data: links = [] } = usePendingLinks()
+  const { data: allLinks = [] } = usePendingLinks()
+  const links = shownPendingLinks(allLinks)
+  const checking = allLinks.length - links.length
+  const adding = useSaveAddingOptions()
+  const watching = adding.options?.watchClipboard ?? false
   const { data: presets } = usePresets()
   const [chosenPresetId, setChosenPresetId] = useState<string | null>(null)
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set())
@@ -85,7 +91,18 @@ export function PendingView() {
     })
   }
 
-  const actions =
+  const watchSwitch = (
+    <span title={strings.pending.watchClipboardHint} className="mr-2 text-fg-secondary">
+      <Checkbox
+        label={strings.pending.watchClipboard}
+        checked={watching}
+        disabled={!adding.options}
+        onChange={(checked) => void adding.save({ watchClipboard: checked })}
+      />
+    </span>
+  )
+
+  const buttons =
     selected.length > 0 ? (
       <>
         <Button
@@ -114,10 +131,31 @@ export function PendingView() {
       )
     )
 
+  const emptyBody = !watching
+    ? strings.pending.emptyBody
+    : adding.options?.downloadRightAway
+      ? strings.pending.emptyBodyRightAway
+      : strings.pending.emptyBodyWatching
+
   return (
-    <Page title={strings.nav.pending} actions={actions}>
+    <Page
+      title={strings.nav.pending}
+      actions={
+        <>
+          {watchSwitch}
+          {buttons}
+        </>
+      }
+    >
+      {adding.error && <StatusMessage tone="danger" {...adding.error} />}
+      {checking > 0 && (
+        <p className="mb-3 flex items-center gap-1.5 text-fg-secondary">
+          <Loader2 size={14} className="shrink-0 animate-spin" />
+          {strings.pending.checkingCopied(checking)}
+        </p>
+      )}
       {links.length === 0 ? (
-        <EmptyState icon={Inbox} title={strings.pending.emptyTitle} body={strings.pending.emptyBody} />
+        <EmptyState icon={Inbox} title={strings.pending.emptyTitle} body={emptyBody} />
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-4">

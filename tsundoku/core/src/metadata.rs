@@ -172,6 +172,9 @@ pub struct FetchTools<'a> {
     pub ffmpeg: Option<&'a Path>,
     /// The `--cookies-from-browser` value (`browsers::cookies_for`), or `None` for no cookies.
     pub cookies: Option<String>,
+    /// Whether yt-dlp may look for a video on any web page (its generic extractor). Off for links copied in other
+    /// apps, so a link to a site yt-dlp doesn't know is turned down at once, without visiting it.
+    pub any_page: bool,
 }
 
 /// What a fetch found.
@@ -285,6 +288,9 @@ fn command(tools: &FetchTools, yt_dlp: &Path, link: &str) -> ProgramCommand {
     }
     if let Some(cookies) = &tools.cookies {
         command = command.arg("--cookies-from-browser").arg(cookies);
+    }
+    if !tools.any_page {
+        command = command.args(["--ies", "default,-generic"]);
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
     command.arg("--").arg(link)
@@ -402,7 +408,7 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
 
     if mentions(&["is not a valid url"]) {
         PreviewError::InvalidLink
-    } else if mentions(&["unsupported url"]) {
+    } else if mentions(&["unsupported url", "no suitable extractor"]) {
         PreviewError::UnsupportedSite
     } else if mentions(&[
         "no video formats found",
@@ -592,6 +598,12 @@ mod tests {
     #[test]
     fn classifies_known_messages() {
         let classify = |line: &str| classify_failure(&[line]);
+        assert_eq!(
+            classify(
+                "ERROR: No suitable extractor found for URL https://github.com/Fuzen777/Tsundoku"
+            ),
+            PreviewError::UnsupportedSite
+        );
         assert!(matches!(
             classify(
                 "ERROR: [youtube] abc: Sign in to confirm your age. This video may be inappropriate for some users."
@@ -664,6 +676,7 @@ mod tests {
             deno: None,
             ffmpeg: Some(Path::new(r"C:\tools\ffmpeg.exe")),
             cookies: Some("firefox".to_owned()),
+            any_page: true,
         };
         let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
         let args: Vec<_> = command
@@ -681,5 +694,28 @@ mod tests {
             args.windows(2)
                 .any(|pair| pair == ["--ffmpeg-location", r"C:\tools\ffmpeg.exe"])
         );
+        assert!(!args.contains(&"--ies".to_owned()));
+    }
+
+    #[test]
+    fn can_leave_out_the_generic_extractor() {
+        let tools = FetchTools {
+            yt_dlp: Some(Path::new("yt-dlp.exe")),
+            deno: None,
+            ffmpeg: None,
+            cookies: None,
+            any_page: false,
+        };
+        let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
+        let args: Vec<_> = command
+            .arguments()
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--ies", "default,-generic"])
+        );
+        assert_eq!(&args[args.len() - 2..], ["--", "https://example.com/v"]);
     }
 }

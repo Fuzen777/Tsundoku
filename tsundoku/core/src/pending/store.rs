@@ -23,7 +23,7 @@ impl PendingStore {
         let connection = self.database.lock();
         let mut statement = connection
             .prepare(
-                "SELECT id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at
+                "SELECT id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught
                 FROM pending_links ORDER BY id",
             )
             .map_err(storage_error)?;
@@ -39,6 +39,7 @@ impl PendingStore {
                     row.get::<_, Option<String>>(6)?,
                     row.get::<_, bool>(7)?,
                     row.get::<_, i64>(8)?,
+                    row.get::<_, bool>(9)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -55,6 +56,7 @@ impl PendingStore {
                 preset_id,
                 start_when_read,
                 added_at,
+                caught,
             ) = row.map_err(storage_error)?;
             let fetched = video
                 .and_then(|json| serde_json::from_str(&json).ok())
@@ -78,6 +80,7 @@ impl PendingStore {
                 preset_id,
                 start_when_read,
                 added_at,
+                caught,
             });
         }
         Ok(entries)
@@ -89,8 +92,8 @@ impl PendingStore {
         connection
             .query_row(
                 "INSERT INTO pending_links
-                    (link, state, video, missing_js_runtime, error, preset, start_when_read, added_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING id",
+                    (link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) RETURNING id",
                 params![
                     entry.link,
                     state_name(entry.state),
@@ -100,6 +103,7 @@ impl PendingStore {
                     entry.preset_id,
                     entry.start_when_read,
                     entry.added_at,
+                    entry.caught,
                 ],
                 |row| row.get(0),
             )

@@ -77,6 +77,8 @@ const MIGRATIONS: &[&str] = &[
         start_when_read INTEGER NOT NULL DEFAULT 0,
         added_at INTEGER NOT NULL
     );",
+    // 6: links copied in another app and caught from the clipboard, which leave quietly when nothing can download them.
+    "ALTER TABLE pending_links ADD COLUMN caught INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub struct Database {

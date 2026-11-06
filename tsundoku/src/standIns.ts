@@ -1,3 +1,4 @@
+import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
@@ -198,6 +199,7 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
     presetId: null,
     startWhenRead: false,
     addedAt: 1_793_876_473,
+    caught: false,
     ...fields,
   }
 }
@@ -283,6 +285,7 @@ export const standIns = {
     cookiesBrowser: "automatic",
     postPause: { min: 10, max: 20 },
   } satisfies DownloadSettings,
+  addingOptions: { watchClipboard: true, downloadRightAway: false } satisfies AddingSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   folderRules: [
     {
@@ -360,6 +363,8 @@ export const standIns = {
       state: "failed",
       error: { kind: "signInRequired", detail: "login required", site: "Instagram", cookies: "notSignedIn" },
     }),
+    pendingStandIn(8, "https://www.instagram.com/p/Copied1/", { state: "reading", caught: true }),
+    pendingStandIn(9, "https://github.com/Fuzen777/Tsundoku", { state: "waiting", caught: true }),
   ] satisfies PendingLink[],
   /** Words that start with http:// or https://, each once: the core also takes links without them. */
   linksInText(text: string): string[] {
