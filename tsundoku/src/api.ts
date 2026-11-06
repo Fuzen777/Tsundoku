@@ -334,6 +334,28 @@ export async function cancelDownload(id: number): Promise<void> {
   await invoke("cancel_download", { id })
 }
 
+/** Pause All: stops every running download, keeping its partial files, and holds every waiting one. */
+export async function stopAllDownloads(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("stop_all_downloads")
+}
+
+export async function resumeAllDownloads(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("resume_all_downloads")
+}
+
+export async function retryFailedDownloads(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("retry_failed_downloads")
+}
+
+/** Moves a waiting download to the front of the line, so it starts before the others waiting. */
+export async function downloadNext(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("download_next", { id })
+}
+
 export async function clearFinishedDownloads(): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("clear_finished_downloads")

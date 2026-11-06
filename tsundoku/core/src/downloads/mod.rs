@@ -199,6 +199,28 @@ pub trait QueueListener: Send + Sync {
     fn progress(&self, id: i64, progress: &DownloadProgress);
 }
 
+/// What the tray's one item for the whole queue does: Pause All while anything runs or waits, else Resume All while
+/// something is stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WholeQueueAction {
+    PauseAll,
+    ResumeAll,
+}
+
+impl WholeQueueAction {
+    /// `None` when there's nothing to pause or resume.
+    pub fn for_items(items: &[QueueItem]) -> Option<Self> {
+        let any_in = |states: &[QueueState]| items.iter().any(|item| states.contains(&item.state));
+        if any_in(&[QueueState::Running, QueueState::Waiting]) {
+            Some(Self::PauseAll)
+        } else if any_in(&[QueueState::Stopped]) {
+            Some(Self::ResumeAll)
+        } else {
+            None
+        }
+    }
+}
+
 /// What ends a running download early, set before its process is ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EndRequest {
@@ -384,14 +406,52 @@ impl DownloadQueue {
         Ok(())
     }
 
+    /// Pause All: Stop for every download running or waiting. The running ones end keeping their partial files, the
+    /// waiting ones are held. One being cancelled is left to finish cancelling.
+    pub fn stop_all(&self) -> Result<(), DownloadError> {
+        let mut state = lock(&self.state);
+        let contents = &mut *state;
+        let mut saved = Ok(());
+        // The waiting ones first: a running one that ends meanwhile waits for this lock, then finds nothing to start.
+        for item in contents
+            .items
+            .iter_mut()
+            .filter(|item| item.state == QueueState::Waiting)
+        {
+            item.state = QueueState::Stopped;
+            saved = saved.and(self.store.update(item));
+        }
+        for running in contents
+            .running
+            .values_mut()
+            .filter(|running| running.end_request.is_none())
+        {
+            running.end_request = Some(EndRequest::Stop);
+            running.cancel.cancel();
+        }
+        drop(state);
+        self.notify();
+        saved
+    }
+
     /// Puts a stopped download back in line.
     pub fn resume(&self, id: i64) -> Result<(), DownloadError> {
         self.requeue(id, QueueState::Stopped)
     }
 
+    /// Resume All: Resume for every stopped download, which start in their order.
+    pub fn resume_all(&self) -> Result<(), DownloadError> {
+        self.requeue_all(QueueState::Stopped)
+    }
+
     /// Puts a failed download back in line. Its partial files are kept, so it continues where it failed.
     pub fn retry(&self, id: i64) -> Result<(), DownloadError> {
         self.requeue(id, QueueState::Failed)
+    }
+
+    /// Retry Failed: Retry for every failed download.
+    pub fn retry_failed(&self) -> Result<(), DownloadError> {
+        self.requeue_all(QueueState::Failed)
     }
 
     fn requeue(&self, id: i64, from: QueueState) -> Result<(), DownloadError> {
@@ -401,12 +461,56 @@ impl DownloadQueue {
             if item.state != from {
                 return Err(DownloadError::WrongState);
             }
-            item.state = QueueState::Waiting;
-            item.error = None;
-            self.store.update(item)?;
+            self.put_back_in_line(item)?;
         }
         self.schedule();
         Ok(())
+    }
+
+    /// Puts every download in the state `from` back in line. One that can't be saved still goes; the first error is
+    /// the answer.
+    fn requeue_all(&self, from: QueueState) -> Result<(), DownloadError> {
+        let mut saved = Ok(());
+        {
+            let mut state = lock(&self.state);
+            for item in state.items.iter_mut().filter(|item| item.state == from) {
+                saved = saved.and(self.put_back_in_line(item));
+            }
+        }
+        self.schedule();
+        saved
+    }
+
+    /// Resume and Retry, for one download or all of them.
+    fn put_back_in_line(&self, item: &mut QueueItem) -> Result<(), DownloadError> {
+        item.state = QueueState::Waiting;
+        item.error = None;
+        self.store.update(item)
+    }
+
+    /// Download Next: moves a waiting download to the front of the line, so it starts before every other waiting one.
+    /// The order is saved, so it holds through a restart.
+    pub fn download_next(&self, id: i64) -> Result<(), DownloadError> {
+        let mut state = lock(&self.state);
+        let index = state
+            .items
+            .iter()
+            .position(|item| item.id == id)
+            .ok_or(DownloadError::NotFound)?;
+        if state.items[index].state != QueueState::Waiting {
+            return Err(DownloadError::WrongState);
+        }
+        self.store.move_to_front(id)?;
+        let item = state.items.remove(index);
+        state.items.insert(0, item);
+        drop(state);
+        self.notify();
+        Ok(())
+    }
+
+    /// What the tray's Pause All item would do now.
+    pub fn whole_queue_action(&self) -> Option<WholeQueueAction> {
+        WholeQueueAction::for_items(&lock(&self.state).items)
     }
 
     /// Removes a download that isn't done, deleting its partial files. A running one is ended first; its thread
@@ -496,9 +600,10 @@ impl DownloadQueue {
         self.logs_folder.join(format!("{id}.log"))
     }
 
-    /// Starts waiting items while there's room, in the order they were added. A post on a site that limits how fast
-    /// it's read (Instagram) waits while another of that site's posts runs, since each pauses between its files on
-    /// its own and two at once would read twice as fast; downloads from other sites go ahead of it meanwhile.
+    /// Starts waiting items while there's room, in the queue's order: the order they were added, apart from those
+    /// Download Next moved to the front. A post on a site that limits how fast it's read (Instagram) waits while another
+    /// of that site's posts runs, since each pauses between its files on its own and two at once would read twice as
+    /// fast; downloads from other sites go ahead of it meanwhile.
     fn schedule(&self) {
         let at_once = self.settings.get().downloads.at_once.max(1) as usize;
         let mut started = Vec::new();

@@ -348,6 +348,150 @@ fn a_failed_download_can_be_retried() {
 }
 
 #[test]
+fn pause_all_stops_running_downloads_and_holds_waiting_ones_until_resume_all() {
+    let test = Test::new();
+    let [first, second, third] = ["a", "b", "c"].map(|id| test.add(id));
+    wait_until("two run", || test.runner.started().len() == 2);
+
+    test.queue.stop_all().unwrap();
+    wait_until("all three stop", || {
+        [first, second, third]
+            .iter()
+            .all(|id| test.state(*id) == Some(QueueState::Stopped))
+    });
+    assert_eq!(
+        test.runner.started().len(),
+        2,
+        "the waiting one never started"
+    );
+    assert!(test.temp_folder(first).exists(), "partial files are kept");
+    assert_eq!(test.queue.store.state_of(third), Some(QueueState::Stopped));
+
+    test.queue.resume_all().unwrap();
+    wait_until("two run again", || test.runner.started().len() == 4);
+    let mut resumed = test.runner.started()[2..].to_vec();
+    resumed.sort_unstable();
+    assert_eq!(resumed, [first, second], "they start in their order");
+    assert_eq!(test.state(third), Some(QueueState::Waiting));
+}
+
+#[test]
+fn pause_all_leaves_a_cancelled_download_to_be_removed() {
+    let test = Test::new();
+    let id = test.add("a");
+    wait_until("it runs", || test.state(id) == Some(QueueState::Running));
+    test.queue.cancel(id).unwrap();
+    test.queue.stop_all().unwrap();
+    wait_until("it's gone", || test.state(id).is_none());
+    assert!(!test.temp_folder(id).exists());
+}
+
+#[test]
+fn retry_failed_retries_every_failed_download_and_nothing_else() {
+    let test = Test::new();
+    let [first, second, held] = ["a", "b", "c"].map(|id| test.add(id));
+    test.queue.stop(held).unwrap();
+    wait_until("two run", || test.runner.started().len() == 2);
+    for id in [first, second] {
+        test.runner
+            .complete(id, JobOutcome::Failed(DownloadError::NoFile));
+    }
+    wait_until("both fail", || {
+        test.state(first) == Some(QueueState::Failed)
+            && test.state(second) == Some(QueueState::Failed)
+    });
+
+    test.queue.retry_failed().unwrap();
+    wait_until("both run again", || test.runner.started().len() == 4);
+    assert!(
+        test.queue.items().iter().all(|item| item.error.is_none()),
+        "their errors are cleared"
+    );
+    assert_eq!(
+        test.state(held),
+        Some(QueueState::Stopped),
+        "a stopped one stays"
+    );
+}
+
+#[test]
+fn download_next_moves_a_waiting_download_to_the_front_for_good() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let [first, second, third, fourth] = ["a", "b", "c", "d"].map(|id| test.add(id));
+    wait_until("the first runs", || test.runner.started() == [first]);
+    assert_eq!(
+        test.queue.download_next(first),
+        Err(DownloadError::WrongState),
+        "only a waiting one moves"
+    );
+    assert_eq!(test.queue.download_next(99), Err(DownloadError::NotFound));
+
+    test.queue.download_next(third).unwrap();
+    test.queue.download_next(fourth).unwrap();
+    let saved: Vec<i64> = test
+        .queue
+        .store
+        .load()
+        .unwrap()
+        .iter()
+        .map(|item| item.id)
+        .collect();
+    assert_eq!(
+        saved,
+        [fourth, third, first, second],
+        "the order is saved, the latest moved first"
+    );
+
+    test.runner.complete(first, test.finished_file("a.mkv"));
+    wait_until("the next one starts", || test.runner.started().len() == 2);
+    assert_eq!(test.runner.started()[1], fourth);
+    test.runner.complete(fourth, test.finished_file("d.mkv"));
+    wait_until("then the one after", || test.runner.started().len() == 3);
+    assert_eq!(test.runner.started()[2], third);
+    test.queue.stop_all().unwrap();
+}
+
+fn item_in(state: QueueState) -> QueueItem {
+    QueueItem {
+        id: 1,
+        video: video("a"),
+        preset: None,
+        folder: String::new(),
+        state,
+        overwrite: false,
+        added_at: 0,
+        result: None,
+        error: None,
+        progress: None,
+    }
+}
+
+#[test]
+fn the_tray_pauses_while_anything_runs_or_waits_else_resumes() {
+    let action = |states: &[QueueState]| {
+        let items: Vec<QueueItem> = states.iter().map(|state| item_in(*state)).collect();
+        WholeQueueAction::for_items(&items)
+    };
+    assert_eq!(action(&[]), None);
+    assert_eq!(action(&[QueueState::Done, QueueState::Failed]), None);
+    assert_eq!(
+        action(&[QueueState::Stopped, QueueState::Done]),
+        Some(WholeQueueAction::ResumeAll)
+    );
+    assert_eq!(
+        action(&[QueueState::Stopped, QueueState::Waiting]),
+        Some(WholeQueueAction::PauseAll)
+    );
+    assert_eq!(
+        action(&[QueueState::Running]),
+        Some(WholeQueueAction::PauseAll)
+    );
+}
+
+#[test]
 fn refuses_a_video_already_in_the_queue() {
     let test = Test::new();
     test.add("a");

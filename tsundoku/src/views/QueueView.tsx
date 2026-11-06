@@ -3,11 +3,15 @@ import { CircleStop, FileText, FolderOpen, ListVideo, Play, RefreshCw, X } from 
 import {
   cancelDownload,
   clearFinishedDownloads,
+  downloadNext,
   openDownload,
   openDownloadLog,
+  resumeAllDownloads,
   resumeDownload,
   retryDownload,
+  retryFailedDownloads,
   showDownloadInFolder,
+  stopAllDownloads,
   stopDownload,
 } from "../api"
 import { arrange, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
@@ -21,6 +25,7 @@ import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { IconButton } from "../components/IconButton"
+import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
 import { ProgressBar } from "../components/ProgressBar"
 import { StatusMessage } from "../components/StatusMessage"
@@ -31,32 +36,41 @@ import { useListArrangement, useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
 import { strings } from "../strings"
 
+/** The buttons for the whole queue, each shown while a download is in a state it acts on, as the row's own button. */
+const WHOLE_QUEUE_ACTIONS: readonly { label: string; states: readonly QueueState[]; action: () => Promise<void> }[] = [
+  { label: strings.queue.pauseAll, states: ["running", "waiting"], action: stopAllDownloads },
+  { label: strings.queue.resumeAll, states: ["stopped"], action: resumeAllDownloads },
+  { label: strings.queue.retryFailed, states: ["failed"], action: retryFailedDownloads },
+  { label: strings.queue.clearFinished, states: ["done"], action: clearFinishedDownloads },
+]
+
 /** Every download added and not cleared yet, grouped and sorted as its toolbar says. */
 export function QueueView() {
   const { data: items = [] } = useQueue()
-  const [clearError, setClearError] = useState<ErrorDescription | null>(null)
-  const hasFinished = items.some((item) => item.state === "done")
+  const [queueError, setQueueError] = useState<ErrorDescription | null>(null)
   const { arrangement, ready, change: changeArrangement, error: arrangeError } = useListArrangement("queue")
   const { group } = arrangement
   const groups = arrange(items, arrangement, queueFacts, group === "none" ? null : (item) => queueGroup(item, group))
+  const actions = WHOLE_QUEUE_ACTIONS.filter(({ states }) => items.some((item) => states.includes(item.state)))
 
-  const clearFinished = () => {
-    setClearError(null)
-    clearFinishedDownloads().catch((error: unknown) => setClearError(describeDownloadError(error)))
+  const actOnAll = (action: () => Promise<void>) => {
+    setQueueError(null)
+    action().catch((error: unknown) => setQueueError(describeDownloadError(error)))
   }
 
   return (
     <Page
       title={strings.nav.queue}
       actions={
-        hasFinished && (
-          <Button size="sm" onClick={clearFinished}>
-            {strings.queue.clearFinished}
+        actions.length > 0 &&
+        actions.map(({ label, action }) => (
+          <Button key={label} size="sm" onClick={() => actOnAll(action)}>
+            {label}
           </Button>
-        )
+        ))
       }
     >
-      {clearError && <StatusMessage tone="danger" {...clearError} />}
+      {queueError && <StatusMessage tone="danger" {...queueError} />}
       {items.length === 0 ? (
         <EmptyState icon={ListVideo} title={strings.queue.emptyTitle} body={strings.queue.emptyBody} />
       ) : (
@@ -184,6 +198,12 @@ function QueueRow({ item }: { item: QueueItem }) {
         )}
         {item.state !== "done" && (
           <IconButton label={strings.queue.cancel} icon={X} onClick={() => act(cancelDownload)} />
+        )}
+        {item.state === "waiting" && (
+          <Menu
+            label={strings.queue.moreActions}
+            items={[{ label: strings.queue.downloadNext, onSelect: () => act(downloadNext) }]}
+          />
         )}
       </div>
     </Card>

@@ -39,6 +39,11 @@ export const strings = {
     emptyTitle: "Nothing in the Queue",
     emptyBody: "Paste a video link above to download it.",
     clearFinished: "Clear Finished",
+    pauseAll: "Pause All",
+    resumeAll: "Resume All",
+    retryFailed: "Retry Failed",
+    moreActions: "More Actions",
+    downloadNext: "Download Next",
     stages: {
       waiting: "Waiting",
       starting: "Starting",

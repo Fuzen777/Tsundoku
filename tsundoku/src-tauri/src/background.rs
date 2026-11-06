@@ -17,7 +17,7 @@ use tauri_plugin_global_shortcut::{
 };
 use tauri_plugin_notification::NotificationExt;
 use tsundoku_core::data_folder;
-use tsundoku_core::downloads::{DownloadError, DownloadQueue};
+use tsundoku_core::downloads::{DownloadError, DownloadQueue, QueueItem, WholeQueueAction};
 use tsundoku_core::pending::{self, PendingLink, PendingLinks};
 use tsundoku_core::presets::PresetManager;
 use tsundoku_core::settings::{BackgroundSettings, ClipboardShortcut, SettingsStore};
@@ -43,6 +43,7 @@ const TRAY_ID: &str = "main";
 const OPEN_ID: &str = "open";
 const WATCH_ID: &str = "watch-clipboard";
 const START_ALL_ID: &str = "start-all";
+const PAUSE_ALL_ID: &str = "pause-all";
 const QUIT_ID: &str = "quit";
 
 /// What the tray, the question before quitting and the notifications say. The UI's own texts are in strings.ts;
@@ -59,6 +60,9 @@ mod text {
             count => format!("Start All Pending ({count})"),
         }
     }
+
+    pub const PAUSE_ALL: &str = "Pause All Downloads";
+    pub const RESUME_ALL: &str = "Resume All Downloads";
 
     pub const QUIT_TITLE: &str = "Downloads Are Running";
     pub const QUIT_CONFIRM: &str = "Quit";
@@ -119,8 +123,8 @@ mod text {
     }
 }
 
-/// The tray menu's items that change while it shows: Watch Clipboard's tick and Start All Pending's count. `None`
-/// while there's no tray icon.
+/// The tray menu's items that change while it shows: Watch Clipboard's tick, Start All Pending's count, and Pause All
+/// Downloads, which is Resume All Downloads while everything is stopped. `None` while there's no tray icon.
 #[derive(Default)]
 pub struct TrayMenu {
     items: Mutex<Option<TrayItems>>,
@@ -129,6 +133,7 @@ pub struct TrayMenu {
 struct TrayItems {
     watch: CheckMenuItem<Wry>,
     start_all: MenuItem<Wry>,
+    pause_all: MenuItem<Wry>,
 }
 
 impl TrayMenu {
@@ -274,6 +279,14 @@ fn show_tray(app: &AppHandle, show: bool) -> tauri::Result<()> {
         startable > 0,
         None::<&str>,
     )?;
+    let whole_queue = app.state::<Arc<DownloadQueue>>().whole_queue_action();
+    let pause_all = MenuItem::with_id(
+        app,
+        PAUSE_ALL_ID,
+        pause_all_text(whole_queue),
+        whole_queue.is_some(),
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, QUIT_ID, text::QUIT, true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
@@ -282,6 +295,7 @@ fn show_tray(app: &AppHandle, show: bool) -> tauri::Result<()> {
             &PredefinedMenuItem::separator(app)?,
             &watch,
             &start_all,
+            &pause_all,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -305,7 +319,11 @@ fn show_tray(app: &AppHandle, show: bool) -> tauri::Result<()> {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
-    tray_menu.set_items(Some(TrayItems { watch, start_all }));
+    tray_menu.set_items(Some(TrayItems {
+        watch,
+        start_all,
+        pause_all,
+    }));
     Ok(())
 }
 
@@ -323,8 +341,38 @@ fn on_menu_item(app: &AppHandle, id: &str) {
             watching_changed(app, pending.options().watch_clipboard);
         }
         START_ALL_ID => start_all_pending(app),
+        PAUSE_ALL_ID => pause_or_resume_all(app),
         QUIT_ID => quit(app),
         _ => {}
+    }
+}
+
+/// Pause All Downloads, or Resume All Downloads while everything is stopped: what the item says once the queue has
+/// told the menu, worked out again in case it changed since. A failure to save shows in the Queue view's rows.
+fn pause_or_resume_all(app: &AppHandle) {
+    let queue = app.state::<Arc<DownloadQueue>>();
+    let _ = match queue.whole_queue_action() {
+        Some(WholeQueueAction::PauseAll) => queue.stop_all(),
+        Some(WholeQueueAction::ResumeAll) => queue.resume_all(),
+        None => Ok(()),
+    };
+}
+
+fn pause_all_text(action: Option<WholeQueueAction>) -> &'static str {
+    match action {
+        Some(WholeQueueAction::ResumeAll) => text::RESUME_ALL,
+        Some(WholeQueueAction::PauseAll) | None => text::PAUSE_ALL,
+    }
+}
+
+/// Keeps Pause All Downloads current: Resume All Downloads while everything is stopped, off with nothing to do.
+pub fn queue_changed(app: &AppHandle, items: &[QueueItem]) {
+    let action = WholeQueueAction::for_items(items);
+    if let Some(tray_menu) = app.try_state::<TrayMenu>() {
+        tray_menu.with_items(|tray_items| {
+            let _ = tray_items.pause_all.set_text(pause_all_text(action));
+            let _ = tray_items.pause_all.set_enabled(action.is_some());
+        });
     }
 }
 

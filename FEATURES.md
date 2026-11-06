@@ -21,7 +21,7 @@ type: Features
 - **Icons for row actions**: the actions on each row or card (Start, Remove, Stop, Resume, Retry, Cancel, Open File, Show in Folder, Edit, Delete…) are icons, and hovering one shows its name. A view's main actions (Add, Download, Start All, Clear Finished, Add Rule) keep their words.
 - **Remembered placement**: the window reopens at its last size and position, maximized if it was.
 - **One window**: opening Tsundoku while it is already running brings the open window to the front.
-- **Keep running in the tray**: with Settings → Running in the Background → Keep Running in the Tray on, closing the window leaves Tsundoku in the notification area, still downloading and watching the clipboard. Clicking its icon opens the window; its right-click menu has Open Tsundoku, Watch Clipboard (ticked while on), Start All Pending with how many links it would start, and Quit Tsundoku, which asks first while downloads run. Off to start with: closing the window then quits, asking first while downloads run.
+- **Keep running in the tray**: with Settings → Running in the Background → Keep Running in the Tray on, closing the window leaves Tsundoku in the notification area, still downloading and watching the clipboard. Clicking its icon opens the window; its right-click menu has Open Tsundoku, Watch Clipboard (ticked while on), Start All Pending with how many links it would start, Pause All Downloads (Resume All Downloads while every download is stopped), and Quit Tsundoku, which asks first while downloads run. Off to start with: closing the window then quits, asking first while downloads run.
 - **Start with Windows**: Tsundoku opens when you sign in to Windows; with Keep Running in the Tray on, it starts in the tray without showing its window.
 - **Notifications**: while the window isn't in front (hidden, minimized or behind another app), a Windows notification says when a copied link was added to Pending or started downloading (with its title), what the clipboard shortcut or the browser added, and how many links Start All Pending started from the tray. Clicking one opens Tsundoku. On to start with; Settings → Adding Links → Show Notifications turns them off.
 
@@ -67,11 +67,13 @@ type: Features
 ## Queue
 
 - **Two at a time**: downloads start in the order they were added, two at once.
+- **Download Next**: a waiting download's ⋯ menu moves it to the front, so it starts before the others waiting, even after a restart.
+- **The whole queue**: on the title's right, Pause All stops every download running and holds every one waiting, Resume All resumes every stopped one, Retry Failed retries every failed one and Clear Finished removes the finished ones. Each does what the row's own button does, and shows only while a download needs it.
 - **Posts**: a post's row shows what it holds ("3 images, 1 video") instead of a preset, and its progress counts files. On Instagram, each file waits a random 5 to 10 seconds first (Settings → Instagram), so the account isn't blocked.
 - **MEGA, MediaFire, Google Drive and Dropbox**: a file host's row shows what it holds instead of a preset. Its progress covers every file together, with the speed limit applied; Stop and Retry continue the file they stopped in.
 - **One Instagram post at a time**: while an Instagram post downloads, the next one waits, since two at once would read twice as fast. Downloads from other sites go ahead of it meanwhile.
 - **Each row**: thumbnail, title, preset, what it's doing (Downloading Video, Downloading Audio, Merging, Converting, Embedding…), size, speed and time left, with a progress bar.
-- **Group and sort**: as in Pending, the toolbar groups the downloads by their folder, their site or where they stand (downloading, waiting, stopped, failed, done), and sorts them by date added, title, uploader or site, either way. Downloads still start in the order they were added. The choice is kept through a restart.
+- **Group and sort**: as in Pending, the toolbar groups the downloads by their folder, their site or where they stand (downloading, waiting, stopped, failed, done), and sorts them by date added, title, uploader or site, either way. Downloads still start in the order they were added, or that Download Next gave them. The choice is kept through a restart.
 - **Stop and Resume**: Stop ends the download and keeps what it got; Resume continues from there. Stopping one that's waiting holds it.
 - **Cancel**: removes the download and its partial files.
 - **Failed downloads**: the reason, in plain words with yt-dlp's error under it, and Retry, which continues where it failed.

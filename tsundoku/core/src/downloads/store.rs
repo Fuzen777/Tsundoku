@@ -16,13 +16,13 @@ impl QueueStore {
         Self { database }
     }
 
-    /// Every item, oldest first.
+    /// Every item, in the queue's order: those Download Next moved, the latest moved first, then the rest oldest first.
     pub fn load(&self) -> Result<Vec<QueueItem>, DownloadError> {
         let connection = self.database.lock();
         let mut statement = connection
             .prepare(
                 "SELECT id, video, preset, folder, state, overwrite, added_at, result, error
-                FROM queue_items ORDER BY id",
+                FROM queue_items ORDER BY position, id",
             )
             .map_err(storage_error)?;
         let rows = statement
@@ -103,6 +103,19 @@ impl QueueStore {
                     item.result.as_ref().map(to_json),
                     item.error.as_ref().map(to_json),
                 ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    /// Download Next: puts the item before every other. Items are added at position 0, and a moved one takes one less
+    /// than the lowest, so the latest moved comes first.
+    pub fn move_to_front(&self, id: i64) -> Result<(), DownloadError> {
+        self.database
+            .lock()
+            .execute(
+                "UPDATE queue_items SET position = (SELECT MIN(position) FROM queue_items) - 1 WHERE id = ?1",
+                [id],
             )
             .map_err(storage_error)?;
         Ok(())

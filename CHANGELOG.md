@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.35 · 2026-11-06
+
+### Added
+
+- **Buttons for the whole queue**: on the queue's title's right, Pause All stops every running download and holds every waiting one, Resume All resumes every stopped one, and Retry Failed retries every failed one. Each does what the row's own button does and shows only while a download needs it. The tray menu has Pause All Downloads too, which reads Resume All Downloads while every download is stopped.
+- **Download Next**: a waiting download's ⋯ menu moves it to the front of the line, so it starts before the others waiting, even after a restart.
+
 ## 0.1.34 · 2026-11-06
 
 ### Changed

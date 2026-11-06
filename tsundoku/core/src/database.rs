@@ -79,6 +79,9 @@ const MIGRATIONS: &[&str] = &[
     );",
     // 6: links copied in another app and caught from the clipboard, which leave quietly when nothing can download them.
     "ALTER TABLE pending_links ADD COLUMN caught INTEGER NOT NULL DEFAULT 0;",
+    // 7: the queue's order. Items are added at 0 and start by position, then ID; Download Next gives one a position
+    // below every other.
+    "ALTER TABLE queue_items ADD COLUMN position INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub struct Database {

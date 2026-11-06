@@ -20,7 +20,7 @@ flowchart LR
 ```
 
 1. Download on the preview card adds the video to the queue with a copy of the preset, so editing the preset later doesn't change it. A video can't be in the queue twice until it's done.
-2. The queue starts waiting items while fewer than `downloads.atOnce` (2) run, in the order they were added. A post on a paced site (Instagram, `sites::paces_downloads`) waits while another of those runs, since each pauses between its files on its own; items behind it from other sites start meanwhile.
+2. The queue starts waiting items while fewer than `downloads.atOnce` (2) run, in the queue's order: the order they were added, apart from those Download Next moved to the front. A post on a paced site (Instagram, `sites::paces_downloads`) waits while another of those runs, since each pauses between its files on its own; items behind it from other sites start meanwhile.
 3. Each run is a thread running yt-dlp to its end. Its progress reaches the UI as events; its output goes to the item's log.
 4. When yt-dlp finishes, the file is recorded in the history (a `videos` row if it's new, and a `downloads` row) and `archive.txt` is rewritten. The item is Done.
 
@@ -46,6 +46,8 @@ stateDiagram-v2
 - The queue is saved in `tsundoku.db` (`queue_items`). An item that was running when the app closed or crashed comes back Stopped; waiting ones start again.
 - Stop and Cancel both end the process (the whole job object, ffmpeg included). The run's thread then settles the item: Stop leaves it Stopped with its partial files; Cancel deletes its temporary folder and removes it.
 - Retry and Resume put the item back in line. yt-dlp continues `.part` files by default, so neither starts over.
+- Pause All, Resume All and Retry Failed (`stop_all`, `resume_all`, `retry_failed`) do Stop, Resume and Retry for every item in the state each acts on, through the same code as the single-item actions. Pause All holds the waiting items before it ends the running ones, so none starts in between, and leaves an item being cancelled to its cancel.
+- Download Next (`download_next`) moves a waiting item to the front. `queue_items.position` is 0 for a new item and one less than the lowest for a moved one; the queue loads and starts by position, then ID, so the order holds through a restart.
 
 ## Arguments
 

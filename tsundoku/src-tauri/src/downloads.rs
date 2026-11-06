@@ -30,6 +30,7 @@ pub struct EventListener {
 impl QueueListener for EventListener {
     fn changed(&self, items: &[QueueItem]) {
         let _ = self.app.emit(QUEUE_CHANGED_EVENT, items);
+        crate::background::queue_changed(&self.app, items);
     }
 
     fn progress(&self, id: i64, progress: &DownloadProgress) {
@@ -160,6 +161,28 @@ pub fn retry_download(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
 #[tauri::command]
 pub fn cancel_download(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
     queue.cancel(id)
+}
+
+/// Pause All: stops every running download and holds every waiting one.
+#[tauri::command]
+pub fn stop_all_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
+    queue.stop_all()
+}
+
+#[tauri::command]
+pub fn resume_all_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
+    queue.resume_all()
+}
+
+#[tauri::command]
+pub fn retry_failed_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
+    queue.retry_failed()
+}
+
+/// Moves a waiting download to the front of the line.
+#[tauri::command]
+pub fn download_next(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
+    queue.download_next(id)
 }
 
 #[tauri::command]
