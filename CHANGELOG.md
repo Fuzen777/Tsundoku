@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.58 · 2026-11-06
+
+### Added
+
+- **Room checked before downloading**: before a download starts, Tsundoku checks there's room for it on its drive. One that won't fit waits instead of failing partway, with "D: has 3.1 GB free, and this needs 14.0 GB." on its row, while the downloads after it that fit go ahead. It starts by itself once there's room: the drive is looked at again every 30 seconds, whenever a download ends or is removed, and on Retry or Resume. What the downloads already running on that drive still need is set aside, and a small margin, since sizes are estimates. A shared file's size is exact; a video's is the estimate for the formats its preset picks, read with its link. A post of images, a video added before Tsundoku restarted, or one whose site gives no sizes starts as before.
+
 ## 0.1.57 · 2026-11-06
 
 ### Added

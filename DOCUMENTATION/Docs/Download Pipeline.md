@@ -84,6 +84,12 @@ The downloads started since the queue was last idle make up its run (`downloads:
 - A run that finds a file host's download limit used up (`PreviewError::LimitReached`: MEGA's transfer quota, a Google Drive or Dropbox file's) waits 30 minutes, doubled each time it's still used up, up to 4 hours, and never fails for it.
 - Its `Hold` (`retry` or `limitReached`) says when; Try Now ends the wait. A finished run, Resume and Retry start the count over. Like the site waits, these live in memory: after a restart, a waiting download tries again at once.
 
+## Room on the Drive
+
+- As the queue is about to start a waiting download, it checks the download's drive has room for it (`downloads/room_check.rs`): what it's expected to take (`room::expected_bytes`), with a margin of 100 MB and 5%, against the drive's free space less what the downloads already running there still need.
+- What it takes is known for a file host's link (its files' size) and, for a video, estimated from the sizes yt-dlp gave for its formats when its link was read, for those its preset picks. A post, a video read before Tsundoku started or one without sizes isn't checked.
+- One that won't fit stays Waiting with `Hold::NotEnoughRoom`, and the next waiting download is tried. It's checked again 30 seconds later (`until`) and whenever the queue schedules (a download ends, is removed, retried or resumed), and starts once there's room.
+
 ## Arguments
 
 `runner.rs` builds the command, Tsundoku's arguments first so the preset's can change them:

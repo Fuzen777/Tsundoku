@@ -9,6 +9,7 @@ use ts_rs::TS;
 
 use crate::cancel::CancelToken;
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
+use crate::room::{self, FormatSize, FormatSizes};
 use crate::tools::{ToolCacheFolder, ToolError, ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
@@ -446,6 +447,9 @@ struct InfoJson {
     live_status: Option<String>,
     height: Option<u32>,
     vcodec: Option<String>,
+    acodec: Option<String>,
+    filesize: Option<f64>,
+    filesize_approx: Option<f64>,
     #[serde(default)]
     formats: Vec<FormatJson>,
 }
@@ -454,6 +458,9 @@ struct InfoJson {
 struct FormatJson {
     height: Option<u32>,
     vcodec: Option<String>,
+    acodec: Option<String>,
+    filesize: Option<f64>,
+    filesize_approx: Option<f64>,
 }
 
 pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
@@ -492,7 +499,17 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
             .max()
     };
 
-    Ok(VideoInfo {
+    let sizes = format_sizes(
+        &info.formats,
+        &FormatJson {
+            height: info.height,
+            vcodec: info.vcodec.clone(),
+            acodec: info.acodec.clone(),
+            filesize: info.filesize,
+            filesize_approx: info.filesize_approx,
+        },
+    );
+    let video = VideoInfo {
         site: extractor_key.to_lowercase(),
         site_name: info
             .webpage_url_domain
@@ -509,7 +526,36 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         post: None,
         files: None,
         post_files: Vec::new(),
-    })
+    };
+    // Kept for when it's downloaded, to check there's room for it first.
+    room::remember_sizes(&video, sizes);
+    Ok(video)
+}
+
+/// What each format weighs, for `room`. An answer without a list of formats is its own one format (`own`).
+fn format_sizes(formats: &[FormatJson], own: &FormatJson) -> FormatSizes {
+    let formats = if formats.is_empty() {
+        vec![format_size(own)]
+    } else {
+        formats.iter().map(format_size).collect()
+    };
+    FormatSizes { formats }
+}
+
+/// A format's size: its `filesize`, else its `filesize_approx`. It's video as for `best_height`, and has sound unless
+/// its `acodec` is "none".
+fn format_size(format: &FormatJson) -> FormatSize {
+    FormatSize {
+        height: format
+            .height
+            .filter(|_| format.vcodec.as_deref() != Some("none")),
+        audio: format.acodec.as_deref() != Some("none"),
+        bytes: format
+            .filesize
+            .or(format.filesize_approx)
+            .filter(|bytes| *bytes >= 1.0)
+            .map(|bytes| bytes as u64),
+    }
 }
 
 /// "20050424" to "2005-04-24".
@@ -698,6 +744,39 @@ mod tests {
             Err(PreviewError::Failed { .. })
         ));
         assert!(matches!(parse_info("{}"), Err(PreviewError::Failed { .. })));
+    }
+
+    #[test]
+    fn keeps_what_the_formats_weigh_for_the_room_check() {
+        let answer = r#"{ "id": "sized", "extractor_key": "Youtube", "formats": [
+            { "height": null, "vcodec": "none", "acodec": "opus", "filesize": 3000000 },
+            { "height": 1080, "vcodec": "avc1", "acodec": "none", "filesize_approx": 90000000.5 },
+            { "height": 720, "vcodec": "avc1", "acodec": "none" }
+        ] }"#;
+        let video = parse_info(answer).unwrap();
+        let preset = |id: &str| {
+            crate::presets::built_in_presets()
+                .into_iter()
+                .find(|preset| preset.id == id)
+        };
+        assert_eq!(
+            room::expected_bytes(&video, preset("best-video").as_ref()),
+            Some(93_000_000)
+        );
+        assert_eq!(
+            room::expected_bytes(&video, preset("audio-mp3").as_ref()),
+            Some(3_000_000)
+        );
+
+        let one_format = parse_info(
+            r#"{ "id": "one", "extractor_key": "Vimeo", "height": 480, "vcodec": "h264", "acodec": "aac",
+                "filesize": 20000000 }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            room::expected_bytes(&one_format, preset("best-video").as_ref()),
+            Some(20_000_000)
+        );
     }
 
     #[test]

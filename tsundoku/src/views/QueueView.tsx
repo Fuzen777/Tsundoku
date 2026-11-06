@@ -36,7 +36,7 @@ import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
 import { pickSummary } from "../postFiles"
-import { describeHold, useTimeLeft } from "../holds"
+import { describeHold, holdEnd, useTimeLeft } from "../holds"
 import { useListArrangement, useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
 import { strings } from "../strings"
@@ -145,7 +145,7 @@ function QueueRow({ item }: { item: QueueItem }) {
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const stage = stageLabel(item, progress)
   const hold = item.state === "waiting" ? item.hold : null
-  const holdTimeLeft = useTimeLeft(hold?.until ?? null)
+  const holdTimeLeft = useTimeLeft(hold ? holdEnd(hold) : null)
 
   const act = (action: (id: number) => Promise<void>, describe = describeDownloadError) => {
     setActionError(null)

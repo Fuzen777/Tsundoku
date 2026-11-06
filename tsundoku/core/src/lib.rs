@@ -26,6 +26,7 @@ pub mod post_names;
 pub mod presets;
 pub mod preview;
 pub mod process;
+pub mod room;
 pub mod rules;
 pub mod settings;
 pub mod site_limits;

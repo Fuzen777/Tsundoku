@@ -19,4 +19,12 @@ until: number, } | { "kind": "limitReached", site: string,
 /**
  * In milliseconds since 1970.
  */
+until: number, } | { "kind": "notEnoughRoom", 
+/**
+ * "D:", or "\\server\share".
+ */
+drive: string, free: number, needed: number, others: number, 
+/**
+ * In milliseconds since 1970.
+ */
 until: number, };

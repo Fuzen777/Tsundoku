@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import type { Hold } from "./bindings/Hold"
 import type { SiteWait } from "./bindings/SiteWait"
-import { formatClockTime, formatDuration } from "./format"
+import { formatBytes, formatClockTime, formatDuration } from "./format"
 import { strings } from "./strings"
 
 /** Why a waiting download doesn't start yet, as a sentence, and when it continues: its site asked to slow down, the
@@ -17,7 +17,21 @@ export function describeHold(hold: Hold): string {
       return strings.queue.holds.retry(hold.attempt, hold.attempts, time)
     case "limitReached":
       return strings.queue.holds.limitReached(hold.site, time)
+    case "notEnoughRoom":
+      return hold.others > 0
+        ? strings.queue.holds.notEnoughRoomBeside(
+            hold.drive,
+            formatBytes(hold.free),
+            formatBytes(hold.needed),
+            formatBytes(hold.others),
+          )
+        : strings.queue.holds.notEnoughRoom(hold.drive, formatBytes(hold.free), formatBytes(hold.needed))
   }
+}
+
+/** When a hold ends, for its countdown: none for a drive without room, which is only looked at again then. */
+export function holdEnd(hold: Hold): number | null {
+  return hold.kind === "notEnoughRoom" ? null : hold.until
 }
 
 /** Why a link in Pending isn't read yet: its site asked to slow down. */

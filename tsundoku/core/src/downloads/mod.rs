@@ -6,6 +6,7 @@ mod file_runner;
 mod holds;
 mod post_runner;
 mod progress;
+mod room_check;
 mod run;
 mod runner;
 mod store;
@@ -22,6 +23,7 @@ use ts_rs::TS;
 
 pub use self::holds::{Hold, Recovery};
 use self::holds::{asked_to_slow_down, watch_holds};
+use self::room_check::Reserved;
 pub use self::run::{Notice, QueueRun, RunEvent, RunSummary, TaskbarProgress, notices};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
@@ -32,6 +34,7 @@ use crate::history::{History, NewDownload, SavedFile};
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
+use crate::room::{DiskSpace, SystemDisks};
 use crate::rules::{self, Destination, DownloadKind, RuleSubject};
 use crate::settings::{DownloadSettings, SettingsStore};
 use crate::site_limits::{SiteLimits, now_ms};
@@ -303,6 +306,8 @@ pub struct DownloadQueue {
     presets: Arc<PresetManager>,
     settings: Arc<SettingsStore>,
     logs_folder: PathBuf,
+    /// What each drive has free, to check a download has room before it starts (`room_check`).
+    disks: Mutex<Arc<dyn DiskSpace>>,
     runner: Arc<dyn JobRunner>,
     listener: Arc<dyn QueueListener>,
     /// Each site's wait after it answered "too many requests", which the pending links and the preview card follow too.
@@ -337,6 +342,7 @@ impl DownloadQueue {
             presets: services.presets,
             settings: services.settings,
             logs_folder: services.logs_folder,
+            disks: Mutex::new(Arc::new(SystemDisks)),
             runner: services.runner,
             listener: services.listener,
             limits: SiteLimits::new(),
@@ -638,7 +644,8 @@ impl DownloadQueue {
         state.items.retain(|item| item.id != id);
         self.store.delete(id)?;
         drop(state);
-        self.notify();
+        // Its partial files are gone: a download waiting for room may fit now.
+        self.schedule();
         Ok(())
     }
 
@@ -777,6 +784,8 @@ impl DownloadQueue {
             // Through a plain reference, so the items and the running map can be borrowed at once.
             let contents = &mut *state;
             self.settle_holds(&mut contents.items, now_ms());
+            // What the downloads already running need on their drives, and those started below once each starts.
+            let mut reserved = Reserved::of_running(&contents.items);
             while contents.running.len() < at_once {
                 let pacing = contents
                     .items
@@ -789,6 +798,11 @@ impl DownloadQueue {
                 }) else {
                     break;
                 };
+                // A download that won't fit waits, held, and the next one is tried.
+                if let Some(hold) = self.room_hold(item, &mut reserved, now_ms()) {
+                    item.hold = Some(hold);
+                    continue;
+                }
                 item.state = QueueState::Running;
                 item.progress = Some(DownloadProgress::at(DownloadStage::Starting));
                 if let Err(error) = self.store.update(item) {

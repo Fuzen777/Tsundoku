@@ -126,6 +126,21 @@ pub enum Hold {
         #[ts(type = "number")]
         until: i64,
     },
+    /// Its drive has `free` bytes, and it needs `needed` (with a margin) besides the `others` that the downloads
+    /// running there still need (`room`). Checked again at `until`, and whenever a download ends or is removed.
+    NotEnoughRoom {
+        /// "D:", or "\\server\share".
+        drive: String,
+        #[ts(type = "number")]
+        free: u64,
+        #[ts(type = "number")]
+        needed: u64,
+        #[ts(type = "number")]
+        others: u64,
+        /// In milliseconds since 1970.
+        #[ts(type = "number")]
+        until: i64,
+    },
 }
 
 impl Hold {
@@ -136,6 +151,7 @@ impl Hold {
             | Self::HourlyLimit { until, .. }
             | Self::Retry { until, .. }
             | Self::LimitReached { until, .. } => *until,
+            Self::NotEnoughRoom { until, .. } => *until,
         }
     }
 }

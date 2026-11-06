@@ -1242,6 +1242,119 @@ fn a_video_isnt_added_as_a_post() {
     assert!(test.queue.items().is_empty());
 }
 
+/// A drive whose free space the test sets.
+struct FakeDisk {
+    free: Mutex<u64>,
+}
+
+impl crate::room::DiskSpace for FakeDisk {
+    fn free(&self, _folder: &Path) -> Option<crate::room::DriveSpace> {
+        Some(crate::room::DriveSpace {
+            drive: "D:".to_owned(),
+            free: *lock(&self.free),
+        })
+    }
+}
+
+const GB: u64 = 1024 * 1024 * 1024;
+
+impl Test {
+    /// Has the queue see a drive with `free` bytes, and gives it, to change later.
+    fn disk_with(&self, free: u64) -> Arc<FakeDisk> {
+        let disk = Arc::new(FakeDisk {
+            free: Mutex::new(free),
+        });
+        self.queue.use_disk_space(disk.clone());
+        disk
+    }
+
+    /// Adds a file host's link to a file of `bytes`, whose size is known before it starts.
+    fn add_share(&self, id: &str, bytes: u64) -> i64 {
+        let share = VideoInfo {
+            site: "mega".to_owned(),
+            site_name: "mega.nz".to_owned(),
+            url: format!("https://mega.nz/file/{id}#key"),
+            duration_seconds: None,
+            best_height: None,
+            files: Some(crate::metadata::FileContents { count: 1, bytes }),
+            ..video(id)
+        };
+        self.queue.add_post(share).unwrap().id
+    }
+
+    /// Waits until the download waits for room, and gives its hold.
+    fn held_for_room(&self, id: i64) -> Hold {
+        wait_until("it waits for room", || {
+            matches!(self.item(id).hold, Some(Hold::NotEnoughRoom { .. }))
+        });
+        assert_eq!(self.item(id).state, QueueState::Waiting);
+        self.item(id).hold.unwrap()
+    }
+}
+
+#[test]
+fn a_download_without_room_waits_while_others_go_on() {
+    let test = Test::new();
+    let disk = test.disk_with(GB);
+    let big = test.add_share("big", 5 * GB);
+    let small = test.add_share("small", GB / 10);
+    wait_until("the small one runs", || {
+        test.runner.started().contains(&small)
+    });
+    match test.held_for_room(big) {
+        Hold::NotEnoughRoom {
+            drive,
+            free,
+            needed,
+            others,
+            ..
+        } => {
+            assert_eq!(drive, "D:");
+            assert_eq!(free, GB);
+            assert!(needed > 5 * GB, "with a margin");
+            assert_eq!(others, 0, "checked before the small one started");
+        }
+        other => panic!("held for {other:?}"),
+    }
+    assert!(!test.runner.started().contains(&big));
+
+    *lock(&disk.free) = 10 * GB;
+    test.queue.check_room_again();
+    wait_until("the big one runs once there's room", || {
+        test.runner.started().contains(&big)
+    });
+    assert_eq!(test.item(big).hold, None);
+    test.cancel_all();
+}
+
+#[test]
+fn a_finished_download_leaves_room_for_the_next() {
+    let test = Test::new();
+    test.disk_with(3 * GB);
+    let first = test.add_share("first", 2 * GB);
+    wait_until("the first runs", || test.runner.started().contains(&first));
+    let second = test.add_share("second", GB);
+    assert!(
+        matches!(test.held_for_room(second), Hold::NotEnoughRoom { others, .. } if others == 2 * GB),
+        "the first's share is set aside"
+    );
+
+    test.runner.complete(first, test.finished_file("first.zip"));
+    wait_until("the second runs", || {
+        test.runner.started().contains(&second)
+    });
+    test.cancel_all();
+}
+
+#[test]
+fn a_download_of_unknown_size_starts_as_before() {
+    let test = Test::new();
+    test.disk_with(0);
+    let id = test.add("unknown-size");
+    wait_until("it runs", || test.runner.started().contains(&id));
+    test.cancel_all();
+}
+
 #[test]
 fn downloads_a_file_hosts_link_without_a_preset() {
     let test = Test::new();

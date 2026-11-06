@@ -139,6 +139,10 @@ export const strings = {
       retry: (attempt: number, attempts: number, time: string) =>
         `The connection dropped. Trying again at ${time} (${attempt} of ${attempts}).`,
       limitReached: (site: string, time: string) => `${site}'s download limit is used up. Continuing at ${time}.`,
+      notEnoughRoom: (drive: string, free: string, needed: string) =>
+        `${drive} has ${free} free, and this needs ${needed}. It starts by itself once there's room.`,
+      notEnoughRoomBeside: (drive: string, free: string, needed: string, others: string) =>
+        `${drive} has ${free} free, and this needs ${needed} besides the ${others} the downloads running there still need. It starts by itself once there's room.`,
     },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>
