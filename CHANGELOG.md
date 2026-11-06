@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.26 · 2026-11-06
+
+### Fixed
+
+- **The setup's options show all their text**: a long path under an option, such as a tool found on the PC, wraps onto more lines instead of being cut off.
+
 ## 0.1.25 · 2026-11-06
 
 ### Changed

@@ -385,7 +385,7 @@ interface ChoiceOptionProps {
   detail: string
 }
 
-/** A radio option with a label and a line of detail, the whole row clickable. A row that opens a folder picker stays
+/** A radio option with a label and its detail under it, the whole row clickable. A row that opens a folder picker stays
  * unchecked until a folder is picked; clicking it again picks another. */
 function ChoiceOption({ name, checked, onSelect, label, detail }: ChoiceOptionProps) {
   return (
@@ -400,9 +400,8 @@ function ChoiceOption({ name, checked, onSelect, label, detail }: ChoiceOptionPr
       />
       <span className="min-w-0">
         <span className="block font-medium">{label}</span>
-        <span className="block truncate text-xs text-fg-secondary" title={detail}>
-          {detail}
-        </span>
+        {/* Wrapped, a long path anywhere, so the whole of it shows. */}
+        <span className="block text-xs wrap-anywhere text-fg-secondary">{detail}</span>
       </span>
     </label>
   )

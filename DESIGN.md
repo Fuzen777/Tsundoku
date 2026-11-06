@@ -140,7 +140,7 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 - **A few options side by side** (an update channel): `SegmentedControl`, the selected option filled with the accent.
 - **A longer list** (a video quality, the preset to download with): a native select.
-- **Options with a line of explanation each** (a tool's copy at setup): radio rows, the whole row clickable, the label in medium weight and the explanation in 12 px secondary text, truncated with the full text in a tooltip.
+- **Options with a line of explanation each** (a tool's copy at setup): radio rows, the whole row clickable, the label in medium weight and the explanation in 12 px secondary text, wrapped (a long path anywhere) so all of it shows.
 
 ---
 
