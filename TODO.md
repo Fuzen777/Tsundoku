@@ -37,8 +37,8 @@ rules:
 
 ### Playlists and Channels
 
-- [ ] **Playlist entry picker.** Pasting a playlist or channel link lists its videos (`--flat-playlist`), with the ones already downloaded greyed out and unchecked, and queues the checked ones. This lifts v1's single-video rule. From here yt-dlp also reads `archive.txt` (`--download-archive`), so it skips known videos itself.
-- [ ] **Channel subscriptions.** Watch a channel or playlist, check it on a schedule, and queue only new uploads (`--break-on-existing` with the archive). Builds on the picker's playlist handling.
+- [x] **Playlist entry picker.** Pasting a YouTube channel or playlist, or an Instagram account, lists its items in the preview card, with the ones already downloaded greyed out and unticked, and queues the ticked ones. Phase 1 of Watched Links. Downloads don't read `archive.txt` (`--download-archive`), which would block Download Again.
+- [ ] **Watched Links** (was Channel subscriptions). Phases 2 to 4: a Watched tab of channels, playlists and accounts, checked on a schedule, queuing only what's new (`listing::before_known_ground`, which stops past the pinned posts), with a folder of their own and notifications. Shorts and past live streams, and X accounts, come with them.
 
 ### File Hosts
 

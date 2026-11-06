@@ -41,6 +41,17 @@ describe("describePreviewError", () => {
   })
 })
 
+describe("pages of several videos or posts", () => {
+  it("points a listing in Pending to the add bar, and names a site that can't be listed, without naming a tool", () => {
+    expect(describePreviewError({ kind: "playlist" }).message).toContain("add bar")
+    const refused = describePreviewError({ kind: "notListable", site: "X" }).message
+    expect(refused).toBe(
+      "This X page holds several videos or posts, which Tsundoku can't list yet. Paste a link to a single one instead.",
+    )
+    expect(refused).not.toMatch(/yt-dlp|gallery-dl/)
+  })
+})
+
 describe("describeHistoryError", () => {
   it("shows a missing file's path", () => {
     expect(describeHistoryError({ kind: "fileMissing", path: String.raw`D:\Videos\a.mkv` })).toEqual({

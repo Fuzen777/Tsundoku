@@ -202,6 +202,7 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 - **A few options side by side** (an update channel): `SegmentedControl`, the selected option filled with the accent.
 - **A longer list** (a video quality, the preset to download with): a native select.
 - **Options with a line of explanation each** (a tool's copy at setup): radio rows, the whole row clickable, the label in medium weight and the explanation in 12 px secondary text, wrapped (a long path anywhere) so all of it shows.
+- **Many items to pick from** (a channel's videos, in the preview card's `ListingPicker`): the card's header as for one video (a channel's or account's picture is a 96 px circle), then a select-all checkbox with "12 of 50 selected", then a list that scrolls on its own (at most 28 rem or half the window), one row per item, the whole row clickable: its checkbox, the thumbnail (96 px), the title and "date · length" in 12 px secondary text. An item the history or the queue has is greyed (muted title, thumbnail at half opacity) with a pill on the right (Downloaded, In Queue: a line border, 12 px secondary text, rounded), and an item in the queue can't be ticked. Rows off screen aren't laid out (`content-visibility: auto`), so hundreds scroll smoothly. At the bottom right, Videos Start As with the preset picker when there are videos, then Download Selected with the count (`primary`).
 
 ---
 

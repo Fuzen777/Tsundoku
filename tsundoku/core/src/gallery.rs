@@ -40,13 +40,26 @@ pub fn fetch(
     link: &str,
     cancel: &CancelToken,
 ) -> Result<VideoInfo, PreviewError> {
+    let json = run(tools, link, &[], FETCH_TIMEOUT, cancel)?;
+    parse_answer(&json, link)
+}
+
+/// Runs gallery-dl on the link, with `extra` arguments after Tsundoku's own (`listing` adds how many posts to list),
+/// and returns its answer, or why it failed. `link` must come from `metadata::normalize_link`.
+pub(crate) fn run(
+    tools: &GalleryTools,
+    link: &str,
+    extra: &[&str],
+    timeout: Duration,
+    cancel: &CancelToken,
+) -> Result<String, PreviewError> {
     let Some(gallery_dl) = tools.gallery_dl else {
         return Err(PreviewError::ImagesNotSetUp);
     };
     let output = process::run_collecting_with_cancel(
-        &command(tools, gallery_dl, link),
+        &command(tools, gallery_dl, extra, link),
         cancel,
-        FETCH_TIMEOUT,
+        timeout,
     )
     .map_err(|error| match error {
         RunError::Start { source, .. } => PreviewError::Tool {
@@ -55,7 +68,7 @@ pub fn fetch(
         },
         RunError::Cancelled => PreviewError::Cancelled,
         RunError::TimedOut => PreviewError::Network {
-            detail: format!("no answer within {} seconds", FETCH_TIMEOUT.as_secs()),
+            detail: format!("no answer within {} seconds", timeout.as_secs()),
         },
         RunError::Wait(source) => PreviewError::Failed {
             detail: source.to_string(),
@@ -73,11 +86,10 @@ pub fn fetch(
             .collect();
         return Err(classify_exit(output.status.code(), &stderr));
     }
-    let json: String = output.stdout().collect();
-    parse_answer(&json, link)
+    Ok(output.stdout().collect())
 }
 
-fn command(tools: &GalleryTools, gallery_dl: &Path, link: &str) -> ProgramCommand {
+fn command(tools: &GalleryTools, gallery_dl: &Path, extra: &[&str], link: &str) -> ProgramCommand {
     let mut command = ProgramCommand::new(gallery_dl).args([
         // gallery-dl's spelling of yt-dlp's --ignore-config: a config file of the user's can't change the answer.
         "--config-ignore",
@@ -91,7 +103,7 @@ fn command(tools: &GalleryTools, gallery_dl: &Path, link: &str) -> ProgramComman
         command = command.args(caches.gallery_dl_args());
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
-    command.arg("--").arg(link)
+    command.args(extra).arg("--").arg(link)
 }
 
 /// Why gallery-dl stopped with an error code. Errors met while reading a site come in the answer instead.
@@ -119,50 +131,152 @@ fn classify_exit(code: Option<i32>, stderr: &[&str]) -> PreviewError {
     }
 }
 
-/// Reads gallery-dl's answer: a list of messages, each `[2, metadata]` for a post, `[3, url, metadata]` for one of
-/// its files, `[6, url, metadata]` for a link to another page (a profile's posts), or `[-1, {error, message}]`.
-pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewError> {
-    let messages: Vec<Value> =
-        serde_json::from_str(json).map_err(|error| PreviewError::Failed {
-            detail: format!("gallery-dl's answer can't be read: {error}"),
-        })?;
+/// The account behind an account's posts, as gallery-dl describes it in each of them (Instagram's `user`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct AccountInfo {
+    pub username: Option<String>,
+    pub full_name: Option<String>,
+    /// Its profile picture.
+    pub picture: Option<String>,
+    /// How many posts it has in all.
+    pub post_count: Option<u32>,
+}
 
-    let mut post: Option<&Value> = None;
-    let mut files: Vec<(&str, &Value)> = Vec::new();
+/// The posts of gallery-dl's answer for an account's page, each as reading its own link would describe it, and the
+/// account.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct FoundPosts {
+    pub posts: Vec<VideoInfo>,
+    pub account: Option<AccountInfo>,
+}
+
+/// A post of gallery-dl's answer: its metadata (`[2, metadata]`, or its first file's when there's none) and its files.
+struct PostMessages<'a> {
+    post: &'a Value,
+    files: Vec<(&'a str, &'a Value)>,
+}
+
+/// gallery-dl's answer, sorted into posts.
+struct SortedAnswer<'a> {
+    posts: Vec<PostMessages<'a>>,
+    /// `[6, url, metadata]` messages: links to other pages, such as a profile's posts.
+    links_elsewhere: usize,
+}
+
+/// Reads gallery-dl's answer: a list of messages, each `[2, metadata]` for a post, `[3, url, metadata]` for one of
+/// its files, `[6, url, metadata]` for a link to another page (a profile's posts), or `[-1, {error, message}]`. A page
+/// of several posts (an account, a search) or of links to others is refused as `NotListable`: an Instagram account is
+/// listed by `listing` instead, before it gets here.
+pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewError> {
+    let messages = read_messages(json)?;
+    let answer = sort_answer(&messages)?;
+    match answer.posts.as_slice() {
+        [] if answer.links_elsewhere > 0 => Err(crate::listing::not_listable(link)),
+        [] => Err(PreviewError::Unavailable {
+            detail: "gallery-dl found nothing to download".to_owned(),
+        }),
+        [only] => video_of(only, link),
+        _ => Err(crate::listing::not_listable(link)),
+    }
+}
+
+/// Reads gallery-dl's answer for an account's posts (`--post-range` limits how many): every post with its files, in
+/// the answer's order, and the account they're from.
+pub(crate) fn parse_posts(json: &str, link: &str) -> Result<FoundPosts, PreviewError> {
+    let messages = read_messages(json)?;
+    let answer = sort_answer(&messages)?;
+    let account = answer
+        .posts
+        .first()
+        .and_then(|first| first.post.get("user"))
+        .filter(|user| user.is_object())
+        .map(|user| AccountInfo {
+            username: text(user, "username"),
+            full_name: text(user, "full_name"),
+            picture: text(user, "profile_pic_url"),
+            post_count: user
+                .get("media_count")
+                .and_then(Value::as_u64)
+                .and_then(|count| u32::try_from(count).ok()),
+        });
+    let posts = answer
+        .posts
+        .iter()
+        .map(|post| video_of(post, link))
+        .collect::<Result<_, _>>()?;
+    Ok(FoundPosts { posts, account })
+}
+
+fn read_messages(json: &str) -> Result<Vec<Value>, PreviewError> {
+    serde_json::from_str(json).map_err(|error| PreviewError::Failed {
+        detail: format!("gallery-dl's answer can't be read: {error}"),
+    })
+}
+
+/// Sorts gallery-dl's messages into posts, each with the files that follow it. An error message fails the whole
+/// answer. A post with no file (a text post) is left out.
+fn sort_answer(messages: &[Value]) -> Result<SortedAnswer<'_>, PreviewError> {
+    let mut posts: Vec<PostMessages> = Vec::new();
     let mut links_elsewhere = 0;
-    for message in &messages {
+    for message in messages {
         let Some(parts) = message.as_array() else {
             continue;
         };
         match (parts.first().and_then(Value::as_i64), parts.len()) {
             (Some(-1), _) => return Err(classify_error(parts.get(1).unwrap_or(&Value::Null))),
             (Some(2), _) => {
-                if post.is_none() {
-                    post = parts.last();
+                if let Some(post) = parts.last() {
+                    // gallery-dl may describe a post again before more of its files: still the same post.
+                    let same_post = posts
+                        .last()
+                        .is_some_and(|last| same_post_id(last.post, post));
+                    if !same_post {
+                        posts.push(PostMessages {
+                            post,
+                            files: Vec::new(),
+                        });
+                    }
                 }
             }
             (Some(3), 3) => {
                 if let Some(url) = parts[1].as_str() {
-                    files.push((url, &parts[2]));
+                    match posts.last_mut() {
+                        Some(last) => last.files.push((url, &parts[2])),
+                        None => posts.push(PostMessages {
+                            post: &parts[2],
+                            files: vec![(url, &parts[2])],
+                        }),
+                    }
                 }
             }
             (Some(6), _) => links_elsewhere += 1,
             _ => {}
         }
     }
+    posts.retain(|post| !post.files.is_empty());
+    Ok(SortedAnswer {
+        posts,
+        links_elsewhere,
+    })
+}
 
-    if files.is_empty() {
-        return Err(if links_elsewhere > 0 {
-            // A profile or a list of posts, refused like a playlist until the playlist picker exists.
-            PreviewError::Playlist
-        } else {
-            PreviewError::Unavailable {
-                detail: "gallery-dl found nothing to download".to_owned(),
-            }
-        });
+/// Whether two posts' metadata name the same post, by their site and ID. Without an ID to tell them apart, they're
+/// taken as one.
+fn same_post_id(first: &Value, second: &Value) -> bool {
+    let key = |post: &Value| {
+        let site = text(post, "category")?;
+        let id = post_id(&site, post)?;
+        Some((site, id))
+    };
+    match (key(first), key(second)) {
+        (Some(first), Some(second)) => first == second,
+        _ => true,
     }
-    let post = post.unwrap_or(files[0].1);
+}
 
+/// A post as the preview card shows it.
+fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError> {
+    let (post, files) = (found.post, found.files.as_slice());
     let site = text(post, "category").ok_or_else(|| PreviewError::Failed {
         detail: "gallery-dl's answer has no site".to_owned(),
     })?;
@@ -183,7 +297,7 @@ pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewE
     Ok(VideoInfo {
         site_name: site_name(link).unwrap_or_else(|| site.clone()),
         url: text(post, "post_url").unwrap_or_else(|| link.to_owned()),
-        thumbnail_url: thumbnail(&files),
+        thumbnail_url: thumbnail(files),
         upload_date: text(post, "date")
             .and_then(|date| date.get(..10).map(str::to_owned))
             .filter(|date| date.as_bytes().get(4) == Some(&b'-')),
@@ -195,7 +309,7 @@ pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewE
         best_height: None,
         post: Some(contents),
         files: None,
-        post_files: post_files(&files),
+        post_files: post_files(files),
     })
 }
 
@@ -519,11 +633,45 @@ mod tests {
     }
 
     #[test]
-    fn refuses_profiles_like_playlists() {
+    fn refuses_pages_of_several_posts() {
+        // An Instagram account is listed before gallery-dl reads it as a post; this is what any other profile gives.
         let link = "https://www.instagram.com/instagram/";
         assert_eq!(
             parse_answer(&fixture("instagram-profile.json"), link),
-            Err(PreviewError::Playlist)
+            Err(PreviewError::NotListable {
+                site: "Instagram".to_owned()
+            })
+        );
+
+        let json = r#"[
+            [2, {"category": "twitter", "tweet_id": 1, "content": "first"}],
+            [3, "https://pbs.example/a.jpg", {"category": "twitter", "tweet_id": 1, "extension": "jpg"}],
+            [2, {"category": "twitter", "tweet_id": 2, "content": "second"}],
+            [3, "https://pbs.example/b.jpg", {"category": "twitter", "tweet_id": 2, "extension": "jpg"}]
+        ]"#;
+        assert_eq!(
+            parse_answer(json, "https://x.com/NASA/media"),
+            Err(PreviewError::NotListable {
+                site: "X".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn a_post_described_again_stays_one_post() {
+        let json = r#"[
+            [2, {"category": "twitter", "tweet_id": 7, "content": "caption"}],
+            [3, "https://pbs.example/a.jpg", {"category": "twitter", "tweet_id": 7, "extension": "jpg"}],
+            [2, {"category": "twitter", "tweet_id": 7, "content": "caption"}],
+            [3, "https://pbs.example/b.jpg", {"category": "twitter", "tweet_id": 7, "extension": "jpg"}]
+        ]"#;
+        let post = parse_answer(json, "https://x.com/NASA/status/7").unwrap();
+        assert_eq!(
+            post.post,
+            Some(PostContents {
+                images: 2,
+                videos: 0
+            })
         );
     }
 
@@ -721,7 +869,7 @@ mod tests {
             cookies: Some("firefox".to_owned()),
             caches: None,
         };
-        let args: Vec<String> = command(&tools, Path::new("gallery-dl.exe"), "-x")
+        let args: Vec<String> = command(&tools, Path::new("gallery-dl.exe"), &[], "-x")
             .arguments()
             .iter()
             .map(|arg| arg.to_string_lossy().into_owned())
@@ -736,6 +884,20 @@ mod tests {
                 "--",
                 "-x"
             ]
+        );
+        let args: Vec<String> = command(
+            &tools,
+            Path::new("gallery-dl.exe"),
+            &["--post-range", "1-50"],
+            "-x",
+        )
+        .arguments()
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+        assert_eq!(
+            &args[args.len() - 4..],
+            ["--post-range", "1-50", "--", "-x"]
         );
     }
 }

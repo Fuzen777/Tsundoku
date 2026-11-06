@@ -43,6 +43,17 @@ export function formatDay(secondsSinceEpoch: number, locale?: string, timeZone?:
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone }).format(new Date(secondsSinceEpoch * 1000))
 }
 
+/** A day a site only gives roughly ("3 weeks ago" in YouTube's listings), given as YYYY-MM-DD, as how long ago it was in
+ * the reader's language, as roughly: "3 weeks ago", "last month". */
+export function formatRoughAge(isoDate: string, locale?: string, now = Date.now()): string {
+  const days = Math.max(0, Math.floor((now - Date.parse(`${isoDate}T00:00:00Z`)) / 86_400_000))
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+  if (days < 7) return relative.format(-days, "day")
+  if (days < 30) return relative.format(-Math.round(days / 7), "week")
+  if (days < 365) return relative.format(-Math.round(days / 30), "month")
+  return relative.format(-Math.round(days / 365), "year")
+}
+
 /** A moment's day in the reader's time zone as a file name has it, so files sort by it: "2026-11-06". */
 export function formatFileDate(moment: Date): string {
   return [moment.getFullYear(), moment.getMonth() + 1, moment.getDate()]

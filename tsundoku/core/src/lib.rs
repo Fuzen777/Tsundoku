@@ -19,6 +19,7 @@ pub mod first_run;
 pub mod gallery;
 pub mod history;
 pub mod hosts;
+pub mod listing;
 pub mod metadata;
 pub mod pending;
 pub mod post_names;

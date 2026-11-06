@@ -21,6 +21,7 @@ import { DestinationLine } from "./DestinationLine"
 import { FailureFixes } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
+import { ListingPicker } from "./ListingPicker"
 import { PostFilesStrip } from "./PostFilesStrip"
 import { PresetRuleLink } from "./PresetRuleLink"
 import { StatusMessage } from "./StatusMessage"
@@ -36,7 +37,8 @@ interface PreviewCardProps {
   onRetry: (link: string) => void
 }
 
-/** Under the add bar: what a link is, whether it was downloaded before, and Download. */
+/** Under the add bar: what a link is, whether it was downloaded before, and Download; or, for a channel, playlist or
+ * account, its items to pick from (`ListingPicker`). */
 export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardProps) {
   return (
     <Card className="flex flex-col gap-3 p-4">
@@ -44,7 +46,7 @@ export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardPro
         <div className="flex items-center gap-3">
           <Loader2 size={16} className="shrink-0 animate-spin text-fg-secondary" />
           <div className="min-w-0 flex-1">
-            <p>{strings.preview.fetching}</p>
+            <p>{state.listing ? strings.preview.listing[state.listing] : strings.preview.fetching}</p>
             <p className="truncate text-xs text-fg-muted">{state.link}</p>
           </div>
           <IconButton label={strings.preview.cancel} icon={X} onClick={onClose} />
@@ -60,7 +62,12 @@ export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardPro
           <IconButton label={strings.preview.dismiss} icon={X} onClick={onClose} />
         </div>
       )}
-      {state.stage === "ready" && <VideoDetails preview={state.preview} onClose={onClose} onAdded={onAdded} />}
+      {state.stage === "ready" &&
+        (state.preview.kind === "listing" ? (
+          <ListingPicker listing={state.preview.listing} onClose={onClose} onAdded={onAdded} />
+        ) : (
+          <VideoDetails preview={state.preview} onClose={onClose} onAdded={onAdded} />
+        ))}
     </Card>
   )
 }

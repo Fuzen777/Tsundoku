@@ -14,7 +14,11 @@ import type { HistoryPage } from "./bindings/HistoryPage"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
 import type { LinkFileError } from "./bindings/LinkFileError"
+import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListArrangements } from "./bindings/ListArrangements"
+import type { ListedItem } from "./bindings/ListedItem"
+import type { Listing } from "./bindings/Listing"
+import type { ListingKind } from "./bindings/ListingKind"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
@@ -557,24 +561,70 @@ export const standIns = {
     return [...new Set(links)]
   },
   /**
-   * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link;
-   * or a failure for a link containing "fail", or "images" (gallery-dl not set up).
+   * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link; a
+   * listing for a channel, playlist or account (`listingKind`); or a failure for a link containing "fail", or "images"
+   * (gallery-dl not set up).
    */
-  fetchPreview(link: string): Promise<VideoPreview> {
+  fetchPreview(link: string): Promise<LinkPreview> {
+    const kind = standIns.listingKind(link)
     return new Promise((resolve, reject) =>
       setTimeout(() => {
         if (link.includes("fail")) {
           reject({ kind: "unavailable", detail: "[youtube] aaaaaaaaaaa: This video is unavailable" })
         } else if (link.includes("images")) {
           reject({ kind: "imagesNotSetUp" })
+        } else if (kind) {
+          resolve({ kind: "listing", listing: listingStandIn(kind) })
         } else if (link.includes("instagram")) {
-          resolve(postStandIn)
+          resolve({ kind: "video", ...postStandIn })
         } else if (link.includes("mega.nz")) {
-          resolve(sharedFolderStandIn)
+          resolve({ kind: "video", ...sharedFolderStandIn })
         } else {
-          resolve(previewStandIn)
+          resolve({ kind: "video", ...previewStandIn })
         }
-      }, 800),
+      }, kind ? 1600 : 800),
     )
   },
+  /** As the core tells them: a YouTube channel (`/@name`) or playlist (`/playlist?list=`), an Instagram account. */
+  listingKind(link: string): ListingKind | null {
+    if (/youtube\.com\/(@[^/?#]+|channel\/|c\/|user\/)/.test(link)) return "channel"
+    if (/youtube\.com\/playlist\?list=/.test(link)) return "playlist"
+    if (/instagram\.com\/(?!p\/|reels?\/|stories\/|explore\/)[\w.]+\/?(posts\/?|reels\/?)?$/.test(link)) return "account"
+    return null
+  },
+}
+
+/** A listing with a downloaded item and a queued one: 60 for a channel or an account, 300 for a playlist, to check a
+ * long list. */
+function listingStandIn(kind: ListingKind): Listing {
+  const posts = kind === "account"
+  const count = kind === "playlist" ? 300 : 60
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
+  const items: ListedItem[] = Array.from({ length: count }, (_, index) => {
+    const base = posts ? postStandIn.video : previewStandIn.video
+    return {
+      video: {
+        ...base,
+        videoId: `listed${index}`,
+        url: `${base.url}#${index}`,
+        title: posts ? `Post number ${index + 1}, with a caption long enough to need cutting short` : `Video number ${index + 1}`,
+        durationSeconds: posts ? null : 45 + index * 97,
+        uploadDate: posts ? daysAgo(index * 3) : null,
+      },
+      approximateDate: posts ? null : daysAgo(index * 5),
+      lastDownload: index === 2 ? previewStandIn.lastDownload : null,
+      inQueue: index === 4,
+    }
+  })
+  return {
+    kind,
+    title: { channel: "jawed", playlist: "A Long Playlist", account: "Some Account" }[kind],
+    uploader: kind === "playlist" ? "jawed" : null,
+    siteName: posts ? "instagram.com" : "youtube.com",
+    url: "https://www.youtube.com/@jawed/videos",
+    thumbnailUrl: previewStandIn.video.thumbnailUrl,
+    total: posts ? 8634 : null,
+    newestOnly: kind !== "playlist",
+    items,
+  }
 }

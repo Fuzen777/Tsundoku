@@ -1,8 +1,9 @@
-"""Trims gallery-dl's raw answers in tsundoku/core/tests/fixtures/gallery to what the tests read.
+"""Trims gallery-dl's raw answers in tsundoku/core/tests/fixtures/gallery, and the Instagram accounts' in
+tsundoku/core/tests/fixtures/listing, to what the tests read.
 
 gallery-dl's `-j` answers carry everything it knows, including fields about the account that fetched them (whether it
-liked or follows the post's author) and CDN links signed for that request. This keeps only the keys gallery.rs reads,
-and cuts the query string off every link. Run it after capturing new answers:
+liked or follows the post's author) and CDN links signed for that request. This keeps only the keys gallery.rs and
+listing.rs read, and cuts the query string off every link. Run it after capturing new answers:
 
     python Scripts\\Trim-Gallery-Fixtures.py
 """
@@ -10,15 +11,18 @@ and cuts the query string off every link. Run it after capturing new answers:
 import json
 import pathlib
 
-FOLDER = pathlib.Path(__file__).resolve().parent.parent / "tsundoku" / "core" / "tests" / "fixtures" / "gallery"
+FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "tsundoku" / "core" / "tests" / "fixtures"
+FILES = sorted((FIXTURES / "gallery").glob("*.json")) + sorted((FIXTURES / "listing").glob("instagram-*.json"))
 
 # The keys gallery.rs reads, on posts and files alike, plus a few that say what the file is.
 KEPT_KEYS = {
     "category", "subcategory", "post_shortcode", "shortcode", "post_id", "tweet_id", "id", "index", "post_url",
     "username", "fullname", "author", "description", "content", "date", "count", "num", "extension",
-    "display_url", "width", "height", "type", "error", "message",
+    "display_url", "width", "height", "type", "error", "message", "user",
 }
 KEPT_AUTHOR_KEYS = {"name", "nick"}
+# The account an account's posts are from, which listing.rs reads (not what it says about the account fetching them).
+KEPT_USER_KEYS = {"username", "full_name", "profile_pic_url", "media_count"}
 
 
 def strip_query(value):
@@ -34,6 +38,8 @@ def trim_metadata(metadata):
             continue
         if key == "author" and isinstance(value, dict):
             value = {name: value[name] for name in KEPT_AUTHOR_KEYS if name in value}
+        if key == "user" and isinstance(value, dict):
+            value = {name: strip_query(value[name]) for name in sorted(KEPT_USER_KEYS) if name in value}
         trimmed[key] = strip_query(value)
     return trimmed
 
@@ -47,7 +53,7 @@ def trim_message(message):
     return [kind] + [trim_metadata(part) for part in message[1:]]
 
 
-for path in sorted(FOLDER.glob("*.json")):
+for path in FILES:
     messages = json.loads(path.read_text(encoding="utf-8"))
     trimmed = [trim_message(message) for message in messages]
     path.write_text(json.dumps(trimmed, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\r\n")

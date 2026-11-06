@@ -7,6 +7,7 @@ import {
   formatDay,
   formatDuration,
   formatFileDate,
+  formatRoughAge,
   formatSpeed,
   joinDetails,
 } from "./format"
@@ -36,6 +37,24 @@ describe("formatSpeed", () => {
   it("shows bytes per second", () => {
     expect(formatSpeed(5_452_595.4)).toBe("5.2 MB/s")
     expect(formatSpeed(512)).toBe("512 B/s")
+  })
+})
+
+describe("formatRoughAge", () => {
+  const now = Date.parse("2026-11-06T15:00:00Z")
+  const age = (isoDate: string) => formatRoughAge(isoDate, "en-US", now)
+
+  it("says how long ago, as roughly as the date is", () => {
+    expect(age("2026-11-06")).toBe("today")
+    expect(age("2026-11-04")).toBe("2 days ago")
+    expect(age("2026-10-16")).toBe("3 weeks ago")
+    expect(age("2026-09-06")).toBe("2 months ago")
+    expect(age("2025-11-01")).toBe("last year")
+    expect(age("2013-11-07")).toBe("13 years ago")
+  })
+
+  it("takes a day ahead as today", () => {
+    expect(age("2026-11-08")).toBe("today")
   })
 })
 

@@ -24,6 +24,17 @@ flowchart LR
 3. Each run is a thread running yt-dlp to its end. Its progress reaches the UI as events; its output goes to the item's log.
 4. When yt-dlp finishes, the file is recorded in the history (a `videos` row if it's new, and a `downloads` row) and `archive.txt` is rewritten. The item is Done.
 
+## From a Channel, Playlist or Account
+
+A channel, playlist or account isn't downloaded as one: the preview card lists it (`core/src/listing.rs`), and Download Selected queues each ticked item as its own item, as if its link had been pasted.
+
+1. `listing::listing_link` tells a listing from its address and gives the page to read: a YouTube channel's Videos tab (`/@name/videos`, whatever tab the link opened), a YouTube playlist (`/playlist?list=…`), an Instagram account's posts (`/name/posts/`). Anything else is read as one video or post; if yt-dlp answers it with a playlist anyway (another site's), it's listed when every entry has a link, a site and an ID of its own, and refused as `NotListable` otherwise.
+2. `listing::read` lists it without reading each item: yt-dlp with the preview's own arguments (`--flat-playlist --dump-single-json`, cookies, caches) plus `--extractor-args youtubetab:approximate_date` (YouTube's listings say "3 weeks ago": yt-dlp turns that into a rough timestamp, kept apart from `upload_date` as `approximate_date`) and, for a channel, `--playlist-end 50`; gallery-dl with `--dump-json --post-range 1-50` for an account, whose posts are sorted newest first, pinned ones included. A listing may take up to 5 minutes, against 2 for a preview. Its errors are a preview's, so a missing sign-in offers the same fixes.
+3. Each item is a `VideoInfo` keyed as reading its own link would key it (yt-dlp's `ie_key` and `id`, gallery-dl's post shortcode), so `listing::mark` finds it in the history (`last_download`) and the queue (`contains`) as the duplicate check does.
+4. Download Selected sends a `QueuePick` per ticked item to `DownloadQueue::add_many`: a video with the preset a rule picks for it or else Videos Start As, and `overwrite` when it was downloaded before with that preset (the UI asks first); a post without one. `add_many` saves them all, then schedules once, so the UI gets one `queue-changed` for the batch. From there each is an ordinary item: rules pick its folder, Instagram's posts are paced, and a finished one goes to the history and `archive.txt`.
+
+Downloads don't pass `--download-archive`, which would make Download Again skip a video it has. A pending link that's a listing is refused as `Playlist` before any tool runs.
+
 ## States
 
 ```mermaid

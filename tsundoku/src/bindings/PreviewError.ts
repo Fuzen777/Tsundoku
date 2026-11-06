@@ -6,7 +6,7 @@ import type { ToolId } from "./ToolId";
 /**
  * Why a link can't be previewed or downloaded. The UI turns each into a sentence; `detail` is yt-dlp's own error.
  */
-export type PreviewError = { "kind": "invalidLink" } | { "kind": "playlist" } | { "kind": "liveStream" } | { "kind": "upcoming", detail: string, } | { "kind": "unsupportedSite" } | { "kind": "noVideo", detail: string, } | { "kind": "unavailable", detail: string, } | { "kind": "signInRequired", detail: string, 
+export type PreviewError = { "kind": "invalidLink" } | { "kind": "playlist" } | { "kind": "notListable", site: string, } | { "kind": "liveStream" } | { "kind": "upcoming", detail: string, } | { "kind": "unsupportedSite" } | { "kind": "noVideo", detail: string, } | { "kind": "unavailable", detail: string, } | { "kind": "signInRequired", detail: string, 
 /**
  * The site's name, when it's one of `sites::SIGN_IN_SITES`.
  */

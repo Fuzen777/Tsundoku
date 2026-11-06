@@ -1,0 +1,109 @@
+{
+  "_type": "playlist",
+  "id": "2284613",
+  "title": "The Royal Concept EP",
+  "extractor": "soundcloud:set",
+  "extractor_key": "SoundcloudSet",
+  "webpage_url": "https://soundcloud.com/the-concept-band/sets/the-royal-concept-ep",
+  "webpage_url_domain": "soundcloud.com",
+  "uploader": "The Royal Concept",
+  "playlist_count": 6,
+  "thumbnails": [
+    {
+      "id": "mini",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-mini.jpg",
+      "width": 16,
+      "height": 16
+    },
+    {
+      "id": "tiny",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-tiny.jpg",
+      "width": 20,
+      "height": 20
+    },
+    {
+      "id": "small",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-small.jpg",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "badge",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-badge.jpg",
+      "width": 47,
+      "height": 47
+    },
+    {
+      "id": "t67x67",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-t67x67.jpg",
+      "width": 67,
+      "height": 67
+    },
+    {
+      "id": "large",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-large.jpg",
+      "width": 100,
+      "height": 100
+    },
+    {
+      "id": "t300x300",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-t300x300.jpg",
+      "width": 300,
+      "height": 300
+    },
+    {
+      "id": "crop",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-crop.jpg",
+      "width": 400,
+      "height": 400
+    },
+    {
+      "id": "t500x500",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-t500x500.jpg",
+      "width": 500,
+      "height": 500
+    },
+    {
+      "id": "original",
+      "url": "https://i1.sndcdn.com/artworks-000030896212-o16m9v-original.jpg"
+    }
+  ],
+  "entries": [
+    {
+      "_type": "url_transparent",
+      "ie_key": "Soundcloud",
+      "id": "75206121",
+      "url": "https://soundcloud.com/the-concept-band/world-on-fire-1"
+    },
+    {
+      "_type": "url_transparent",
+      "ie_key": "Soundcloud",
+      "id": "47127625",
+      "url": "https://soundcloud.com/the-concept-band/gimme-twice-mastered"
+    },
+    {
+      "_type": "url_transparent",
+      "ie_key": "Soundcloud",
+      "id": "47127627",
+      "url": "https://soundcloud.com/the-concept-band/goldrushed-mastered"
+    },
+    {
+      "_type": "url_transparent",
+      "ie_key": "Soundcloud",
+      "id": "30510138",
+      "url": "https://soundcloud.com/the-concept-band/the-concept-d-d-dance"
+    },
+    {
+      "_type": "url_transparent",
+      "ie_key": "Soundcloud",
+      "id": "47127629",
+      "url": "https://soundcloud.com/the-concept-band/in-the-end-mastered"
+    },
+    {
+      "_type": "url_transparent",
+      "ie_key": "Soundcloud",
+      "id": "47127631",
+      "url": "https://api-v2.soundcloud.com/tracks/47127631"
+    }
+  ]
+}

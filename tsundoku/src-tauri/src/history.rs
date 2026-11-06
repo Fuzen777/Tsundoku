@@ -9,10 +9,12 @@ use tsundoku_core::history::{
     History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, PastDownload,
     folder_count,
 };
+use tsundoku_core::listing::{self, ListingKind};
 use tsundoku_core::metadata::PreviewError;
-use tsundoku_core::preview::{PreviewService, VideoPreview};
+use tsundoku_core::preview::{LinkPreview, PreviewService};
 use tsundoku_core::tools::ToolManager;
 
+/// What a link is, for the preview card: a video or post, or a channel's, playlist's or account's items.
 #[tauri::command]
 pub async fn fetch_preview(
     tools: State<'_, Arc<ToolManager>>,
@@ -20,7 +22,7 @@ pub async fn fetch_preview(
     previews: State<'_, Arc<PreviewService>>,
     queue: State<'_, Arc<DownloadQueue>>,
     link: String,
-) -> Result<VideoPreview, PreviewError> {
+) -> Result<LinkPreview, PreviewError> {
     let (tools, history, previews, queue) = (
         Arc::clone(&tools),
         Arc::clone(&history),
@@ -49,6 +51,13 @@ pub fn left_out_files(
 #[tauri::command]
 pub fn cancel_preview(previews: State<'_, Arc<PreviewService>>) {
     previews.cancel();
+}
+
+/// Whether a link is a channel, playlist or account, from its address alone, for the preview card to say what it's
+/// reading while it does.
+#[tauri::command]
+pub fn listing_kind(link: String) -> Option<ListingKind> {
+    listing::kind_of(&link)
 }
 
 /// Opens a downloaded file in its default app. The UI names the download, never a path, so it can't open anything

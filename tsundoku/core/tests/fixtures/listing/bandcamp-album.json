@@ -1,0 +1,75 @@
+{
+  "_type": "playlist",
+  "id": "hierophany-of-the-open-grave",
+  "title": "Hierophany of the Open Grave",
+  "extractor": "Bandcamp:album",
+  "extractor_key": "BandcampAlbum",
+  "webpage_url": "https://nightbringer.bandcamp.com/album/hierophany-of-the-open-grave",
+  "webpage_url_domain": "nightbringer.bandcamp.com",
+  "playlist_count": 9,
+  "entries": [
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "1399739925",
+      "url": "https://nightbringer.bandcamp.com/track/rite-of-the-slaying-tongue",
+      "title": "Rite of the Slaying Tongue"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "725511795",
+      "url": "https://nightbringer.bandcamp.com/track/eater-of-the-black-lead",
+      "title": "Eater of the Black Lead"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "3441764002",
+      "url": "https://nightbringer.bandcamp.com/track/psychagogoi",
+      "title": "Psychagogoi"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "1681626722",
+      "url": "https://nightbringer.bandcamp.com/track/lucifer-trismegistus",
+      "title": "Lucifer Trismegistus"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "2964896582",
+      "url": "https://nightbringer.bandcamp.com/track/the-gnosis-of-inhumation",
+      "title": "The Gnosis of Inhumation"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "2847130292",
+      "url": "https://nightbringer.bandcamp.com/track/the-angel-of-smokeless-fire",
+      "title": "The Angel of Smokeless Fire"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "4137612242",
+      "url": "https://nightbringer.bandcamp.com/track/dreaming-above-the-sepulcher",
+      "title": "Dreaming Above the Sepulcher"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "521036097",
+      "url": "https://nightbringer.bandcamp.com/track/via-tortuosa",
+      "title": "Via Tortuosa"
+    },
+    {
+      "_type": "url",
+      "ie_key": "Bandcamp",
+      "id": "2606680433",
+      "url": "https://nightbringer.bandcamp.com/track/old-night",
+      "title": "Old Night"
+    }
+  ]
+}

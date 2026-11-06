@@ -1,0 +1,188 @@
+{
+  "_type": "playlist",
+  "id": "@NASA",
+  "title": "NASA",
+  "extractor": "youtube:tab",
+  "extractor_key": "YoutubeTab",
+  "webpage_url": "https://www.youtube.com/@NASA",
+  "webpage_url_domain": "youtube.com",
+  "uploader": "NASA",
+  "channel": "NASA",
+  "playlist_count": 3,
+  "thumbnails": [
+    {
+      "id": "0",
+      "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1060-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+      "width": 1060,
+      "height": 175
+    },
+    {
+      "id": "1",
+      "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1138-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+      "width": 1138,
+      "height": 188
+    },
+    {
+      "id": "2",
+      "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1707-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+      "width": 1707,
+      "height": 283
+    },
+    {
+      "id": "3",
+      "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2120-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+      "width": 2120,
+      "height": 351
+    },
+    {
+      "id": "4",
+      "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2276-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+      "width": 2276,
+      "height": 377
+    },
+    {
+      "id": "5",
+      "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+      "width": 2560,
+      "height": 424
+    },
+    {
+      "id": "banner_uncropped",
+      "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=s0"
+    },
+    {
+      "id": "7",
+      "url": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s900-c-k-c0x00ffffff-no-rj",
+      "width": 900,
+      "height": 900
+    },
+    {
+      "id": "avatar_uncropped",
+      "url": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s0"
+    }
+  ],
+  "entries": [
+    {
+      "_type": "playlist",
+      "extractor_key": "YoutubeTab",
+      "id": "UCLA_DiR1FfKNvjuUpBHmylQ",
+      "webpage_url": "https://www.youtube.com/@NASA/videos",
+      "title": "NASA - Videos",
+      "uploader": "NASA",
+      "channel": "NASA",
+      "thumbnails": [
+        {
+          "id": "0",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1060-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1060,
+          "height": 175
+        },
+        {
+          "id": "1",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1138-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1138,
+          "height": 188
+        },
+        {
+          "id": "2",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1707-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1707,
+          "height": 283
+        },
+        {
+          "id": "3",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2120-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2120,
+          "height": 351
+        },
+        {
+          "id": "4",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2276-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2276,
+          "height": 377
+        },
+        {
+          "id": "5",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2560,
+          "height": 424
+        },
+        {
+          "id": "banner_uncropped",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=s0"
+        },
+        {
+          "id": "7",
+          "url": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s900-c-k-c0x00ffffff-no-rj",
+          "width": 900,
+          "height": 900
+        },
+        {
+          "id": "avatar_uncropped",
+          "url": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s0"
+        }
+      ]
+    },
+    {
+      "_type": "playlist",
+      "extractor_key": "YoutubeTab",
+      "id": "UCLA_DiR1FfKNvjuUpBHmylQ",
+      "webpage_url": "https://www.youtube.com/@NASA/streams",
+      "title": "NASA - Live",
+      "uploader": "NASA",
+      "channel": "NASA",
+      "thumbnails": [
+        {
+          "id": "0",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1060-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1060,
+          "height": 175
+        },
+        {
+          "id": "1",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1138-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1138,
+          "height": 188
+        },
+        {
+          "id": "2",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w1707-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 1707,
+          "height": 283
+        },
+        {
+          "id": "3",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2120-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2120,
+          "height": 351
+        },
+        {
+          "id": "4",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2276-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2276,
+          "height": 377
+        },
+        {
+          "id": "5",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=w2560-fcrop64=1,00005a57ffffa5a8-k-c0xffffffff-no-nd-rj",
+          "width": 2560,
+          "height": 424
+        },
+        {
+          "id": "banner_uncropped",
+          "url": "https://yt3.googleusercontent.com/y8Srh-oCcilLvBO8jAPI546m1bn0puA5DIvQiBZ1cSxc_rZfKxKSFlTCtoCQCtB6viUf1NGsaQ=s0"
+        },
+        {
+          "id": "7",
+          "url": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s900-c-k-c0x00ffffff-no-rj",
+          "width": 900,
+          "height": 900
+        },
+        {
+          "id": "avatar_uncropped",
+          "url": "https://yt3.googleusercontent.com/eIf5fNPcIcj9ig-wZBeq4stFy1lgjWTW1nLT5dYlFkHZprZ03QBiMcbpwNMB6XSBjrSFGtAGQg=s0"
+        }
+      ]
+    }
+  ]
+}

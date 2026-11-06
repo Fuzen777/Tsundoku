@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { cancelPreview, fetchPreview } from "./api"
-import type { VideoPreview } from "./bindings/VideoPreview"
+import { cancelPreview, fetchPreview, listingKind } from "./api"
+import type { LinkPreview } from "./bindings/LinkPreview"
+import type { ListingKind } from "./bindings/ListingKind"
 import { isCancelled } from "./errors"
 
 export type PreviewState =
   | { stage: "idle" }
-  | { stage: "loading"; link: string }
-  | { stage: "ready"; preview: VideoPreview }
+  /** `listing` is what the link is when its address says so (a channel, playlist or account), for the waiting text. */
+  | { stage: "loading"; link: string; listing: ListingKind | null }
+  | { stage: "ready"; preview: LinkPreview }
   | { stage: "failed"; link: string; error: unknown }
 
 /**
@@ -20,7 +22,16 @@ export function usePreview() {
   const show = useCallback(async (link: string) => {
     latestRequest.current += 1
     const request = latestRequest.current
-    setState({ stage: "loading", link })
+    setState({ stage: "loading", link, listing: null })
+    listingKind(link)
+      .then((listing) => {
+        if (listing && request === latestRequest.current) {
+          setState((current) => (current.stage === "loading" ? { ...current, listing } : current))
+        }
+      })
+      .catch(() => {
+        // Only the waiting text would have said more.
+      })
     try {
       const preview = await fetchPreview(link)
       if (request === latestRequest.current) setState({ stage: "ready", preview })

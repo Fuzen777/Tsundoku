@@ -6,7 +6,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::{
-    DownloadError, DownloadProgress, DownloadProgressEvent, DownloadQueue, QueueItem, QueueListener,
+    DownloadError, DownloadProgress, DownloadProgressEvent, DownloadQueue, QueueItem,
+    QueueListener, QueuePick,
 };
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
@@ -149,6 +150,12 @@ pub fn add_to_queue(
 #[tauri::command]
 pub fn add_post_to_queue(queue: Queue<'_>, video: VideoInfo) -> Result<QueueItem, DownloadError> {
     queue.add_post(video)
+}
+
+/// Adds the items picked from a channel, playlist or account, each as its own download. How many were added.
+#[tauri::command]
+pub fn add_many_to_queue(queue: Queue<'_>, picks: Vec<QueuePick>) -> Result<usize, DownloadError> {
+    queue.add_many(picks)
 }
 
 /// Where downloads go when no folder is chosen: a Tsundoku folder in Downloads.

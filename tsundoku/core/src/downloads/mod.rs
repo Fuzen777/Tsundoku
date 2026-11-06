@@ -143,6 +143,18 @@ pub struct DownloadProgressEvent {
     pub progress: DownloadProgress,
 }
 
+/// One download for `DownloadQueue::add_many`, such as an item picked from a channel.
+#[derive(Debug, Clone, PartialEq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct QueuePick {
+    pub video: VideoInfo,
+    /// The preset for a video; `None` for a post or a file host's link, whose files are kept as they are.
+    pub preset_id: Option<String>,
+    /// Download Again with the same preset: replace the file made before.
+    pub overwrite: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -368,6 +380,18 @@ impl DownloadQueue {
         preset_id: &str,
         overwrite: bool,
     ) -> Result<QueueItem, DownloadError> {
+        let item = self.insert_video(video, preset_id, overwrite)?;
+        self.schedule();
+        Ok(item)
+    }
+
+    /// Saves a video with a preset in the queue, waiting, for `add` or `add_many` to start.
+    fn insert_video(
+        &self,
+        video: VideoInfo,
+        preset_id: &str,
+        overwrite: bool,
+    ) -> Result<QueueItem, DownloadError> {
         let preset = self.presets.get(preset_id).ok_or(DownloadError::Preset {
             error: PresetError::NotFound,
         })?;
@@ -394,7 +418,6 @@ impl DownloadQueue {
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
-        self.schedule();
         Ok(item)
     }
 
@@ -402,6 +425,43 @@ impl DownloadQueue {
     /// download all its files into the folder the rules give it (a post's by default the site's folder in the
     /// download folder). Files already there are skipped, so adding it again only fetches what's missing.
     pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
+        let item = self.insert_post(video)?;
+        self.schedule();
+        Ok(item)
+    }
+
+    /// Adds several downloads at once, such as those picked from a channel, each as `add` (with a preset) or `add_post`
+    /// (without) would, then starts what can start: the UI hears of the change once rather than once each. One already
+    /// in the queue is skipped. How many were added; the first error is returned once every other one is in.
+    pub fn add_many(&self, picks: Vec<QueuePick>) -> Result<usize, DownloadError> {
+        let mut added = 0;
+        let mut first_error = None;
+        for QueuePick {
+            video,
+            preset_id,
+            overwrite,
+        } in picks
+        {
+            let inserted = match preset_id {
+                Some(preset_id) => self.insert_video(video, &preset_id, overwrite),
+                None => self.insert_post(video),
+            };
+            match inserted {
+                Ok(_) => added += 1,
+                Err(DownloadError::AlreadyQueued) => {}
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                }
+            }
+        }
+        if added > 0 {
+            self.schedule();
+        }
+        first_error.map_or(Ok(added), Err)
+    }
+
+    /// Saves a post or a file host's link in the queue, waiting, for `add_post` or `add_many` to start.
+    fn insert_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
         if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
         }
@@ -429,7 +489,6 @@ impl DownloadQueue {
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
-        self.schedule();
         Ok(item)
     }
 

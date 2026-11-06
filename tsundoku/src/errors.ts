@@ -87,6 +87,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.invalidLink }
     case "playlist":
       return { message: text.playlist }
+    case "notListable":
+      return { message: text.notListable(error.site) }
     case "liveStream":
       return { message: text.liveStream }
     case "upcoming":

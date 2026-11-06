@@ -12,7 +12,7 @@ use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::tools::{ToolCacheFolder, ToolError, ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
-const FETCH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
+pub(crate) const FETCH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
 
 /// What yt-dlp writes when YouTube extraction runs without a JavaScript runtime (Deno).
 const NO_JS_RUNTIME_WARNING: &str = "No supported JavaScript runtime";
@@ -122,9 +122,13 @@ pub enum PreviewError {
     /// Not an http or https link.
     #[error("not a link")]
     InvalidLink,
-    /// A playlist or a channel, refused until the playlist picker exists.
-    #[error("a playlist or channel")]
+    /// A playlist, channel or account, which the preview card lists (`listing`) but a pending link can't be.
+    #[error("a playlist, channel or account")]
     Playlist,
+    /// A page of many videos or posts that can't be listed: an account on an image site other than Instagram, or a
+    /// listing whose items have no link of their own. `site` is its name ("X") or its domain.
+    #[error("{site} page that can't be listed")]
+    NotListable { site: String },
     /// Live now, or just ended and still being processed.
     #[error("a live stream")]
     LiveStream,
@@ -309,6 +313,30 @@ pub fn fetch(
     link: &str,
     cancel: &CancelToken,
 ) -> Result<Fetched, PreviewError> {
+    let answer = run(tools, link, &[], FETCH_TIMEOUT, cancel)?;
+    Ok(Fetched {
+        video: parse_info(&answer.json)?,
+        missing_js_runtime: answer.missing_js_runtime,
+    })
+}
+
+/// What yt-dlp answered for a link.
+pub(crate) struct Answer {
+    /// Its `--dump-single-json`.
+    pub json: String,
+    /// It ran without Deno, so YouTube may have offered fewer formats.
+    pub missing_js_runtime: bool,
+}
+
+/// Runs yt-dlp on the link, with `extra` arguments after Tsundoku's own (`listing` adds how many to list), and returns
+/// its answer, or why it failed. `link` must come from `normalize_link`.
+pub(crate) fn run(
+    tools: &FetchTools,
+    link: &str,
+    extra: &[&str],
+    timeout: Duration,
+    cancel: &CancelToken,
+) -> Result<Answer, PreviewError> {
     let Some(yt_dlp) = tools.yt_dlp else {
         return Err(PreviewError::Tool {
             tool: ToolId::YtDlp,
@@ -318,20 +346,20 @@ pub fn fetch(
         });
     };
     let output =
-        process::run_collecting_with_cancel(&command(tools, yt_dlp, link), cancel, FETCH_TIMEOUT)
+        process::run_collecting_with_cancel(&command(tools, yt_dlp, extra, link), cancel, timeout)
             .map_err(|error| match error {
-            RunError::Start { source, .. } => PreviewError::Tool {
-                tool: ToolId::YtDlp,
-                error: start_error(source, yt_dlp),
-            },
-            RunError::Cancelled => PreviewError::Cancelled,
-            RunError::TimedOut => PreviewError::Network {
-                detail: format!("no answer within {} seconds", FETCH_TIMEOUT.as_secs()),
-            },
-            RunError::Wait(source) => PreviewError::Failed {
-                detail: source.to_string(),
-            },
-        })?;
+                RunError::Start { source, .. } => PreviewError::Tool {
+                    tool: ToolId::YtDlp,
+                    error: start_error(source, yt_dlp),
+                },
+                RunError::Cancelled => PreviewError::Cancelled,
+                RunError::TimedOut => PreviewError::Network {
+                    detail: format!("no answer within {} seconds", timeout.as_secs()),
+                },
+                RunError::Wait(source) => PreviewError::Failed {
+                    detail: source.to_string(),
+                },
+            })?;
 
     let stderr: Vec<&str> = output
         .lines
@@ -344,21 +372,20 @@ pub fn fetch(
     if !output.status.success() {
         return Err(classify_failure(&stderr));
     }
-    let json: String = output.stdout().collect();
-    Ok(Fetched {
-        video: parse_info(&json)?,
+    Ok(Answer {
+        json: output.stdout().collect(),
         missing_js_runtime: stderr
             .iter()
             .any(|line| line.contains(NO_JS_RUNTIME_WARNING)),
     })
 }
 
-fn command(tools: &FetchTools, yt_dlp: &Path, link: &str) -> ProgramCommand {
+fn command(tools: &FetchTools, yt_dlp: &Path, extra: &[&str], link: &str) -> ProgramCommand {
     let mut command = ProgramCommand::new(yt_dlp).args([
         "--ignore-config",
         // A watch?v=…&list=… link means the video, not its playlist.
         "--no-playlist",
-        // A playlist or channel is refused, so its videos needn't be read one by one.
+        // A playlist or a channel is listed without reading each of its videos.
         "--flat-playlist",
         "--dump-single-json",
         // yt-dlp's messages in UTF-8 rather than the Windows code page.
@@ -386,7 +413,18 @@ fn command(tools: &FetchTools, yt_dlp: &Path, link: &str) -> ProgramCommand {
         command = command.args(caches.yt_dlp_args()).variable(name, folder);
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
-    command.arg("--").arg(link)
+    command.args(extra).arg("--").arg(link)
+}
+
+/// Whether yt-dlp's answer is a listing (a playlist or channel) rather than one video.
+pub(crate) fn is_listing(json: &str) -> bool {
+    #[derive(Deserialize)]
+    struct Kind {
+        #[serde(rename = "_type")]
+        kind: Option<String>,
+    }
+    serde_json::from_str::<Kind>(json)
+        .is_ok_and(|answer| matches!(answer.kind.as_deref(), Some("playlist" | "multi_video")))
 }
 
 /// The fields of yt-dlp's answer that Tsundoku reads; the rest is skipped.
@@ -475,7 +513,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
 }
 
 /// "20050424" to "2005-04-24".
-fn iso_date(compact: &str) -> Option<String> {
+pub(crate) fn iso_date(compact: &str) -> Option<String> {
     (compact.len() == 8 && compact.chars().all(|character| character.is_ascii_digit()))
         .then(|| format!("{}-{}-{}", &compact[..4], &compact[4..6], &compact[6..]))
 }
@@ -802,7 +840,12 @@ mod tests {
             any_page: true,
             caches: None,
         };
-        let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
+        let command = command(
+            &tools,
+            Path::new("yt-dlp.exe"),
+            &[],
+            "https://example.com/v",
+        );
         let args: Vec<_> = command
             .arguments()
             .iter()
@@ -822,6 +865,42 @@ mod tests {
     }
 
     #[test]
+    fn puts_extra_arguments_before_the_link() {
+        let tools = FetchTools {
+            yt_dlp: Some(Path::new("yt-dlp.exe")),
+            ..FetchTools::default()
+        };
+        let command = command(
+            &tools,
+            Path::new("yt-dlp.exe"),
+            &["--playlist-end", "50"],
+            "https://www.youtube.com/@jawed/videos",
+        );
+        let args: Vec<_> = command
+            .arguments()
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            &args[args.len() - 4..],
+            [
+                "--playlist-end",
+                "50",
+                "--",
+                "https://www.youtube.com/@jawed/videos"
+            ]
+        );
+    }
+
+    #[test]
+    fn tells_a_listing_from_a_video() {
+        assert!(is_listing(&fixture("youtube-playlist.json")));
+        assert!(is_listing(&fixture("youtube-channel.json")));
+        assert!(!is_listing(&fixture("youtube-watch.json")));
+        assert!(!is_listing("not json"));
+    }
+
+    #[test]
     fn can_leave_out_the_generic_extractor() {
         let tools = FetchTools {
             yt_dlp: Some(Path::new("yt-dlp.exe")),
@@ -831,7 +910,12 @@ mod tests {
             any_page: false,
             caches: None,
         };
-        let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
+        let command = command(
+            &tools,
+            Path::new("yt-dlp.exe"),
+            &[],
+            "https://example.com/v",
+        );
         let args: Vec<_> = command
             .arguments()
             .iter()
@@ -852,7 +936,12 @@ mod tests {
             caches: Some(&caches),
             ..FetchTools::default()
         };
-        let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
+        let command = command(
+            &tools,
+            Path::new("yt-dlp.exe"),
+            &[],
+            "https://example.com/v",
+        );
         let args: Vec<_> = command
             .arguments()
             .iter()

@@ -1,6 +1,8 @@
 //! The preview card's content: what a link is (metadata.rs for yt-dlp, gallery.rs for gallery-dl, hosts for the file
-//! hosts Tsundoku reads itself) and when it was last downloaded (history.rs).
+//! hosts Tsundoku reads itself, listing.rs for a channel, playlist or account) and when it was last downloaded
+//! (history.rs).
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -12,12 +14,25 @@ use crate::downloads::DownloadQueue;
 use crate::gallery::{self, GalleryTools};
 use crate::history::{History, PastDownload};
 use crate::hosts::{self, Host};
+use crate::listing::{self, Found, Listing};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::pending::LinkReader;
 use crate::settings::{CookiesBrowser, SettingsStore};
 use crate::sites;
 use crate::sync::lock;
-use crate::tools::{ToolId, ToolManager};
+use crate::tools::{ToolCacheFolder, ToolId, ToolManager};
+
+/// What the preview card shows for a link: one video or post, or what a channel, playlist or account holds.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum LinkPreview {
+    Video(Box<VideoPreview>),
+    /// Its items marked with what the history and the queue have (`listing::mark`).
+    Listing {
+        listing: Listing,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -52,7 +67,7 @@ impl PreviewService {
         history: &History,
         queue: &DownloadQueue,
         text: &str,
-    ) -> Result<VideoPreview, PreviewError> {
+    ) -> Result<LinkPreview, PreviewError> {
         let link = metadata::normalize_link(text).ok_or(PreviewError::InvalidLink)?;
         let cancel = CancelToken::new();
         if let Some(previous) = lock(&self.current).replace(cancel.clone()) {
@@ -60,7 +75,7 @@ impl PreviewService {
         }
         let fetched = match queue.site_wait(&link) {
             Some(_) => Err(PreviewError::too_many_requests(String::new())),
-            None => read_with_tools(tools, queue.options().cookies_browser, &link, true, &cancel),
+            None => read_for_preview(tools, queue.options().cookies_browser, &link, &cancel),
         };
         {
             let mut current = lock(&self.current);
@@ -80,17 +95,7 @@ impl PreviewService {
             other => other,
         })?;
         queue.site_worked(&link);
-        let last_download = history
-            .last_download(&fetched.video.site, &fetched.video.video_id)
-            .map_err(|error| PreviewError::Failed {
-                detail: error.to_string(),
-            })?;
-        Ok(VideoPreview {
-            in_queue: queue.contains(&fetched.video.site, &fetched.video.video_id),
-            video: fetched.video,
-            last_download,
-            missing_js_runtime: fetched.missing_js_runtime,
-        })
+        preview_of(fetched, history, queue)
     }
 
     /// Stops the preview being fetched, if any.
@@ -119,9 +124,88 @@ impl LinkReader for ToolReader {
     }
 }
 
-/// Reads `link` (from `normalize_link`): a file host's itself (`hosts`), any other with the tools that are set up
-/// (`read_link`). Without `any_page`, yt-dlp only reads sites it knows (`FetchTools::any_page`). When it needs a
-/// signed-in account, the error says which site and whether a browser is signed in to it.
+/// The preview card's content for what a link turned out to be: a video or post with whether the history or the queue
+/// has it, or a listing with each of its items marked so.
+fn preview_of(
+    found: Found,
+    history: &History,
+    queue: &DownloadQueue,
+) -> Result<LinkPreview, PreviewError> {
+    let history_failed = |error: crate::history::HistoryError| PreviewError::Failed {
+        detail: error.to_string(),
+    };
+    match found {
+        Found::One(fetched) => {
+            let video = fetched.video;
+            Ok(LinkPreview::Video(Box::new(VideoPreview {
+                last_download: history
+                    .last_download(&video.site, &video.video_id)
+                    .map_err(history_failed)?,
+                in_queue: queue.contains(&video.site, &video.video_id),
+                video,
+                missing_js_runtime: fetched.missing_js_runtime,
+            })))
+        }
+        Found::Listing(mut listing) => {
+            listing::mark(
+                &mut listing,
+                |site, id| history.last_download(site, id),
+                |site, id| queue.contains(site, id),
+            )
+            .map_err(history_failed)?;
+            Ok(LinkPreview::Listing { listing })
+        }
+    }
+}
+
+/// The tools set up, and the cookies for one link, as the readers take them.
+struct LinkTools {
+    yt_dlp: Option<PathBuf>,
+    deno: Option<PathBuf>,
+    ffmpeg: Option<PathBuf>,
+    gallery_dl: Option<PathBuf>,
+    cookies: Option<String>,
+    caches: Option<ToolCacheFolder>,
+}
+
+impl LinkTools {
+    fn new(tools: &ToolManager, cookies_choice: Option<CookiesBrowser>, link: &str) -> Self {
+        Self {
+            yt_dlp: tools.executable(ToolId::YtDlp),
+            deno: tools.executable(ToolId::Deno),
+            ffmpeg: tools.executable(ToolId::Ffmpeg),
+            gallery_dl: tools.executable(ToolId::GalleryDl),
+            cookies: browsers::cookies_for(cookies_choice, link),
+            caches: tools.cache_folder(),
+        }
+    }
+
+    /// yt-dlp's, which only reads sites it knows without `any_page` (`FetchTools::any_page`).
+    fn videos(&self, any_page: bool) -> FetchTools<'_> {
+        FetchTools {
+            yt_dlp: self.yt_dlp.as_deref(),
+            deno: self.deno.as_deref(),
+            ffmpeg: self.ffmpeg.as_deref(),
+            cookies: self.cookies.clone(),
+            any_page,
+            caches: self.caches.as_ref(),
+        }
+    }
+
+    /// gallery-dl's.
+    fn images(&self) -> GalleryTools<'_> {
+        GalleryTools {
+            gallery_dl: self.gallery_dl.as_deref(),
+            cookies: self.cookies.clone(),
+            caches: self.caches.as_ref(),
+        }
+    }
+}
+
+/// Reads `link` (from `normalize_link`) for a pending link: a file host's itself (`hosts`), any other with the tools
+/// that are set up (`read_link`). A channel, playlist or account is refused as `Playlist` without being read: the
+/// preview card lists it instead. Without `any_page`, yt-dlp only reads sites it knows (`FetchTools::any_page`). When
+/// it needs a signed-in account, the error says which site and whether a browser is signed in to it.
 fn read_with_tools(
     tools: &ToolManager,
     cookies_choice: Option<CookiesBrowser>,
@@ -129,25 +213,10 @@ fn read_with_tools(
     any_page: bool,
     cancel: &CancelToken,
 ) -> Result<Fetched, PreviewError> {
-    let yt_dlp = tools.executable(ToolId::YtDlp);
-    let deno = tools.executable(ToolId::Deno);
-    let ffmpeg = tools.executable(ToolId::Ffmpeg);
-    let gallery_dl = tools.executable(ToolId::GalleryDl);
-    let cookies = browsers::cookies_for(cookies_choice, link);
-    let caches = tools.cache_folder();
-    let fetch_tools = FetchTools {
-        yt_dlp: yt_dlp.as_deref(),
-        deno: deno.as_deref(),
-        ffmpeg: ffmpeg.as_deref(),
-        cookies: cookies.clone(),
-        any_page,
-        caches: caches.as_ref(),
-    };
-    let gallery_tools = GalleryTools {
-        gallery_dl: gallery_dl.as_deref(),
-        cookies,
-        caches: caches.as_ref(),
-    };
+    if listing::listing_link(link).is_some() {
+        return Err(PreviewError::Playlist);
+    }
+    let set = LinkTools::new(tools, cookies_choice, link);
     // A file host Tsundoku reads itself goes there first, since its domains are exact.
     let fetched = match Host::of(link) {
         Some(_) => hosts::read(link, cancel).map(|share| Fetched {
@@ -157,40 +226,85 @@ fn read_with_tools(
         None => read_link(
             link,
             cancel,
-            |link, cancel| metadata::fetch(&fetch_tools, link, cancel),
-            |link, cancel| gallery::fetch(&gallery_tools, link, cancel),
-            gallery_dl.is_some(),
+            |link, cancel| metadata::fetch(&set.videos(any_page), link, cancel),
+            |link, cancel| gallery::fetch(&set.images(), link, cancel).map(from_gallery),
+            set.gallery_dl.is_some(),
         ),
     };
-    fetched.map_err(|error| match error {
+    fetched.map_err(|error| with_sign_in_state(error, cookies_choice, link))
+}
+
+/// Reads `link` (from `normalize_link`) for the preview card: as `read_with_tools` does, except that a channel,
+/// playlist or account is listed (`listing::read`), and so is another site's playlist that yt-dlp answers with.
+fn read_for_preview(
+    tools: &ToolManager,
+    cookies_choice: Option<CookiesBrowser>,
+    link: &str,
+    cancel: &CancelToken,
+) -> Result<Found, PreviewError> {
+    let set = LinkTools::new(tools, cookies_choice, link);
+    let found = if let Some(listing_link) = listing::listing_link(link) {
+        listing::read(&set.videos(true), &set.images(), &listing_link, cancel).map(Found::Listing)
+    } else if Host::of(link).is_some() {
+        hosts::read(link, cancel).map(|share| {
+            Found::One(Fetched {
+                video: share.video_info(),
+                missing_js_runtime: false,
+            })
+        })
+    } else {
+        read_link(
+            link,
+            cancel,
+            |link, cancel| listing::read_any(&set.videos(true), link, cancel),
+            |link, cancel| {
+                gallery::fetch(&set.images(), link, cancel)
+                    .map(|video| Found::One(from_gallery(video)))
+            },
+            set.gallery_dl.is_some(),
+        )
+    };
+    found.map_err(|error| with_sign_in_state(error, cookies_choice, link))
+}
+
+/// A sign-in error says which site and whether a browser is signed in to it, for the hint on the card.
+fn with_sign_in_state(
+    error: PreviewError,
+    cookies_choice: Option<CookiesBrowser>,
+    link: &str,
+) -> PreviewError {
+    match error {
         PreviewError::SignInRequired { detail, .. } => PreviewError::SignInRequired {
             detail,
             site: sites::sign_in_site(link).map(|site| site.name.to_owned()),
             cookies: browsers::sign_in_state(cookies_choice, link),
         },
         other => other,
-    })
+    }
+}
+
+fn from_gallery(video: VideoInfo) -> Fetched {
+    Fetched {
+        video,
+        missing_js_runtime: false,
+    }
 }
 
 /// Reads a link with the tool that suits it, falling back to the other when the first can't handle it, so the user
 /// never has to know which one did. Image sites (`sites::prefers_images`) go to gallery-dl first, the rest to
 /// yt-dlp. gallery-dl is optional: without it, a link yt-dlp finds no video at may be images, which the error says.
-fn read_link(
+fn read_link<T>(
     link: &str,
     cancel: &CancelToken,
-    yt_dlp: impl Fn(&str, &CancelToken) -> Result<Fetched, PreviewError>,
-    gallery_dl: impl Fn(&str, &CancelToken) -> Result<VideoInfo, PreviewError>,
+    yt_dlp: impl Fn(&str, &CancelToken) -> Result<T, PreviewError>,
+    gallery_dl: impl Fn(&str, &CancelToken) -> Result<T, PreviewError>,
     has_gallery_dl: bool,
-) -> Result<Fetched, PreviewError> {
-    let from_gallery = |video| Fetched {
-        video,
-        missing_js_runtime: false,
-    };
+) -> Result<T, PreviewError> {
     let prefers_images = sites::prefers_images(link);
 
     if prefers_images && has_gallery_dl {
         let gallery_error = match gallery_dl(link, cancel) {
-            Ok(video) => return Ok(from_gallery(video)),
+            Ok(found) => return Ok(found),
             Err(error) => error,
         };
         // gallery-dl knowing the site but failing to read it may be a post only yt-dlp reads; anything else, such as
@@ -212,13 +326,11 @@ fn read_link(
     match yt_dlp(link, cancel) {
         Err(error @ (PreviewError::UnsupportedSite | PreviewError::NoVideo { .. })) => {
             if has_gallery_dl {
-                gallery_dl(link, cancel)
-                    .map(from_gallery)
-                    .map_err(|gallery_error| match gallery_error {
-                        // Neither tool knows the link: yt-dlp's answer says it best.
-                        PreviewError::UnsupportedSite => error,
-                        other => other,
-                    })
+                gallery_dl(link, cancel).map_err(|gallery_error| match gallery_error {
+                    // Neither tool knows the link: yt-dlp's answer says it best.
+                    PreviewError::UnsupportedSite => error,
+                    other => other,
+                })
             } else if prefers_images || matches!(error, PreviewError::NoVideo { .. }) {
                 Err(PreviewError::ImagesNotSetUp)
             } else {
@@ -276,10 +388,7 @@ mod tests {
             &CancelToken::new(),
             |_, _| {
                 asked.borrow_mut().push("yt-dlp");
-                yt_dlp.clone().map(|video| Fetched {
-                    video,
-                    missing_js_runtime: false,
-                })
+                yt_dlp.clone()
             },
             |_, _| {
                 asked.borrow_mut().push("gallery-dl");
@@ -287,7 +396,7 @@ mod tests {
             },
             gallery_dl.is_some(),
         );
-        (result.map(|fetched| fetched.video), asked.into_inner())
+        (result, asked.into_inner())
     }
 
     fn no_video() -> PreviewError {

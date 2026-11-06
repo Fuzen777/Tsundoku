@@ -22,12 +22,15 @@ import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryPage } from "./bindings/HistoryPage"
+import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListArrangements } from "./bindings/ListArrangements"
+import type { ListingKind } from "./bindings/ListingKind"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { QueuePick } from "./bindings/QueuePick"
 import type { RulePreset } from "./bindings/RulePreset"
 import type { ShownError } from "./bindings/ShownError"
 import type { SupportedSites } from "./bindings/SupportedSites"
@@ -40,7 +43,6 @@ import type { ToolUpdateCheck } from "./bindings/ToolUpdateCheck"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
-import type { VideoPreview } from "./bindings/VideoPreview"
 import { standIns } from "./standIns"
 
 /*
@@ -248,14 +250,21 @@ export async function pickProgram(title: string, filterName: string): Promise<st
  * What a link is, and whether it was downloaded before. Rejects with a PreviewError. Fetching another preview cancels
  * this one, which then rejects as cancelled.
  */
-export function fetchPreview(link: string): Promise<VideoPreview> {
+/** What a link is: one video or post, or what a channel, playlist or account holds. Rejects with a PreviewError. */
+export function fetchPreview(link: string): Promise<LinkPreview> {
   if (!isTauri()) return standIns.fetchPreview(link)
-  return invoke<VideoPreview>("fetch_preview", { link })
+  return invoke<LinkPreview>("fetch_preview", { link })
 }
 
 export async function cancelPreview(): Promise<void> {
   if (!isTauri()) return
   await invoke("cancel_preview")
+}
+
+/** Whether a link is a channel, playlist or account, from its address alone, or null. */
+export function listingKind(link: string): Promise<ListingKind | null> {
+  if (!isTauri()) return Promise.resolve(standIns.listingKind(link))
+  return invoke<ListingKind | null>("listing_kind", { link })
 }
 
 /** Opens a downloaded file in its default app. Rejects with a HistoryError. */
@@ -342,6 +351,13 @@ export function addPostToQueue(video: VideoInfo): Promise<QueueItem> {
 export function getLeftOutFiles(video: VideoInfo): Promise<number[] | null> {
   if (!isTauri()) return Promise.resolve(standIns.leftOutFiles(video))
   return invoke<number[] | null>("left_out_files", { video })
+}
+
+/** Adds the items picked from a channel, playlist or account, each as its own download, and answers how many were
+ * added. Rejects with a DownloadError once every other one is in. */
+export function addManyToQueue(picks: QueuePick[]): Promise<number> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<number>("add_many_to_queue", { picks })
 }
 
 /** The folder rules, in the order they're tried. */

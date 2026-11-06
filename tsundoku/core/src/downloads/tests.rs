@@ -284,6 +284,51 @@ fn records_a_finished_download_in_the_history() {
 }
 
 #[test]
+fn adds_many_at_once_with_one_change() {
+    let test = Test::new();
+    test.add("a");
+    let changes_before = test.listener.changes.load(Ordering::SeqCst);
+    let pick = |video, preset_id: Option<&str>| QueuePick {
+        video,
+        preset_id: preset_id.map(str::to_owned),
+        overwrite: false,
+    };
+    let added = test.queue.add_many(vec![
+        pick(video("b"), Some("best-video")),
+        pick(post("Post"), None),
+        // Already in the queue: skipped.
+        pick(video("a"), Some("best-video")),
+        pick(video("c"), Some("best-audio")),
+    ]);
+    assert_eq!(added, Ok(3));
+    assert_eq!(
+        test.listener.changes.load(Ordering::SeqCst) - changes_before,
+        1,
+        "the UI hears of them once"
+    );
+    let items = test.queue.items();
+    let ids: Vec<&str> = items
+        .iter()
+        .map(|item| item.video.video_id.as_str())
+        .collect();
+    assert_eq!(ids, ["a", "b", "Post", "c"]);
+    assert_eq!(
+        items[3].preset.as_ref().map(|preset| preset.id.as_str()),
+        Some("best-audio")
+    );
+    assert_eq!(items[2].preset, None);
+
+    // A video without a preset, or a preset that's gone, fails without stopping the rest.
+    let added = test.queue.add_many(vec![
+        pick(video("d"), None),
+        pick(video("e"), Some("no-such-preset")),
+        pick(video("f"), Some("best-video")),
+    ]);
+    assert_eq!(added, Err(DownloadError::WrongState));
+    assert!(test.queue.contains("youtube", "f"));
+}
+
+#[test]
 fn stopping_keeps_the_partial_files_and_resume_continues() {
     let test = Test::new();
     let id = test.add("a");

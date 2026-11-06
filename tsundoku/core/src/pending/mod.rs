@@ -979,7 +979,8 @@ fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
         PreviewError::InvalidLink
         | PreviewError::UnsupportedSite
         | PreviewError::NoVideo { .. }
-        | PreviewError::Playlist => true,
+        | PreviewError::Playlist
+        | PreviewError::NotListable { .. } => true,
         // Without gallery-dl, a page with no video may be images; on a site that isn't about images, it's more
         // likely just a page.
         PreviewError::ImagesNotSetUp => !sites::prefers_images(link),

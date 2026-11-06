@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.57 · 2026-11-06
+
+### Added
+
+- **Pick from a channel, playlist or account**: pasting a YouTube channel (any of its tabs), a YouTube playlist or an Instagram account lists what it holds in the preview card instead of being refused: a channel's or account's newest 50 videos or posts, newest first, or a whole playlist in its own order. Each item has a box, with its thumbnail, title, date and length or what the post holds. New ones start ticked; one downloaded before is greyed and marked Downloaded and can still be ticked, one in the queue is marked In Queue. A box at the top ticks them all or none. Download Selected adds each ticked item to the queue as its own download, exactly as if its link had been pasted, with the preset a rule picks or the one chosen in Videos Start As, and asks first before replacing files downloaded with the same preset. Another site's playlist (a SoundCloud set, a Bandcamp album) is listed too when it gives each item a link of its own.
+
+### Changed
+
+- **Pages of several posts**: an X account's media or another page of many posts now says plainly that Tsundoku can't list that site's pages yet, instead of reading as one huge post. A channel, playlist or account link in Pending now says to paste it in the add bar to pick from it.
+
 ## 0.1.56 · 2026-11-06
 
 ### Added

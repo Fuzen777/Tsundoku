@@ -327,8 +327,40 @@ export const strings = {
       inQueue: "In the Queue",
     },
   },
+  /** The preview card's list of a channel's, playlist's or account's items. */
+  picker: {
+    kinds: { channel: "Channel", playlist: "Playlist", account: "Account" },
+    /** What a listing's items are called: posts on an account, videos on YouTube, items elsewhere. */
+    nouns: {
+      post: ["post", "posts"],
+      video: ["video", "videos"],
+      item: ["item", "items"],
+    },
+    /** How many it lists: "Newest 50 videos", "Newest 50 of 8,634 posts", "95 videos". */
+    listed: (count: number, noun: readonly [string, string], newestOnly: boolean, total: number | null) => {
+      if (!newestOnly) return `${count} ${count === 1 ? noun[0] : noun[1]}`
+      const all = total !== null && total > count ? ` of ${total.toLocaleString()}` : ""
+      return `Newest ${count}${all} ${(total ?? count) === 1 ? noun[0] : noun[1]}`
+    },
+    empty: "There's nothing to download here yet.",
+    selectAll: "Select All",
+    select: "Select",
+    selected: (selected: number, count: number) => `${selected} of ${count} selected`,
+    downloaded: "Downloaded",
+    inQueue: "In Queue",
+    inQueueHint: "Already in the queue.",
+    videosStartAs: "Videos Start As",
+    videosStartAsHint: "For videos no rule picks a preset for.",
+    downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count})`),
+  },
   preview: {
     fetching: "Fetching the details…",
+    /** While a channel, playlist or account is listed, instead of `fetching`. */
+    listing: {
+      channel: "Listing the channel's newest videos…",
+      playlist: "Listing the playlist's videos…",
+      account: "Listing the account's newest posts… This can take a minute.",
+    },
     cancel: "Cancel",
     dismiss: "Dismiss",
     close: "Close",
@@ -368,7 +400,9 @@ export const strings = {
     missingDeno: "Deno isn't set up, so some YouTube formats may be missing. You can set it up in Settings.",
     errors: {
       invalidLink: "That isn't a link. Paste a link that starts with https://.",
-      playlist: "Playlists, channels and profiles aren't supported yet. Paste a single video or post.",
+      playlist: "This link holds several videos or posts. Paste it in the add bar to pick which to download.",
+      notListable: (site: string) =>
+        `This ${site || "site's"} page holds several videos or posts, which Tsundoku can't list yet. Paste a link to a single one instead.`,
       liveStream: "This is a live stream, which can't be downloaded yet.",
       upcoming: "This video hasn't started yet. Try again once it has.",
       unsupportedSite: "This site isn't supported.",
