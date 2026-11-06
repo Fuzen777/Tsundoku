@@ -105,10 +105,10 @@ pub fn add_post_to_queue(queue: Queue<'_>, video: VideoInfo) -> Result<QueueItem
     queue.add_post(video)
 }
 
-/// Where posts go when no folder is chosen.
+/// Where downloads go when no folder is chosen: a Tsundoku folder in Downloads.
 #[tauri::command]
-pub fn default_posts_folder() -> String {
-    tsundoku_core::downloads::default_posts_folder()
+pub fn default_download_folder() -> String {
+    tsundoku_core::settings::default_download_folder()
         .display()
         .to_string()
 }

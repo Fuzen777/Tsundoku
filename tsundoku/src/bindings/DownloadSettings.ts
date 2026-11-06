@@ -7,6 +7,11 @@ import type { PauseRange } from "./PauseRange";
  */
 export type DownloadSettings = { 
 /**
+ * Where downloads go when their preset has no folder of its own, and posts unless `posts_folder` is set, or
+ * `None` for a Tsundoku folder in Downloads (`default_download_folder`).
+ */
+folder: string | null, 
+/**
  * How many downloads run at the same time.
  */
 atOnce: number, 
@@ -21,7 +26,7 @@ rateLimit: string | null,
  */
 cookiesBrowser: CookiesBrowser | null, 
 /**
- * Where posts of images go, each site in a folder of its own, or `None` for the Pictures folder.
+ * Where posts of images go, each site in a folder of its own, or `None` for the download folder.
  */
 postsFolder: string | null, 
 /**

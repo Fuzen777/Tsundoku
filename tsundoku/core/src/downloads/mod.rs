@@ -300,7 +300,10 @@ impl DownloadQueue {
         }
         let mut item = QueueItem {
             id: 0,
-            folder: preset.resolved_folder().display().to_string(),
+            folder: preset
+                .resolved_folder(&self.settings.get().downloads.resolved_folder())
+                .display()
+                .to_string(),
             video,
             preset: Some(preset),
             state: QueueState::Waiting,
@@ -428,25 +431,29 @@ impl DownloadQueue {
         Ok(())
     }
 
-    /// How downloads run: how many at once, the speed limit, the cookies browser, and where posts go and how fast.
+    /// How downloads run: where they go, how many at once, the speed limit, the cookies browser, and where posts go
+    /// and how fast.
     pub fn options(&self) -> DownloadSettings {
         self.settings.get().downloads
     }
 
     /// Saves how downloads run, and starts more right away if more can run at once. The speed limit is checked and
-    /// written as yt-dlp writes it ("2M"); an empty one means no limit.
+    /// written as yt-dlp writes it ("2M"); an empty one means no limit. A blank folder means the default one.
     pub fn set_options(
         &self,
         options: DownloadSettings,
     ) -> Result<DownloadSettings, DownloadError> {
+        let chosen = |folder: Option<String>| {
+            folder
+                .map(|folder| folder.trim().to_owned())
+                .filter(|folder| !folder.is_empty())
+        };
         let options = DownloadSettings {
+            folder: chosen(options.folder),
             at_once: options.at_once.clamp(1, MAX_AT_ONCE),
             rate_limit: normalize_rate_limit(options.rate_limit.as_deref())?,
             cookies_browser: options.cookies_browser,
-            posts_folder: options
-                .posts_folder
-                .map(|folder| folder.trim().to_owned())
-                .filter(|folder| !folder.is_empty()),
+            posts_folder: chosen(options.posts_folder),
             post_pause: options.post_pause.normalized(),
         };
         self.settings
@@ -679,21 +686,10 @@ fn normalize_rate_limit(text: Option<&str>) -> Result<Option<String>, DownloadEr
     }
 }
 
-/// Where posts go when no folder is chosen: the Pictures folder, or the user's folder if Windows has none.
-pub fn default_posts_folder() -> PathBuf {
-    dirs::picture_dir()
-        .or_else(dirs::home_dir)
-        .unwrap_or_default()
-}
-
-/// A post's folder: the posts folder, then a folder for the site ("Instagram", "X", or gallery-dl's name such as
-/// "danbooru"), so each site's files can be imported on their own.
+/// A post's folder: the posts folder (by default the download folder), then a folder for the site ("Instagram", "X",
+/// or gallery-dl's name such as "danbooru"), so each site's files can be imported on their own.
 fn post_folder(options: &DownloadSettings, video: &VideoInfo) -> PathBuf {
-    let base = options
-        .posts_folder
-        .as_deref()
-        .map(PathBuf::from)
-        .unwrap_or_else(default_posts_folder);
+    let base = options.resolved_posts_folder();
     let site = sites::sign_in_site(&video.url).map_or(video.site.as_str(), |site| site.name);
     let name: String = site
         .chars()

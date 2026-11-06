@@ -54,7 +54,7 @@ type: Features
 ## Presets
 
 - **Four to start with**: Best Video (best quality, in MKV, the default), 1080p MP4 (up to 1080p, H.264 and AAC for older devices), Best Audio (the audio as it is) and Audio MP3.
-- **Editor**: name; video or audio; for video, the quality limit and the container (MKV, MP4 or as merged); for audio, the format (as it is, MP3, M4A, Opus or FLAC); the file name; the folder (Videos or Music by default); what to embed (metadata, thumbnail, chapters, subtitles with their languages); SponsorBlock (off, mark as chapters, remove sponsors); and extra yt-dlp arguments.
+- **Editor**: name; video or audio; for video, the quality limit and the container (MKV, MP4 or as merged); for audio, the format (as it is, MP3, M4A, Opus or FLAC); the file name; the folder (the download folder by default); what to embed (metadata, thumbnail, chapters, subtitles with their languages); SponsorBlock (off, mark as chapters, remove sponsors); and extra yt-dlp arguments.
 - **Arguments shown**: the editor shows the yt-dlp arguments the preset gives, as they change. Extra arguments that would break downloads (such as `--yes-playlist` or `-o`) are refused, with the reason.
 - **Set as Default, Duplicate, Delete**, and **Reset** for the four built-ins, which can be edited but not deleted.
 - **Kept per download**: a download keeps the preset as it was when it was added, so editing a preset doesn't change downloads already in the queue.
@@ -73,10 +73,11 @@ type: Features
 
 ## Settings
 
+- **Download Folder**: where everything goes unless its preset has a folder of its own: a Tsundoku folder in Downloads by default, with Choose Folder… and Use Default. Posts of images go there too, each site in a folder of its own.
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
-- **Posts of Images**: the posts folder, where each site gets a folder of its own (the Pictures folder by default, with Choose Folder… and Use Default), and the pause before each Instagram file: a random time in a range, 10 to 20 seconds to start with, up to 600.
+- **Posts of Images**: the posts folder, where each site gets a folder of its own (the download folder by default, with Choose Folder… and Use Default), and the pause before each Instagram file: a random time in a range, 10 to 20 seconds to start with, up to 600.
 - **Cookies**: where to read cookies from, for links that need a signed-in account or an age check. It applies to previews and downloads. Automatic (the default) finds every browser profile on the PC and picks, for each link, the one signed in to its site (by which cookies exist, never their values), or for an unknown site the one that visited it last. A single browser (Firefox, Zen, LibreWolf, Floorp, Waterfox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium) uses its profile signed in to the site, else its default one. Choosing a Chromium browser warns that they lock and encrypt their cookies on Windows; Firefox and its forks work.
 - **Supported Sites**: every site yt-dlp and gallery-dl can read, merged into one searchable list without saying which tool reads which, each site once (its playlists, channels and other parts that the tools list on their own are left out). Sites that need an account (Instagram, X, YouTube, TikTok, Reddit, Facebook, Twitch, Niconico, Bilibili) come first, under Signed In with the browser profiles signed in to them, most recent first, or under Not Signed In. The list is read again when Settings opens after a minute, since sign-ins change in the browser.
 

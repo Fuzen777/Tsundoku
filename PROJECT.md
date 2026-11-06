@@ -78,7 +78,7 @@ Existing yt-dlp GUIs put a window on top of the command line but don't keep trac
 2. Each preset holds a format choice, a container, a file name template, a destination folder, what to embed (metadata, thumbnail, chapters, subtitles with their languages), SponsorBlock (off, mark or remove) and extra arguments.
 3. Built-ins can be edited, duplicated and reset. Any preset can be the default.
 4. The file name template is `%(title).150B [%(id)s].%(ext)s` by default: the title is trimmed to stay under Windows' path limit, and the ID in the name lets a later import recognise the file.
-5. Video presets save to `Videos` and audio presets to `Music` by default.
+5. Presets without a folder of their own save to a Tsundoku folder in Downloads, posts of images too (0.1.10; video presets first saved to `Videos` and audio presets to `Music`).
 6. Extra arguments go to yt-dlp after the app's own. The few that would break progress, history or the single-video rule (`--yes-playlist`, `--download-archive`, `--print`, `--progress-template`…) are refused.
 
 ## Scope

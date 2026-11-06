@@ -99,6 +99,7 @@ impl Test {
                 }
                 // No cookies, so the tests never look at this PC's browsers.
                 settings.downloads.cookies_browser = None;
+                settings.downloads.folder = Some(downloads.clone());
                 settings.downloads.posts_folder =
                     Some(folder.path().join("posts").display().to_string());
             })
@@ -427,6 +428,7 @@ fn checks_and_saves_the_options() {
     let saved = test
         .queue
         .set_options(DownloadSettings {
+            folder: Some(" ".to_owned()),
             at_once: 9,
             rate_limit: Some(" 4.2m ".to_owned()),
             cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
@@ -436,7 +438,8 @@ fn checks_and_saves_the_options() {
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
-    assert_eq!(saved.posts_folder, None, "blank is the Pictures folder");
+    assert_eq!(saved.folder, None, "blank is the default folder");
+    assert_eq!(saved.posts_folder, None, "blank is the download folder");
     assert_eq!(
         saved.post_pause,
         crate::settings::PauseRange { min: 5, max: 5 },
@@ -611,6 +614,42 @@ fn a_video_isnt_added_as_a_post() {
         Err(DownloadError::WrongState)
     );
     assert!(test.queue.items().is_empty());
+}
+
+#[test]
+fn a_preset_without_a_folder_saves_in_the_download_folder() {
+    let test = Test::new();
+    let everything = test.folder.path().join("everything");
+    test.settings
+        .update(|settings| {
+            for preset in &mut settings.presets.list {
+                preset.folder = None;
+            }
+            settings.downloads.folder = Some(everything.display().to_string());
+        })
+        .unwrap();
+    let item = test.queue.add(video("a"), "best-video", false).unwrap();
+    assert_eq!(item.folder, everything.display().to_string());
+    wait_until("it runs", || test.runner.started().contains(&item.id));
+    test.queue.cancel(item.id).unwrap();
+}
+
+#[test]
+fn posts_go_to_the_download_folder_unless_they_have_their_own() {
+    let mut options = DownloadSettings {
+        folder: Some(r"D:\Tsundoku".to_owned()),
+        ..DownloadSettings::default()
+    };
+    let post = post("1");
+    assert_eq!(
+        post_folder(&options, &post),
+        Path::new(r"D:\Tsundoku").join("Instagram")
+    );
+    options.posts_folder = Some(r"D:\Posts".to_owned());
+    assert_eq!(
+        post_folder(&options, &post),
+        Path::new(r"D:\Posts").join("Instagram")
+    );
 }
 
 #[test]

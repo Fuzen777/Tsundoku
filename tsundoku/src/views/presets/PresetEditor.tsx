@@ -60,7 +60,7 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
   const isDefault = overview.defaultId === saved.id
   const argumentsError = args.error ? describePresetError(args.error).message : undefined
   const { output } = draft
-  const defaultFolder = output.kind === "audio" ? overview.defaultAudioFolder : overview.defaultVideoFolder
+  const defaultFolder = overview.defaultFolder
 
   const update = (changes: Partial<Preset>) => {
     setJustSaved(false)

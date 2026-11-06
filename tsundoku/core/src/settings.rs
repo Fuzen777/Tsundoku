@@ -28,6 +28,9 @@ pub struct Settings {
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
 pub struct DownloadSettings {
+    /// Where downloads go when their preset has no folder of its own, and posts unless `posts_folder` is set, or
+    /// `None` for a Tsundoku folder in Downloads (`default_download_folder`).
+    pub folder: Option<String>,
     /// How many downloads run at the same time.
     pub at_once: u32,
     /// yt-dlp's `--limit-rate`, such as "2M", or `None` for no limit.
@@ -36,7 +39,7 @@ pub struct DownloadSettings {
     /// the browser profile signed in to the link's site (`browsers::cookies_for`), a browser its profile, `None`
     /// none at all.
     pub cookies_browser: Option<CookiesBrowser>,
-    /// Where posts of images go, each site in a folder of its own, or `None` for the Pictures folder.
+    /// Where posts of images go, each site in a folder of its own, or `None` for the download folder.
     pub posts_folder: Option<String>,
     /// How long to wait before each file of a post on a site that limits how fast it's read
     /// (`sites::paces_downloads`, Instagram), so the account isn't blocked.
@@ -46,6 +49,7 @@ pub struct DownloadSettings {
 impl Default for DownloadSettings {
     fn default() -> Self {
         Self {
+            folder: None,
             at_once: 2,
             rate_limit: None,
             cookies_browser: Some(CookiesBrowser::Automatic),
@@ -53,6 +57,36 @@ impl Default for DownloadSettings {
             post_pause: PauseRange::default(),
         }
     }
+}
+
+impl DownloadSettings {
+    /// Where downloads go when their preset has no folder of its own: the chosen folder, or a Tsundoku folder in
+    /// Downloads.
+    pub fn resolved_folder(&self) -> PathBuf {
+        chosen_folder(self.folder.as_deref()).unwrap_or_else(default_download_folder)
+    }
+
+    /// Where posts go, each site in a folder of its own: the posts folder, or else the download folder.
+    pub fn resolved_posts_folder(&self) -> PathBuf {
+        chosen_folder(self.posts_folder.as_deref()).unwrap_or_else(|| self.resolved_folder())
+    }
+}
+
+/// A folder the user chose, unless it's blank.
+fn chosen_folder(folder: Option<&str>) -> Option<PathBuf> {
+    folder
+        .map(str::trim)
+        .filter(|folder| !folder.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Where downloads go when no folder is chosen: a Tsundoku folder in Downloads, or in the user's folder if Windows
+/// has no Downloads folder.
+pub fn default_download_folder() -> PathBuf {
+    dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_default()
+        .join("Tsundoku")
 }
 
 /// A random wait between `min` and `max` seconds.
@@ -333,6 +367,38 @@ mod tests {
             Some(&ToolSetup::Managed { checksum: None })
         );
         assert_eq!(settings.tools.yt_dlp_channel, UpdateChannel::Stable);
+    }
+
+    #[test]
+    fn downloads_go_to_a_tsundoku_folder_unless_one_is_chosen() {
+        let mut downloads = DownloadSettings::default();
+        assert!(default_download_folder().ends_with("Tsundoku"));
+        assert_eq!(downloads.resolved_folder(), default_download_folder());
+        assert_eq!(
+            downloads.resolved_posts_folder(),
+            default_download_folder(),
+            "posts too"
+        );
+
+        downloads.folder = Some(r"D:\Tsundoku".to_owned());
+        assert_eq!(downloads.resolved_folder(), PathBuf::from(r"D:\Tsundoku"));
+        assert_eq!(
+            downloads.resolved_posts_folder(),
+            PathBuf::from(r"D:\Tsundoku")
+        );
+
+        downloads.posts_folder = Some(r"D:\Posts".to_owned());
+        assert_eq!(
+            downloads.resolved_posts_folder(),
+            PathBuf::from(r"D:\Posts")
+        );
+
+        downloads.folder = Some("  ".to_owned());
+        assert_eq!(
+            downloads.resolved_folder(),
+            default_download_folder(),
+            "blank is the default"
+        );
     }
 
     #[test]

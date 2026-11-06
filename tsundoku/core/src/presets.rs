@@ -1,7 +1,7 @@
 //! Presets: how a video is downloaded (formats, container, file name, folder, what to embed), the yt-dlp arguments
 //! each one gives, and the user's list of them, kept in `settings.json`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -23,7 +23,7 @@ pub struct Preset {
     pub output: PresetOutput,
     /// yt-dlp's output template for the file name.
     pub file_name: String,
-    /// Where files go, or `None` for the Videos folder (video) or the Music folder (audio).
+    /// Where files go, or `None` for the download folder (Settings → Downloads).
     pub folder: Option<String>,
     pub embed_metadata: bool,
     pub embed_thumbnail: bool,
@@ -240,24 +240,13 @@ impl Preset {
         }
     }
 
-    /// Where the preset's files go: its folder, or else Videos or Music.
-    pub fn resolved_folder(&self) -> PathBuf {
+    /// Where the preset's files go: its folder, or else the download folder.
+    pub fn resolved_folder(&self, download_folder: &Path) -> PathBuf {
         match &self.folder {
             Some(folder) if !folder.trim().is_empty() => PathBuf::from(folder),
-            _ => default_folder(self.is_audio()),
+            _ => download_folder.to_path_buf(),
         }
     }
-}
-
-/// The Videos folder for video presets, the Music folder for audio ones, or the user's folder if Windows has
-/// neither.
-pub fn default_folder(audio: bool) -> PathBuf {
-    let folder = if audio {
-        dirs::audio_dir()
-    } else {
-        dirs::video_dir()
-    };
-    folder.or_else(dirs::home_dir).unwrap_or_default()
 }
 
 /// Splits extra arguments on spaces; double quotes keep spaces in an argument ("--sub-langs \"en, ja\"").
@@ -390,9 +379,8 @@ pub struct PresetsOverview {
     pub default_id: String,
     /// IDs of the built-ins, which can be reset but not deleted.
     pub built_in_ids: Vec<String>,
-    /// Where presets without a folder save: Videos and Music.
-    pub default_video_folder: String,
-    pub default_audio_folder: String,
+    /// Where presets without a folder save: the download folder.
+    pub default_folder: String,
 }
 
 /// Changes to the presets, saved to `settings.json` as they're made.
@@ -406,7 +394,8 @@ impl PresetManager {
     }
 
     pub fn overview(&self) -> PresetsOverview {
-        let presets = self.settings.get().presets;
+        let settings = self.settings.get();
+        let presets = settings.presets;
         PresetsOverview {
             presets: presets.list,
             default_id: presets.default_id,
@@ -414,8 +403,7 @@ impl PresetManager {
                 .into_iter()
                 .map(|preset| preset.id)
                 .collect(),
-            default_video_folder: default_folder(false).display().to_string(),
-            default_audio_folder: default_folder(true).display().to_string(),
+            default_folder: settings.downloads.resolved_folder().display().to_string(),
         }
     }
 
@@ -658,9 +646,13 @@ mod tests {
     #[test]
     fn resolves_the_folder() {
         let mut preset = built_in("best-audio");
-        assert_eq!(preset.resolved_folder(), default_folder(true));
+        let downloads = Path::new(r"D:\Tsundoku");
+        assert_eq!(preset.resolved_folder(downloads), downloads.to_path_buf());
         preset.folder = Some(r"D:\Music\Rips".to_owned());
-        assert_eq!(preset.resolved_folder(), PathBuf::from(r"D:\Music\Rips"));
+        assert_eq!(
+            preset.resolved_folder(downloads),
+            PathBuf::from(r"D:\Music\Rips")
+        );
     }
 
     fn manager_in(folder: &tempfile::TempDir) -> PresetManager {

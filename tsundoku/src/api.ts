@@ -49,7 +49,7 @@ export const queryKeys = {
   videoDownloads: ["video-downloads"],
   downloadFiles: ["download-files"],
   downloadOptions: ["download-options"],
-  defaultPostsFolder: ["default-posts-folder"],
+  defaultDownloadFolder: ["default-download-folder"],
   supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
 } as const
@@ -176,7 +176,7 @@ export function onToolsChanged(handler: () => void): Promise<UnlistenFn> {
   return listen(TOOLS_CHANGED_EVENT, () => handler())
 }
 
-/** The presets, the default and the default folders. */
+/** The presets, the default and the download folder. */
 export function getPresetsOverview(): Promise<PresetsOverview> {
   if (!isTauri()) return Promise.resolve(standIns.presetsOverview)
   return invoke<PresetsOverview>("presets_overview")
@@ -233,10 +233,10 @@ export function addPostToQueue(video: VideoInfo): Promise<QueueItem> {
   return invoke<QueueItem>("add_post_to_queue", { video })
 }
 
-/** Where posts go when no folder is chosen. */
-export function getDefaultPostsFolder(): Promise<string> {
-  if (!isTauri()) return Promise.resolve(standIns.defaultPostsFolder)
-  return invoke<string>("default_posts_folder")
+/** Where downloads go when no folder is chosen: a Tsundoku folder in Downloads. */
+export function getDefaultDownloadFolder(): Promise<string> {
+  if (!isTauri()) return Promise.resolve(standIns.defaultDownloadFolder)
+  return invoke<string>("default_download_folder")
 }
 
 /** Stops a running download, keeping its partial files, or holds a waiting one. */
@@ -369,7 +369,7 @@ export function getSupportedSites(): Promise<SupportedSites> {
   return invoke<SupportedSites>("supported_sites")
 }
 
-/** How downloads run: how many at once, the speed limit and the cookies browser. */
+/** How downloads run: where they go, how many at once, the speed limit, the cookies browser and posts. */
 export function getDownloadOptions(): Promise<DownloadSettings> {
   if (!isTauri()) return Promise.resolve(standIns.downloadOptions)
   return invoke<DownloadSettings>("download_options")

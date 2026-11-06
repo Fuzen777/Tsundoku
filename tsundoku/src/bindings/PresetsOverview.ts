@@ -10,6 +10,6 @@ export type PresetsOverview = { presets: Array<Preset>, defaultId: string,
  */
 builtInIds: Array<string>, 
 /**
- * Where presets without a folder save: Videos and Music.
+ * Where presets without a folder save: the download folder.
  */
-defaultVideoFolder: string, defaultAudioFolder: string, };
+defaultFolder: string, };

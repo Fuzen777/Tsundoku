@@ -4,7 +4,7 @@ import {
   checkForAppUpdate,
   detectTools,
   getAppInfo,
-  getDefaultPostsFolder,
+  getDefaultDownloadFolder,
   getDownloadFiles,
   getDownloadOptions,
   getSupportedSites,
@@ -153,8 +153,8 @@ export function useSupportedSites() {
   return useQuery({ queryKey: queryKeys.supportedSites, queryFn: getSupportedSites, staleTime: 60_000 })
 }
 
-export function useDefaultPostsFolder() {
-  return useQuery({ queryKey: queryKeys.defaultPostsFolder, queryFn: getDefaultPostsFolder, staleTime: Infinity })
+export function useDefaultDownloadFolder() {
+  return useQuery({ queryKey: queryKeys.defaultDownloadFolder, queryFn: getDefaultDownloadFolder, staleTime: Infinity })
 }
 
 export function useDownloadOptions() {

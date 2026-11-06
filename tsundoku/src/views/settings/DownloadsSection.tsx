@@ -10,7 +10,7 @@ import { Field, SelectInput, TextInput } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { describeDownloadError, describePresetError, type ErrorDescription } from "../../errors"
-import { useDefaultPostsFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
+import { useDefaultDownloadFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
 
 const text = strings.settings
@@ -58,9 +58,11 @@ function useSaveOptions() {
   return { options, save, error }
 }
 
-/** Settings → Downloads: how many at once, the speed limit, the default preset. */
+/** Settings → Downloads: the download folder, how many at once, the speed limit, the default preset. */
 export function DownloadsSection() {
+  const queryClient = useQueryClient()
   const { options, save, error } = useSaveOptions()
+  const { data: defaultFolder } = useDefaultDownloadFolder()
   const { data: presets } = usePresets()
   const storePresets = useStorePresets()
   const [presetError, setPresetError] = useState<ErrorDescription | null>(null)
@@ -68,6 +70,17 @@ export function DownloadsSection() {
   const [rateLimit, setRateLimit] = useState<string | null>(null)
   const [rateLimitSaved, setRateLimitSaved] = useState(false)
   const shownRateLimit = rateLimit ?? options?.rateLimit ?? ""
+  const folder = options?.folder ?? null
+
+  async function saveFolder(chosen: string | null) {
+    // Presets without a folder of their own show the download folder.
+    if (await save({ folder: chosen })) await queryClient.invalidateQueries({ queryKey: queryKeys.presets })
+  }
+
+  async function chooseFolder() {
+    const chosen = await pickFolder(text.folderTitle)
+    if (chosen) await saveFolder(chosen)
+  }
 
   async function saveRateLimit() {
     if (rateLimit === null) return
@@ -89,6 +102,22 @@ export function DownloadsSection() {
   return (
     <Section title={text.downloads}>
       <Card className="flex flex-col gap-4 p-4">
+        <Field
+          label={text.folder}
+          hint={folder || !defaultFolder ? text.folderHint : `${text.folderHint} ${text.defaultFolder(defaultFolder)}`}
+        >
+          <div className="flex gap-2">
+            <TextInput readOnly className="flex-1" value={folder ?? defaultFolder ?? ""} title={folder ?? defaultFolder ?? ""} />
+            <Button disabled={!options} onClick={() => void chooseFolder()}>
+              {text.chooseFolder}
+            </Button>
+            {folder && (
+              <Button variant="ghost" onClick={() => void saveFolder(null)}>
+                {text.useDefaultFolder}
+              </Button>
+            )}
+          </div>
+        </Field>
         <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-4">
           <Field label={text.atOnce} hint={text.atOnceHint} htmlFor="settings-at-once">
             <SelectInput
@@ -149,12 +178,14 @@ export function DownloadsSection() {
 /** Settings → Posts of Images: where posts go, each site in its own folder, and the pause between Instagram's files. */
 export function PostsSection() {
   const { options, save, error } = useSaveOptions()
-  const { data: defaultFolder } = useDefaultPostsFolder()
+  const { data: defaultDownloadFolder } = useDefaultDownloadFolder()
   // The pause is saved when a field is left or Enter is pressed, not at every key.
   const [pause, setPause] = useState<{ min: string; max: string } | null>(null)
   const savedPause = options?.postPause ?? { min: 10, max: 20 }
   const shownPause = pause ?? { min: String(savedPause.min), max: String(savedPause.max) }
   const folder = options?.postsFolder ?? null
+  // Without a folder of their own, posts go to the download folder.
+  const defaultFolder = options?.folder ?? defaultDownloadFolder ?? null
 
   async function chooseFolder() {
     const chosen = await pickFolder(text.postsFolderTitle)
@@ -192,7 +223,7 @@ export function PostsSection() {
       <Card className="flex flex-col gap-4 p-4">
         <Field
           label={text.postsFolder}
-          hint={folder || !defaultFolder ? text.postsFolderHint : `${text.postsFolderHint} ${text.defaultFolder(defaultFolder)}`}
+          hint={folder ? text.postsFolderHint : `${text.postsFolderHint} ${text.postsInDownloadFolder}`}
         >
           <div className="flex gap-2">
             <TextInput readOnly className="flex-1" value={folder ?? defaultFolder ?? ""} title={folder ?? defaultFolder ?? ""} />

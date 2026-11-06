@@ -12,7 +12,7 @@ id: string, name: string, output: PresetOutput,
  */
 fileName: string, 
 /**
- * Where files go, or `None` for the Videos folder (video) or the Music folder (audio).
+ * Where files go, or `None` for the download folder (Settings → Downloads).
  */
 folder: string | null, embedMetadata: boolean, embedThumbnail: boolean, embedChapters: boolean, 
 /**

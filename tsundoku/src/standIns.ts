@@ -208,8 +208,7 @@ export const standIns = {
     presets: presetStandIns,
     defaultId: "best-video",
     builtInIds: presetStandIns.map((preset) => preset.id),
-    defaultVideoFolder: String.raw`C:\Users\You\Videos`,
-    defaultAudioFolder: String.raw`C:\Users\You\Music`,
+    defaultFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   } satisfies PresetsOverview,
   presetArguments: ["-f", "bv*+ba/b", "--merge-output-format", "mkv", "-o", "%(title).150B [%(id)s].%(ext)s"],
   /** The history, searched by title only. */
@@ -235,13 +234,14 @@ export const standIns = {
     imagesSetUp: false,
   } satisfies SupportedSites,
   downloadOptions: {
+    folder: null,
     atOnce: 2,
     rateLimit: null,
     cookiesBrowser: "automatic",
     postsFolder: null,
     postPause: { min: 10, max: 20 },
   } satisfies DownloadSettings,
-  defaultPostsFolder: String.raw`C:\Users\You\Pictures`,
+  defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {
       progress: {

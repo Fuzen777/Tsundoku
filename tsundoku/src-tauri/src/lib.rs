@@ -173,7 +173,7 @@ pub fn run() {
             downloads::queue_items,
             downloads::add_to_queue,
             downloads::add_post_to_queue,
-            downloads::default_posts_folder,
+            downloads::default_download_folder,
             downloads::stop_download,
             downloads::resume_download,
             downloads::retry_download,
