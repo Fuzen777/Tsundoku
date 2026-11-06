@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.34 · 2026-11-06
+
+### Changed
+
+- **A new dark mode**, after RJ Library's: the current view now sits darker than the window around it, with cards and fields lighter again, all in plain grays with no tint. Lines are easier to see, supporting text is a softer gray, and the main buttons, the selected choice of a switch and the counts in the sidebar are a deep indigo with white text instead of light blue with dark text. Buttons that confirm a deletion are dark red with white text. Light mode doesn't change.
+
 ## 0.1.33 · 2026-11-06
 
 ### Added

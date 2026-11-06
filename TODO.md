@@ -24,7 +24,7 @@ rules:
 ### Aesthetics
 
 - [x] Use Icons instead of Text where it makes sense (accept, reject…) with hover text.
-- [ ] RJ-Library inspired dark mode
+- [x] RJ-Library inspired dark mode
 - [ ] Light mode revamp that takes its roots from the dark mode above
 
 ## Features

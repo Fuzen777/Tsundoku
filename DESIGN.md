@@ -5,7 +5,7 @@ type: Agent Instructions
 
 ## Guiding Principles
 
-- **A Windows 11 app.** Mica backdrop, Segoe UI Variable, a sidebar and a raised content layer with a rounded top-left corner, as in Windows' own Settings app. It follows Windows' light or dark theme, unless Settings → Appearance picks one.
+- **A Windows 11 app.** Mica backdrop, Segoe UI Variable, a sidebar and a content layer with a rounded top-left corner, as in Windows' own Settings app: raised above the window in light mode, sunk below it in dark mode, as in RJ Library. It follows Windows' light or dark theme, unless Settings → Appearance picks one.
 - **Quiet chrome, clear state.** The app recedes; what is downloading, finished, failed or already owned is what stands out.
 - **Consistency over cleverness.** Repeated patterns (buttons, rows, empty states) look and behave the same everywhere.
 
@@ -31,13 +31,15 @@ Which side of `light-dark()` shows follows the theme picked in Settings → Appe
 | Role | Token | Usage |
 | --- | --- | --- |
 | Window background | `--color-bg` | Painted only without Mica (Windows 10) |
-| Raised layer | `--color-surface` | The content area, panels |
+| Content layer | `--color-surface` | The content area, panels: raised above the window in light mode, sunk below it in dark mode |
 | Card | `--color-card` | Cards, one step above the content area |
 | Interactive background | `--color-input`, `--color-input-hover` | Inputs, secondary buttons, hovered and selected rows, icon tiles |
 | Borders | `--color-line`, `--color-line-strong` | Dividers and outlines; strong for emphasis |
 | Text | `--color-fg`, `--color-fg-secondary`, `--color-fg-muted` | Primary text; supporting details; labels, empty states and placeholders |
-| Accent | `--color-accent`, `--color-accent-hover`, `--color-on-accent` | Ai-iro (藍色), Japanese indigo: primary buttons, the selected navigation item, focus rings |
-| Destructive | `--color-danger`, `--color-danger-hover`, `--color-on-danger` | Confirming a destructive action |
+| Accent | `--color-accent`, `--color-accent-hover` | Ai-iro (藍色), Japanese indigo, for marks and text: focus outlines, the selected navigation item's pill, progress bars, links, checkboxes |
+| Accent fill | `--color-accent-fill`, `--color-accent-fill-hover`, `--color-on-accent` | A filled background with `--color-on-accent` text: primary buttons, the selected segment, count badges |
+| Destructive | `--color-danger` | For text and icons: an error under a field, a destructive menu item, an error message's icon |
+| Danger fill | `--color-danger-fill`, `--color-danger-fill-hover`, `--color-on-danger` | The danger button, confirming a destructive action |
 | Attention | `--color-warning` | Warnings that don't block: the icon of the duplicate warning, and of Deno missing |
 | Success | `--color-success` | Something finished well: the icon of a success message |
 
@@ -49,16 +51,26 @@ Which side of `light-dark()` shows follows the theme picked in Settings → Appe
 > [!tip]
 > When one color would serve two distinct roles, add a token rather than sharing one.
 
+### Dark Mode
+
+Dark mode follows RJ Library's dark theme:
+
+1. Neutral grays with no tint: white or black at an opacity, and gray text.
+2. The content area (`--color-surface`, black at 45%) is darker than the window around it, and cards and inputs are lighter again (white at 4% and 7.5%).
+3. Lines are white at 14% (24% for `--color-line-strong`).
+4. Filled buttons, the selected segment and count badges are dark (`--color-accent-fill`, `--color-danger-fill`) with white text; the light `--color-accent` and `--color-danger` are for marks and text.
+5. Every layer is translucent, so Mica still shows through; without it, they sit over `--color-bg` the same way.
+
 ---
 
 ## Layout
 
 1. The app name (積ん読 beside it) and the add bar run across the top.
 2. The sidebar is on the left: the views at the top, Settings at the bottom.
-3. The current view sits in the raised layer (`--color-surface`, a line border on its top and left, rounded top-left corner).
+3. The current view sits in the content layer (`--color-surface`, a line border on its top and left, rounded top-left corner).
 4. A view is a `Page`: its title, then content that scrolls on its own. Within it, a `Section` groups related content under a 14 px semibold title, and a `Card` raises one item (`--color-card`, a line border, 8 px corners).
 5. An empty list shows an `EmptyState`: a 40 px icon, a Title Case title and a one-sentence explanation.
-6. The first-run setup replaces the sidebar and the add bar: the app name, then the raised layer across the whole width, holding a centered column (`max-w-2xl`) with the title, a sentence, its cards, and the buttons at the bottom right. Its first screen has a card per choice (where the tools go, their caches, the download folder), each an `IconHeading` and radio rows; its second, a card per tool, with Back while no tool is set up.
+6. The first-run setup replaces the sidebar and the add bar: the app name, then the content layer across the whole width, holding a centered column (`max-w-2xl`) with the title, a sentence, its cards, and the buttons at the bottom right. Its first screen has a card per choice (where the tools go, their caches, the download folder), each an `IconHeading` and radio rows; its second, a card per tool, with Back while no tool is set up.
 7. A tool is shown with `ToolHeading`: its icon on a 36 px tile (`--color-input`), its name, and what it does. `IconHeading` is the same for anything else, such as a first-run choice.
 8. A view's page-wide buttons (such as Clear Finished) sit on its title's right, `sm` size.
 9. The sidebar shows a count beside Queue (downloads not done yet) and Pending (links waiting): an accent pill with the number, hidden at zero.

@@ -35,7 +35,7 @@ export function SegmentedControl<Value extends string>({
               if (!selected) onChange(option.value)
             }}
             className={`h-6 rounded px-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${
-              selected ? "bg-accent text-on-accent" : "text-fg-secondary hover:text-fg"
+              selected ? "bg-accent-fill text-on-accent" : "text-fg-secondary hover:text-fg"
             }`}
           >
             {option.label}

@@ -57,7 +57,7 @@ function NavButton({ item, selected, count, onSelect }: NavButtonProps) {
       <Icon size={16} />
       {item.label}
       {count !== undefined && count > 0 && (
-        <span className="ml-auto min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-medium text-on-accent tabular-nums">
+        <span className="ml-auto min-w-5 rounded-full bg-accent-fill px-1.5 text-center text-xs font-medium text-on-accent tabular-nums">
           {count}
         </span>
       )}

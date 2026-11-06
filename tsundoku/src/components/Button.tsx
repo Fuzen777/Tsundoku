@@ -18,10 +18,10 @@ const BASE_CLASSES = [
 ].join(" ")
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-on-accent hover:bg-accent-hover",
+  primary: "bg-accent-fill text-on-accent hover:bg-accent-fill-hover",
   secondary: "border border-line bg-input text-fg hover:bg-input-hover",
   ghost: "bg-transparent text-fg-secondary hover:bg-input hover:text-fg",
-  danger: "bg-danger text-on-danger hover:bg-danger-hover",
+  danger: "bg-danger-fill text-on-danger hover:bg-danger-fill-hover",
 }
 
 const SIZE_CLASSES: Record<ButtonSize, string> = {
