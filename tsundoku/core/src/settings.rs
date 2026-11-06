@@ -224,9 +224,9 @@ impl PauseRange {
 }
 
 impl Default for PauseRange {
-    /// One file every 10 to 20 seconds: slow, but safe from Instagram's limits.
+    /// One file every 5 to 10 seconds: slow enough for Instagram's limits.
     fn default() -> Self {
-        Self { min: 10, max: 20 }
+        Self { min: 5, max: 10 }
     }
 }
 

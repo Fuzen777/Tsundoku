@@ -304,7 +304,7 @@ export const standIns = {
     atOnce: 2,
     rateLimit: null,
     cookiesBrowser: "automatic",
-    postPause: { min: 10, max: 20 },
+    postPause: { min: 5, max: 10 },
   } satisfies DownloadSettings,
   addingOptions: {
     watchClipboard: true,

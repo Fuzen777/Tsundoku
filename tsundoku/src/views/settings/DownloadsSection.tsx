@@ -10,7 +10,6 @@ import { Field, SelectInput, TextInput } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { describeDownloadError, describePresetError, type ErrorDescription } from "../../errors"
-import { useAppActions } from "../../navigation"
 import { useDefaultDownloadFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
 
@@ -180,13 +179,12 @@ export function DownloadsSection() {
   )
 }
 
-/** Settings → Posts of Images: where posts go (a rule, so a link to Rules), and the pause between Instagram's files. */
-export function PostsSection() {
-  const { navigate } = useAppActions()
+/** Settings → Instagram: the pause before each Instagram file, and between Instagram links in Pending. */
+export function InstagramSection() {
   const { options, save, error } = useSaveOptions()
   // The pause is saved when a field is left or Enter is pressed, not at every key.
   const [pause, setPause] = useState<{ min: string; max: string } | null>(null)
-  const savedPause = options?.postPause ?? { min: 10, max: 20 }
+  const savedPause = options?.postPause ?? { min: 5, max: 10 }
   const shownPause = pause ?? { min: String(savedPause.min), max: String(savedPause.max) }
 
   async function savePause() {
@@ -216,14 +214,8 @@ export function PostsSection() {
   )
 
   return (
-    <Section title={text.posts}>
-      <Card className="flex flex-col gap-4 p-4">
-        <div className="flex items-center gap-3">
-          <p className="min-w-0 flex-1 text-fg-secondary">{text.postsRule}</p>
-          <Button size="sm" onClick={() => navigate("rules")}>
-            {text.openRules}
-          </Button>
-        </div>
+    <Section title={text.instagram}>
+      <Card className="flex flex-col gap-3 p-4">
         <Field label={text.postPause} hint={text.postPauseHint(LONGEST_PAUSE)} htmlFor="settings-pause-min">
           <div className="flex items-center gap-2 text-fg-secondary">
             <span>{text.pauseFrom}</span>

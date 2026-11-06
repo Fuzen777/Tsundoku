@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.27 · 2026-11-06
+
+### Changed
+
+- **Settings → Instagram**: the card once called Posts of Images is named for what it sets, the pause between Instagram files, and no longer points to Rules. The pause now starts at 5 to 10 seconds instead of 10 to 20; a range you already saved stays as it is.
+
 ## 0.1.26 · 2026-11-06
 
 ### Fixed

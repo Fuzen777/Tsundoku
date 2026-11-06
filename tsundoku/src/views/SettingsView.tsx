@@ -9,7 +9,7 @@ import { useAppInfo, useAppUpdate } from "../queries"
 import { strings } from "../strings"
 import { AddingSection } from "./settings/AddingSection"
 import { BackgroundSection } from "./settings/BackgroundSection"
-import { CookiesSection, DownloadsSection, PostsSection } from "./settings/DownloadsSection"
+import { CookiesSection, DownloadsSection, InstagramSection } from "./settings/DownloadsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { ToolsSection } from "./settings/ToolsSection"
 
@@ -20,7 +20,7 @@ export function SettingsView() {
         <DownloadsSection />
         <AddingSection />
         <BackgroundSection />
-        <PostsSection />
+        <InstagramSection />
         <CookiesSection />
         <SupportedSitesSection />
         <ToolsSection />
