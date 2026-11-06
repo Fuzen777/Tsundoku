@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -26,10 +27,11 @@ pub const CATCH_ALL_RULE_ID: &str = "catch-all";
 /// The catch-all's ID from 0.1.11 to 0.1.29, when it was the posts rule and took only posts of images.
 const POSTS_RULE_ID: &str = "posts";
 
-/// Replaced in a rule's folder by the download's site, such as "Instagram".
+/// Replaced in a rule's folder by the download's site, such as "Instagram". The others are in `placeholder_value`.
 const SITE_PLACEHOLDER: &str = "site";
-/// Replaced in a rule's folder by the download's uploader or account.
-const UPLOADER_PLACEHOLDER: &str = "uploader";
+
+/// The most characters a placeholder fills in, so a long title doesn't make a path longer than Windows takes.
+const LONGEST_PLACEHOLDER: usize = 80;
 
 /// When every condition matches a download, it goes in `folder`, starts with `preset_id` and downloads right away or
 /// not, each when set. A rule sets at least one; the catch-all only its folder.
@@ -95,6 +97,10 @@ pub enum RuleOperator {
     IsNot,
     Contains,
     DoesNotContain,
+    /// The value is a pattern (a regular expression), found anywhere in the text, ignoring case. The groups it
+    /// captures can go in the rule's folder as `{1}` to `{9}`.
+    Matches,
+    DoesNotMatch,
 }
 
 /// What a download is: a video or audio by its preset, a post of images, or a file host's files.
@@ -109,6 +115,16 @@ pub enum DownloadKind {
 }
 
 impl DownloadKind {
+    /// As `{kind}` puts it in a folder: "Videos", "Audio", "Posts" or "Files".
+    pub fn folder_name(self) -> &'static str {
+        match self {
+            Self::Video => "Videos",
+            Self::Audio => "Audio",
+            Self::Post => "Posts",
+            Self::File => "Files",
+        }
+    }
+
     /// As a condition's value holds it.
     pub fn as_str(self) -> &'static str {
         match self {
@@ -167,6 +183,9 @@ pub enum RuleError {
     /// A condition with nothing to compare to.
     #[error("a condition of rule {rule} is empty")]
     EmptyValue { rule: u32 },
+    /// A condition's pattern that isn't a valid regular expression, and what's wrong with it.
+    #[error("a pattern of rule {rule} isn't valid: {detail}")]
+    InvalidPattern { rule: u32, detail: String },
     #[error("couldn't save: {detail}")]
     Storage { detail: String },
 }
@@ -301,19 +320,6 @@ impl RuleSubject<'_> {
                 .unwrap_or_default(),
         }
     }
-
-    /// The site as a folder's name: the name people know for sites that need an account ("Instagram", "X") and
-    /// for file hosts ("MEGA"), otherwise the tools' own ("danbooru").
-    fn site_folder_name(&self) -> String {
-        site_name(self.video)
-    }
-
-    fn uploader_folder_name(&self) -> String {
-        safe_folder_name(
-            self.video.uploader.as_deref().unwrap_or_default(),
-            "Unknown",
-        )
-    }
 }
 
 impl FolderRule {
@@ -327,6 +333,15 @@ impl FolderRule {
         self.conditions
             .iter()
             .all(|condition| condition.matches(subject))
+    }
+
+    /// What `{1}` to `{9}` become in its folder: the groups of its first pattern that captures any, whole match
+    /// first. `None` when it has no such pattern.
+    fn captured(&self, subject: &RuleSubject<'_>) -> Option<Vec<Option<String>>> {
+        self.conditions
+            .iter()
+            .filter_map(|condition| condition.captured(subject))
+            .find(|captured| captured.len() > 1)
     }
 
     /// Whether it picks where matching downloads go.
@@ -344,7 +359,7 @@ impl FolderRule {
     }
 
     /// Checks the rule can be saved: it does something (the catch-all picks a folder), doesn't pick the preset while
-    /// checking it, and every condition has a value. `number` counts from 1.
+    /// checking it, every condition has a value, and every pattern is valid. `number` counts from 1.
     fn validate(&self, number: u32) -> Result<(), RuleError> {
         if self.is_catch_all() && !self.picks_folder() {
             return Err(RuleError::EmptyFolder { rule: number });
@@ -362,27 +377,85 @@ impl FolderRule {
         {
             return Err(RuleError::EmptyValue { rule: number });
         }
+        if let Some(error) = self
+            .conditions
+            .iter()
+            .filter(|condition| condition.is_pattern())
+            .find_map(|condition| condition.pattern().err())
+        {
+            return Err(RuleError::InvalidPattern {
+                rule: number,
+                detail: pattern_problem(&error),
+            });
+        }
         Ok(())
     }
 }
 
 impl RuleCondition {
+    /// Whether any of the field's values passes the comparison. A field without a value (no uploader) passes only
+    /// the negative ones. A pattern that isn't valid, which only a settings.json edited by hand can hold, matches
+    /// nothing either way.
     pub fn matches(&self, subject: &RuleSubject<'_>) -> bool {
+        let found = |test: &dyn Fn(&str) -> bool| subject.values(self.field).into_iter().any(test);
         let wanted = self.value.trim().to_lowercase();
-        let values: Vec<String> = subject
-            .values(self.field)
-            .into_iter()
-            .map(str::to_lowercase)
-            .collect();
-        let is = values.contains(&wanted);
-        let contains = values.iter().any(|value| value.contains(&wanted));
+        let is = |value: &str| value.to_lowercase() == wanted;
+        let contains = |value: &str| value.to_lowercase().contains(&wanted);
         match self.operator {
-            RuleOperator::Is => is,
-            RuleOperator::IsNot => !is,
-            RuleOperator::Contains => contains,
-            RuleOperator::DoesNotContain => !contains,
+            RuleOperator::Is => found(&is),
+            RuleOperator::IsNot => !found(&is),
+            RuleOperator::Contains => found(&contains),
+            RuleOperator::DoesNotContain => !found(&contains),
+            RuleOperator::Matches => self
+                .pattern()
+                .is_ok_and(|pattern| found(&|value: &str| pattern.is_match(value))),
+            RuleOperator::DoesNotMatch => self
+                .pattern()
+                .is_ok_and(|pattern| !found(&|value: &str| pattern.is_match(value))),
         }
     }
+
+    /// Whether its value is a pattern rather than text.
+    pub fn is_pattern(&self) -> bool {
+        matches!(
+            self.operator,
+            RuleOperator::Matches | RuleOperator::DoesNotMatch
+        )
+    }
+
+    /// Its value as a pattern, ignoring case.
+    fn pattern(&self) -> Result<Regex, regex::Error> {
+        RegexBuilder::new(self.value.trim())
+            .case_insensitive(true)
+            .build()
+    }
+
+    /// For a Matches condition, the groups its pattern captured in the first of the field's values it's found in,
+    /// whole match first (a group that took no part is `None`). `None` otherwise.
+    fn captured(&self, subject: &RuleSubject<'_>) -> Option<Vec<Option<String>>> {
+        if self.operator != RuleOperator::Matches {
+            return None;
+        }
+        let pattern = self.pattern().ok()?;
+        subject.values(self.field).into_iter().find_map(|value| {
+            pattern.captures(value).map(|captures| {
+                captures
+                    .iter()
+                    .map(|group| group.map(|group| group.as_str().to_owned()))
+                    .collect()
+            })
+        })
+    }
+}
+
+/// What's wrong with a pattern, in a line ("unclosed group"), without the copy of the pattern and the caret under it
+/// that the regex crate's message starts with.
+fn pattern_problem(error: &regex::Error) -> String {
+    let message = error.to_string();
+    message
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("error: "))
+        .map_or_else(|| message.clone(), str::to_owned)
 }
 
 /// Where a download goes: the folder of the first rule that's on, picks one and matches, else the preset's own folder,
@@ -391,6 +464,16 @@ pub fn destination(
     rules: &[FolderRule],
     subject: &RuleSubject<'_>,
     download_folder: &Path,
+) -> Destination {
+    destination_on(rules, subject, download_folder, &local_date())
+}
+
+/// `destination` for a download added on `today` (YYYY-MM-DD), which `{added}` becomes.
+fn destination_on(
+    rules: &[FolderRule],
+    subject: &RuleSubject<'_>,
+    download_folder: &Path,
+    today: &str,
 ) -> Destination {
     let rule_folder_of = |catch_all: bool| {
         rules
@@ -404,7 +487,7 @@ pub fn destination(
             })
             .map(|(index, rule)| {
                 (
-                    rule_folder(&rule.folder, subject, download_folder),
+                    rule_folder(rule, subject, download_folder, today),
                     DestinationSource::Rule {
                         number: rule_number(index),
                     },
@@ -471,10 +554,19 @@ fn rule_number(index: usize) -> u32 {
     u32::try_from(index + 1).unwrap_or(u32::MAX)
 }
 
-/// A rule's folder for one download: its placeholders filled in, inside the download folder unless it's a full
-/// path.
-fn rule_folder(folder: &str, subject: &RuleSubject<'_>, download_folder: &Path) -> PathBuf {
-    let folder = PathBuf::from(fill_placeholders(folder.trim(), subject));
+/// A rule's folder for one download added on `today`: its placeholders filled in, inside the download folder unless
+/// it's a full path.
+fn rule_folder(
+    rule: &FolderRule,
+    subject: &RuleSubject<'_>,
+    download_folder: &Path,
+    today: &str,
+) -> PathBuf {
+    let fill_in = FillIn {
+        captured: rule.captured(subject),
+        today,
+    };
+    let folder = PathBuf::from(fill_placeholders(rule.folder.trim(), subject, &fill_in));
     if folder.is_absolute() {
         folder
     } else {
@@ -482,9 +574,17 @@ fn rule_folder(folder: &str, subject: &RuleSubject<'_>, download_folder: &Path) 
     }
 }
 
-/// `{site}` and `{uploader}`, in any case, replaced by the download's, each made safe as a folder's name. Other text
-/// in braces stays as it is.
-fn fill_placeholders(folder: &str, subject: &RuleSubject<'_>) -> String {
+/// What a rule's folder takes for one download besides the download itself.
+struct FillIn<'a> {
+    /// The groups of the rule's first pattern that captures any (`FolderRule::captured`).
+    captured: Option<Vec<Option<String>>>,
+    /// The local date it's added, as YYYY-MM-DD.
+    today: &'a str,
+}
+
+/// Every placeholder (`placeholder_value`), in any case, replaced by the download's value, made safe as a folder's
+/// name. Other text in braces stays as it is.
+fn fill_placeholders(folder: &str, subject: &RuleSubject<'_>, fill_in: &FillIn<'_>) -> String {
     let mut filled = String::with_capacity(folder.len());
     let mut rest = folder;
     while let Some(start) = rest.find('{') {
@@ -493,18 +593,80 @@ fn fill_placeholders(folder: &str, subject: &RuleSubject<'_>) -> String {
         let Some(end) = rest.find('}') else {
             break;
         };
-        let name = &rest[1..end];
-        if name.eq_ignore_ascii_case(SITE_PLACEHOLDER) {
-            filled.push_str(&subject.site_folder_name());
-        } else if name.eq_ignore_ascii_case(UPLOADER_PLACEHOLDER) {
-            filled.push_str(&subject.uploader_folder_name());
-        } else {
-            filled.push_str(&rest[..=end]);
+        match placeholder_value(&rest[1..end], subject, fill_in) {
+            Some(value) => filled.push_str(&value),
+            None => filled.push_str(&rest[..=end]),
         }
         rest = &rest[end + 1..];
     }
     filled.push_str(rest);
     filled
+}
+
+/// What a placeholder in a rule's folder becomes, made safe as a folder's name, with a word for a value the download
+/// doesn't have. `None` for a name that isn't a placeholder, and for `{1}` to `{9}` in a rule without a pattern that
+/// captures, which then stay as they are.
+fn placeholder_value(
+    name: &str,
+    subject: &RuleSubject<'_>,
+    fill_in: &FillIn<'_>,
+) -> Option<String> {
+    let video = subject.video;
+    let uploaded = video.upload_date.as_deref();
+    let kind = subject.kind().folder_name();
+    let (value, fallback): (Option<&str>, &str) = match name.to_ascii_lowercase().as_str() {
+        SITE_PLACEHOLDER => return Some(site_name(video)),
+        "uploader" => (video.uploader.as_deref(), "Unknown"),
+        "title" => (Some(video.title.as_str()), "Untitled"),
+        "id" => (Some(video.video_id.as_str()), "Unknown"),
+        "kind" => (Some(kind), kind),
+        // A post or a file host's files have no preset.
+        "preset" => (subject.preset.map(|preset| preset.name.as_str()), kind),
+        "year" => (uploaded.and_then(|date| date.get(..4)), "Unknown"),
+        "month" => (uploaded.and_then(|date| date.get(5..7)), "Unknown"),
+        "date" => (uploaded, "Unknown"),
+        "added" => (Some(fill_in.today), "Unknown"),
+        other => {
+            let [digit @ b'1'..=b'9'] = other.as_bytes() else {
+                return None;
+            };
+            let captured = fill_in.captured.as_ref()?;
+            let group = captured.get(usize::from(digit - b'0')).cloned().flatten();
+            return Some(folder_part(group.as_deref().unwrap_or_default(), "Unknown"));
+        }
+    };
+    Some(folder_part(value.unwrap_or_default(), fallback))
+}
+
+/// `value` made safe as one folder's name (`safe_folder_name`), cut to `LONGEST_PLACEHOLDER` characters.
+fn folder_part(value: &str, fallback: &str) -> String {
+    let safe = safe_folder_name(value, fallback);
+    if safe.chars().count() <= LONGEST_PLACEHOLDER {
+        return safe;
+    }
+    let cut: String = safe.chars().take(LONGEST_PLACEHOLDER).collect();
+    safe_folder_name(&cut, fallback)
+}
+
+/// Today's local date, as YYYY-MM-DD, for `{added}`.
+#[cfg(windows)]
+fn local_date() -> String {
+    use windows_sys::Win32::Foundation::SYSTEMTIME;
+    use windows_sys::Win32::System::SystemInformation::GetLocalTime;
+
+    // SAFETY: GetLocalTime only writes the SYSTEMTIME it's given, which lives through the call.
+    let time = unsafe {
+        let mut time: SYSTEMTIME = std::mem::zeroed();
+        GetLocalTime(&mut time);
+        time
+    };
+    format!("{:04}-{:02}-{:02}", time.wYear, time.wMonth, time.wDay)
+}
+
+/// Tsundoku only runs on Windows; elsewhere, where only its tests build, `{added}` doesn't know the day.
+#[cfg(not(windows))]
+fn local_date() -> String {
+    String::new()
 }
 
 /// `name` made safe as one folder's name: characters Windows refuses in names, separators included, become "_", and
@@ -898,6 +1060,116 @@ mod tests {
         assert_eq!(folder_of(&unclosed, &tweet, None).folder, r"D:\{site");
     }
 
+    fn folder_on(rules: &[FolderRule], video: &VideoInfo, preset: Option<&Preset>) -> String {
+        destination_on(
+            rules,
+            &RuleSubject { video, preset },
+            Path::new(DOWNLOADS),
+            "2026-11-06",
+        )
+        .folder
+    }
+
+    #[test]
+    fn fills_in_what_the_download_is_and_when() {
+        let mut video = video();
+        video.upload_date = Some("2005-04-23".to_owned());
+        let best_video = preset("best-video");
+        let rules = [rule(
+            Vec::new(),
+            r"D:\{title}\{ID}\{kind}\{preset}\{year}\{month}\{date}\{added}",
+        )];
+        assert_eq!(
+            folder_on(&rules, &video, Some(&best_video)),
+            format!(
+                r"D:\Me at the zoo\jNQXAC9IVRw\Videos\{}\2005\04\2005-04-23\2026-11-06",
+                best_video.name
+            )
+        );
+        assert!(
+            folder_on(&rules, &video, Some(&preset("best-audio"))).contains(r"\Audio\"),
+            "audio by its preset"
+        );
+
+        let mut tweet = tweet();
+        tweet.title = "a/b".repeat(40);
+        let expected_title = "a_b".repeat(40).chars().take(80).collect::<String>();
+        assert_eq!(
+            folder_on(&rules, &tweet, None),
+            format!(r"D:\{expected_title}\1\Posts\Posts\Unknown\Unknown\Unknown\2026-11-06"),
+            "a post has no preset or, here, upload date, and a long title is cut"
+        );
+        assert!(folder_on(&rules, &mega_file(), None).contains(r"\Files\Files\"));
+    }
+
+    #[test]
+    fn matches_a_pattern_ignoring_case() {
+        let video = video();
+        let subject = RuleSubject {
+            video: &video,
+            preset: None,
+        };
+        let matches = |field, pattern| condition(field, RuleOperator::Matches, pattern);
+        assert!(matches(RuleField::Title, r"^me AT\s").matches(&subject));
+        assert!(!matches(RuleField::Title, "^zoo").matches(&subject));
+        assert!(condition(RuleField::Title, RuleOperator::DoesNotMatch, "^zoo").matches(&subject));
+        assert!(matches(RuleField::Link, r"watch\?v=[\w-]{11}$").matches(&subject));
+        assert!(
+            matches(RuleField::Site, "^x$").matches(&RuleSubject {
+                video: &tweet(),
+                preset: None
+            }),
+            "any of the site's names"
+        );
+
+        let mut nobody = video.clone();
+        nobody.uploader = None;
+        let nobody = RuleSubject {
+            video: &nobody,
+            preset: None,
+        };
+        assert!(!matches(RuleField::Uploader, ".*").matches(&nobody));
+        assert!(condition(RuleField::Uploader, RuleOperator::DoesNotMatch, "a").matches(&nobody));
+
+        let broken = condition(RuleField::Title, RuleOperator::DoesNotMatch, "(zoo");
+        assert!(
+            !broken.matches(&subject),
+            "a broken pattern matches nothing"
+        );
+    }
+
+    #[test]
+    fn puts_what_a_pattern_captured_in_the_folder() {
+        let mut episode = video();
+        episode.title = "[Show: Night] Episode 12".to_owned();
+        let captures = rule(
+            vec![
+                condition(RuleField::Title, RuleOperator::Matches, "episode"),
+                condition(
+                    RuleField::Title,
+                    RuleOperator::Matches,
+                    r"^\[(.+?)\] episode (\d+)(x)?",
+                ),
+            ],
+            r"D:\Series\{1}\{2}\{3}\{4}",
+        );
+        assert_eq!(
+            folder_on(&[captures], &episode, None),
+            r"D:\Series\Show_ Night\12\Unknown\Unknown",
+            "the first pattern with groups; a group that took no part, or isn't there, is Unknown"
+        );
+
+        let without = rule(
+            vec![condition(
+                RuleField::Title,
+                RuleOperator::Contains,
+                "episode",
+            )],
+            r"D:\Series\{1}",
+        );
+        assert_eq!(folder_on(&[without], &episode, None), r"D:\Series\{1}");
+    }
+
     #[test]
     fn a_folder_that_isnt_a_full_path_is_inside_the_download_folder() {
         let tweet = tweet();
@@ -1273,6 +1545,17 @@ mod tests {
         assert_eq!(
             manager.save(catch_all),
             Err(RuleError::EmptyFolder { rule: 1 })
+        );
+        let broken = vec![rule(
+            vec![condition(RuleField::Title, RuleOperator::Matches, "(zoo")],
+            r"D:\x",
+        )];
+        assert_eq!(
+            manager.save(broken),
+            Err(RuleError::InvalidPattern {
+                rule: 1,
+                detail: "unclosed group".to_owned()
+            })
         );
         let empty = vec![rule(
             vec![condition(RuleField::Title, RuleOperator::Contains, " ")],

@@ -408,11 +408,23 @@ export const strings = {
     value: "Value",
     saveIn: "Save In",
     saveInHint: (downloadFolder: string) =>
-      `{site} and {uploader} become the download's site and uploader: click one to put it where the cursor is. A folder that isn't a full path goes inside the download folder, ${downloadFolder}.`,
+      `Placeholders such as {site} become the download's own: click one to put it where the cursor is, and hover over it to see what it becomes. A folder that isn't a full path goes inside the download folder, ${downloadFolder}.`,
     placeholderHints: {
       site: "The download's site, such as Instagram or YouTube.",
       uploader: "The download's uploader or account, or Unknown when there's none.",
+      title: "The title of the video or post, or the shared file's name, cut to 80 characters.",
+      id: "The video's or post's ID on its site, such as jNQXAC9IVRw.",
+      kind: "Videos, Audio, Posts or Files.",
+      preset: "The preset's name. Posts and shared files have none, so they get Posts or Files.",
+      year: "The year it was uploaded, such as 2026, or Unknown.",
+      month: "The month it was uploaded, from 01 to 12, or Unknown.",
+      date: "The day it was uploaded, as 2026-11-06, or Unknown.",
+      added: "The day you added it, as 2026-11-06.",
     },
+    capturedHint: (group: string) =>
+      `The text the pattern captured in its parentheses number ${group}, counting from the left, or Unknown.`,
+    patternHint:
+      "Matches takes a regular expression, ignoring case, found anywhere in the text. Text it captures in parentheses can go in the folder as {1}, {2} and so on.",
     alwaysLast: "Always Last",
     alwaysLastHint:
       "Takes every download no rule above it takes, unless its preset has a folder of its own. New rules go above it.",
@@ -449,12 +461,15 @@ export const strings = {
       uploader: "Account or Channel",
       title: "Words in the Title",
       link: "Part of the Link",
+      pattern: String.raw`Pattern, such as ^\[(.+?)\]`,
     },
     operators: {
       is: "Is",
       isNot: "Is Not",
       contains: "Contains",
       doesNotContain: "Doesn't Contain",
+      matches: "Matches",
+      doesNotMatch: "Doesn't Match",
     },
     kinds: {
       video: "Video",
@@ -478,6 +493,8 @@ export const strings = {
         isNot: "isn't",
         contains: "contains",
         doesNotContain: "doesn't contain",
+        matches: "matches",
+        doesNotMatch: "doesn't match",
       },
       kind: (isNot: boolean, kind: string) => (isNot ? `it isn't ${kind}` : `it's ${kind}`),
       kinds: {
@@ -497,6 +514,7 @@ export const strings = {
       circularPreset: (rule: number) =>
         `Rule ${rule} checks the kind or the preset, so it can't pick the preset too. Remove that condition, or set Start As to Leave as Is.`,
       emptyValue: (rule: number) => `A condition of rule ${rule} is empty. Fill it in or remove it.`,
+      invalidPattern: (rule: number) => `A pattern in rule ${rule} isn't a valid regular expression.`,
       storage: "Couldn't save the rules.",
     },
   },

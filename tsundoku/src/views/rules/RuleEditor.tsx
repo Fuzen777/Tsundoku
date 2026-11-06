@@ -23,6 +23,8 @@ import {
   RULE_FIELDS,
   newCondition,
   canPickPreset,
+  capturedGroups,
+  isPattern,
   operatorsFor,
 } from "./ruleLabels"
 
@@ -71,6 +73,8 @@ export function RuleEditor({
   const { data: supportedSites } = useSupportedSites()
   const folderInput = useRef<HTMLInputElement>(null)
   const isCatchAll = draft.id === CATCH_ALL_RULE_ID
+  const { placeholders, hints: placeholderHints } = folderPlaceholders(draft.conditions)
+  const hasPattern = draft.conditions.some((condition) => isPattern(condition.operator))
   const update = (changes: Partial<FolderRule>) => onChange({ ...draft, ...changes })
   const setCondition = (index: number, condition: RuleCondition) =>
     update({ conditions: draft.conditions.map((existing, at) => (at === index ? condition : existing)) })
@@ -88,7 +92,7 @@ export function RuleEditor({
           <p className="text-fg-secondary">{text.catchAllWhen}</p>
         </Field>
       ) : (
-        <Field label={text.when} hint={text.whenHint}>
+        <Field label={text.when} hint={hasPattern ? `${text.whenHint} ${text.patternHint}` : text.whenHint}>
           <div className="flex flex-col gap-2">
             {draft.conditions.map((condition, index) => (
               <ConditionRow
@@ -133,8 +137,8 @@ export function RuleEditor({
           <PlaceholderButtons
             input={folderInput}
             value={draft.folder}
-            placeholders={FOLDER_PLACEHOLDERS}
-            hints={text.placeholderHints}
+            placeholders={placeholders}
+            hints={placeholderHints}
             onChange={(folder) => update({ folder })}
           />
         </div>
@@ -215,6 +219,18 @@ interface ConditionRowProps {
   onRemove: () => void
 }
 
+/** The folder's placeholders, then `{1}`, `{2}`… for the groups the rule's pattern captures, each with its hover text. */
+function folderPlaceholders(conditions: readonly RuleCondition[]): {
+  placeholders: string[]
+  hints: Record<string, string>
+} {
+  const groups = Array.from({ length: capturedGroups(conditions) }, (_, index) => String(index + 1))
+  return {
+    placeholders: [...FOLDER_PLACEHOLDERS, ...groups],
+    hints: { ...text.placeholderHints, ...Object.fromEntries(groups.map((group) => [group, text.capturedHint(group)])) },
+  }
+}
+
 /** What to check, how to compare it, and what to compare it to. Picking another field starts the condition over. */
 function ConditionRow({ condition, presets, defaultPresetId, onChange, onRemove }: ConditionRowProps) {
   const { field, operator, value } = condition
@@ -265,8 +281,9 @@ function ConditionRow({ condition, presets, defaultPresetId, onChange, onRemove 
       ) : (
         <TextInput
           aria-label={text.value}
-          list={field === "site" ? SITES_LIST_ID : undefined}
-          placeholder={text.placeholders[field]}
+          className={isPattern(operator) ? "font-mono" : undefined}
+          list={field === "site" && !isPattern(operator) ? SITES_LIST_ID : undefined}
+          placeholder={isPattern(operator) ? text.placeholders.pattern : text.placeholders[field]}
           value={value}
           onChange={(event) => setValue(event.target.value)}
         />

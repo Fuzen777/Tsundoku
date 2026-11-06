@@ -21,7 +21,7 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 ### Where Downloads Go
 
 - **One download folder**: everything goes to a Tsundoku folder in your Downloads by default, and Settings can point it elsewhere.
-- **Folder rules**: the **Rules** tab decides where downloads go: "when all of these match, save in this folder", checking the site, uploader, title, link, kind (video, audio, post or shared file) or preset. A folder can use `{site}` and `{uploader}`, such as `D:\Archive\{site}\{uploader}`. Every install starts with a last rule that gives each site's downloads a folder of their own, unless another rule or a preset's own folder says otherwise.
+- **Folder rules**: the **Rules** tab decides where downloads go: "when all of these match, save in this folder", checking the site, uploader, title, link, kind (video, audio, post or shared file) or preset. A condition can also match a regular expression. A folder can use placeholders such as `{site}`, `{uploader}`, `{title}`, `{year}` or `{added}`, such as `D:\Archive\{site}\{uploader}`, and the text a pattern captures, as `{1}`. Every install starts with a last rule that gives each site's downloads a folder of their own, unless another rule or a preset's own folder says otherwise.
 - **Shown before you download**: the preview and each link in Pending show the folder a download will be saved in and what picked it: a rule, the preset or the download folder.
 
 ### History

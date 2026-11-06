@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.44 · 2026-11-06
+
+### Added
+
+- **More placeholders for rules' folders**: besides {site} and {uploader}, a folder can use {title}, {id}, {kind} (Videos, Audio, Posts or Files), {preset}, the upload date's {year}, {month} and {date}, and {added}, the day you added the download. Each has a button under the folder field that says what it becomes when you hover over it.
+- **Patterns in rules**: a condition on the site, uploader, title or link can use Matches or Doesn't Match with a regular expression, ignoring case. A pattern that isn't valid is caught when you save, with what's wrong with it. What a pattern captures in parentheses can go in the folder as {1}, {2} and so on: title matches `^\[(.+?)\]` → `D:\Series\{1}`.
+
 ## 0.1.43 · 2026-11-06
 
 ### Added

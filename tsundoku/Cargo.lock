@@ -5032,7 +5032,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku"
-version = "0.1.43"
+version = "0.1.44"
 dependencies = [
  "serde_json",
  "tauri",
@@ -5053,12 +5053,13 @@ dependencies = [
 
 [[package]]
 name = "tsundoku-core"
-version = "0.1.43"
+version = "0.1.44"
 dependencies = [
  "aes",
  "base64 0.23.1",
  "ctr",
  "dirs 7.0.0",
+ "regex",
  "reqwest",
  "rusqlite",
  "serde",
