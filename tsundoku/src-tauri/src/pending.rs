@@ -3,9 +3,11 @@
 
 use std::sync::Arc;
 
+use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Emitter, State};
 use tsundoku_core::downloads::DownloadError;
 use tsundoku_core::metadata::VideoInfo;
+use tsundoku_core::pending::files::{self, LinkFileError};
 use tsundoku_core::pending::{self, AddedLinks, PendingLink, PendingLinks, PendingListener};
 use tsundoku_core::settings::AddingSettings;
 
@@ -50,6 +52,32 @@ pub fn links_in_text(text: String) -> Vec<String> {
     pending::links_in(&text)
 }
 
+/// The header that names a dropped file for `links_in_link_file`: the name as a JSON string with every character
+/// past ASCII escaped, since a header value is ASCII.
+const LINK_FILE_NAME_HEADER: &str = "tsundoku-file-name";
+
+/// Whether a dropped file can be read for links, from its name and size, before the UI reads it.
+#[tauri::command]
+pub fn check_link_file(name: String, size: u64) -> Result<(), LinkFileError> {
+    files::check(&name, size).map(|_| ())
+}
+
+/// The links in a dropped file: its bytes as the request's body, its name in `LINK_FILE_NAME_HEADER`.
+#[tauri::command]
+pub fn links_in_link_file(request: Request<'_>) -> Result<Vec<String>, LinkFileError> {
+    let name = request
+        .headers()
+        .get(LINK_FILE_NAME_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| serde_json::from_str::<String>(value).ok())
+        .unwrap_or_default();
+    let bytes = match request.body() {
+        InvokeBody::Raw(bytes) => bytes.as_slice(),
+        InvokeBody::Json(_) => &[],
+    };
+    files::links_in_file(&name, bytes)
+}
+
 #[tauri::command]
 pub fn add_pending_links(
     pending: Pending<'_>,
@@ -59,6 +87,16 @@ pub fn add_pending_links(
 }
 
 /// Removes links, and answers how many: Undo puts them back (`restore_removed_pending_links`).
+/// Adds the links read from files dropped on the window: they're checked as copied links are, and those with
+/// nothing to download leave once read.
+#[tauri::command]
+pub fn add_pending_links_from_files(
+    pending: Pending<'_>,
+    links: Vec<String>,
+) -> Result<AddedLinks, DownloadError> {
+    pending.add_from_files(&links)
+}
+
 #[tauri::command]
 pub fn remove_pending_links(pending: Pending<'_>, ids: Vec<i64>) -> Result<usize, DownloadError> {
     pending.remove(&ids)

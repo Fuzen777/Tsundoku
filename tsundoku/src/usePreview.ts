@@ -40,25 +40,34 @@ export function usePreview() {
   return { state, show, close }
 }
 
+/** What was dropped on the window: its text (a link, several, or text holding them) and its files, either of which
+ * may be missing. A browser often gives both, such as a linked image's file with the link. */
+export interface Drop {
+  text: string | null
+  files: File[]
+}
+
 /**
  * Calls `onDrop` with what was dropped anywhere on the window: a link dragged from a browser's address bar, several
- * links, or text holding them. Needs `dragDropEnabled: false` in tauri.conf.json, or Tauri takes the drop before the
- * page sees it.
+ * links, text holding them, or files from File Explorer. Needs `dragDropEnabled: false` in tauri.conf.json, or Tauri
+ * takes the drop before the page sees it: WebView2 then gives the page text and files alike, files as `File`s.
  */
-export function useLinkDrop(onDrop: (text: string) => void) {
+export function useLinkDrop(onDrop: (drop: Drop) => void) {
   useEffect(() => {
     function onDragOver(event: DragEvent) {
       const types = event.dataTransfer?.types ?? []
-      if (types.includes("text/uri-list") || types.includes("text/plain")) {
+      if (types.includes("text/uri-list") || types.includes("text/plain") || types.includes("Files")) {
         event.preventDefault()
         if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"
       }
     }
     function onDropped(event: DragEvent) {
       const text = droppedText(event.dataTransfer)
-      if (!text) return
+      const files = Array.from(event.dataTransfer?.files ?? [])
+      if (!text && files.length === 0) return
+      // Otherwise a dropped file would open in the window, as in a browser.
       event.preventDefault()
-      onDrop(text)
+      onDrop({ text, files })
     }
     window.addEventListener("dragover", onDragOver)
     window.addEventListener("drop", onDropped)

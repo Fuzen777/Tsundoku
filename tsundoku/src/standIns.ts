@@ -13,6 +13,7 @@ import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryPage } from "./bindings/HistoryPage"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
+import type { LinkFileError } from "./bindings/LinkFileError"
 import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
@@ -251,6 +252,7 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
     startWhenRead: false,
     addedAt: 1_793_876_473 + id * 60,
     caught: false,
+    fromFile: false,
     hold: null,
     ...fields,
   }
@@ -530,6 +532,8 @@ export const standIns = {
     }),
     pendingStandIn(8, "https://www.instagram.com/p/Copied1/", { state: "reading", caught: true }),
     pendingStandIn(9, "https://github.com/Fuzen777/Tsundoku", { state: "waiting", caught: true }),
+    pendingStandIn(10, "https://www.bbc.com/news/an-article", { state: "waiting", fromFile: true }),
+    pendingStandIn(11, "https://vimeo.com/76979871", { state: "reading", fromFile: true }),
   ] satisfies PendingLink[],
   listArrangements: {
     pending: { group: "none", sort: "added", descending: false },
@@ -538,6 +542,18 @@ export const standIns = {
   /** Words that start with http:// or https://, each once: the core also takes links without them. */
   linksInText(text: string): string[] {
     const links = text.split(/\s+/).filter((word) => /^https?:\/\//i.test(word))
+    return [...new Set(links)]
+  },
+  /** As the core checks a dropped file: by its extension, and at most 10 MB. */
+  checkLinkFile(name: string, size: number): void {
+    if (!/\.(txt|html?|url)$/i.test(name)) throw { kind: "unsupportedType", name } satisfies LinkFileError
+    const maxBytes = 10 * 1024 * 1024
+    if (size > maxBytes) throw { kind: "tooLarge", name, maxBytes } satisfies LinkFileError
+  },
+  /** Every http or https link in the file's text, each once, or noLinks. */
+  linksInLinkFile(name: string, bytes: Uint8Array): string[] {
+    const links = new TextDecoder().decode(bytes).match(/https?:\/\/[^\s"'<>]+/gi) ?? []
+    if (links.length === 0) throw { kind: "noLinks", name } satisfies LinkFileError
     return [...new Set(links)]
   },
   /**

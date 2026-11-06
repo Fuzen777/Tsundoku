@@ -1,6 +1,7 @@
 import type { BackupError } from "./bindings/BackupError"
 import type { DownloadError } from "./bindings/DownloadError"
 import type { HistoryError } from "./bindings/HistoryError"
+import type { LinkFileError } from "./bindings/LinkFileError"
 import type { PostNameError } from "./bindings/PostNameError"
 import type { PresetError } from "./bindings/PresetError"
 import type { PreviewError } from "./bindings/PreviewError"
@@ -8,7 +9,7 @@ import type { RuleError } from "./bindings/RuleError"
 import type { SignInCookies } from "./bindings/SignInCookies"
 import type { ToolError } from "./bindings/ToolError"
 import type { ToolId } from "./bindings/ToolId"
-import { formatClockTime } from "./format"
+import { formatBytes, formatClockTime } from "./format"
 import { strings } from "./strings"
 
 /*
@@ -242,6 +243,20 @@ export function describeBackupError(error: unknown): ErrorDescription {
       return { message: text.newerVersion(error.version) }
     case "storage":
       return { message: text.storage, detail: error.detail }
+  }
+}
+
+/** Why a dropped file gave no links; anything else is the file failing to be read, such as a folder dropped. */
+export function describeLinkFileError(error: unknown, name: string): ErrorDescription {
+  const text = strings.addBar.files
+  if (!isCoreError<LinkFileError>(error)) return { message: text.unreadable(name), detail: String(error) }
+  switch (error.kind) {
+    case "unsupportedType":
+      return { message: text.unsupportedType, detail: error.name }
+    case "tooLarge":
+      return { message: text.tooLarge(error.name, formatBytes(error.maxBytes)) }
+    case "noLinks":
+      return { message: text.noLinks(error.name) }
   }
 }
 

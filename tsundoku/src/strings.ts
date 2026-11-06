@@ -71,6 +71,20 @@ export const strings = {
     errors: {
       dismiss: "Dismiss",
     },
+    /** A file of links dropped on the window. */
+    files: {
+      unsupportedType: "Tsundoku reads links from .txt, .html and .url files.",
+      tooLarge: (name: string, size: string) => `${name} is too large to read links from: the most is ${size}.`,
+      noLinks: (name: string) => `No links found in ${name}.`,
+      unreadable: (name: string) => `Couldn't read ${name}.`,
+      manyTitle: (count: number) => `Add ${count.toLocaleString()} Links?`,
+      /** `files`: the names of the files the links came from. */
+      manyMessage: (files: string[], count: number, duration: string) =>
+        `${files.length === 1 ? `${files[0]} holds` : `These ${files.length} files hold`} ${count.toLocaleString()} links. Tsundoku checks each one, which takes ${duration} for this many, and the ones with nothing to download leave on their own.`,
+      addThem: "Add Them",
+      aboutMinutes: (minutes: number) => (minutes === 1 ? "about a minute" : `about ${minutes} minutes`),
+      aboutHours: (hours: number) => (hours === 1 ? "about an hour" : `about ${hours.toLocaleString()} hours`),
+    },
   },
   queue: {
     emptyTitle: "Nothing in the Queue",
@@ -278,6 +292,9 @@ export const strings = {
     watchClipboard: "Watch Clipboard",
     watchClipboardHint: "Catch links you copy in any app",
     checkingCopied: (count: number) => (count === 1 ? "Checking a copied link…" : `Checking ${count} copied links…`),
+    checkingFiles: (count: number) =>
+      count === 1 ? "Checking a link from a file…" : `Checking ${count.toLocaleString()} links from files…`,
+    showMore: (count: number) => `Show ${count.toLocaleString()} More`,
     count: (count: number) => `${count} ${count === 1 ? "link" : "links"}`,
     selectAll: "Select All",
     select: "Select",

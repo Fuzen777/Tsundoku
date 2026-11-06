@@ -1,0 +1,8 @@
+Things to download later (see notes.txt, v1.2):
+
+- https://youtu.be/jNQXAC9IVRw
+- <https://www.youtube.com/watch?v=aqz-KE-bpKQ>, the long one.
+  youtu.be/abc without its scheme
+  (http://example.com/page?a=1&b=2)
+  ftp://files.example.com/archive.zip
+  https://youtu.be/jNQXAC9IVRw again

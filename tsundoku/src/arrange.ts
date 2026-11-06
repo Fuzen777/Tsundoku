@@ -95,6 +95,18 @@ function compareValues(first: string | number, second: string | number): number 
 }
 
 /** The group of a folder. Windows doesn't tell letter case apart in paths, so neither do the groups. */
+/** The groups holding the first `count` items, the last of them cut short: a long list shown a page at a time. */
+export function firstItems<Item>(groups: readonly ItemGroup<Item>[], count: number): ItemGroup<Item>[] {
+  const shown: ItemGroup<Item>[] = []
+  let left = count
+  for (const group of groups) {
+    if (left <= 0) break
+    shown.push(group.items.length > left ? { ...group, items: group.items.slice(0, left) } : group)
+    left -= group.items.length
+  }
+  return shown
+}
+
 export function folderGroup(folder: string): GroupPlace {
   return { key: `folder:${folder.toLowerCase()}`, label: folder, rank: 0, folder: true }
 }

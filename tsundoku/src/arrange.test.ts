@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { arrange, folderGroup, STORED_ORDER, type GroupPlace, type SortFacts } from "./arrange"
+import { arrange, firstItems, folderGroup, STORED_ORDER, type GroupPlace, type SortFacts } from "./arrange"
 import type { ListArrangement } from "./bindings/ListArrangement"
 
 function item(id: number, facts: Partial<SortFacts> = {}): SortFacts {
@@ -58,5 +58,25 @@ describe("folderGroup", () => {
   it("puts the same folder in one group whatever its letter case", () => {
     expect(folderGroup(String.raw`D:\Videos\YouTube`).key).toBe(folderGroup(String.raw`d:\videos\youtube`).key)
     expect(folderGroup(String.raw`D:\Videos\YouTube`).label).toBe(String.raw`D:\Videos\YouTube`)
+  })
+})
+
+describe("firstItems", () => {
+  const groups = [
+    { key: "a", label: "A", rank: 0, items: [item(1), item(2)] },
+    { key: "b", label: "B", rank: 1, items: [item(3), item(4), item(5)] },
+    { key: "c", label: "C", rank: 2, items: [item(6)] },
+  ]
+
+  it("keeps the groups holding the first items, the last one cut short", () => {
+    const shown = firstItems(groups, 3)
+    expect(shown.map((group) => [group.key, ids(group.items)])).toEqual([
+      ["a", [1, 2]],
+      ["b", [3]],
+    ])
+  })
+
+  it("keeps everything when there are fewer items", () => {
+    expect(firstItems(groups, 200)).toEqual(groups)
   })
 })

@@ -9,7 +9,7 @@ import {
   setPendingPreset,
   startPendingLinks,
 } from "../api"
-import { arrange, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
+import { arrange, firstItems, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
 import type { Destination } from "../bindings/Destination"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { PendingLink } from "../bindings/PendingLink"
@@ -33,7 +33,7 @@ import { describeDownloadError, describePreviewError, fixFor, type ErrorDescript
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { pickedOf, pickSummary } from "../postFiles"
 import { describeSiteWait, useTimeLeft } from "../holds"
-import { shownPendingLinks } from "../pendingLinks"
+import { checkingCounts, shownPendingLinks } from "../pendingLinks"
 import {
   useDownloadDestination,
   useDownloadDestinations,
@@ -49,6 +49,9 @@ import { useDeleteKey } from "../shortcuts"
 import { strings } from "../strings"
 import { useOfferUndo } from "../undo"
 
+/** How many links Pending shows at first, and how many more Show More adds. */
+const PENDING_PAGE = 200
+
 /**
  * Links waiting to be started: pasted or dropped several at once, or copied while Watch Clipboard is on, each read in
  * the background to show what it is. Copied links still being read are only counted, since they may turn out to be
@@ -59,7 +62,9 @@ import { useOfferUndo } from "../undo"
 export function PendingView() {
   const { data: allLinks = [] } = usePendingLinks()
   const links = shownPendingLinks(allLinks)
-  const checking = allLinks.length - links.length
+  const checking = checkingCounts(allLinks)
+  // A long list, such as a bookmarks file's, shows a page at a time.
+  const [shownCount, setShownCount] = useState(PENDING_PAGE)
   const adding = useSaveAddingOptions()
   const watching = adding.options?.watchClipboard ?? false
   const { data: presets } = usePresets()
@@ -205,11 +210,17 @@ export function PendingView() {
       }
     >
       {adding.error && <StatusMessage tone="danger" {...adding.error} />}
-      {checking > 0 && (
-        <p className="mb-3 flex items-center gap-1.5 text-fg-secondary">
-          <Loader2 size={14} className="shrink-0 animate-spin" />
-          {strings.pending.checkingCopied(checking)}
-        </p>
+      {[
+        checking.copied > 0 && strings.pending.checkingCopied(checking.copied),
+        checking.fromFiles > 0 && strings.pending.checkingFiles(checking.fromFiles),
+      ].map(
+        (line) =>
+          line && (
+            <p key={line} className="mb-3 flex items-center gap-1.5 text-fg-secondary">
+              <Loader2 size={14} className="shrink-0 animate-spin" />
+              {line}
+            </p>
+          ),
       )}
       {links.length === 0 ? (
         <EmptyState icon={Inbox} title={strings.pending.emptyTitle} body={emptyBody} />
@@ -250,7 +261,7 @@ export function PendingView() {
           {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           {error && <StatusMessage tone="danger" {...error} />}
           <GroupedList
-            groups={groups}
+            groups={firstItems(groups, shownCount)}
             grouped={group !== "none"}
             keyOf={(link) => link.id}
             renderItem={(link) => (
@@ -266,6 +277,13 @@ export function PendingView() {
               />
             )}
           />
+          {links.length > shownCount && (
+            <div>
+              <Button size="sm" onClick={() => setShownCount((count) => count + PENDING_PAGE)}>
+                {strings.pending.showMore(Math.min(PENDING_PAGE, links.length - shownCount))}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Page>

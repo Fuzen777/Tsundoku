@@ -31,6 +31,10 @@ addedAt: number,
  */
 caught: boolean, 
 /**
+ * Read from a file dropped on the window (`files`). Until it's read, the UI only counts it, as a copied link.
+ */
+fromFile: boolean, 
+/**
  * While it waits to be read, the wait of its site, which answered "too many requests".
  */
 hold: SiteWait | null, };

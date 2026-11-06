@@ -107,6 +107,8 @@ impl QueueListener for NoQueueEvents {
 #[derive(Default)]
 struct CountingListener {
     changes: AtomicUsize,
+    /// How many links the last change listed.
+    last_count: AtomicUsize,
     /// The copied links announced as read: the video's ID, and whether it started.
     copied: Mutex<Vec<(String, bool)>>,
     /// The options as each change saved them.
@@ -114,8 +116,9 @@ struct CountingListener {
 }
 
 impl PendingListener for CountingListener {
-    fn changed(&self, _links: &[PendingLink]) {
+    fn changed(&self, links: &[PendingLink]) {
         self.changes.fetch_add(1, Ordering::SeqCst);
+        self.last_count.store(links.len(), Ordering::SeqCst);
     }
 
     fn copied_link_read(&self, video: &VideoInfo, started: bool) {
@@ -1166,4 +1169,108 @@ fn saved_options_are_announced_and_kept() {
     test.links.set_options(options).unwrap();
     assert_eq!(*lock(&test.listener.options), [options]);
     assert_eq!(test.settings.get().adding, options);
+}
+
+/// Links read from files dropped on the window, as the window hands them over.
+fn from_files(test: &Test, links: &[&str]) -> AddedLinks {
+    let links: Vec<String> = links.iter().map(|link| (*link).to_owned()).collect();
+    test.links.add_from_files(&links).unwrap()
+}
+
+#[test]
+fn links_from_a_file_are_checked_as_copied_links_are() {
+    let test = Test::new();
+    let unsupported = "https://github.com/Fuzen777/Tsundoku";
+    test.reader
+        .answer(unsupported, Err(PreviewError::UnsupportedSite));
+    test.reader.hold(FIRST);
+    test.record_download(&video_at(SECOND));
+    from_files(&test, &[unsupported, FIRST, SECOND]);
+    let first = test.link(FIRST).unwrap();
+    assert!(first.from_file && !first.caught);
+    assert!(
+        !starts_with_all(&first),
+        "counted as being checked until it's read"
+    );
+    test.reader.release(FIRST);
+
+    test.wait_until_gone(unsupported);
+    test.wait_until_read(FIRST);
+    test.wait_until_read(SECOND);
+    assert!(
+        !test.reader.read_any_page(FIRST),
+        "read only by sites the tools know"
+    );
+    let second = test.link(SECOND).unwrap();
+    assert!(
+        second.preview.unwrap().last_download.is_some(),
+        "one downloaded before stays, marked, as one added by hand does"
+    );
+    assert!(
+        lock(&test.listener.copied).is_empty(),
+        "nothing is announced"
+    );
+    assert!(
+        test.reopen().list().iter().all(|link| link.from_file),
+        "still from a file after a restart"
+    );
+}
+
+#[test]
+fn a_link_from_a_file_that_needs_a_fix_stays_to_say_so() {
+    let test = Test::new();
+    let post = "https://www.instagram.com/p/Private/";
+    let error = PreviewError::SignInRequired {
+        detail: "login required".to_owned(),
+        site: Some("Instagram".to_owned()),
+        cookies: SignInCookies::NotSignedIn,
+    };
+    test.reader.answer(post, Err(error.clone()));
+    from_files(&test, &[post]);
+    test.wait_until_read(post);
+    assert_eq!(test.link(post).unwrap().error, Some(error));
+}
+
+#[test]
+fn many_links_are_saved_together_each_once() {
+    let test = Test::new();
+    let links: Vec<String> = (0..1500)
+        .map(|number| format!("https://www.youtube.com/watch?v=v{}", number % 1000))
+        .collect();
+    let started = Instant::now();
+    let added = test.links.add_from_files(&links).unwrap();
+    assert_eq!(
+        added,
+        AddedLinks {
+            added: 1000,
+            already_pending: 500
+        }
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "saved in one go, not one by one: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(test.reopen().list().len(), 1000);
+}
+
+#[test]
+fn a_burst_of_changes_sends_a_few_notices_and_then_the_last() {
+    let test = Test::new();
+    let before = test.listener.changes.load(Ordering::SeqCst);
+    for number in 0..100 {
+        test.add(&[&format!("https://www.youtube.com/watch?v=burst{number}")]);
+    }
+    wait_until("every link is read", || {
+        test.links
+            .list()
+            .iter()
+            .all(|link| link.state == PendingState::Ready)
+    });
+    // Adding and reading 100 links changed the list 300 times.
+    let sent = test.listener.changes.load(Ordering::SeqCst) - before;
+    assert!(sent < 60, "{sent} notices");
+    wait_until("the last notice lists every link", || {
+        test.listener.last_count.load(Ordering::SeqCst) == 100 && test.links.list().len() == 100
+    });
 }

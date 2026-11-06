@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.56 · 2026-11-06
+
+### Added
+
+- **Drop a file of links**: dropping a text file, a browser's bookmarks export (.html) or an Internet shortcut (.url) anywhere on the window sends the links in it to Pending. Several files at once work too. Links from a file are checked as copied links are: those with nothing to download, such as an ordinary page or a site no tool supports, leave on their own, counted meanwhile as "Checking 1,234 links from files…", and the rest stay as links added by hand do, marked when downloaded before. A file with more than 300 links asks first, saying about how long checking them takes. A file with no links, or of another kind, says so.
+
+### Changed
+
+- **Long lists in Pending**: thousands of links are added at once, the list updates a few times a second at most while they're read, and Pending shows 200 links at a time, with Show More under them.
+
 ## 0.1.55 · 2026-11-06
 
 ### Added

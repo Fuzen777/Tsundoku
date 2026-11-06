@@ -470,6 +470,31 @@ export function linksInText(text: string): Promise<string[]> {
   return invoke<string[]>("links_in_text", { text })
 }
 
+/** Whether a dropped file can be read for links, from its name and size, before it's read. Rejects with a
+ * LinkFileError. */
+export function checkLinkFile(name: string, size: number): Promise<void> {
+  if (!isTauri()) return Promise.resolve().then(() => standIns.checkLinkFile(name, size))
+  return invoke<void>("check_link_file", { name, size })
+}
+
+/** The links in a dropped file, read by the core from its bytes. Rejects with a LinkFileError. */
+export function linksInLinkFile(name: string, bytes: Uint8Array): Promise<string[]> {
+  if (!isTauri()) return Promise.resolve().then(() => standIns.linksInLinkFile(name, bytes))
+  // A header value is ASCII, so the name goes as JSON with every character past ASCII escaped.
+  const asciiName = JSON.stringify(name).replace(
+    /[\u0080-￿]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  )
+  return invoke<string[]>("links_in_link_file", bytes, { headers: { "tsundoku-file-name": asciiName } })
+}
+
+/** Adds the links read from dropped files: they're checked as copied links are, and those with nothing to download
+ * leave once read. Rejects with a DownloadError. */
+export function addPendingLinksFromFiles(links: string[]): Promise<AddedLinks> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<AddedLinks>("add_pending_links_from_files", { links })
+}
+
 /** Adds links to the pending ones, which are then read one at a time. Rejects with a DownloadError. */
 export function addPendingLinks(links: string[]): Promise<AddedLinks> {
   if (!isTauri()) return outsideTauri()

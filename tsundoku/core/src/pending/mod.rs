@@ -7,9 +7,11 @@
 //! reads only sites it knows, and a link nothing can download, or that's downloaded or in the queue already, leaves
 //! without a word. With Download Right Away on, the rest start once read.
 
+pub mod files;
 mod store;
 pub mod watcher;
 
+use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
@@ -74,6 +76,8 @@ pub struct PendingLink {
     /// Copied in another app and caught by the clipboard watcher. Until it's read, the UI only counts it, since it may
     /// turn out to be nothing to download and leave.
     pub caught: bool,
+    /// Read from a file dropped on the window (`files`). Until it's read, the UI only counts it, as a copied link.
+    pub from_file: bool,
     /// While it waits to be read, the wait of its site, which answered "too many requests".
     pub hold: Option<SiteWait>,
 }
@@ -173,7 +177,37 @@ struct Entry {
     preset_id: Option<String>,
     start_when_read: StartWhenRead,
     added_at: i64,
-    caught: bool,
+    origin: LinkOrigin,
+}
+
+/// Where a link came from, which decides how it's read and whether it stays once read (`leaves_once_read`). Kept in
+/// `pending_links.caught` as 0, 1 and 2, so a version from before 0.1.54 reads a link from a file as copied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LinkOrigin {
+    /// Pasted, dropped as text, or sent by the clipboard shortcut or a browser.
+    Added,
+    /// Copied in another app and caught by the clipboard watcher.
+    Copied,
+    /// Read from a file dropped on the window (`files`), such as a bookmarks export.
+    File,
+}
+
+/// How long the pending-changed notices wait after one before sending the next, so a burst of changes (thousands of
+/// links added or read) sends a few, each with the list as it is then. Longer for a long list, which takes longer to
+/// put together and to show.
+fn change_gap(links: usize) -> Duration {
+    if links > 500 {
+        Duration::from_secs(1)
+    } else {
+        Duration::from_millis(250)
+    }
+}
+
+/// When the last pending-changed notice went out, and whether one is due once the gap is up.
+#[derive(Default)]
+struct ChangeNotices {
+    last_sent: Option<Instant>,
+    due: bool,
 }
 
 /// Whether a link not read yet starts once it's read. Kept in `pending_links.start_when_read` as 0, 1 and 2, so a
@@ -211,6 +245,9 @@ pub struct PendingLinks {
     settings: Arc<SettingsStore>,
     reader: Arc<dyn LinkReader>,
     listener: Arc<dyn PendingListener>,
+    notices: Mutex<ChangeNotices>,
+    /// Wakes the thread that sends a notice once its gap is up.
+    notices_due: Condvar,
 }
 
 impl PendingLinks {
@@ -232,9 +269,13 @@ impl PendingLinks {
             settings: services.settings,
             reader: services.reader,
             listener: services.listener,
+            notices: Mutex::default(),
+            notices_due: Condvar::new(),
         });
         let reading = Arc::downgrade(&links);
         thread::spawn(move || read_links(&reading));
+        let notifying = Arc::downgrade(&links);
+        thread::spawn(move || send_due_notices(&notifying));
         Ok(links)
     }
 
@@ -249,7 +290,13 @@ impl PendingLinks {
 
     /// Adds links to read, skipping those already here and anything that isn't a link.
     pub fn add(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
-        self.insert(links, false, StartWhenRead::No)
+        self.insert(links, LinkOrigin::Added, StartWhenRead::No)
+    }
+
+    /// Adds the links read from files dropped on the window (`files`), checked as copied links are: those with
+    /// nothing to download leave once read, without a word (`leaves_once_read`).
+    pub fn add_from_files(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
+        self.insert(links, LinkOrigin::File, StartWhenRead::No)
     }
 
     /// Adds links copied in another app (`watcher`), skipping those already here and those the queue or the history
@@ -263,14 +310,14 @@ impl PendingLinks {
             })
             .cloned()
             .collect();
-        self.insert(&new, true, StartWhenRead::No)
+        self.insert(&new, LinkOrigin::Copied, StartWhenRead::No)
     }
 
     /// Adds links sent from outside the window: the clipboard shortcut's, and the page a browser sends
     /// (`links_in_sent_link`). As if pasted, so each shows even when nothing can download it, but started once read
     /// when Download Right Away is on for it (by a rule or Settings), unless it was downloaded before.
     pub fn add_sent(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
-        self.insert(links, false, StartWhenRead::IfRightAway)
+        self.insert(links, LinkOrigin::Added, StartWhenRead::IfRightAway)
     }
 
     /// Starts every link Start All would (`starts_with_all`), each video with its own preset or `preset_id`. How many
@@ -303,10 +350,11 @@ impl PendingLinks {
         Ok(options)
     }
 
+    /// Adds links, saved together in one go, since a file can hold thousands.
     fn insert(
         &self,
         links: &[String],
-        caught: bool,
+        origin: LinkOrigin,
         start_when_read: StartWhenRead,
     ) -> Result<AddedLinks, DownloadError> {
         let mut outcome = AddedLinks {
@@ -315,15 +363,22 @@ impl PendingLinks {
         };
         {
             let mut state = lock(&self.state);
+            let mut here: HashSet<String> = state
+                .entries
+                .iter()
+                .map(|entry| entry.link.clone())
+                .collect();
+            let added_at = seconds_since_epoch();
+            let mut new = Vec::new();
             for text in links {
                 let Some(link) = metadata::normalize_link(text) else {
                     continue;
                 };
-                if state.entries.iter().any(|entry| entry.link == link) {
+                if !here.insert(link.clone()) {
                     outcome.already_pending += 1;
                     continue;
                 }
-                let mut entry = Entry {
+                new.push(Entry {
                     id: 0,
                     link,
                     state: PendingState::Waiting,
@@ -331,13 +386,13 @@ impl PendingLinks {
                     error: None,
                     preset_id: None,
                     start_when_read,
-                    added_at: seconds_since_epoch(),
-                    caught,
-                };
-                entry.id = self.store.insert(&entry)?;
-                state.entries.push(entry);
-                outcome.added += 1;
+                    added_at,
+                    origin,
+                });
             }
+            self.store.insert_all(&mut new)?;
+            outcome.added = new.len() as u32;
+            state.entries.append(&mut new);
         }
         if outcome.added > 0 {
             self.wake.notify_all();
@@ -610,7 +665,7 @@ impl PendingLinks {
         let turn = Turn {
             id: entry.id,
             link: entry.link.clone(),
-            caught: entry.caught,
+            origin: entry.origin,
             cancel: CancelToken::new(),
         };
         state.reading = Some((turn.id, turn.cancel.clone()));
@@ -643,7 +698,9 @@ impl PendingLinks {
     /// read with Download Right Away on. A site that answers "too many requests" waits (`DownloadQueue::slow_down`),
     /// and its links are read again once the wait ends.
     fn read(&self, turn: &Turn) {
-        let outcome = self.reader.read(&turn.link, !turn.caught, &turn.cancel);
+        let outcome = self
+            .reader
+            .read(&turn.link, turn.origin == LinkOrigin::Added, &turn.cancel);
         match &outcome {
             Err(PreviewError::TooManyRequests { .. }) => {
                 self.queue.slow_down(&turn.link);
@@ -676,9 +733,9 @@ impl PendingLinks {
                                 .as_ref()
                                 .is_some_and(|known| same_video(&known.video, &fetched.video))
                     });
-                    duplicate || (turn.caught && self.has_video(&fetched.video))
+                    duplicate || self.leaves_once_read(turn.origin, &outcome, &turn.link)
                 }
-                Err(error) => turn.caught && nothing_to_download(error, &turn.link),
+                Err(_) => self.leaves_once_read(turn.origin, &outcome, &turn.link),
             };
             if leaves {
                 state.entries.remove(index);
@@ -698,7 +755,8 @@ impl PendingLinks {
                         StartWhenRead::Yes => true,
                         StartWhenRead::IfRightAway => self.downloads_right_away(entry, &video),
                         StartWhenRead::No => {
-                            turn.caught && self.downloads_right_away(entry, &video)
+                            turn.origin == LinkOrigin::Copied
+                                && self.downloads_right_away(entry, &video)
                         }
                     };
                     let started = starts && self.start_once_read(entry);
@@ -709,7 +767,7 @@ impl PendingLinks {
                     } else {
                         let _ = self.store.update(&state.entries[index]);
                     }
-                    if turn.caught {
+                    if turn.origin == LinkOrigin::Copied {
                         announce = Some((video, started));
                     }
                 }
@@ -794,7 +852,8 @@ impl PendingLinks {
             preset_id: entry.preset_id,
             start_when_read: self.shows_starting_once_read(entry.start_when_read),
             added_at: entry.added_at,
-            caught: entry.caught,
+            caught: entry.origin == LinkOrigin::Copied,
+            from_file: entry.origin == LinkOrigin::File,
             hold,
         }
     }
@@ -804,9 +863,80 @@ impl PendingLinks {
         self.queue.site_wait(link).is_some()
     }
 
+    /// Tells the listener the links changed: at once when the last notice went out a while ago (`change_gap`), else
+    /// once that's up, with the list as it is then (`send_due_notices`).
     fn notify(&self) {
+        let count = lock(&self.state).entries.len();
+        {
+            let mut notices = lock(&self.notices);
+            let now = Instant::now();
+            if notices
+                .last_sent
+                .is_some_and(|last| now.duration_since(last) < change_gap(count))
+            {
+                if !notices.due {
+                    notices.due = true;
+                    self.notices_due.notify_all();
+                }
+                return;
+            }
+            notices.last_sent = Some(now);
+            notices.due = false;
+        }
+        self.send_changes();
+    }
+
+    fn send_changes(&self) {
         let links = self.list();
         self.listener.changed(&links);
+    }
+
+    /// Whether a link leaves once read, without a word: the rule for each origin, in one place. A link added by hand
+    /// always stays, to say what it is or why it couldn't be read. A copied link leaves when there's nothing to
+    /// download (`nothing_to_download`) or the queue or the history has its video, since nobody picked it. A link from
+    /// a file leaves when there's nothing to download, and otherwise stays as one added by hand does: marked when it
+    /// was downloaded before. (A second link to a video already here leaves whatever its origin.)
+    fn leaves_once_read(
+        &self,
+        origin: LinkOrigin,
+        outcome: &Result<Fetched, PreviewError>,
+        link: &str,
+    ) -> bool {
+        match (origin, outcome) {
+            (LinkOrigin::Added, _) => false,
+            (LinkOrigin::Copied | LinkOrigin::File, Err(error)) => nothing_to_download(error, link),
+            (LinkOrigin::Copied, Ok(fetched)) => self.has_video(&fetched.video),
+            (LinkOrigin::File, Ok(_)) => false,
+        }
+    }
+}
+
+/// Sends the pending-changed notice that `notify` left for later, once its gap is up, while the pending links exist.
+fn send_due_notices(links: &Weak<PendingLinks>) {
+    while let Some(links) = links.upgrade() {
+        let count = lock(&links.state).entries.len();
+        let mut notices = lock(&links.notices);
+        if !notices.due {
+            drop(
+                links
+                    .notices_due
+                    .wait_timeout(notices, IDLE_WAIT)
+                    .unwrap_or_else(PoisonError::into_inner),
+            );
+            continue;
+        }
+        let gap = change_gap(count);
+        let since = notices.last_sent.map_or(gap, |last| last.elapsed());
+        if since < gap {
+            drop(notices);
+            drop(links);
+            thread::sleep(gap - since);
+            continue;
+        }
+        notices.due = false;
+        notices.last_sent = Some(Instant::now());
+        drop(notices);
+        links.send_changes();
     }
 }
 
@@ -823,8 +953,8 @@ fn read_links(links: &Weak<PendingLinks>) {
 /// Whether Start All takes a link: not one that couldn't be read, is in the queue, was downloaded before or starts
 /// once read already, nor a copied link still being checked. The Pending view's own Start All matches it.
 pub fn starts_with_all(link: &PendingLink) -> bool {
-    let checking =
-        link.caught && matches!(link.state, PendingState::Waiting | PendingState::Reading);
+    let checking = (link.caught || link.from_file)
+        && matches!(link.state, PendingState::Waiting | PendingState::Reading);
     link.state != PendingState::Failed
         && !checking
         && !link.start_when_read
@@ -838,7 +968,7 @@ pub fn starts_with_all(link: &PendingLink) -> bool {
 struct Turn {
     id: i64,
     link: String,
-    caught: bool,
+    origin: LinkOrigin,
     cancel: CancelToken,
 }
 

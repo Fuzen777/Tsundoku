@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use rusqlite::params;
 use rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+use rusqlite::{Connection, params};
 
-use super::{Entry, PendingState, StartWhenRead};
+use super::{Entry, LinkOrigin, PendingState, StartWhenRead};
 use crate::database::Database;
 use crate::downloads::DownloadError;
 use crate::metadata::Fetched;
@@ -40,7 +40,7 @@ impl PendingStore {
                     row.get::<_, Option<String>>(6)?,
                     row.get::<_, StartWhenRead>(7)?,
                     row.get::<_, i64>(8)?,
-                    row.get::<_, bool>(9)?,
+                    row.get::<_, LinkOrigin>(9)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -57,7 +57,7 @@ impl PendingStore {
                 preset_id,
                 start_when_read,
                 added_at,
-                caught,
+                origin,
             ) = row.map_err(storage_error)?;
             let fetched = video
                 .and_then(|json| serde_json::from_str(&json).ok())
@@ -81,7 +81,7 @@ impl PendingStore {
                 preset_id,
                 start_when_read,
                 added_at,
-                caught,
+                origin,
             });
         }
         Ok(entries)
@@ -89,27 +89,20 @@ impl PendingStore {
 
     /// Adds a link and returns its ID: a new one when `id` is 0, else `id`, for Undo putting back a removed link.
     pub fn insert(&self, entry: &Entry) -> Result<i64, DownloadError> {
-        let connection = self.database.lock();
-        connection
-            .query_row(
-                "INSERT INTO pending_links
-                    (id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught)
-                VALUES (?10, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) RETURNING id",
-                params![
-                    entry.link,
-                    state_name(entry.state),
-                    video_json(entry),
-                    missing_js_runtime(entry),
-                    entry.error.as_ref().map(to_json),
-                    entry.preset_id,
-                    entry.start_when_read,
-                    entry.added_at,
-                    entry.caught,
-                    (entry.id != 0).then_some(entry.id),
-                ],
-                |row| row.get(0),
-            )
-            .map_err(storage_error)
+        insert_into(&self.database.lock(), entry)
+    }
+
+    /// Adds new links in one transaction, since a dropped file can hold thousands, and gives each its ID.
+    pub fn insert_all(&self, entries: &mut [Entry]) -> Result<(), DownloadError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let mut connection = self.database.lock();
+        let transaction = connection.transaction().map_err(storage_error)?;
+        for entry in entries.iter_mut() {
+            entry.id = insert_into(&transaction, entry)?;
+        }
+        transaction.commit().map_err(storage_error)
     }
 
     /// Saves everything about a link but its address and when it was added.
@@ -143,6 +136,29 @@ impl PendingStore {
     }
 }
 
+fn insert_into(connection: &Connection, entry: &Entry) -> Result<i64, DownloadError> {
+    connection
+        .query_row(
+            "INSERT INTO pending_links
+                (id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught)
+            VALUES (?10, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) RETURNING id",
+            params![
+                entry.link,
+                state_name(entry.state),
+                video_json(entry),
+                missing_js_runtime(entry),
+                entry.error.as_ref().map(to_json),
+                entry.preset_id,
+                entry.start_when_read,
+                entry.added_at,
+                entry.origin,
+                (entry.id != 0).then_some(entry.id),
+            ],
+            |row| row.get(0),
+        )
+        .map_err(storage_error)
+}
+
 /// A link being read is saved as waiting, so it's read again after a restart.
 fn state_name(state: PendingState) -> &'static str {
     match state {
@@ -170,6 +186,28 @@ impl FromSql for StartWhenRead {
             1 => Self::Yes,
             2 => Self::IfRightAway,
             _ => Self::No,
+        })
+    }
+}
+
+/// Where a link came from, in the `caught` column: 0 added by hand, 1 copied, 2 from a file. The column was a yes or
+/// no before 0.1.54, so older versions read a link from a file as copied.
+impl ToSql for LinkOrigin {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::from(match self {
+            Self::Added => 0_i64,
+            Self::Copied => 1,
+            Self::File => 2,
+        }))
+    }
+}
+
+impl FromSql for LinkOrigin {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(match i64::column_result(value)? {
+            0 => Self::Added,
+            2 => Self::File,
+            _ => Self::Copied,
         })
     }
 }

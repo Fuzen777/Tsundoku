@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { addPendingLinks, linksInText, showMainWindow } from "./api"
+import { addPendingLinks, addPendingLinksFromFiles, confirmWithUser, linksInText, showMainWindow } from "./api"
 import { AddBar } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
 import { Button } from "./components/Button"
@@ -11,12 +11,13 @@ import { UndoToastProvider } from "./components/UndoToast"
 import { UpdateBanner } from "./components/UpdateBanner"
 import { WhatsNewCard } from "./components/WhatsNewCard"
 import { describeDownloadError, type ErrorDescription } from "./errors"
+import { ASK_BEFORE_ADDING_OVER, checkingTime, readLinkFiles } from "./linkFiles"
 import { AppActionsContext, type ViewId } from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
 import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup } from "./queries"
 import { useAppShortcuts, useWindowPaste } from "./shortcuts"
 import { strings } from "./strings"
-import { useLinkDrop, usePreview } from "./usePreview"
+import { type Drop, useLinkDrop, usePreview } from "./usePreview"
 import { HistoryView } from "./views/HistoryView"
 import { PendingView } from "./views/PendingView"
 import { PresetsView } from "./views/PresetsView"
@@ -29,6 +30,8 @@ export function App() {
   const [view, setView] = useState<ViewId>("queue")
   const [link, setLink] = useState("")
   const [addError, setAddError] = useState<ErrorDescription | null>(null)
+  /** Why dropped files gave no links: a type Tsundoku doesn't read, or none in it. */
+  const [fileProblems, setFileProblems] = useState<ErrorDescription[]>([])
   const { data: needsSetup } = useToolsNeedSetup()
   const preview = usePreview()
   const { show: showPreview, close: closePreview } = preview
@@ -77,7 +80,51 @@ export function App() {
     [showLink, closePreview],
   )
   const takeText = useCallback((text: string) => void addText(text), [addText])
-  useLinkDrop(takeText)
+
+  // A dropped file of links (a text file, a bookmarks export, an Internet shortcut) sends its links to Pending, where
+  // they're checked as copied links are: those with nothing to download leave once read. Over 300 links, it asks
+  // first. When a drop holds text too and none of its files is one Tsundoku reads, such as a linked image dragged
+  // from a browser, the text goes in instead.
+  const addDrop = useCallback(
+    async ({ text, files }: Drop) => {
+      if (files.length > 0) {
+        setAddError(null)
+        const read = await readLinkFiles(files)
+        if (read.readable > 0 || !text) {
+          setFileProblems(read.problems)
+          if (read.links.length === 0) return
+          if (
+            read.links.length > ASK_BEFORE_ADDING_OVER &&
+            !(await confirmWithUser({
+              title: strings.addBar.files.manyTitle(read.links.length),
+              message: strings.addBar.files.manyMessage(
+                read.sources,
+                read.links.length,
+                checkingTime(read.links.length),
+              ),
+              confirmLabel: strings.addBar.files.addThem,
+              cancelLabel: strings.dialogs.cancel,
+            }))
+          ) {
+            return
+          }
+          try {
+            await addPendingLinksFromFiles(read.links)
+            setLink("")
+            closePreview()
+            setView("pending")
+          } catch (error) {
+            setAddError(describeDownloadError(error))
+          }
+          return
+        }
+      }
+      if (text) await addText(text)
+    },
+    [addText, closePreview],
+  )
+  const takeDrop = useCallback((drop: Drop) => void addDrop(drop), [addDrop])
+  useLinkDrop(takeDrop)
 
   // Ctrl+V outside a text field adds what was copied as if pasted in the add bar and submitted; Ctrl+L goes to the
   // add bar, and Ctrl+1 to Ctrl+6 to the sidebar's views. Not during the first-run setup.
@@ -122,6 +169,18 @@ export function App() {
                 <StatusMessage tone="danger" {...addError} />
               </div>
               <Button size="sm" variant="ghost" onClick={() => setAddError(null)}>
+                {strings.addBar.errors.dismiss}
+              </Button>
+            </Card>
+          )}
+          {fileProblems.length > 0 && (
+            <Card className="flex items-start gap-3 p-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                {fileProblems.map((problem) => (
+                  <StatusMessage key={problem.message} tone="warning" {...problem} />
+                ))}
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => setFileProblems([])}>
                 {strings.addBar.errors.dismiss}
               </Button>
             </Card>
