@@ -617,6 +617,14 @@ impl Drop for Operation<'_> {
     }
 }
 
+/// Whether `tools_folder` holds one of Tsundoku's own copies of the first-run setup's tools, such as an installed
+/// Tsundoku's, which the setup then offers to use.
+pub fn has_own_copies(tools_folder: &Path) -> bool {
+    ToolId::SETUP
+        .iter()
+        .any(|&id| locate::managed_executable(tools_folder, id).is_file())
+}
+
 /// Runs `work` for each of `ids` at once, since each mostly waits on a program or the network, and returns the
 /// results in the order of `ids`.
 fn for_each_tool<T: Send>(ids: &[ToolId], work: impl Fn(ToolId) -> T + Sync) -> Vec<T> {

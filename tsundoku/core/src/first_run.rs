@@ -12,6 +12,7 @@ use crate::settings::{
     BESIDE_APP_DOWNLOADS, Settings, SettingsError, SettingsStore, ToolCaches,
     default_download_folder,
 };
+use crate::tools;
 
 /// What the first-run choices offer, with the folders each option means on this PC.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -28,6 +29,11 @@ pub struct FirstRunOptions {
     pub default_download_folder: String,
     /// A portable copy's `Downloads` folder beside it, or `None` for an installed copy.
     pub beside_app_folder: Option<String>,
+    /// For a portable copy, an installed Tsundoku's `tools\` in AppData, which the two can share; `None` for an
+    /// installed copy, whose data folder is there already.
+    pub installed_tools_folder: Option<String>,
+    /// Whether that folder already holds Tsundoku's copies of the tools, so the setup picks it and uses them.
+    pub installed_tools_found: bool,
     /// What was chosen, once saved, so going back from the tools shows it, even after a restart.
     pub chosen: Option<FirstRunChoices>,
 }
@@ -58,12 +64,17 @@ pub enum DownloadFolderChoice {
     },
 }
 
-/// The choices on offer. `portable_folder` is the copy's own folder when it's portable.
+/// The choices on offer. `portable_folder` is the copy's own folder when it's portable, and `installed_data_folder`
+/// an installed copy's data folder in AppData, which a portable copy can share its tools with.
 pub fn options(
     settings: &Settings,
     paths: &DataPaths,
     portable_folder: Option<&Path>,
+    installed_data_folder: Option<&Path>,
 ) -> FirstRunOptions {
+    let installed_tools_folder = portable_folder
+        .and(installed_data_folder)
+        .map(|folder| DataPaths::new(folder.to_path_buf()).tools_folder());
     FirstRunOptions {
         needed: needed(settings),
         tools_folder: paths.tools_folder().display().to_string(),
@@ -71,6 +82,10 @@ pub fn options(
         default_download_folder: default_download_folder().display().to_string(),
         beside_app_folder: portable_folder
             .map(|folder| folder.join(BESIDE_APP_DOWNLOADS).display().to_string()),
+        installed_tools_found: installed_tools_folder
+            .as_deref()
+            .is_some_and(tools::has_own_copies),
+        installed_tools_folder: installed_tools_folder.map(|folder| folder.display().to_string()),
         chosen: chosen(settings, portable_folder),
     }
 }
@@ -143,7 +158,7 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         let store = store_in(&folder);
         let paths = DataPaths::new(folder.path().to_path_buf());
-        let offered = options(&store.get(), &paths, None);
+        let offered = options(&store.get(), &paths, None, None);
         assert!(offered.needed);
         assert_eq!(offered.beside_app_folder, None);
         assert_eq!(offered.chosen, None);
@@ -162,7 +177,7 @@ mod tests {
         )
         .unwrap();
         let settings = store.get();
-        let offered = options(&settings, &paths, None);
+        let offered = options(&settings, &paths, None, None);
         assert!(!offered.needed);
         assert_eq!(
             offered.chosen,
@@ -195,7 +210,37 @@ mod tests {
             })
             .unwrap();
         let paths = DataPaths::new(folder.path().to_path_buf());
-        assert!(!options(&store.get(), &paths, None).needed);
+        assert!(!options(&store.get(), &paths, None, None).needed);
+    }
+
+    #[test]
+    fn a_portable_copy_can_share_an_installed_copys_tools() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = store_in(&folder);
+        let paths = DataPaths::new(folder.path().join("data"));
+        let installed = tempfile::tempdir().unwrap();
+        let portable = folder.path();
+
+        let offered = options(&store.get(), &paths, None, Some(installed.path()));
+        assert_eq!(
+            offered.installed_tools_folder, None,
+            "an installed copy's data folder is there already"
+        );
+
+        let offered = options(&store.get(), &paths, Some(portable), Some(installed.path()));
+        let tools_folder = installed.path().join("tools");
+        assert_eq!(
+            offered.installed_tools_folder,
+            Some(tools_folder.display().to_string())
+        );
+        assert!(!offered.installed_tools_found);
+
+        std::fs::create_dir_all(tools_folder.join("yt-dlp")).unwrap();
+        std::fs::write(tools_folder.join("yt-dlp").join("yt-dlp.exe"), "").unwrap();
+        assert!(
+            options(&store.get(), &paths, Some(portable), Some(installed.path()))
+                .installed_tools_found
+        );
     }
 
     #[test]
@@ -205,7 +250,7 @@ mod tests {
         let paths = DataPaths::new(folder.path().to_path_buf());
         let portable = Path::new(r"E:\Tsundoku");
         assert_eq!(
-            options(&store.get(), &paths, Some(portable)).beside_app_folder,
+            options(&store.get(), &paths, Some(portable), None).beside_app_folder,
             Some(r"E:\Tsundoku\Downloads".to_owned())
         );
 
@@ -222,7 +267,7 @@ mod tests {
         );
         assert_eq!(settings.tools.folder, None);
         assert_eq!(
-            options(&settings, &paths, Some(portable)).chosen,
+            options(&settings, &paths, Some(portable), None).chosen,
             Some(choices.clone())
         );
 

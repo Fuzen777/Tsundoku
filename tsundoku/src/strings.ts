@@ -468,6 +468,11 @@ export const strings = {
     toolsFolderHint: "The programs Tsundoku downloads with, about 350 MB once set up.",
     toolsInDataFolder: "In Tsundoku's Data Folder",
     toolsFolderTitle: "Choose Where the Tools Go",
+    toolsInAppData: "In AppData",
+    toolsInAppDataDetail: (path: string, found: boolean) =>
+      found
+        ? `${path}, where an installed Tsundoku's tools already are: they're used as they are.`
+        : `${path}, shared with an installed Tsundoku and kept on this PC.`,
     caches: "Tool Caches",
     cachesHint: "Sign-ins and site data the tools keep between downloads. You can change this later in Settings.",
     cachesInDataFolder: "In Tsundoku's Data Folder",

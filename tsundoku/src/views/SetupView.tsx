@@ -75,9 +75,13 @@ function ChoicesScreen({ options }: { options: FirstRunOptions }) {
   const queryClient = useQueryClient()
   const text = strings.setup
   // What was saved before, when the tools screen's Back (or a restart before the tools were set up) led back here.
-  const { chosen } = options
-  /** A folder picked for the tools, or null for the data folder. */
-  const [toolsFolder, setToolsFolder] = useState<string | null>(chosen?.toolsFolder ?? null)
+  const { chosen, installedToolsFolder } = options
+  // A portable copy uses an installed Tsundoku's tools when they're there, unless something else was picked.
+  const firstToolsFolder = chosen ? chosen.toolsFolder : options.installedToolsFound ? installedToolsFolder : null
+  /** A folder for the tools (AppData's or a picked one), or null for the data folder. */
+  const [toolsFolder, setToolsFolder] = useState<string | null>(firstToolsFolder)
+  const inAppData = installedToolsFolder !== null && toolsFolder === installedToolsFolder
+  const pickedToolsFolder = toolsFolder !== null && !inAppData ? toolsFolder : null
   const [caches, setCaches] = useState<ToolCaches | null>(chosen?.caches ?? null)
   const [downloadFolder, setDownloadFolder] = useState<DownloadFolderChoice | null>(chosen?.downloadFolder ?? null)
   const [saving, setSaving] = useState(false)
@@ -133,12 +137,21 @@ function ChoicesScreen({ options }: { options: FirstRunOptions }) {
           label={text.toolsInDataFolder}
           detail={options.toolsFolder}
         />
+        {installedToolsFolder !== null && (
+          <ChoiceOption
+            name="setup-tools-folder"
+            checked={inAppData}
+            onSelect={() => setToolsFolder(installedToolsFolder)}
+            label={text.toolsInAppData}
+            detail={text.toolsInAppDataDetail(installedToolsFolder, options.installedToolsFound)}
+          />
+        )}
         <ChoiceOption
           name="setup-tools-folder"
-          checked={toolsFolder !== null}
+          checked={pickedToolsFolder !== null}
           onSelect={() => void chooseToolsFolder()}
           label={text.chooseFolder}
-          detail={toolsFolder ?? text.noFolderChosen}
+          detail={pickedToolsFolder ?? text.noFolderChosen}
         />
       </ChoiceCard>
       <ChoiceCard icon={HardDrive} title={text.caches} description={text.cachesHint}>

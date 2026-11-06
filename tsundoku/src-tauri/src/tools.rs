@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tsundoku_core::data_folder::{self, DataPaths};
 use tsundoku_core::downloads::DownloadError;
 use tsundoku_core::first_run::{self, FirstRunChoices, FirstRunOptions};
@@ -50,13 +50,22 @@ pub fn tools_need_setup(tools: Tools<'_>) -> bool {
 /// The first-run setup's choices (where the tools go, their caches, the download folder), asked before the tools.
 #[tauri::command]
 pub fn first_run_options(
+    app: AppHandle,
     settings: State<'_, Arc<SettingsStore>>,
     data_folder: State<'_, crate::DataFolder>,
 ) -> FirstRunOptions {
+    // An installed copy's data folder in AppData: Tauri's own base folder, which a portable copy's override leaves as
+    // it is, and the identifier.
+    let installed_data_folder = app
+        .path()
+        .local_data_dir()
+        .ok()
+        .map(|folder| folder.join(&app.config().identifier));
     first_run::options(
         &settings.get(),
         &DataPaths::new(data_folder.path.clone()),
         data_folder::portable_folder(),
+        installed_data_folder.as_deref(),
     )
 }
 

@@ -26,6 +26,15 @@ defaultDownloadFolder: string,
  */
 besideAppFolder: string | null, 
 /**
+ * For a portable copy, an installed Tsundoku's `tools\` in AppData, which the two can share; `None` for an
+ * installed copy, whose data folder is there already.
+ */
+installedToolsFolder: string | null, 
+/**
+ * Whether that folder already holds Tsundoku's copies of the tools, so the setup picks it and uses them.
+ */
+installedToolsFound: boolean, 
+/**
  * What was chosen, once saved, so going back from the tools shows it, even after a restart.
  */
 chosen: FirstRunChoices | null, };

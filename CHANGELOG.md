@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.24 · 2026-11-06
+
+### New
+
+- **Tools in AppData for a portable copy**: the first screen's Tools card offers In AppData, where an installed Tsundoku keeps its tools, so the two can share them. When an installed copy's tools are already there, it's picked, and the next screen uses them as they are instead of downloading them again.
+
 ## 0.1.23 · 2026-11-06
 
 ### Fixed
