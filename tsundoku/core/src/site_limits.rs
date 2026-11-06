@@ -98,6 +98,13 @@ impl SiteLimits {
             })
     }
 
+    /// Try Now: ends the site's wait at `now`. Its count stays, so a "too many requests" soon after waits longer.
+    pub fn end(&self, key: &str, now: i64) {
+        if let Some(cooldown) = lock(&self.sites).get_mut(key) {
+            cooldown.until = cooldown.until.min(now);
+        }
+    }
+
     /// Ends every wait, as if its time had come.
     #[cfg(test)]
     pub(crate) fn end_all(&self) {
@@ -206,6 +213,20 @@ mod tests {
             limits.slow_down(&site, 20 * MINUTE).until,
             25 * MINUTE,
             "back to the first wait once it worked"
+        );
+    }
+
+    #[test]
+    fn try_now_ends_a_wait_but_keeps_its_count() {
+        let limits = SiteLimits::new();
+        let site = instagram();
+        limits.slow_down(&site, 0);
+        limits.end("instagram.com", MINUTE);
+        assert_eq!(limits.wait("instagram.com", MINUTE), None);
+        assert_eq!(
+            limits.slow_down(&site, 2 * MINUTE).until,
+            12 * MINUTE,
+            "the next answer waits twice as long"
         );
     }
 

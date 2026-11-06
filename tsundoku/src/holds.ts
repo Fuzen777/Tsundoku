@@ -4,8 +4,8 @@ import type { SiteWait } from "./bindings/SiteWait"
 import { formatClockTime, formatDuration } from "./format"
 import { strings } from "./strings"
 
-/** Why a waiting download doesn't start yet, as a sentence: its site asked to slow down, or the hourly limit on
- * Instagram's files is reached, and when it continues. */
+/** Why a waiting download doesn't start yet, as a sentence, and when it continues: its site asked to slow down, the
+ * hourly limit on Instagram's files is reached, its connection dropped, or its site's download limit is used up. */
 export function describeHold(hold: Hold): string {
   const time = formatClockTime(hold.until)
   switch (hold.kind) {
@@ -13,6 +13,10 @@ export function describeHold(hold: Hold): string {
       return strings.queue.holds.slowDown(hold.site, time)
     case "hourlyLimit":
       return strings.queue.holds.hourlyLimit(hold.site, hold.limit, time)
+    case "retry":
+      return strings.queue.holds.retry(hold.attempt, hold.attempts, time)
+    case "limitReached":
+      return strings.queue.holds.limitReached(hold.site, time)
   }
 }
 

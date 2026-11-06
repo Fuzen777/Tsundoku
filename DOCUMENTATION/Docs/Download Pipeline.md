@@ -34,6 +34,7 @@ stateDiagram-v2
     Running --> Done: the file is in place
     Running --> Failed: yt-dlp failed
     Running --> Waiting: the site asked to slow down
+    Running --> Waiting: the connection dropped, or the download limit is used up
     Running --> Stopped: Stop, or the app closed
     Stopped --> Waiting: Resume
     Failed --> Waiting: Retry
@@ -65,6 +66,12 @@ The downloads started since the queue was last idle make up its run (`downloads:
 - A run that fails because its site answered "too many requests" (HTTP 429, `PreviewError::TooManyRequests`) goes back to Waiting with its partial files, instead of Failed. Its site (`sites::site_of`) then waits: 5 minutes, doubled for each 429 in a row, up to an hour, and back to 5 once something from the site works (`site_limits`).
 - While it waits, none of the site's downloads start, Pending doesn't read its links and the preview card refuses them; other sites go on. Each waiting item carries its `Hold` (`slowDown`, or `hourlyLimit` when Settings → Instagram's hourly limit on Instagram's files is reached), worked out whenever the queue schedules, and a thread schedules again once one ends.
 - Neither tool passes on the site's Retry-After, so the waits are Tsundoku's own. They live in memory: after a restart, a waiting download tries once more.
+
+## When a Download Fails
+
+- A run that fails because the connection dropped (`PreviewError::Network`) goes back to Waiting with its partial files and is tried again after 30 seconds, 2 minutes and 8 minutes (`CONNECTION_RETRY_WAITS`); the fourth failure in a row leaves it Failed.
+- A run that finds a file host's download limit used up (`PreviewError::LimitReached`: MEGA's transfer quota, a Google Drive or Dropbox file's) waits 30 minutes, doubled each time it's still used up, up to 4 hours, and never fails for it.
+- Its `Hold` (`retry` or `limitReached`) says when; Try Now ends the wait. A finished run, Resume and Retry start the count over. Like the site waits, these live in memory: after a restart, a waiting download tries again at once.
 
 ## Arguments
 

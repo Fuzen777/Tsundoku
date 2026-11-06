@@ -83,6 +83,7 @@ export const strings = {
     resume: "Resume",
     cancel: "Cancel",
     retry: "Retry",
+    tryNow: "Try Now",
     openLog: "Open Log",
     copyDetails: "Copy Details",
     detailsCopied: "Copied",
@@ -104,6 +105,9 @@ export const strings = {
       slowDown: (site: string, time: string) => `${site} asked to slow down. Continuing at ${time}.`,
       hourlyLimit: (site: string, limit: number, time: string) =>
         `${limit} ${site} ${limit === 1 ? "file" : "files"} in the past hour, the limit set in Settings. Continuing at ${time}.`,
+      retry: (attempt: number, attempts: number, time: string) =>
+        `The connection dropped. Trying again at ${time} (${attempt} of ${attempts}).`,
+      limitReached: (site: string, time: string) => `${site}'s download limit is used up. Continuing at ${time}.`,
     },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>

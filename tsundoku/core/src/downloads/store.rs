@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use rusqlite::params;
 
-use super::{DownloadError, QueueItem, QueueState};
+use super::{DownloadError, QueueItem, QueueState, Recovery};
 use crate::database::Database;
 
 pub(crate) struct QueueStore {
@@ -65,6 +65,7 @@ impl QueueStore {
                 error: error.and_then(|json| serde_json::from_str(&json).ok()),
                 progress: None,
                 hold: None,
+                recovery: Recovery::default(),
             });
         }
         Ok(items)

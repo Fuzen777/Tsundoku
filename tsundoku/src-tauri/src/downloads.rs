@@ -174,6 +174,12 @@ pub fn retry_download(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
     queue.retry(id)
 }
 
+/// Try Now: starts a download that waits to try again, or for its site, without waiting any longer.
+#[tauri::command]
+pub fn try_download_now(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
+    queue.try_now(id)
+}
+
 #[tauri::command]
 pub fn cancel_download(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
     queue.cancel(id)

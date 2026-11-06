@@ -14,6 +14,7 @@ import {
   showDownloadInFolder,
   stopAllDownloads,
   stopDownload,
+  tryDownloadNow,
 } from "../api"
 import { arrange, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
 import type { DownloadProgress } from "../bindings/DownloadProgress"
@@ -186,6 +187,9 @@ function QueueRow({ item }: { item: QueueItem }) {
             variant="secondary"
             onClick={() => act(stopDownload)}
           />
+        )}
+        {hold && hold.kind !== "hourlyLimit" && (
+          <IconButton label={strings.queue.tryNow} icon={RefreshCw} onClick={() => act(tryDownloadNow)} />
         )}
         {item.state === "stopped" && (
           <IconButton

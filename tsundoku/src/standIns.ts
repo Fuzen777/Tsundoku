@@ -438,6 +438,9 @@ export const standIns = {
     queueStandIn(3, "waiting", "Next in Line", {
       hold: { kind: "slowDown", site: "YouTube", until: Date.now() + 12 * 60_000 },
     }),
+    queueStandIn(7, "waiting", "Lost Its Connection", {
+      hold: { kind: "retry", attempt: 2, attempts: 3, until: Date.now() + 90_000 },
+    }),
     queueStandIn(4, "stopped", "Stopped Halfway"),
     queueStandIn(5, "failed", "A Video That Failed", {
       error: { kind: "ytDlp", error: { kind: "unavailable", detail: "[youtube] video5: This video is unavailable" } },

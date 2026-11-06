@@ -468,6 +468,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         error: None,
         progress: None,
         hold: None,
+        recovery: Recovery::default(),
     }
 }
 
@@ -892,10 +893,10 @@ fn a_site_that_asks_to_slow_down_waits_while_others_go_on() {
     wait_until("both run", || test.runner.started().len() == 2);
 
     test.runner.complete(first, too_many_requests());
-    wait_until("the post waits again", || {
-        test.state(first) == Some(QueueState::Waiting)
-    });
+    // Its hold is worked out once the run has settled, so that's what to wait for.
+    wait_until("the post waits again", || test.item(first).hold.is_some());
     let item = test.item(first);
+    assert_eq!(item.state, QueueState::Waiting);
     assert_eq!(item.error, None, "it didn't fail");
     let Some(Hold::SlowDown { site, until }) = item.hold else {
         panic!("{:?}", item.hold);
@@ -991,6 +992,155 @@ fn the_hourly_limit_holds_instagram_until_its_old_files_are_an_hour_old() {
     wait_until("it starts once there's room", || {
         test.times_started(id) == 1
     });
+    test.cancel_all();
+}
+
+fn lost_connection() -> JobOutcome {
+    JobOutcome::Failed(DownloadError::YtDlp {
+        error: PreviewError::Network {
+            detail: "Connection reset by peer".to_owned(),
+        },
+    })
+}
+
+fn limit_reached() -> JobOutcome {
+    JobOutcome::Failed(DownloadError::YtDlp {
+        error: PreviewError::LimitReached {
+            site: "MEGA".to_owned(),
+            detail: "MEGA answered -17".to_owned(),
+        },
+    })
+}
+
+/// How far off a hold's end is, in whole seconds.
+fn seconds_left(hold: &Hold) -> i64 {
+    (hold.until() - now_ms() + 500) / 1000
+}
+
+impl Test {
+    /// Waits until the download is held, and gives its hold.
+    fn held(&self, id: i64) -> Hold {
+        wait_until("it waits", || self.item(id).hold.is_some());
+        let item = self.item(id);
+        assert_eq!(item.state, QueueState::Waiting);
+        assert_eq!(item.error, None, "it didn't fail");
+        item.hold.unwrap()
+    }
+}
+
+#[test]
+fn a_lost_connection_is_tried_again_three_times_then_fails() {
+    let test = Test::new();
+    let id = test.add("a");
+    for (attempt, seconds) in [(1, 30), (2, 120), (3, 480)] {
+        wait_until("it runs", || test.times_started(id) == attempt as usize);
+        test.runner.complete(id, lost_connection());
+        let hold = test.held(id);
+        assert!(
+            matches!(hold, Hold::Retry { attempt: shown, attempts: 3, .. } if shown == attempt),
+            "{hold:?}"
+        );
+        assert_eq!(seconds_left(&hold), seconds);
+        assert!(
+            temp_folder(&test.item(id)).exists(),
+            "its partial files are kept"
+        );
+        test.queue.try_now(id).unwrap();
+    }
+    wait_until("it runs a fourth time", || test.times_started(id) == 4);
+    test.runner.complete(id, lost_connection());
+    wait_until("it fails", || test.state(id) == Some(QueueState::Failed));
+    assert!(matches!(
+        test.item(id).error,
+        Some(DownloadError::YtDlp {
+            error: PreviewError::Network { .. }
+        })
+    ));
+
+    test.queue.retry(id).unwrap();
+    wait_until("it runs again", || test.times_started(id) == 5);
+    test.runner.complete(id, lost_connection());
+    assert!(
+        matches!(test.held(id), Hold::Retry { attempt: 1, .. }),
+        "Retry starts the automatic retries over"
+    );
+    test.cancel_all();
+}
+
+#[test]
+fn a_used_up_download_limit_waits_longer_each_time_and_never_fails() {
+    let test = Test::new();
+    let id = test.add("a");
+    for (run, minutes) in [(1, 30), (2, 60), (3, 120), (4, 240), (5, 240)] {
+        wait_until("it runs", || test.times_started(id) == run);
+        test.runner.complete(id, limit_reached());
+        let hold = test.held(id);
+        assert!(
+            matches!(&hold, Hold::LimitReached { site, .. } if site == "MEGA"),
+            "{hold:?}"
+        );
+        assert_eq!(seconds_left(&hold), minutes * 60);
+        test.queue.try_now(id).unwrap();
+    }
+    wait_until("it runs again", || test.times_started(id) == 6);
+    test.runner.complete(id, test.finished_file("a.mkv"));
+    wait_until("it's done", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(
+        test.item(id).recovery,
+        Recovery::default(),
+        "a finished download starts its retries over"
+    );
+}
+
+#[test]
+fn pause_all_then_resume_all_tries_a_waiting_download_afresh() {
+    let test = Test::new();
+    let id = test.add("a");
+    wait_until("it runs", || test.times_started(id) == 1);
+    test.runner.complete(id, limit_reached());
+    test.held(id);
+
+    test.queue.stop_all().unwrap();
+    assert_eq!(test.state(id), Some(QueueState::Stopped));
+    assert_eq!(
+        test.queue.try_now(id),
+        Err(DownloadError::WrongState),
+        "only a held download can be tried now"
+    );
+    test.queue.resume_all().unwrap();
+    wait_until("it runs at once", || test.times_started(id) == 2);
+    test.runner.complete(id, limit_reached());
+    assert_eq!(
+        seconds_left(&test.held(id)),
+        30 * 60,
+        "back to the first wait"
+    );
+    test.cancel_all();
+}
+
+#[test]
+fn try_now_ends_a_sites_wait() {
+    let test = Test::new();
+    let post_id = test.queue.add_post(post("First")).unwrap().id;
+    wait_until("it runs", || test.times_started(post_id) == 1);
+    test.runner.complete(post_id, too_many_requests());
+    assert!(matches!(test.held(post_id), Hold::SlowDown { .. }));
+    let video = test.add("a");
+    wait_until("the video runs", || test.times_started(video) == 1);
+    assert_eq!(
+        test.queue.try_now(video),
+        Err(DownloadError::WrongState),
+        "a running download isn't held"
+    );
+
+    test.queue.try_now(post_id).unwrap();
+    wait_until("it starts again", || test.times_started(post_id) == 2);
+    assert!(
+        test.queue
+            .site_wait("https://www.instagram.com/p/Other/")
+            .is_none(),
+        "the site's reads go on too"
+    );
     test.cancel_all();
 }
 

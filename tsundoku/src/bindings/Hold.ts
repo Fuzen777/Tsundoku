@@ -11,4 +11,12 @@ until: number, } | { "kind": "hourlyLimit", site: string, limit: number,
 /**
  * In milliseconds since 1970.
  */
+until: number, } | { "kind": "retry", attempt: number, attempts: number, 
+/**
+ * In milliseconds since 1970.
+ */
+until: number, } | { "kind": "limitReached", site: string, 
+/**
+ * In milliseconds since 1970.
+ */
 until: number, };

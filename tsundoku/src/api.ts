@@ -384,6 +384,12 @@ export async function retryDownload(id: number): Promise<void> {
   await invoke("retry_download", { id })
 }
 
+/** Try Now: starts a download that waits to try again, or for its site, as soon as there's room. */
+export async function tryDownloadNow(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("try_download_now", { id })
+}
+
 /** Removes a download that isn't done, with its partial files. */
 export async function cancelDownload(id: number): Promise<void> {
   if (!isTauri()) return outsideTauri()

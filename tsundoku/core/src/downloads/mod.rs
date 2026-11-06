@@ -20,7 +20,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-pub use self::holds::Hold;
+pub use self::holds::{Hold, Recovery};
 use self::holds::{asked_to_slow_down, watch_holds};
 pub use self::run::{Notice, QueueRun, RunEvent, RunSummary, TaskbarProgress, notices};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
@@ -84,6 +84,10 @@ pub struct QueueItem {
     /// Worked out again whenever the queue schedules, so it isn't saved.
     #[serde(default)]
     pub hold: Option<Hold>,
+    /// What its automatic retries have done so far: kept in memory only, so the UI never sees it.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub recovery: Recovery,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -383,6 +387,7 @@ impl DownloadQueue {
             error: None,
             progress: None,
             hold: None,
+            recovery: Recovery::default(),
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -413,6 +418,7 @@ impl DownloadQueue {
             error: None,
             progress: None,
             hold: None,
+            recovery: Recovery::default(),
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -518,6 +524,8 @@ impl DownloadQueue {
     fn put_back_in_line(&self, item: &mut QueueItem) -> Result<(), DownloadError> {
         item.state = QueueState::Waiting;
         item.error = None;
+        // A fresh start: the automatic retries begin again, and a wait they set is dropped.
+        item.recovery = Recovery::default();
         self.store.update(item)
     }
 
@@ -805,6 +813,11 @@ impl DownloadQueue {
             drop(state);
         } else if let Ok(item) = find(&mut state.items, job.id) {
             item.progress = None;
+            // A lost connection or a used-up download limit is tried again by itself, unless the user ended the run.
+            let retry = match (&end_request, &outcome) {
+                (None, JobOutcome::Failed(error)) => item.recovery.after_failure(error, now_ms()),
+                _ => None,
+            };
             match (end_request, outcome) {
                 (Some(EndRequest::Stop), _) | (_, JobOutcome::Cancelled) => {
                     item.state = QueueState::Stopped
@@ -815,6 +828,10 @@ impl DownloadQueue {
                     if asked_to_slow_down(&error) && sites::site_of(&item.video.url).is_some() =>
                 {
                     self.note_slow_down(&item.video.url);
+                    item.state = QueueState::Waiting;
+                }
+                // It waits with its partial files (`Recovery::after_failure`), then runs again.
+                (_, JobOutcome::Failed(_)) if retry.is_some() => {
                     item.state = QueueState::Waiting;
                 }
                 (_, JobOutcome::Failed(error)) => {
@@ -833,6 +850,7 @@ impl DownloadQueue {
                             item.result = Some(result);
                             remove_folder(&job.temp_folder);
                             self.site_worked(&item.video.url);
+                            item.recovery = Recovery::default();
                         }
                         Err(error) => {
                             item.state = QueueState::Failed;

@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.52 · 2026-11-06
+
+### Added
+
+- **Downloads recover by themselves**: a download whose connection drops is tried again after 30 seconds, then 2 minutes, then 8 minutes, continuing from what it got, before it shows as failed. Its row says so, such as "The connection dropped. Trying again at 2:32 PM (2 of 3).", with the time left. When MEGA's, Google Drive's or Dropbox's download limit is used up, the download waits too, 30 minutes, then an hour, two, and up to four hours each time it's still used up, and starts again by itself instead of failing. A waiting row has Try Now, which starts it without waiting any longer (for a site that asked to slow down, all of that site's downloads go on), and can still be stopped or cancelled.
+
 ## 0.1.51 · 2026-11-06
 
 ### Added

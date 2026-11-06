@@ -306,6 +306,7 @@ pub fn run() {
             downloads::stop_download,
             downloads::resume_download,
             downloads::retry_download,
+            downloads::try_download_now,
             downloads::cancel_download,
             downloads::stop_all_downloads,
             downloads::resume_all_downloads,
