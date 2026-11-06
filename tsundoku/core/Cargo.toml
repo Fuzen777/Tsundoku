@@ -9,6 +9,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+# MEGA's files arrive encrypted (AES-128 in counter mode) with a CBC-MAC to check them by: hosts/mega.rs.
+aes = "0.9"
+base64 = "0.23"
+ctr = "0.10"
 dirs = "7"
 # Native TLS is Windows' own (SChannel): no crypto library to build, and Windows' certificate store.
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "native-tls", "system-proxy"] }

@@ -1,7 +1,8 @@
-//! The download queue: videos and posts of images waiting, running (a few at a time), stopped, done or failed, kept in `tsundoku.db` so
+//! The download queue: videos, posts of images and file hosts' files waiting, running (a few at a time), stopped, done or failed, kept in `tsundoku.db` so
 //! they come back after a restart. A finished download is recorded in the history. See
 //! `DOCUMENTATION/Docs/Download Pipeline.md`.
 
+mod file_runner;
 mod post_runner;
 mod progress;
 mod runner;
@@ -152,7 +153,8 @@ pub enum DownloadStage {
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum DownloadError {
-    /// yt-dlp, or gallery-dl for a post, failed or couldn't run; its error, sorted as a preview's is.
+    /// yt-dlp, gallery-dl for a post, or a file host failed, or the tool couldn't run; its error, sorted as a
+    /// preview's is.
     #[error("download failed: {error}")]
     YtDlp { error: PreviewError },
     /// The destination or temporary folder couldn't be made.
@@ -168,6 +170,10 @@ pub enum DownloadError {
     AlreadyQueued,
     #[error("no such item in the queue")]
     NotFound,
+    /// A file host's file didn't match its checksum (MEGA's MAC, MediaFire's SHA-256). It was deleted, so Retry
+    /// downloads it again.
+    #[error("{file} arrived damaged")]
+    Damaged { file: String },
     /// The action doesn't fit the item's state, such as Retry on one that didn't fail.
     #[error("not possible in this state")]
     WrongState,
@@ -318,11 +324,11 @@ impl DownloadQueue {
         Ok(item)
     }
 
-    /// Adds a post of images (a video whose `post` is set, from gallery-dl), to download all its files into the
-    /// folder the rules give it (by default the site's folder in the download folder). Files already there are
-    /// skipped, so adding a post again only fetches what's missing.
+    /// Adds a post of images (a video whose `post` is set, from gallery-dl) or a file host's link (`files` set), to
+    /// download all its files into the folder the rules give it (a post's by default the site's folder in the
+    /// download folder). Files already there are skipped, so adding it again only fetches what's missing.
     pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
-        if video.post.is_none() {
+        if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
         }
         if self.contains(&video.site, &video.video_id) {
@@ -539,6 +545,7 @@ impl DownloadQueue {
                 pause: sites::paces_downloads(&item.video.url).then_some(options.post_pause),
                 files: contents.images + contents.videos,
             }),
+            files: item.video.files,
         }
     }
 
@@ -614,8 +621,8 @@ impl DownloadQueue {
         self.schedule();
     }
 
-    /// Records a finished download in the history: its file, or every file of a post with the size of all of them.
-    /// A post's preset name is empty.
+    /// Records a finished download in the history: its file, or every file of a post or a file host's link with the
+    /// size of all of them. Their preset name is empty.
     fn record(
         &self,
         video: &VideoInfo,
@@ -638,7 +645,7 @@ impl DownloadQueue {
         let download = NewDownload {
             preset: preset_name.to_owned(),
             file_path: file_path.display().to_string(),
-            files: if video.post.is_some() {
+            files: if video.post.is_some() || video.files.is_some() {
                 saved
             } else {
                 Vec::new()

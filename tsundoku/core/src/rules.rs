@@ -8,6 +8,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::hosts::Host;
 use crate::metadata::VideoInfo;
 use crate::presets::Preset;
 use crate::settings::{SettingsError, SettingsStore};
@@ -61,7 +62,7 @@ pub enum RuleField {
     Title,
     /// The link to the video or post.
     Link,
-    /// Video, audio or a post of images (`DownloadKind`).
+    /// Video, audio, a post of images or a file host's files (`DownloadKind`).
     Kind,
     /// The preset, by its ID or its name. A post has none.
     Preset,
@@ -77,7 +78,7 @@ pub enum RuleOperator {
     DoesNotContain,
 }
 
-/// What a download is: a video or audio by its preset, or a post of images.
+/// What a download is: a video or audio by its preset, a post of images, or a file host's files.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -85,6 +86,7 @@ pub enum DownloadKind {
     Video,
     Audio,
     Post,
+    File,
 }
 
 impl DownloadKind {
@@ -94,6 +96,7 @@ impl DownloadKind {
             Self::Video => "video",
             Self::Audio => "audio",
             Self::Post => "post",
+            Self::File => "file",
         }
     }
 }
@@ -186,6 +189,8 @@ impl RuleSubject<'_> {
     pub fn kind(&self) -> DownloadKind {
         if self.video.post.is_some() {
             DownloadKind::Post
+        } else if self.video.files.is_some() {
+            DownloadKind::File
         } else if self.preset.is_some_and(Preset::is_audio) {
             DownloadKind::Audio
         } else {
@@ -200,6 +205,7 @@ impl RuleSubject<'_> {
             RuleField::Site => {
                 let mut names = vec![video.site.as_str(), video.site_name.as_str()];
                 names.extend(sites::sign_in_site(&video.url).map(|site| site.name));
+                names.extend(Host::of(&video.url).map(Host::name));
                 names
             }
             RuleField::Uploader => video.uploader.as_deref().into_iter().collect(),
@@ -213,11 +219,13 @@ impl RuleSubject<'_> {
         }
     }
 
-    /// The site as a folder's name: the name people know for sites that need an account ("Instagram", "X"),
-    /// otherwise the tools' own ("danbooru").
+    /// The site as a folder's name: the name people know for sites that need an account ("Instagram", "X") and
+    /// for file hosts ("MEGA"), otherwise the tools' own ("danbooru").
     fn site_folder_name(&self) -> String {
-        let site =
-            sites::sign_in_site(&self.video.url).map_or(self.video.site.as_str(), |site| site.name);
+        let site = sites::sign_in_site(&self.video.url)
+            .map(|site| site.name)
+            .or_else(|| Host::of(&self.video.url).map(Host::name))
+            .unwrap_or(self.video.site.as_str());
         safe_folder_name(site, "Other")
     }
 
@@ -403,7 +411,7 @@ impl RuleManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::PostContents;
+    use crate::metadata::{FileContents, PostContents};
     use crate::presets::built_in_presets;
 
     fn video() -> VideoInfo {
@@ -419,6 +427,7 @@ mod tests {
             thumbnail_url: None,
             best_height: Some(240),
             post: None,
+            files: None,
         }
     }
 
@@ -433,6 +442,24 @@ mod tests {
             post: Some(PostContents {
                 images: 1,
                 videos: 0,
+            }),
+            ..video()
+        }
+    }
+
+    fn mega_file() -> VideoInfo {
+        VideoInfo {
+            site: "mega".to_owned(),
+            site_name: "mega.nz".to_owned(),
+            video_id: "AbCdEf12".to_owned(),
+            url: "https://mega.nz/file/AbCdEf12#key".to_owned(),
+            title: "Pack.zip".to_owned(),
+            uploader: None,
+            duration_seconds: None,
+            best_height: None,
+            files: Some(FileContents {
+                count: 1,
+                bytes: 2048,
             }),
             ..video()
         }
@@ -487,6 +514,23 @@ mod tests {
     }
 
     #[test]
+    fn knows_a_file_host_by_the_name_people_use() {
+        let file = mega_file();
+        let subject = RuleSubject {
+            video: &file,
+            preset: None,
+        };
+        for name in ["MEGA", "mega", "mega.nz"] {
+            assert!(
+                condition(RuleField::Site, RuleOperator::Is, name).matches(&subject),
+                "{name}"
+            );
+        }
+        let rules = [rule(Vec::new(), r"D:\Hosts\{site}")];
+        assert_eq!(folder_of(&rules, &file, None).folder, r"D:\Hosts\MEGA");
+    }
+
+    #[test]
     fn compares_text_ignoring_case_and_spaces_around() {
         let video = video();
         let subject = RuleSubject {
@@ -525,6 +569,13 @@ mod tests {
         assert_eq!(kind(&video, Some(&best_video)), DownloadKind::Video);
         assert_eq!(kind(&video, Some(&best_audio)), DownloadKind::Audio);
         assert_eq!(kind(&tweet, None), DownloadKind::Post);
+        assert_eq!(kind(&mega_file(), None), DownloadKind::File);
+        assert!(
+            condition(RuleField::Kind, RuleOperator::Is, "file").matches(&RuleSubject {
+                video: &mega_file(),
+                preset: None
+            })
+        );
 
         let is_audio = condition(RuleField::Kind, RuleOperator::Is, "audio");
         assert!(is_audio.matches(&RuleSubject {

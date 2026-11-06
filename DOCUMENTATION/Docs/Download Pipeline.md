@@ -92,6 +92,10 @@ yt-dlp prints a line starting with `@@tsundoku` and a space for every progress u
 - Postprocessor names map to stages: Merger → Merging; ExtractAudio, VideoConvertor and VideoRemuxer → Converting; Metadata, EmbedThumbnail and EmbedSubtitle → Embedding; MoveFiles → Finishing; anything else → Processing.
 - Only the fields Tsundoku reads are printed (`%(progress.{…})j`), so each line stays short.
 
+## File Hosts
+
+MEGA and MediaFire downloads don't run a tool: `file_runner.rs` reads the link again (`core::hosts`), then fetches each file over HTTPS into `<n>.part` in the item's temporary folder. A part file resumes with a `Range` request, MEGA's decrypted from where it stopped. Each file is checked when it's complete (MEGA's MAC, MediaFire's SHA-256); a damaged one is deleted and the item fails with `damaged`, so Retry downloads it again. Its progress is the bytes of all the share's files, with the speed limit applied by sleeping between reads, and its log names each file and its size (MEGA's key is never written).
+
 ## Temporary Folders
 
 - Each item works in `<destination>\.tsundoku-<id>\`: on the same drive as the destination, so yt-dlp's final move is a rename, not a copy of a large file. The ID never repeats (`AUTOINCREMENT`).

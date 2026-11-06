@@ -203,6 +203,7 @@ fn video(video_id: &str) -> VideoInfo {
         thumbnail_url: None,
         best_height: Some(1080),
         post: None,
+        files: None,
     }
 }
 
@@ -533,6 +534,7 @@ fn post(post_id: &str) -> VideoInfo {
             images: 2,
             videos: 1,
         }),
+        files: None,
     }
 }
 
@@ -613,6 +615,38 @@ fn a_video_isnt_added_as_a_post() {
         Err(DownloadError::WrongState)
     );
     assert!(test.queue.items().is_empty());
+}
+
+#[test]
+fn downloads_a_file_hosts_link_without_a_preset() {
+    let test = Test::new();
+    let share = VideoInfo {
+        site: "mediafire".to_owned(),
+        site_name: "mediafire.com".to_owned(),
+        video_id: "abc123".to_owned(),
+        url: "https://www.mediafire.com/file/abc123".to_owned(),
+        title: "Pack.zip".to_owned(),
+        duration_seconds: None,
+        best_height: None,
+        files: Some(crate::metadata::FileContents {
+            count: 1,
+            bytes: 2048,
+        }),
+        ..video("abc123")
+    };
+    let id = test.queue.add_post(share).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    let job = test.runner.job(id);
+    assert_eq!(job.preset, None);
+    assert_eq!(job.post, None, "it isn't paced as a post");
+    assert_eq!(
+        job.files,
+        Some(crate::metadata::FileContents {
+            count: 1,
+            bytes: 2048
+        })
+    );
+    test.queue.cancel(id).unwrap();
 }
 
 #[test]

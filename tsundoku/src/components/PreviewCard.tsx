@@ -11,7 +11,7 @@ import {
   fixFor,
   type ErrorDescription,
 } from "../errors"
-import { formatCalendarDate, formatDay, formatDuration, joinDetails } from "../format"
+import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { useAppActions } from "../navigation"
 import { useDownloadDestination, usePresets } from "../queries"
 import { strings } from "../strings"
@@ -87,11 +87,8 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
             {joinDetails([
               video.durationSeconds !== null && formatDuration(video.durationSeconds),
               video.uploadDate && formatCalendarDate(video.uploadDate),
-              video.post
-                ? strings.preview.postContents(video.post.images, video.post.videos)
-                : video.bestHeight === null
-                  ? strings.preview.audioOnly
-                  : strings.preview.quality(video.bestHeight),
+              formatContents(video) ??
+                (video.bestHeight === null ? strings.preview.audioOnly : strings.preview.quality(video.bestHeight)),
             ])}
           </p>
         </div>
@@ -103,7 +100,7 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
       {missingJsRuntime && <StatusMessage tone="warning" message={strings.preview.missingDeno} />}
       {preview.inQueue ? (
         <p className="text-right text-fg-secondary">{strings.preview.inQueue}</p>
-      ) : video.post ? (
+      ) : video.post || video.files ? (
         <PostDownloadControls preview={preview} onAdded={onAdded} />
       ) : (
         <DownloadControls preview={preview} onAdded={onAdded} />
@@ -174,8 +171,8 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
   )
 }
 
-/** Download for a post of images: every file as the site gives it, so there's no preset to pick. Downloading again
- * only fetches the files that aren't in the folder any more. */
+/** Download for a post of images or a file host's link: every file as the site gives it, so there's no preset to
+ * pick. Downloading again only fetches the files that aren't in the folder any more. */
 function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)

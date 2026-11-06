@@ -12,6 +12,7 @@ pub mod database;
 pub mod downloads;
 pub mod gallery;
 pub mod history;
+pub mod hosts;
 pub mod metadata;
 pub mod presets;
 pub mod preview;

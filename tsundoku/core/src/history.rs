@@ -10,7 +10,7 @@ use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
 use crate::database::Database;
-use crate::metadata::{PostContents, VideoInfo};
+use crate::metadata::{FileContents, PostContents, VideoInfo};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -187,11 +187,12 @@ impl HistorySort {
 /// The video's columns, in the order `video_from_row` reads them from 0, then the download's from `DOWNLOAD_OFFSET`.
 const VIDEO_COLUMNS: &str =
     "v.id, v.site, v.site_name, v.video_id, v.url, v.title, v.uploader, v.duration_seconds,
-    v.upload_date, v.thumbnail_url, v.best_height, v.first_downloaded_at, v.post_images, v.post_videos";
+    v.upload_date, v.thumbnail_url, v.best_height, v.first_downloaded_at, v.post_images, v.post_videos,
+    v.file_count, v.file_bytes";
 const DOWNLOAD_COLUMNS: &str =
     "d.id, d.preset, d.file_path, d.file_size, d.format, d.downloaded_at,
     (SELECT COUNT(*) FROM download_files f WHERE f.download = d.id)";
-const DOWNLOAD_OFFSET: usize = 14;
+const DOWNLOAD_OFFSET: usize = 16;
 /// How many columns `DOWNLOAD_COLUMNS` has.
 const DOWNLOAD_WIDTH: usize = 7;
 
@@ -218,13 +219,14 @@ impl History {
         let transaction = connection.transaction()?;
         let video_row: i64 = transaction.query_row(
             "INSERT INTO videos (site, site_name, video_id, url, title, uploader, duration_seconds, upload_date,
-                thumbnail_url, best_height, first_downloaded_at, post_images, post_videos)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                thumbnail_url, best_height, first_downloaded_at, post_images, post_videos, file_count, file_bytes)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT (site, video_id) DO UPDATE SET site_name = excluded.site_name, url = excluded.url,
                 title = excluded.title, uploader = excluded.uploader, duration_seconds = excluded.duration_seconds,
                 upload_date = excluded.upload_date, thumbnail_url = excluded.thumbnail_url,
                 best_height = excluded.best_height, post_images = excluded.post_images,
-                post_videos = excluded.post_videos
+                post_videos = excluded.post_videos, file_count = excluded.file_count,
+                file_bytes = excluded.file_bytes
             RETURNING id",
             params![
                 video.site,
@@ -240,6 +242,8 @@ impl History {
                 download.downloaded_at,
                 video.post.map(|post| post.images),
                 video.post.map(|post| post.videos),
+                video.files.map(|files| files.count),
+                video.files.map(|files| files.bytes as i64),
             ],
             |row| row.get(0),
         )?;
@@ -500,6 +504,13 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
             (Some(images), Some(videos)) => Some(PostContents { images, videos }),
             _ => None,
         },
+        files: match (row.get(14)?, row.get::<_, Option<i64>>(15)?) {
+            (Some(count), Some(bytes)) => Some(FileContents {
+                count,
+                bytes: bytes.max(0) as u64,
+            }),
+            _ => None,
+        },
     })
 }
 
@@ -563,6 +574,7 @@ mod tests {
             thumbnail_url: None,
             best_height: Some(1080),
             post: None,
+            files: None,
         }
     }
 
@@ -1067,6 +1079,44 @@ mod tests {
             Err(HistoryError::NotFound),
             "forgotten with its video"
         );
+    }
+
+    #[test]
+    fn keeps_what_a_file_hosts_link_held() {
+        let test = TestHistory::new();
+        let files: Vec<PathBuf> = ["Pack/a.zip", "Pack/b.zip"]
+            .iter()
+            .map(|name| test.folder.path().join(name))
+            .collect();
+        fs::create_dir_all(test.folder.path().join("Pack")).unwrap();
+        for file in &files {
+            fs::write(file, b"zip").unwrap();
+        }
+        let mut share = video("mega", "AbCdEf12", "Pack", "", 0.0);
+        share.uploader = None;
+        share.duration_seconds = None;
+        share.files = Some(FileContents { count: 2, bytes: 6 });
+        let saved = NewDownload {
+            preset: String::new(),
+            file_path: files[0].display().to_string(),
+            files: files
+                .iter()
+                .map(|file| SavedFile {
+                    path: file.display().to_string(),
+                    size: Some(3),
+                })
+                .collect(),
+            file_size: Some(6),
+            format: None,
+            downloaded_at: 1,
+        };
+        let id = test.history.record(&share, &saved).unwrap();
+
+        let found = test.history.search(&HistoryQuery::default()).unwrap();
+        assert_eq!(found[0].video.files, share.files);
+        assert_eq!(found[0].video.post, None);
+        assert_eq!(found[0].last_download.file_count, 2);
+        assert_eq!(test.history.files_of(id).unwrap().len(), 2);
     }
 
     #[test]

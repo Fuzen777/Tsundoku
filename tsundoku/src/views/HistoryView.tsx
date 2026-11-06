@@ -23,7 +23,7 @@ import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeHistoryError, type ErrorDescription } from "../errors"
-import { formatBytes, formatDay, formatDuration, joinDetails } from "../format"
+import { formatBytes, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { useAppActions } from "../navigation"
 import { useDownloadFiles, useHistory, useHistoryFilters, useVideoDownloads } from "../queries"
 import { strings } from "../strings"
@@ -163,7 +163,7 @@ function HistoryRow({ video }: { video: HistoryVideo }) {
               video.uploader,
               video.siteName,
               video.durationSeconds !== null && formatDuration(video.durationSeconds),
-              video.post && strings.preview.postContents(video.post.images, video.post.videos),
+              formatContents(video),
             ])}
           </p>
           <p className="flex flex-wrap items-center gap-x-2 text-xs text-fg-secondary tabular-nums">

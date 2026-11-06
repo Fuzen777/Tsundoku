@@ -1,5 +1,5 @@
-//! The preview card's content: what a link is (metadata.rs for yt-dlp, gallery.rs for gallery-dl) and when it was
-//! last downloaded (history.rs).
+//! The preview card's content: what a link is (metadata.rs for yt-dlp, gallery.rs for gallery-dl, hosts for the file
+//! hosts Tsundoku reads itself) and when it was last downloaded (history.rs).
 
 use std::sync::Mutex;
 
@@ -11,6 +11,7 @@ use crate::cancel::CancelToken;
 use crate::downloads::DownloadQueue;
 use crate::gallery::{self, GalleryTools};
 use crate::history::{History, PastDownload};
+use crate::hosts::{self, Host};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::sites;
 use crate::sync::lock;
@@ -71,13 +72,20 @@ impl PreviewService {
             gallery_dl: gallery_dl.as_deref(),
             cookies,
         };
-        let fetched = read_link(
-            &link,
-            &cancel,
-            |link, cancel| metadata::fetch(&fetch_tools, link, cancel),
-            |link, cancel| gallery::fetch(&gallery_tools, link, cancel),
-            gallery_dl.is_some(),
-        );
+        // A file host Tsundoku reads itself goes there first, since its domains are exact.
+        let fetched = match Host::of(&link) {
+            Some(_) => hosts::read(&link, &cancel).map(|share| Fetched {
+                video: share.video_info(),
+                missing_js_runtime: false,
+            }),
+            None => read_link(
+                &link,
+                &cancel,
+                |link, cancel| metadata::fetch(&fetch_tools, link, cancel),
+                |link, cancel| gallery::fetch(&gallery_tools, link, cancel),
+                gallery_dl.is_some(),
+            ),
+        };
         {
             let mut current = lock(&self.current);
             if current.as_ref().is_some_and(|token| token.is_same(&cancel)) {
@@ -197,6 +205,7 @@ mod tests {
             thumbnail_url: None,
             best_height: None,
             post,
+            files: None,
         }
     }
 

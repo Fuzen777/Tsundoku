@@ -10,6 +10,7 @@ use serde::Serialize;
 use ts_rs::TS;
 
 use crate::browsers::{self, BrowserProfile, BrowserRoots, CookieUse};
+use crate::hosts::Host;
 use crate::process::{self, ProgramCommand};
 use crate::settings::CookiesBrowser;
 use crate::sites::SIGN_IN_SITES;
@@ -90,7 +91,7 @@ pub struct SignedInProfile {
     pub profile: String,
 }
 
-/// Lists the sites the set-up tools support, with this PC's browser sign-ins.
+/// Lists the sites the set-up tools support and the file hosts Tsundoku reads itself, with this PC's browser sign-ins.
 pub fn supported_sites(yt_dlp: Option<&Path>, gallery_dl: Option<&Path>) -> SupportedSites {
     let yt_dlp_names = yt_dlp
         .and_then(|program| list(program, &["--ignore-config", "--list-extractors"]))
@@ -108,7 +109,8 @@ pub fn supported_sites(yt_dlp: Option<&Path>, gallery_dl: Option<&Path>) -> Supp
             yt_dlp_names
                 .iter()
                 .chain(&gallery_dl_names)
-                .map(String::as_str),
+                .map(String::as_str)
+                .chain(Host::ALL.map(Host::name)),
             &sign_ins(&profiles, browsers::cookie_uses),
         ),
         images_set_up: gallery_dl.is_some(),

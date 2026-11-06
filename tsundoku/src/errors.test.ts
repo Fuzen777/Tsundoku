@@ -99,3 +99,15 @@ describe("fixFor", () => {
     expect(fixFor(new Error("x"))).toBeNull()
   })
 })
+
+describe("file host errors", () => {
+  it("names the host", () => {
+    expect(describePreviewError({ kind: "linkIncomplete", site: "MEGA" }).message).toBe(
+      strings.preview.errors.linkIncomplete("MEGA"),
+    )
+    expect(describePreviewError({ kind: "limitReached", site: "MEGA", detail: "MEGA answered -17" })).toEqual({
+      message: strings.preview.errors.limitReached("MEGA"),
+      detail: "MEGA answered -17",
+    })
+  })
+})

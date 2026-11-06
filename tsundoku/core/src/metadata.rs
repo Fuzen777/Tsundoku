@@ -41,6 +41,9 @@ pub struct VideoInfo {
     /// What a post holds, when the link is a post of images and videos (from gallery-dl). `None` for a video.
     #[serde(default)]
     pub post: Option<PostContents>,
+    /// What a file host's link holds (`hosts`): one file, or a shared folder's. `None` for a video or a post.
+    #[serde(default)]
+    pub files: Option<FileContents>,
 }
 
 /// The files of a post, such as an Instagram carousel.
@@ -50,6 +53,17 @@ pub struct VideoInfo {
 pub struct PostContents {
     pub images: u32,
     pub videos: u32,
+}
+
+/// The files behind a file host's link, such as a MEGA folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FileContents {
+    pub count: u32,
+    /// Their size together.
+    #[ts(type = "number")]
+    pub bytes: u64,
 }
 
 /// Why a link can't be previewed or downloaded. The UI turns each into a sentence; `detail` is yt-dlp's own error.
@@ -88,6 +102,15 @@ pub enum PreviewError {
         #[serde(default)]
         cookies: SignInCookies,
     },
+    /// A file host's free downloads for this connection are used up for now, such as MEGA's transfer quota.
+    #[error("{site}'s download limit is reached: {detail}")]
+    LimitReached { site: String, detail: String },
+    /// A link that needs a password, which Tsundoku can't ask for yet.
+    #[error("{site} link with a password")]
+    PasswordProtected { site: String },
+    /// A link missing part of itself, such as a MEGA link without its key, or with a key that doesn't open it.
+    #[error("incomplete {site} link")]
+    LinkIncomplete { site: String },
     #[error("network error: {detail}")]
     Network { detail: String },
     /// The tool couldn't read the site's page, which an update of the tool often fixes.
@@ -347,6 +370,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         thumbnail_url: info.thumbnail,
         best_height,
         post: None,
+        files: None,
     })
 }
 

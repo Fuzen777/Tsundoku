@@ -9,7 +9,7 @@ import { strings } from "../../strings"
 const text = strings.rules
 
 export const RULE_FIELDS: readonly RuleField[] = ["site", "uploader", "title", "link", "kind", "preset"]
-export const DOWNLOAD_KINDS: readonly DownloadKind[] = ["video", "audio", "post"]
+export const DOWNLOAD_KINDS: readonly DownloadKind[] = ["video", "audio", "post", "file"]
 
 /** The comparisons that fit a field: a kind or a preset is picked from a list, so it's either equal or not. */
 export function operatorsFor(field: RuleField): readonly RuleOperator[] {

@@ -9,9 +9,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 
-use super::{DownloadError, DownloadProgress, DownloadStage, post_runner, progress};
+use super::{DownloadError, DownloadProgress, DownloadStage, file_runner, post_runner, progress};
 use crate::cancel::CancelToken;
-use crate::metadata::{PreviewError, classify_failure};
+use crate::metadata::{FileContents, PreviewError, classify_failure};
 use crate::presets::{Preset, PresetError};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::settings::PauseRange;
@@ -44,6 +44,8 @@ pub struct JobSpec {
     pub cookies: Option<String>,
     /// Set for a post of images, which gallery-dl downloads.
     pub post: Option<PostJob>,
+    /// Set for a file host's link (`hosts`), which Tsundoku downloads itself.
+    pub files: Option<FileContents>,
 }
 
 /// What downloading a post takes beyond a video's needs.
@@ -78,7 +80,7 @@ pub trait JobRunner: Send + Sync {
     ) -> JobOutcome;
 }
 
-/// Downloads with the tools: gallery-dl for a post, yt-dlp for a video.
+/// Downloads with the tools, gallery-dl for a post and yt-dlp for a video, and a file host's files without one.
 pub struct ToolRunner;
 
 impl JobRunner for ToolRunner {
@@ -88,9 +90,10 @@ impl JobRunner for ToolRunner {
         cancel: &CancelToken,
         on_progress: &mut dyn FnMut(DownloadProgress),
     ) -> JobOutcome {
-        match &job.post {
-            Some(post) => post_runner::run(job, post, cancel, on_progress),
-            None => run_yt_dlp(job, cancel, on_progress),
+        match (&job.post, &job.files) {
+            (Some(post), _) => post_runner::run(job, post, cancel, on_progress),
+            (None, Some(_)) => file_runner::run(job, cancel, on_progress),
+            (None, None) => run_yt_dlp(job, cancel, on_progress),
         }
     }
 }
@@ -331,6 +334,7 @@ mod tests {
             rate_limit: None,
             cookies: None,
             post: None,
+            files: None,
         }
     }
 

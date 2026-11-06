@@ -168,6 +168,7 @@ mod tests {
             rate_limit: Some("2M".to_owned()),
             cookies: Some("firefox:C:\\Profiles\\main".to_owned()),
             post: None,
+            files: None,
         };
         let post = PostJob {
             gallery_dl: Some(PathBuf::from("gallery-dl.exe")),

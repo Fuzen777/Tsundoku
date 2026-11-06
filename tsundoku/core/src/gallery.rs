@@ -189,6 +189,7 @@ pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewE
         duration_seconds: None,
         best_height: None,
         post: Some(contents),
+        files: None,
     })
 }
 

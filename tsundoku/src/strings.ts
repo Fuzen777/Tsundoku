@@ -70,6 +70,7 @@ export const strings = {
       alreadyQueued: "This video is already in the queue.",
       notFound: "This download isn't in the queue anymore.",
       wrongState: "That can't be done to this download right now.",
+      damaged: (file: string) => `${file} arrived damaged and was deleted. Retry to download it again.`,
       storage: "Couldn't save the queue or the history.",
       logMissing: "This download has no log yet.",
       invalidRateLimit: "Use a number of bytes per second, with K, M or G after it if you like, such as 500K or 2M.",
@@ -156,6 +157,8 @@ export const strings = {
       ].filter(Boolean)
       return parts.join(", ")
     },
+    /** A file host's link: one file's size, or a shared folder's file count and size. */
+    fileContents: (count: number, size: string) => (count === 1 ? size : `${count} files, ${size}`),
     alreadyDownloaded: (date: string, preset: string) =>
       preset ? `Already downloaded on ${date} with ${preset}.` : `Already downloaded on ${date}.`,
     openFile: "Open File",
@@ -180,7 +183,7 @@ export const strings = {
       liveStream: "This is a live stream, which can't be downloaded yet.",
       upcoming: "This video hasn't started yet. Try again once it has.",
       unsupportedSite: "This site isn't supported.",
-      noVideo: "There's no video to download here.",
+      noVideo: "There's nothing to download here.",
       imagesNotSetUp:
         "This looks like a post of images. Downloading images takes one more free tool, which Tsundoku can set up.",
       unavailable: "This isn't available. It may be private, removed or blocked in your country.",
@@ -190,6 +193,11 @@ export const strings = {
       signInNeeded: (site: string) => `${site} needs you signed in. Sign in to ${site} in your browser, then try again.`,
       signInRefused: (site: string) =>
         `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
+      limitReached: (site: string) =>
+        `${site}'s free download limit for your connection is used up. Try again in a few hours.`,
+      passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
+      linkIncomplete: (site: string) =>
+        `This ${site} link is missing its key, the part after #, or the key is cut off. Copy the whole link again.`,
       network: "Couldn't reach the site. Check your connection, then try again.",
       siteError: "Couldn't read this site's page. An update often fixes this.",
       failed: "Couldn't read this link.",
@@ -328,6 +336,7 @@ export const strings = {
       video: "Video",
       audio: "Audio",
       post: "Post of Images",
+      file: "Shared File",
     },
     sentence: {
       every: "Every download",
@@ -350,6 +359,7 @@ export const strings = {
         video: "a video",
         audio: "audio",
         post: "a post of images",
+        file: "a shared file",
       },
       quoted: (value: string) => `“${value}”`,
     },

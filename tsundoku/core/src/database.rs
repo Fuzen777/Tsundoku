@@ -61,6 +61,9 @@ const MIGRATIONS: &[&str] = &[
         file_size INTEGER,
         PRIMARY KEY (download, position)
     );",
+    // 4: what a file host's link held (a MEGA folder, say): how many files, and their size together.
+    "ALTER TABLE videos ADD COLUMN file_count INTEGER;
+    ALTER TABLE videos ADD COLUMN file_bytes INTEGER;",
 ];
 
 pub struct Database {

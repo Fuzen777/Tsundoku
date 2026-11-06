@@ -29,6 +29,7 @@ const previewStandIn: VideoPreview = {
     thumbnailUrl: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
     bestHeight: 240,
     post: null,
+    files: null,
   },
   lastDownload: {
     id: 1,
@@ -159,6 +160,27 @@ const postStandIn: VideoPreview = {
     thumbnailUrl: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
     bestHeight: null,
     post: { images: 2, videos: 4 },
+    files: null,
+  },
+  lastDownload: null,
+  inQueue: false,
+  missingJsRuntime: false,
+}
+
+const sharedFolderStandIn: VideoPreview = {
+  video: {
+    site: "mega",
+    siteName: "mega.nz",
+    videoId: "AbCdEfGh",
+    url: "https://mega.nz/folder/AbCdEfGh#key",
+    title: "Wallpapers 2026",
+    uploader: null,
+    durationSeconds: null,
+    uploadDate: "2026-10-30",
+    thumbnailUrl: null,
+    bestHeight: null,
+    post: null,
+    files: { count: 14, bytes: 1_288_490_189 },
   },
   lastDownload: null,
   inQueue: false,
@@ -305,8 +327,8 @@ export const standIns = {
     }),
   ] satisfies QueueItem[],
   /**
-   * A downloaded video after a short wait; a post of images for an Instagram link; or a failure for a link
-   * containing "fail", or "images" (gallery-dl not set up).
+   * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link;
+   * or a failure for a link containing "fail", or "images" (gallery-dl not set up).
    */
   fetchPreview(link: string): Promise<VideoPreview> {
     return new Promise((resolve, reject) =>
@@ -317,6 +339,8 @@ export const standIns = {
           reject({ kind: "imagesNotSetUp" })
         } else if (link.includes("instagram")) {
           resolve(postStandIn)
+        } else if (link.includes("mega.nz")) {
+          resolve(sharedFolderStandIn)
         } else {
           resolve(previewStandIn)
         }

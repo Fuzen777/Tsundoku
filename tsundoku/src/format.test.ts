@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { formatBytes, formatCalendarDate, formatDay, formatDuration, formatSpeed, joinDetails } from "./format"
+import {
+  formatBytes,
+  formatCalendarDate,
+  formatContents,
+  formatDay,
+  formatDuration,
+  formatSpeed,
+  joinDetails,
+} from "./format"
 
 describe("formatBytes", () => {
   it("keeps bytes whole", () => {
@@ -52,5 +60,20 @@ describe("joinDetails", () => {
   it("skips what's missing", () => {
     expect(joinDetails(["jawed", null, "youtube.com", undefined, false])).toBe("jawed · youtube.com")
     expect(joinDetails([])).toBe("")
+  })
+})
+
+describe("formatContents", () => {
+  it("counts a post's images and videos", () => {
+    expect(formatContents({ post: { images: 2, videos: 1 }, files: null })).toBe("2 images, 1 video")
+  })
+
+  it("shows one file's size, or a folder's count and size", () => {
+    expect(formatContents({ post: null, files: { count: 1, bytes: 23_592_960 } })).toBe("22.5 MB")
+    expect(formatContents({ post: null, files: { count: 14, bytes: 1_288_490_189 } })).toBe("14 files, 1.2 GB")
+  })
+
+  it("has nothing to say about a video", () => {
+    expect(formatContents({ post: null, files: null })).toBeNull()
   })
 })

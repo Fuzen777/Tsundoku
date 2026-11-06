@@ -21,7 +21,7 @@ import { ProgressBar } from "../components/ProgressBar"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
-import { formatBytes, formatDuration, formatSpeed, joinDetails } from "../format"
+import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
 import { useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
 import { strings } from "../strings"
@@ -85,7 +85,7 @@ function QueueRow({ item }: { item: QueueItem }) {
         </p>
         <p className="truncate text-xs text-fg-secondary tabular-nums">
           {joinDetails([
-            item.preset?.name ?? (item.video.post && strings.preview.postContents(item.video.post.images, item.video.post.videos)),
+            item.preset?.name ?? formatContents(item.video),
             stage,
             ...sizeDetails(item, progress),
           ])}

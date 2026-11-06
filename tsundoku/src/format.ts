@@ -1,3 +1,5 @@
+import type { FileContents } from "./bindings/FileContents"
+import type { PostContents } from "./bindings/PostContents"
 import { strings } from "./strings"
 
 /** A size in bytes as Windows shows it: in 1024-based units, with one decimal from KB up ("22.5 MB"). */
@@ -44,4 +46,11 @@ export function formatDay(secondsSinceEpoch: number, locale?: string, timeZone?:
 /** Joins the parts of a line of details that are known, skipping the rest: "jawed · youtube.com". */
 export function joinDetails(parts: readonly (string | null | undefined | false)[]): string {
   return parts.filter(Boolean).join(strings.separator)
+}
+
+/** What a post or a file host's link holds: "2 images, 1 video", "3 files, 1.2 GB". Null for a video. */
+export function formatContents({ post, files }: { post: PostContents | null; files: FileContents | null }): string | null {
+  if (post) return strings.preview.postContents(post.images, post.videos)
+  if (files) return strings.preview.fileContents(files.count, formatBytes(files.bytes))
+  return null
 }

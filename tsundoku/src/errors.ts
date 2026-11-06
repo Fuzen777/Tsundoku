@@ -95,6 +95,12 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.unavailable, detail: error.detail }
     case "signInRequired":
       return { message: describeSignIn(error.site, error.cookies), detail: error.detail }
+    case "limitReached":
+      return { message: text.limitReached(error.site), detail: error.detail }
+    case "passwordProtected":
+      return { message: text.passwordProtected(error.site) }
+    case "linkIncomplete":
+      return { message: text.linkIncomplete(error.site) }
     case "network":
       return { message: text.network, detail: error.detail }
     case "siteError":
@@ -185,6 +191,8 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.alreadyQueued }
     case "notFound":
       return { message: text.notFound }
+    case "damaged":
+      return { message: text.damaged(error.file) }
     case "wrongState":
       return { message: text.wrongState }
     case "storage":

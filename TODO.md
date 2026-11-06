@@ -27,6 +27,11 @@ rules:
 - [ ] **Playlist entry picker.** Pasting a playlist or channel link lists its videos (`--flat-playlist`), with the ones already downloaded greyed out and unchecked, and queues the checked ones. This lifts v1's single-video rule. From here yt-dlp also reads `archive.txt` (`--download-archive`), so it skips known videos itself.
 - [ ] **Channel subscriptions.** Watch a channel or playlist, check it on a schedule, and queue only new uploads (`--break-on-existing` with the archive). Builds on the picker's playlist handling.
 
+### File Hosts
+
+- [ ] **Google Drive and Dropbox.** The other two of the big four file hosts, after MEGA and MediaFire, as hosts of their own in `core::hosts`.
+- [ ] **Password-protected links.** MEGA's `#P!` links and MediaFire's protected files are refused with a message for now.
+
 ### Getting Links In
 
 - [ ] **Tray icon and clipboard watcher.** Closing the window keeps Tsundoku running in the tray, and copying a video link offers to queue it.
