@@ -1,5 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query"
-import { confirmWithUser, onCloseRequested, onDownloadProgress, onPendingChanged, onQueueChanged, queryKeys } from "./api"
+import {
+  confirmWithUser,
+  getBackgroundOptions,
+  onCloseRequested,
+  onDownloadProgress,
+  onPendingChanged,
+  onQueueChanged,
+  queryKeys,
+} from "./api"
 import type { DownloadProgress } from "./bindings/DownloadProgress"
 import type { QueueItem } from "./bindings/QueueItem"
 import { createLiveStore } from "./liveStore"
@@ -13,8 +21,8 @@ import { strings } from "./strings"
 
 const progress = createLiveStore<number, DownloadProgress>()
 
-/** Starts listening to the queue's events, and asks before closing the window while downloads run. Called once,
- * before the first render (main.tsx). */
+/** Starts listening to the queue's events, and decides what closing the window does: with the tray on, it hides;
+ * otherwise, it asks first while downloads run. Called once, before the first render (main.tsx). */
 export function trackQueue(queryClient: QueryClient): void {
   void onQueueChanged((items) => {
     queryClient.setQueryData(queryKeys.queue, items)
@@ -34,15 +42,19 @@ export function trackQueue(queryClient: QueryClient): void {
   void onPendingChanged((links) => queryClient.setQueryData(queryKeys.pending, links))
   void onDownloadProgress(({ id, progress: value }) => progress.set(id, value))
   void onCloseRequested(async () => {
+    // Read again each time: the tray's setting may have changed since the window opened.
+    const { keepInTray } = await getBackgroundOptions()
+    if (keepInTray) return "hide"
     const items = queryClient.getQueryData<QueueItem[]>(queryKeys.queue) ?? []
     const running = items.filter((item) => item.state === "running").length
-    if (running === 0) return true
-    return confirmWithUser({
+    if (running === 0) return "close"
+    const confirmed = await confirmWithUser({
       title: strings.queue.closeTitle,
       message: strings.queue.closeMessage(running),
       confirmLabel: strings.queue.closeConfirm,
       cancelLabel: strings.dialogs.cancel,
     })
+    return confirmed ? "close" : "stay"
   })
 }
 

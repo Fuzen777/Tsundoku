@@ -11,6 +11,7 @@ use crate::downloads::{
 };
 use crate::history::NewDownload;
 use crate::metadata::{FileContents, PostContents, SignInCookies};
+use crate::settings::ClipboardShortcut;
 use crate::tools::ToolManager;
 
 /// Answers what each link is: a YouTube video, an Instagram post or a MEGA folder named after the link's end, unless
@@ -105,11 +106,23 @@ impl QueueListener for NoQueueEvents {
 #[derive(Default)]
 struct CountingListener {
     changes: AtomicUsize,
+    /// The copied links announced as read: the video's ID, and whether it started.
+    copied: Mutex<Vec<(String, bool)>>,
+    /// The options as each change saved them.
+    options: Mutex<Vec<AddingSettings>>,
 }
 
 impl PendingListener for CountingListener {
     fn changed(&self, _links: &[PendingLink]) {
         self.changes.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn copied_link_read(&self, video: &VideoInfo, started: bool) {
+        lock(&self.copied).push((video.video_id.clone(), started));
+    }
+
+    fn options_changed(&self, options: &AddingSettings) {
+        lock(&self.options).push(*options);
     }
 }
 
@@ -229,6 +242,7 @@ impl Test {
         let options = AddingSettings {
             watch_clipboard: true,
             download_right_away: on,
+            ..AddingSettings::default()
         };
         assert_eq!(self.links.set_options(options).unwrap(), options);
     }
@@ -706,4 +720,111 @@ fn a_copied_link_is_still_copied_after_a_restart() {
     test.reader.release(FIRST);
     let reopened = test.reopen();
     assert!(reopened.list()[0].caught);
+}
+
+#[test]
+fn the_clipboard_shortcut_adds_links_as_if_pasted() {
+    let test = Test::new();
+    test.download_right_away(true);
+    let unsupported = "https://github.com/Fuzen777/Tsundoku";
+    test.reader
+        .answer(unsupported, Err(PreviewError::UnsupportedSite));
+    test.record_download(&video_at(SECOND));
+    let links: Vec<String> = [FIRST, SECOND, unsupported]
+        .iter()
+        .map(|link| (*link).to_owned())
+        .collect();
+    assert_eq!(test.links.add_from_clipboard(&links).unwrap().added, 3);
+
+    wait_until("the first is in the queue", || {
+        test.queued("first").is_some()
+    });
+    test.wait_until_read(SECOND);
+    test.wait_until_read(unsupported);
+    assert_eq!(
+        test.state(SECOND),
+        Some(PendingState::Ready),
+        "downloaded before, it waits"
+    );
+    assert_eq!(
+        test.state(unsupported),
+        Some(PendingState::Failed),
+        "it shows why, as a pasted link does"
+    );
+    assert!(test.reader.read_any_page(unsupported));
+
+    test.download_right_away(false);
+    test.links.add_from_clipboard(&[THIRD.to_owned()]).unwrap();
+    test.wait_until_read(THIRD);
+    assert!(test.queued("third").is_none());
+}
+
+#[test]
+fn start_all_takes_what_the_pending_view_offers() {
+    let test = Test::new();
+    test.record_download(&video_at(SECOND));
+    test.reader.answer(
+        THIRD,
+        Err(PreviewError::Network {
+            detail: "offline".to_owned(),
+        }),
+    );
+    test.add(&[FIRST, SECOND, THIRD]);
+    for link in [FIRST, SECOND, THIRD] {
+        test.wait_until_read(link);
+    }
+    let copied = "https://www.youtube.com/watch?v=copied";
+    test.reader.hold(copied);
+    test.copy(&[copied]);
+    wait_until("the copy is being checked", || {
+        test.state(copied) == Some(PendingState::Reading)
+    });
+
+    assert_eq!(test.links.start_all("best-video").unwrap(), 1);
+    assert!(test.queued("first").is_some());
+    assert!(test.queued("second").is_none());
+    assert!(test.link(copied).is_some_and(|link| !link.start_when_read));
+    test.reader.release(copied);
+}
+
+#[test]
+fn copied_links_are_announced_once_read() {
+    let test = Test::new();
+    test.copy(&[FIRST]);
+    test.wait_until_read(FIRST);
+    test.download_right_away(true);
+    test.copy(&[SECOND]);
+    wait_until("the second is in the queue", || {
+        test.queued("second").is_some()
+    });
+    test.add(&[THIRD]);
+    test.wait_until_read(THIRD);
+    assert_eq!(
+        *lock(&test.listener.copied),
+        [("first".to_owned(), false), ("second".to_owned(), true)],
+        "a pasted link isn't announced"
+    );
+}
+
+#[test]
+fn saved_options_are_announced_and_kept() {
+    let test = Test::new();
+    assert_eq!(
+        test.links.options(),
+        AddingSettings {
+            watch_clipboard: false,
+            download_right_away: false,
+            clipboard_shortcut: None,
+            notify: true,
+        },
+        "everything starts off but notifications"
+    );
+    let options = AddingSettings {
+        watch_clipboard: true,
+        clipboard_shortcut: Some(ClipboardShortcut::CtrlAltD),
+        ..AddingSettings::default()
+    };
+    test.links.set_options(options).unwrap();
+    assert_eq!(*lock(&test.listener.options), [options]);
+    assert_eq!(test.settings.get().adding, options);
 }

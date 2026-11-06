@@ -8,6 +8,7 @@ import { StatusMessage } from "../components/StatusMessage"
 import { useAppInfo, useAppUpdate } from "../queries"
 import { strings } from "../strings"
 import { AddingSection } from "./settings/AddingSection"
+import { BackgroundSection } from "./settings/BackgroundSection"
 import { CookiesSection, DownloadsSection, PostsSection } from "./settings/DownloadsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { ToolsSection } from "./settings/ToolsSection"
@@ -18,6 +19,7 @@ export function SettingsView() {
       <div className="flex max-w-3xl flex-col gap-6">
         <DownloadsSection />
         <AddingSection />
+        <BackgroundSection />
         <PostsSection />
         <CookiesSection />
         <SupportedSitesSection />

@@ -116,6 +116,13 @@ pub trait LinkReader: Send + Sync {
 /// Told when the pending links change, to pass them on to the UI.
 pub trait PendingListener: Send + Sync {
     fn changed(&self, links: &[PendingLink]);
+
+    /// A link copied in another app was read and stays: waiting in the pending links, or `started` into the queue.
+    /// The app notifies the user while its window is hidden.
+    fn copied_link_read(&self, _video: &VideoInfo, _started: bool) {}
+
+    /// How links get added changed, from Settings or the tray's Watch Clipboard.
+    fn options_changed(&self, _options: &AddingSettings) {}
 }
 
 /// What the pending links use.
@@ -201,7 +208,7 @@ impl PendingLinks {
 
     /// Adds links to read, skipping those already here and anything that isn't a link.
     pub fn add(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
-        self.insert(links, false)
+        self.insert(links, false, false)
     }
 
     /// Adds links copied in another app (`watcher`), skipping those already here and those the queue or the history
@@ -215,7 +222,26 @@ impl PendingLinks {
             })
             .cloned()
             .collect();
-        self.insert(&new, true)
+        self.insert(&new, true, false)
+    }
+
+    /// Adds the links on the clipboard, for the clipboard shortcut: as if pasted, so each shows even when nothing can
+    /// download it, but started once read with Download Right Away on, unless it was downloaded before.
+    pub fn add_from_clipboard(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
+        self.insert(links, false, self.options().download_right_away)
+    }
+
+    /// Starts every link Start All would (`starts_with_all`), each video with its own preset or `preset_id`. How many
+    /// were started.
+    pub fn start_all(&self, preset_id: &str) -> Result<usize, DownloadError> {
+        let ids: Vec<i64> = self
+            .list()
+            .iter()
+            .filter(|link| starts_with_all(link))
+            .map(|link| link.id)
+            .collect();
+        self.start(&ids, preset_id)?;
+        Ok(ids.len())
     }
 
     /// How links get added besides pasting them: the clipboard watcher and Download Right Away.
@@ -231,10 +257,16 @@ impl PendingLinks {
             .map_err(|error| DownloadError::Storage {
                 detail: error.to_string(),
             })?;
+        self.listener.options_changed(&options);
         Ok(options)
     }
 
-    fn insert(&self, links: &[String], caught: bool) -> Result<AddedLinks, DownloadError> {
+    fn insert(
+        &self,
+        links: &[String],
+        caught: bool,
+        start_when_read: bool,
+    ) -> Result<AddedLinks, DownloadError> {
         let mut outcome = AddedLinks {
             added: 0,
             already_pending: 0,
@@ -256,7 +288,7 @@ impl PendingLinks {
                     fetched: None,
                     error: None,
                     preset_id: None,
-                    start_when_read: false,
+                    start_when_read,
                     added_at: seconds_since_epoch(),
                     caught,
                 };
@@ -439,6 +471,7 @@ impl PendingLinks {
         let outcome = self.reader.read(&turn.link, !turn.caught, &turn.cancel);
         let settings = self.settings.get();
         let right_away = turn.caught && settings.adding.download_right_away;
+        let mut announce = None;
         {
             let mut state = lock(&self.state);
             state.reading = None;
@@ -475,15 +508,21 @@ impl PendingLinks {
             }
             match outcome {
                 Ok(fetched) => {
+                    let video = fetched.video.clone();
                     let entry = &mut state.entries[index];
                     entry.state = PendingState::Ready;
                     entry.fetched = Some(fetched);
                     entry.error = None;
-                    if (entry.start_when_read || right_away) && self.start_once_read(entry) {
+                    let started =
+                        (entry.start_when_read || right_away) && self.start_once_read(entry);
+                    if started {
                         state.entries.remove(index);
                         let _ = self.store.delete(turn.id);
                     } else {
                         let _ = self.store.update(&state.entries[index]);
+                    }
+                    if turn.caught {
+                        announce = Some((video, started));
                     }
                 }
                 Err(error) => {
@@ -501,6 +540,9 @@ impl PendingLinks {
             }
         }
         self.notify();
+        if let Some((video, started)) = announce {
+            self.listener.copied_link_read(&video, started);
+        }
     }
 
     /// Whether the queue or the history has the video already.
@@ -574,6 +616,20 @@ fn read_links(links: &Weak<PendingLinks>) {
             None => links.wait_for_work(),
         }
     }
+}
+
+/// Whether Start All takes a link: not one that couldn't be read, is in the queue, was downloaded before or starts
+/// once read already, nor a copied link still being checked. The Pending view's own Start All matches it.
+pub fn starts_with_all(link: &PendingLink) -> bool {
+    let checking =
+        link.caught && matches!(link.state, PendingState::Waiting | PendingState::Reading);
+    link.state != PendingState::Failed
+        && !checking
+        && !link.start_when_read
+        && link
+            .preview
+            .as_ref()
+            .is_none_or(|preview| !preview.in_queue && preview.last_download.is_none())
 }
 
 /// A link's turn to be read.

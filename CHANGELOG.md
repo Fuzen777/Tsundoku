@@ -2,6 +2,19 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.17 · 2026-11-06
+
+### New
+
+- **Keep Running in the Tray**: a new Settings → Running in the Background section. With it on, closing the window leaves Tsundoku in the notification area, still downloading and watching the clipboard. Clicking its icon opens the window; right-clicking gives Open Tsundoku, Watch Clipboard, Start All Pending (with how many) and Quit Tsundoku, which asks first while downloads run.
+- **Start with Windows**: Tsundoku opens when you sign in to Windows, in the tray without its window when Keep Running in the Tray is on.
+- **Clipboard Shortcut**: in Settings → Adding Links, pick Ctrl+Alt+D, Ctrl+Shift+D, Ctrl+Alt+V or Alt+Shift+D. Pressing it in any app adds the links on the clipboard to Pending, as if pasted there, even with Watch Clipboard off. A shortcut another app already uses is refused with a message.
+- **Notifications**: while the window isn't in front, a Windows notification says when a copied link was added to Pending or started downloading, what the shortcut added, and what Start All Pending in the tray started. Clicking one opens Tsundoku. On to start with; Show Notifications in Settings → Adding Links turns them off.
+
+### Changed
+
+- Download Right Away now also applies to links the clipboard shortcut adds.
+
 ## 0.1.16 · 2026-11-06
 
 ### Fixed

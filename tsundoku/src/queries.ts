@@ -5,6 +5,7 @@ import {
   detectTools,
   getAddingOptions,
   getAppInfo,
+  getBackgroundOptions,
   getDefaultDownloadFolder,
   getDownloadDestination,
   getDownloadFiles,
@@ -23,8 +24,10 @@ import {
   getToolsOverview,
   queryKeys,
   saveAddingOptions,
+  saveBackgroundOptions,
 } from "./api"
 import type { AddingSettings } from "./bindings/AddingSettings"
+import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
@@ -205,6 +208,27 @@ export function useSaveAddingOptions() {
     setError(null)
     try {
       queryClient.setQueryData(queryKeys.addingOptions, await saveAddingOptions({ ...options, ...changes }))
+    } catch (caught) {
+      setError(describeDownloadError(caught))
+    }
+  }
+  return { options, save, error }
+}
+
+export function useBackgroundOptions() {
+  return useQuery({ queryKey: queryKeys.backgroundOptions, queryFn: getBackgroundOptions, staleTime: Infinity })
+}
+
+/** Saves changes to Settings → Running in the Background, with the error if it failed. */
+export function useSaveBackgroundOptions() {
+  const queryClient = useQueryClient()
+  const { data: options } = useBackgroundOptions()
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const save = async (changes: Partial<BackgroundSettings>) => {
+    if (!options) return
+    setError(null)
+    try {
+      queryClient.setQueryData(queryKeys.backgroundOptions, await saveBackgroundOptions({ ...options, ...changes }))
     } catch (caught) {
       setError(describeDownloadError(caught))
     }

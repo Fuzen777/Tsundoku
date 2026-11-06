@@ -1,5 +1,6 @@
 //! The Tauri app: the window, the plugins, and the commands that expose `tsundoku_core` to the UI.
 
+mod background;
 mod downloads;
 mod history;
 mod pending;
@@ -51,6 +52,9 @@ fn app_info(
         version: app.package_info().version.to_string(),
         has_mica_backdrop: backdrop.has_mica,
         data_folder: data_folder.path.display().to_string(),
+        started_in_tray: app
+            .try_state::<background::StartedInTray>()
+            .is_some_and(|started| started.0),
     }
 }
 
@@ -62,7 +66,7 @@ fn open_data_folder(app: AppHandle, data_folder: State<'_, DataFolder>) -> Resul
         .map_err(|error| error.to_string())
 }
 
-/// Brings the main window to the front, for a second launch of the app.
+/// Brings the main window to the front: for a second launch of the app, the tray icon, or a click on a notification.
 fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         // Best effort: a window that can't be restored or focused is still the one already open.
@@ -129,7 +133,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         settings: Arc::clone(&settings),
         reader: Arc::new(ToolReader {
             tools: Arc::clone(&tools),
-            settings,
+            settings: Arc::clone(&settings),
         }),
         listener: Arc::new(pending::EventListener {
             app: app.handle().clone(),
@@ -149,6 +153,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(queue);
     app.manage(pending);
     app.manage(Arc::new(PreviewService::new()));
+    background::start(app.handle(), &settings);
+    app.manage(settings);
     Ok(tools)
 }
 
@@ -172,6 +178,20 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // Restarts the app once an update is installed.
         .plugin(tauri_plugin_process::init())
+        // Start with Windows: an entry among Windows' startup apps, which starts Tsundoku in the tray.
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name(background::STARTUP_NAME)
+                .args([background::IN_TRAY_ARG])
+                .build(),
+        )
+        // The clipboard shortcut, registered once the settings are read (background::start).
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(background::on_shortcut)
+                .build(),
+        )
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -183,7 +203,10 @@ pub fn run() {
             let tool_manager = open_data(app)?;
             tools::start_daily_yt_dlp_update(app.handle().clone(), tool_manager);
 
-            show_main_window_if_still_hidden(window);
+            // Started by Windows with the tray on, the window waits there until it's opened.
+            if !app.state::<background::StartedInTray>().0 {
+                show_main_window_if_still_hidden(window);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -240,6 +263,8 @@ pub fn run() {
             pending::start_pending_links,
             pending::adding_options,
             pending::save_adding_options,
+            background::background_options,
+            background::save_background_options,
             downloads::download_options,
             downloads::save_download_options,
         ])

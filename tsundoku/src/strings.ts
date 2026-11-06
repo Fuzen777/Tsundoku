@@ -78,6 +78,7 @@ export const strings = {
       storage: "Couldn't save the queue or the history.",
       logMissing: "This download has no log yet.",
       invalidRateLimit: "Use a number of bytes per second, with K, M or G after it if you like, such as 500K or 2M.",
+      shortcutTaken: (keys: string) => `Another app already uses ${keys}. Pick another shortcut.`,
     },
     fixes: {
       updateYtDlp: "Update yt-dlp",
@@ -496,10 +497,31 @@ export const strings = {
     adding: "Adding Links",
     watchClipboard: "Watch Clipboard",
     watchClipboardHint:
-      "Links you copy in any app go to Pending while Tsundoku is open, even minimized. Copies holding anything besides links are left alone, and so are links to sites Tsundoku can't download from and links already downloaded or in the queue.",
+      "Links you copy in any app go to Pending while Tsundoku is open, even minimized or in the tray. Copies holding anything besides links are left alone, and so are links to sites Tsundoku can't download from and links already downloaded or in the queue.",
+    clipboardShortcut: "Clipboard Shortcut",
+    clipboardShortcutHint:
+      "Press it in any app to add the links you copied to Pending, as if you'd pasted them there. Works without Watch Clipboard.",
+    noShortcut: "None",
+    /** The keys of each clipboard shortcut, as the core's ClipboardShortcut::keys names them. */
+    shortcutKeys: {
+      ctrlAltD: "Ctrl+Alt+D",
+      ctrlShiftD: "Ctrl+Shift+D",
+      ctrlAltV: "Ctrl+Alt+V",
+      altShiftD: "Alt+Shift+D",
+    },
     downloadRightAway: "Download Right Away",
     downloadRightAwayHint:
-      "Copied links start downloading once they're read, with the default preset, instead of waiting in Pending. A link that needs something from you first, such as signing in, still waits there.",
+      "Links the clipboard watcher or the shortcut adds start downloading once they're read, with the default preset, instead of waiting in Pending. A link that needs something from you first, such as signing in, still waits there, and so does one downloaded before.",
+    notify: "Show Notifications",
+    notifyHint:
+      "While Tsundoku's window isn't in front: when a copied link is added or starts downloading, and when the shortcut adds links. Clicking one opens Tsundoku.",
+    background: "Running in the Background",
+    keepInTray: "Keep Running in the Tray",
+    keepInTrayHint:
+      "Closing the window leaves Tsundoku in the notification area, still downloading and watching the clipboard. Click its icon to open it, or right-click for Watch Clipboard, Start All Pending and Quit.",
+    startWithWindows: "Start with Windows",
+    startWithWindowsHint:
+      "Opens Tsundoku when you sign in to Windows. With Keep Running in the Tray on, it starts there, without its window.",
     folder: "Download Folder",
     folderHint: "Where downloads go, unless a rule or their preset picks another folder.",
     folderTitle: "Choose Where Downloads Go",

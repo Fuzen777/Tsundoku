@@ -15,4 +15,9 @@ hasMicaBackdrop: boolean,
 /**
  * The data folder (settings, tools, history, logs), shown in Settings → About with Open Folder.
  */
-dataFolder: string, };
+dataFolder: string, 
+/**
+ * Windows started Tsundoku at sign-in and it keeps running in the tray, so the window stays hidden until it's
+ * opened from there.
+ */
+startedInTray: boolean, };

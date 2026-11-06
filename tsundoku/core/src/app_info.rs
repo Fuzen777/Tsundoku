@@ -12,4 +12,7 @@ pub struct AppInfo {
     pub has_mica_backdrop: bool,
     /// The data folder (settings, tools, history, logs), shown in Settings → About with Open Folder.
     pub data_folder: String,
+    /// Windows started Tsundoku at sign-in and it keeps running in the tray, so the window stays hidden until it's
+    /// opened from there.
+    pub started_in_tray: bool,
 }

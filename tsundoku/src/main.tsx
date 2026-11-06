@@ -2,7 +2,7 @@ import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { App } from "./App"
-import { getAppInfo, getToolsNeedSetup, onToolsChanged, queryKeys } from "./api"
+import { getAppInfo, getToolsNeedSetup, onAddingOptionsChanged, onToolsChanged, queryKeys } from "./api"
 import { trackQueue } from "./queueEvents"
 import { trackToolProgress } from "./toolProgress"
 import "./index.css"
@@ -19,6 +19,8 @@ document.documentElement.dataset.backdrop = appInfo.hasMicaBackdrop ? "mica" : "
 trackToolProgress()
 trackQueue(queryClient)
 void onToolsChanged(() => void queryClient.invalidateQueries({ queryKey: queryKeys.toolsOverview }))
+// The tray's Watch Clipboard changes the options outside the UI.
+void onAddingOptionsChanged((options) => queryClient.setQueryData(queryKeys.addingOptions, options))
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

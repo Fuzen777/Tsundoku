@@ -8,6 +8,7 @@ import { check } from "@tauri-apps/plugin-updater"
 import type { AddedLinks } from "./bindings/AddedLinks"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
+import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
@@ -58,6 +59,7 @@ export const queryKeys = {
   downloadFiles: ["download-files"],
   downloadOptions: ["download-options"],
   addingOptions: ["adding-options"],
+  backgroundOptions: ["background-options"],
   defaultDownloadFolder: ["default-download-folder"],
   supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
@@ -73,6 +75,8 @@ const QUEUE_CHANGED_EVENT = "queue-changed"
 const DOWNLOAD_PROGRESS_EVENT = "download-progress"
 /** Sent by the core with every pending link when they change. */
 const PENDING_CHANGED_EVENT = "pending-changed"
+/** Sent by the app with the options when how links get added changes, such as from the tray's Watch Clipboard. */
+const ADDING_OPTIONS_CHANGED_EVENT = "adding-options-changed"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -363,10 +367,28 @@ export function getAddingOptions(): Promise<AddingSettings> {
   return invoke<AddingSettings>("adding_options")
 }
 
-/** Saves how links get added, and resolves to the options as saved. Rejects with a DownloadError. */
+/** Saves how links get added, and resolves to the options as saved. Rejects with a DownloadError, such as when
+ * another app has the clipboard shortcut picked. */
 export function saveAddingOptions(options: AddingSettings): Promise<AddingSettings> {
   if (!isTauri()) return outsideTauri()
   return invoke<AddingSettings>("save_adding_options", { options })
+}
+
+export function onAddingOptionsChanged(handler: (options: AddingSettings) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<AddingSettings>(ADDING_OPTIONS_CHANGED_EVENT, (event) => handler(event.payload))
+}
+
+/** Whether closing the window keeps Tsundoku in the tray, and whether it starts with Windows. */
+export function getBackgroundOptions(): Promise<BackgroundSettings> {
+  if (!isTauri()) return Promise.resolve(standIns.backgroundOptions)
+  return invoke<BackgroundSettings>("background_options")
+}
+
+/** Saves Settings → Running in the Background, and resolves to the options as saved. Rejects with a DownloadError. */
+export function saveBackgroundOptions(options: BackgroundSettings): Promise<BackgroundSettings> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<BackgroundSettings>("save_background_options", { options })
 }
 
 export function onPendingChanged(handler: (links: PendingLink[]) => void): Promise<UnlistenFn> {
@@ -400,11 +422,19 @@ ${message}`)
   return ask(message, { title, kind: "warning", okLabel: confirmLabel, cancelLabel })
 }
 
-/** Lets the UI keep the window open, such as while downloads run: `shouldClose` resolving to false cancels closing. */
-export async function onCloseRequested(shouldClose: () => Promise<boolean>): Promise<UnlistenFn> {
+/** What closing the window does: closes Tsundoku, hides the window with Tsundoku running on in the tray, or nothing,
+ * when the user would rather keep it open. */
+export type CloseChoice = "close" | "hide" | "stay"
+
+/** Lets the UI decide what closing the window does, such as asking first while downloads run. */
+export async function onCloseRequested(choose: () => Promise<CloseChoice>): Promise<UnlistenFn> {
   if (!isTauri()) return () => {}
-  return getCurrentWindow().onCloseRequested(async (event) => {
-    if (!(await shouldClose())) event.preventDefault()
+  const window = getCurrentWindow()
+  return window.onCloseRequested(async (event) => {
+    const choice = await choose()
+    if (choice === "close") return
+    event.preventDefault()
+    if (choice === "hide") await window.hide()
   })
 }
 

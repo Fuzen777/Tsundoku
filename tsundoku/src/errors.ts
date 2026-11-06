@@ -199,6 +199,8 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.storage, detail: error.detail }
     case "invalidRateLimit":
       return { message: text.invalidRateLimit, detail: error.value }
+    case "shortcutTaken":
+      return { message: text.shortcutTaken(error.keys) }
     case "unexpected":
       return { message: strings.errors.unexpected, detail: error.detail }
   }

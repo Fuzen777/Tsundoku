@@ -11,7 +11,7 @@ import { UpdateBanner } from "./components/UpdateBanner"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { AppActionsContext, type ViewId } from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
-import { usePendingLinks, useQueue, useToolsNeedSetup } from "./queries"
+import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup } from "./queries"
 import { strings } from "./strings"
 import { useLinkDrop, usePreview } from "./usePreview"
 import { HistoryView } from "./views/HistoryView"
@@ -33,11 +33,16 @@ export function App() {
   const { data: pending = [] } = usePendingLinks()
   const unfinished = queue.filter((item) => item.state !== "done").length
 
+  const { data: appInfo } = useAppInfo()
+  const startedInTray = appInfo?.startedInTray ?? false
+
   useEffect(() => {
+    // Started by Windows with the tray on, the window waits there until it's opened.
+    if (startedInTray) return
     // After the first frame is painted, so the hidden window never shows blank.
     const frame = requestAnimationFrame(() => void showMainWindow())
     return () => cancelAnimationFrame(frame)
-  }, [])
+  }, [startedInTray])
 
   // A dropped link, or Download Again in the history, goes in the add bar and is fetched right away.
   const showLink = useCallback(

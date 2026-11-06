@@ -183,6 +183,10 @@ pub enum DownloadError {
     /// A speed limit yt-dlp wouldn't understand.
     #[error("{value} isn't a speed limit")]
     InvalidRateLimit { value: String },
+    /// The clipboard shortcut picked in Settings → Adding Links is taken by another app, so Windows won't give it to
+    /// Tsundoku.
+    #[error("{keys} is taken by another app")]
+    ShortcutTaken { keys: String },
     #[error("unexpected error: {detail}")]
     Unexpected { detail: String },
 }

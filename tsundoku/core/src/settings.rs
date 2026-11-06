@@ -24,6 +24,7 @@ pub struct Settings {
     pub downloads: DownloadSettings,
     pub rules: RulesSettings,
     pub adding: AddingSettings,
+    pub background: BackgroundSettings,
 }
 
 impl Settings {
@@ -60,15 +61,68 @@ struct DownloadsBeforeRules {
     posts_folder: Option<String>,
 }
 
-/// How links get added besides pasting them. Settings → Adding Links edits it; both start off.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// How links get added besides pasting them. Settings → Adding Links edits it; the watcher and the shortcut start
+/// off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
 pub struct AddingSettings {
     /// Links copied in any app go to the pending links (`pending::watcher`) while Tsundoku runs.
     pub watch_clipboard: bool,
-    /// Copied links start downloading once read, with the default preset, instead of waiting to be started.
+    /// Copied links start downloading once read, with the default preset, instead of waiting to be started. Links
+    /// added with the clipboard shortcut too.
     pub download_right_away: bool,
+    /// A shortcut that adds the links on the clipboard from any app, if one is picked.
+    pub clipboard_shortcut: Option<ClipboardShortcut>,
+    /// Windows notifications while the window isn't in front: for each copied link added or started, for what the
+    /// shortcut adds, and for the tray's Start All Pending.
+    pub notify: bool,
+}
+
+impl Default for AddingSettings {
+    fn default() -> Self {
+        Self {
+            watch_clipboard: false,
+            download_right_away: false,
+            clipboard_shortcut: None,
+            notify: true,
+        }
+    }
+}
+
+/// The keys of the clipboard shortcut, from a few that Windows and common apps leave free.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ClipboardShortcut {
+    CtrlAltD,
+    CtrlShiftD,
+    CtrlAltV,
+    AltShiftD,
+}
+
+impl ClipboardShortcut {
+    /// The keys as Tauri's global shortcuts read them, and as the UI shows them.
+    pub fn keys(self) -> &'static str {
+        match self {
+            Self::CtrlAltD => "Ctrl+Alt+D",
+            Self::CtrlShiftD => "Ctrl+Shift+D",
+            Self::CtrlAltV => "Ctrl+Alt+V",
+            Self::AltShiftD => "Alt+Shift+D",
+        }
+    }
+}
+
+/// What Tsundoku does when its window closes and when Windows starts. Settings → Running in the Background edits it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct BackgroundSettings {
+    /// Closing the window hides it and keeps Tsundoku running in the tray, so downloads and the clipboard watcher go
+    /// on. Quit in the tray's menu ends it.
+    pub keep_in_tray: bool,
+    /// Tsundoku starts when the user signs in to Windows: in the tray when `keep_in_tray` is on, else with its window.
+    pub start_with_windows: bool,
 }
 
 /// How downloads run. Settings → Downloads edits it.
@@ -402,6 +456,35 @@ mod tests {
             Some(&ToolSetup::Managed { checksum: None })
         );
         assert_eq!(settings.tools.yt_dlp_channel, UpdateChannel::Stable);
+    }
+
+    #[test]
+    fn reads_adding_links_saved_before_the_shortcut_and_notifications() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "adding": { "watchClipboard": true, "downloadRightAway": true } }"#,
+        )
+        .unwrap();
+
+        let settings = store_in(&folder).get();
+        assert_eq!(
+            settings.adding,
+            AddingSettings {
+                watch_clipboard: true,
+                download_right_away: true,
+                clipboard_shortcut: None,
+                notify: true,
+            }
+        );
+        assert_eq!(settings.background, BackgroundSettings::default());
+    }
+
+    #[test]
+    fn names_each_clipboard_shortcut_as_saved() {
+        let saved = serde_json::to_string(&Some(ClipboardShortcut::CtrlShiftD)).unwrap();
+        assert_eq!(saved, r#""ctrlShiftD""#);
+        assert_eq!(ClipboardShortcut::AltShiftD.keys(), "Alt+Shift+D");
     }
 
     #[test]

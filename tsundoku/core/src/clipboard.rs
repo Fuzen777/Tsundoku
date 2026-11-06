@@ -1,6 +1,7 @@
-//! Windows' clipboard, as the clipboard watcher reads it (`pending::watcher`). Only the change count is read until
-//! something is copied; then the text, unless Tsundoku copied it (its window, or WebView2's processes, which it
-//! starts) or the program that copied it marks it private, as password managers do.
+//! Windows' clipboard, as the clipboard watcher (`pending::watcher`) and the clipboard shortcut (`copied_text`) read
+//! it. For the watcher, only the change count is read until something is copied; then the text, unless Tsundoku
+//! copied it (its window, or WebView2's processes, which it starts) or the program that copied it marks it private,
+//! as password managers do.
 
 use std::thread;
 use std::time::Duration;
@@ -82,30 +83,36 @@ impl Clipboard for SystemClipboard {
         {
             return None;
         }
-        let _open = OpenedClipboard::open()?;
-        // SAFETY: the clipboard is open, and the handle it gives stays valid until it's closed.
-        unsafe {
-            let handle = GetClipboardData(u32::from(CF_UNICODETEXT));
-            if handle.is_null() {
-                return None;
-            }
-            let size = GlobalSize(handle);
-            if size == 0 || size > LONGEST_TEXT_BYTES {
-                return None;
-            }
-            let data = GlobalLock(handle).cast::<u16>();
-            if data.is_null() {
-                return None;
-            }
-            let units = slice::from_raw_parts(data, size / mem::size_of::<u16>());
-            let end = units
-                .iter()
-                .position(|&unit| unit == 0)
-                .unwrap_or(units.len());
-            let text = String::from_utf16_lossy(&units[..end]);
-            GlobalUnlock(handle);
-            Some(text)
+        copied_text()
+    }
+}
+
+/// The text on the clipboard, whoever copied it, for the clipboard shortcut: pressing it asks for what's there.
+/// `None` when what's copied isn't text or is too long to be a list of links.
+pub fn copied_text() -> Option<String> {
+    let _open = OpenedClipboard::open()?;
+    // SAFETY: the clipboard is open, and the handle it gives stays valid until it's closed.
+    unsafe {
+        let handle = GetClipboardData(u32::from(CF_UNICODETEXT));
+        if handle.is_null() {
+            return None;
         }
+        let size = GlobalSize(handle);
+        if size == 0 || size > LONGEST_TEXT_BYTES {
+            return None;
+        }
+        let data = GlobalLock(handle).cast::<u16>();
+        if data.is_null() {
+            return None;
+        }
+        let units = slice::from_raw_parts(data, size / mem::size_of::<u16>());
+        let end = units
+            .iter()
+            .position(|&unit| unit == 0)
+            .unwrap_or(units.len());
+        let text = String::from_utf16_lossy(&units[..end]);
+        GlobalUnlock(handle);
+        Some(text)
     }
 }
 

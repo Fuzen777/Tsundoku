@@ -5,15 +5,20 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 use tsundoku_core::downloads::DownloadError;
+use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::pending::{self, AddedLinks, PendingLink, PendingLinks, PendingListener};
 use tsundoku_core::settings::AddingSettings;
 
+use crate::background;
+
 /// Sent with every pending link when they change.
 const PENDING_CHANGED_EVENT: &str = "pending-changed";
+/// Sent with the options when how links get added changes, such as from the tray's Watch Clipboard.
+const ADDING_OPTIONS_CHANGED_EVENT: &str = "adding-options-changed";
 
 type Pending<'a> = State<'a, Arc<PendingLinks>>;
 
-/// Passes the pending links' changes on to the UI as events.
+/// Passes the pending links' changes on to the UI as events, and to the tray and notifications.
 pub struct EventListener {
     pub app: AppHandle,
 }
@@ -21,6 +26,16 @@ pub struct EventListener {
 impl PendingListener for EventListener {
     fn changed(&self, links: &[PendingLink]) {
         let _ = self.app.emit(PENDING_CHANGED_EVENT, links);
+        background::pending_changed(&self.app, links);
+    }
+
+    fn copied_link_read(&self, video: &VideoInfo, started: bool) {
+        background::copied_link_read(&self.app, &video.title, started);
+    }
+
+    fn options_changed(&self, options: &AddingSettings) {
+        let _ = self.app.emit(ADDING_OPTIONS_CHANGED_EVENT, options);
+        background::watching_changed(&self.app, options.watch_clipboard);
     }
 }
 
@@ -73,16 +88,22 @@ pub fn start_pending_links(
     pending.start(&ids, &preset_id)
 }
 
-/// How links get added besides pasting them: the clipboard watcher and Download Right Away.
+/// How links get added besides pasting them: the clipboard watcher, the clipboard shortcut, Download Right Away and
+/// notifications.
 #[tauri::command]
 pub fn adding_options(pending: Pending<'_>) -> AddingSettings {
     pending.options()
 }
 
+/// Saves how links get added, first asking Windows for a newly picked clipboard shortcut: when another app has it,
+/// nothing is saved and the error says so.
 #[tauri::command]
 pub fn save_adding_options(
+    app: AppHandle,
     pending: Pending<'_>,
     options: AddingSettings,
 ) -> Result<AddingSettings, DownloadError> {
+    let previous = pending.options().clipboard_shortcut;
+    background::change_clipboard_shortcut(&app, previous, options.clipboard_shortcut)?;
     pending.set_options(options)
 }

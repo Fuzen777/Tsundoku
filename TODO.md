@@ -34,8 +34,8 @@ rules:
 
 ### Getting Links In
 
-- [ ] **Tray icon.** Closing the window keeps Tsundoku running in the tray, with Watch Clipboard, Start Pending, Open and Quit in its menu, and Start with Windows. Wanted by Fuzen; without it the watcher only works while the window is open. With it, a Windows notification when a copied link is caught while the window is hidden.
-- [ ] **Clipboard shortcut.** A global shortcut (such as Ctrl+Alt+D) that adds the link on the clipboard, for when the watcher is off.
+- [ ] **Pick any clipboard shortcut.** Settings offers four fixed key combinations; recording one the user presses would fit any keyboard.
+- [ ] **Shortcut taken at startup.** A clipboard shortcut another app took since it was picked fails quietly at startup; Settings could say so.
 - [ ] **Browser send to app.** A browser button or right-click entry that queues the current page, through a `tsundoku://` link (Tauri's deep-link plugin) or a local endpoint.
 
 ---

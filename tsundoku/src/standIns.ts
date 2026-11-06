@@ -1,5 +1,6 @@
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
+import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
@@ -210,6 +211,7 @@ export const standIns = {
     version: "browser",
     hasMicaBackdrop: false,
     dataFolder: String.raw`C:\Users\You\AppData\Local\io.github.fuzen777.tsundoku`,
+    startedInTray: false,
   } satisfies AppInfo,
   toolsOverview: {
     tools: [
@@ -285,7 +287,13 @@ export const standIns = {
     cookiesBrowser: "automatic",
     postPause: { min: 10, max: 20 },
   } satisfies DownloadSettings,
-  addingOptions: { watchClipboard: true, downloadRightAway: false } satisfies AddingSettings,
+  addingOptions: {
+    watchClipboard: true,
+    downloadRightAway: false,
+    clipboardShortcut: "ctrlAltD",
+    notify: true,
+  } satisfies AddingSettings,
+  backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   folderRules: [
     {
