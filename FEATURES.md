@@ -16,7 +16,8 @@ type: Features
 
 ## Window
 
-- **Mica**: Windows 11's backdrop shows through the window, which follows Windows' light or dark theme. Windows 10 gets a plain background.
+- **Mica**: Windows 11's backdrop shows through the window. Windows 10 gets a plain background.
+- **Light or dark**: the window follows Windows' light or dark mode, or the one picked in Settings → Appearance: its colors, title bar, Mica, scrollbars and menus all change at once.
 - **Icons for row actions**: the actions on each row or card (Start, Remove, Stop, Resume, Retry, Cancel, Open File, Show in Folder, Edit, Delete…) are icons, and hovering one shows its name. A view's main actions (Add, Download, Start All, Clear Finished, Add Rule) keep their words.
 - **Remembered placement**: the window reopens at its last size and position, maximized if it was.
 - **One window**: opening Tsundoku while it is already running brings the open window to the front.
@@ -115,6 +116,7 @@ type: Features
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
 - **Adding Links**: Watch Clipboard, the Clipboard Shortcut, Send from Your Browser, Download Right Away for the links they add (see Pending), and Show Notifications (see Window).
 - **Running in the Background**: Keep Running in the Tray and Start with Windows (see Window).
+- **Appearance**: Theme, Auto (the default, following Windows' light or dark mode), Light or Dark, taken at once and from the first frame at the next start.
 - **Instagram**: the pause before each Instagram file, and between Instagram links in Pending: a random time in a range, 5 to 10 seconds to start with, up to 600.
 - **Cookies**: where to read cookies from, for links that need a signed-in account or an age check. It applies to previews and downloads. Automatic (the default) finds every browser profile on the PC and picks, for each link, the one signed in to its site (by which cookies exist, never their values), or for an unknown site the one that visited it last. A single browser (Firefox, Zen, LibreWolf, Floorp, Waterfox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium) uses its profile signed in to the site, else its default one. Choosing a Chromium browser warns that they lock and encrypt their cookies on Windows; Firefox and its forks work.
 - **Supported Sites**: every site yt-dlp and gallery-dl can read, merged into one searchable list without saying which tool reads which, each site once (its playlists, channels and other parts that the tools list on their own are left out). Sites that need an account (Instagram, X, YouTube, TikTok, Reddit, Facebook, Twitch, Niconico, Bilibili) come first, under Signed In with the browser profiles signed in to them, most recent first, or under Not Signed In. The list is read again when Settings opens after a minute, since sign-ins change in the browser.

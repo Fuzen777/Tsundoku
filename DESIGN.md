@@ -5,7 +5,7 @@ type: Agent Instructions
 
 ## Guiding Principles
 
-- **A Windows 11 app.** Mica backdrop, Segoe UI Variable, a sidebar and a raised content layer with a rounded top-left corner, as in Windows' own Settings app. It follows Windows' light or dark theme.
+- **A Windows 11 app.** Mica backdrop, Segoe UI Variable, a sidebar and a raised content layer with a rounded top-left corner, as in Windows' own Settings app. It follows Windows' light or dark theme, unless Settings → Appearance picks one.
 - **Quiet chrome, clear state.** The app recedes; what is downloading, finished, failed or already owned is what stands out.
 - **Consistency over cleverness.** Repeated patterns (buttons, rows, empty states) look and behave the same everywhere.
 
@@ -23,6 +23,8 @@ type: Agent Instructions
 ## Color
 
 Every color is a token in the `@theme` block of `tsundoku/src/index.css`, written `light-dark(light, dark)`. Tailwind turns each one into utilities (`bg-surface`, `text-fg-muted`, `border-line`…). Never write a raw color in a component.
+
+Which side of `light-dark()` shows follows the theme picked in Settings → Appearance: `data-theme` on `:root` (`src/theme.ts`) sets `color-scheme` to `light` or `dark`, or leaves it `light dark` for Auto, which follows Windows. Native controls, scrollbars and select lists follow it too. Never use `prefers-color-scheme` or Tailwind's `dark:` variant, which would follow Windows instead of the choice; a color that differs between themes is a token.
 
 ### Role Mapping
 
@@ -65,7 +67,7 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 12. The pending view puts the Watch Clipboard checkbox and Start All on its title's right (`sm`, `primary`), or Remove Selected (`ghost`) and Start Selected (`primary`) while links are ticked. While copied links are checked, a line with a spinner counts them above the list. Under the title, a toolbar: the select-all checkbox with the number of links, and on the right "Videos Start As" with the preset picker. Then one `Card` per link, like a queue row: its checkbox, the thumbnail (96 px), the title (or the link until it's read), "uploader · site · length · date · quality" (or "Waiting to be read" / a spinner and "Reading…", with "Starts once it's read"), then, once read, where it will be saved, as on the preview card, then its notices (already downloaded, already in the queue, why it couldn't be read with its fixes); its actions on the right: the preset picker for a video, then icon buttons: Start (Download Again once downloaded) or Try Again `secondary`, and Remove `ghost`.
 13. The history view is a toolbar (search, the site and preset filters, the sort and its direction), a count, then one `Card` per video: the thumbnail (112 px), the title, "uploader · site · length", "preset · date · size" for the latest download, and a "File Missing" pill when its file is gone; Open File, Show in Folder and Open Source Page as icon buttons, then a `Menu` with Download Again and Forget. A video with several downloads has an accent "N Downloads" toggle that lists them under it, indented to the text. It's a list rather than a table: at the window's minimum width, eight columns leave no room for titles.
 14. When a newer Tsundoku is out, its banner is the first thing under the add bar, above the preview card: a `Card` with an accent arrow icon, "Tsundoku X is available.", Later (`ghost`) and Install and Restart (`primary`), then a progress bar while it downloads.
-15. Settings is a column of sections: Downloads, Adding Links, Running in the Background, Instagram, Cookies, Supported Sites, Tools, About.
+15. Settings is a column of sections: Downloads, Adding Links, Running in the Background, Appearance, Instagram, Cookies, Supported Sites, Tools, About.
 16. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right: Set as Default (`sm`), then Duplicate and Reset (a built-in) or Delete as icon buttons.
 17. The rules view is a column (`max-w-3xl`): a sentence on how rules work, then one `Card` per rule: its number in a 24 px `--color-input` circle, the rule as a sentence and, under it, its folder in 12 px monospace secondary text; an "Always Last" pill on the last rule, whose sentence is "Everything else", and an "Off" pill when it's off; then Move Up, Move Down and Edit (icon buttons) and a `Menu` (Turn Off or On, Delete). The rule being edited becomes a `Card` with its conditions (a row each: what to check, the comparison, the value, and × to remove) and Add Condition, or for the last rule a line on what it takes, Save In with Choose Folder… and, under it, "Insert" and a `sm` button for each placeholder ({site}, {uploader}, in monospace) that puts it at the field's cursor, and Discard and Save at the bottom right; the other rows' actions are off meanwhile. Add Rule sits on the title's right. Under the list, the download folder in muted text with Change Download Folder.
 
@@ -154,7 +156,7 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 ## Forms
 
 - Each field is a `Field`: a medium-weight label, the control, then a hint in 12 px muted text, or its error in the danger color instead.
-- Text fields and selects share one look (`INPUT_CLASSES` in `components/styles.ts`): 32 px tall, `--color-input`, a line border, the accent border when focused. Selects are native, so their list follows Windows' theme; its options get `--color-bg` and `--color-fg` (`index.css`), since the select's see-through background would otherwise leave the list white in dark mode.
+- Text fields and selects share one look (`INPUT_CLASSES` in `components/styles.ts`): 32 px tall, `--color-input`, a line border, the accent border when focused. Selects are native, so their list follows the theme; its options get `--color-bg` and `--color-fg` (`index.css`), since the select's see-through background would otherwise leave the list white in dark mode.
 - Code-like values (file name templates, yt-dlp arguments, languages) use the monospace font, Cascadia Mono.
 - Edits that take effect at once (a toggle in Settings) save right away; an editor with many fields (a preset) keeps a draft until Save, with Discard beside it, and asks before leaving unsaved changes.
 - Confirmations (overwriting a file, deleting a preset, closing while downloading) use Windows' own dialog (`confirmWithUser`), with the action as its button label.

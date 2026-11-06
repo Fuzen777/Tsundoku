@@ -1,5 +1,6 @@
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
+import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
@@ -313,6 +314,7 @@ export const standIns = {
     notify: true,
   } satisfies AddingSettings,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
+  appearanceOptions: { theme: "auto" } satisfies AppearanceSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   folderRules: [
     {

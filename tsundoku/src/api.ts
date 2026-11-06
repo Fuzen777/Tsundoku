@@ -8,6 +8,7 @@ import { check } from "@tauri-apps/plugin-updater"
 import type { AddedLinks } from "./bindings/AddedLinks"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
+import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
@@ -64,6 +65,7 @@ export const queryKeys = {
   downloadOptions: ["download-options"],
   addingOptions: ["adding-options"],
   backgroundOptions: ["background-options"],
+  appearanceOptions: ["appearance-options"],
   defaultDownloadFolder: ["default-download-folder"],
   supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
@@ -424,6 +426,19 @@ export function getBackgroundOptions(): Promise<BackgroundSettings> {
 export function saveBackgroundOptions(options: BackgroundSettings): Promise<BackgroundSettings> {
   if (!isTauri()) return outsideTauri()
   return invoke<BackgroundSettings>("save_background_options", { options })
+}
+
+/** Whether Tsundoku is light, dark, or follows Windows. main.tsx reads it before the first render. */
+export function getAppearanceOptions(): Promise<AppearanceSettings> {
+  if (!isTauri()) return Promise.resolve(standIns.appearanceOptions)
+  return invoke<AppearanceSettings>("appearance_options")
+}
+
+/** Saves Settings → Appearance, which also gives the window the theme, and resolves to the options as saved. Rejects
+ * with a DownloadError. */
+export function saveAppearanceOptions(options: AppearanceSettings): Promise<AppearanceSettings> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<AppearanceSettings>("save_appearance_options", { options })
 }
 
 export function onPendingChanged(handler: (links: PendingLink[]) => void): Promise<UnlistenFn> {

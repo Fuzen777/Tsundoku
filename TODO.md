@@ -16,11 +16,24 @@ rules:
 > [!info]
 > v1 itself is specified in [PROJECT](./PROJECT.md). This list holds what comes after it.
 
+## Priority
+
+- [ ] Pending and Queue ⇒ Group + Sort so we can group by destination and sort by recency for instance.
+- [x] Manual select of Dark/Light/Auto
+
+### Aesthetics
+
+- [ ] Use Icons instead of Text where it makes sense (accept, reject…) with hover text.
+- [ ] RJ-Library inspired dark mode
+- [ ] Light mode revamp that takes its roots from the dark mode above
+
 ## Features
 
 ### Look
 
-- [ ] **A designed app icon.** The current one is a placeholder: three books piled up, drawn in `tsundoku/src-tauri/icons/source.svg`, from which `npm run tauri icon` makes every size.
+#### Not Now
+
+- [ ] **A designed app icon.** The current one is a placeholder: three books piled up, drawn in `tsundoku/src-tauri/icons/source.svg`, from which `npm run tauri icon` makes every size. Do once the app is feature complete.
 
 ### Playlists and Channels
 
@@ -29,6 +42,8 @@ rules:
 
 ### File Hosts
 
+#### Not Now
+
 - [ ] **Google Docs, Sheets and Slides.** Left out of Drive folders for now. They could download as .docx, .xlsx and .pptx through `docs.google.com/KIND/d/ID/export?format=...`.
 - [ ] **Password-protected links.** MEGA's `#P!` links and MediaFire's protected files are refused with a message for now.
 
@@ -36,6 +51,9 @@ rules:
 
 - [ ] **Pick any clipboard shortcut.** Settings offers four fixed key combinations; recording one the user presses would fit any keyboard.
 - [ ] **Shortcut taken at startup.** A clipboard shortcut another app took since it was picked fails quietly at startup; Settings could say so.
+
+#### Not Now
+
 - [ ] **Browser extension.** A toolbar button and a right-click Send Link to Tsundoku entry for a link on the page, through the same `tsundoku://add?url=…` links as the bookmark. Firefox-family browsers (Zen) need it signed by Mozilla.
 
 ---

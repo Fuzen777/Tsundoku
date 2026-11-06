@@ -36,7 +36,7 @@ export function TextInput({ className, ...props }: ComponentProps<"input">) {
   return <input type="text" spellCheck={false} autoComplete="off" className={classes(INPUT_CLASSES, className)} {...props} />
 }
 
-/** A native select, which follows Windows' theme for its list. */
+/** A native select, whose list follows the theme (Settings → Appearance). */
 export function SelectInput({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select className={classes(INPUT_CLASSES, "pr-8", className)} {...props} />
 }

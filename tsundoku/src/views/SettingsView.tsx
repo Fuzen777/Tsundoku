@@ -8,6 +8,7 @@ import { StatusMessage } from "../components/StatusMessage"
 import { useAppInfo, useAppUpdate } from "../queries"
 import { strings } from "../strings"
 import { AddingSection } from "./settings/AddingSection"
+import { AppearanceSection } from "./settings/AppearanceSection"
 import { BackgroundSection } from "./settings/BackgroundSection"
 import { CookiesSection, DownloadsSection, InstagramSection } from "./settings/DownloadsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
@@ -20,6 +21,7 @@ export function SettingsView() {
         <DownloadsSection />
         <AddingSection />
         <BackgroundSection />
+        <AppearanceSection />
         <InstagramSection />
         <CookiesSection />
         <SupportedSitesSection />

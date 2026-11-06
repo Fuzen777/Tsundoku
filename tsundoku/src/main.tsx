@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { App } from "./App"
 import {
   getAppInfo,
+  getAppearanceOptions,
   getFirstRunOptions,
   getToolsNeedSetup,
   onAddingOptionsChanged,
@@ -11,16 +12,23 @@ import {
   queryKeys,
 } from "./api"
 import { trackQueue } from "./queueEvents"
+import { applyTheme } from "./theme"
 import { trackToolProgress } from "./toolProgress"
 import "./index.css"
 
 const queryClient = new QueryClient()
 
-// Read before the first render: the page's background depends on whether the window has Mica, and the first screen on
-// whether the tools still need setting up.
-const [appInfo, needsSetup] = await Promise.all([getAppInfo(), getToolsNeedSetup()])
+// Read before the first render: the page's background depends on whether the window has Mica, its colors on the theme
+// picked in Settings → Appearance, and the first screen on whether the tools still need setting up.
+const [appInfo, appearance, needsSetup] = await Promise.all([
+  getAppInfo(),
+  getAppearanceOptions(),
+  getToolsNeedSetup(),
+])
 queryClient.setQueryData(queryKeys.appInfo, appInfo)
+queryClient.setQueryData(queryKeys.appearanceOptions, appearance)
 queryClient.setQueryData(queryKeys.toolsNeedSetup, needsSetup)
+applyTheme(appearance.theme)
 // The setup opens on its choices when they're still to be made.
 if (needsSetup) queryClient.setQueryData(queryKeys.firstRunOptions, await getFirstRunOptions())
 document.documentElement.dataset.backdrop = appInfo.hasMicaBackdrop ? "mica" : "solid"

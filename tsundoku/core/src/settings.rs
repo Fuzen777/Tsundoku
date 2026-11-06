@@ -26,6 +26,7 @@ pub struct Settings {
     pub rules: RulesSettings,
     pub adding: AddingSettings,
     pub background: BackgroundSettings,
+    pub appearance: AppearanceSettings,
 }
 
 impl Settings {
@@ -126,6 +127,28 @@ pub struct BackgroundSettings {
     pub keep_in_tray: bool,
     /// Tsundoku starts when the user signs in to Windows: in the tray when `keep_in_tray` is on, else with its window.
     pub start_with_windows: bool,
+}
+
+/// How Tsundoku looks. Settings → Appearance edits it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct AppearanceSettings {
+    /// Light or dark, or whichever Windows uses. The window (its title bar and Mica) and the UI's colors both follow
+    /// it.
+    pub theme: Theme,
+}
+
+/// Whether Tsundoku is light or dark.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Theme {
+    /// Whichever Windows uses for apps, following it when it changes.
+    #[default]
+    Auto,
+    Light,
+    Dark,
 }
 
 /// How downloads run. Settings → Downloads edits it.
@@ -516,6 +539,26 @@ mod tests {
         let saved = serde_json::to_string(&Some(ClipboardShortcut::CtrlShiftD)).unwrap();
         assert_eq!(saved, r#""ctrlShiftD""#);
         assert_eq!(ClipboardShortcut::AltShiftD.keys(), "Alt+Shift+D");
+    }
+
+    #[test]
+    fn follows_windows_theme_until_one_is_picked() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "background": { "keepInTray": true } }"#,
+        )
+        .unwrap();
+        assert_eq!(store_in(&folder).get().appearance.theme, Theme::Auto);
+
+        let store = store_in(&folder);
+        store
+            .update(|settings| settings.appearance.theme = Theme::Dark)
+            .unwrap();
+        assert_eq!(store_in(&folder).get().appearance.theme, Theme::Dark);
+
+        let saved = serde_json::to_string(&Theme::Light).unwrap();
+        assert_eq!(saved, r#""light""#);
     }
 
     #[test]

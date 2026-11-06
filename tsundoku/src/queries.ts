@@ -5,6 +5,7 @@ import {
   detectTools,
   getAddingOptions,
   getAppInfo,
+  getAppearanceOptions,
   getBackgroundOptions,
   getDefaultDownloadFolder,
   getDownloadDestination,
@@ -25,9 +26,11 @@ import {
   getToolsOverview,
   queryKeys,
   saveAddingOptions,
+  saveAppearanceOptions,
   saveBackgroundOptions,
 } from "./api"
 import type { AddingSettings } from "./bindings/AddingSettings"
+import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { Preset } from "./bindings/Preset"
@@ -38,6 +41,7 @@ import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
 import { describeDownloadError, type ErrorDescription } from "./errors"
+import { applyTheme } from "./theme"
 
 /*
   React Query hooks over api.ts. The tool queries never go stale on their own: they change only through the app's
@@ -247,6 +251,32 @@ export function useSaveBackgroundOptions() {
     try {
       queryClient.setQueryData(queryKeys.backgroundOptions, await saveBackgroundOptions({ ...options, ...changes }))
     } catch (caught) {
+      setError(describeDownloadError(caught))
+    }
+  }
+  return { options, save, error }
+}
+
+/** Light, dark or Windows' theme. main.tsx reads it before the first render, so it's always there. */
+export function useAppearanceOptions() {
+  return useQuery({ queryKey: queryKeys.appearanceOptions, queryFn: getAppearanceOptions, staleTime: Infinity })
+}
+
+/** Saves changes to Settings → Appearance, with the error if it failed. The UI takes a new theme at once, and goes
+ * back to the saved one if saving fails. */
+export function useSaveAppearanceOptions() {
+  const queryClient = useQueryClient()
+  const { data: options } = useAppearanceOptions()
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const save = async (changes: Partial<AppearanceSettings>) => {
+    if (!options) return
+    const changed = { ...options, ...changes }
+    setError(null)
+    applyTheme(changed.theme)
+    try {
+      queryClient.setQueryData(queryKeys.appearanceOptions, await saveAppearanceOptions(changed))
+    } catch (caught) {
+      applyTheme(options.theme)
       setError(describeDownloadError(caught))
     }
   }

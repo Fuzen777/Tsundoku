@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 /*
-  Theme tokens (DESIGN.md → Color). Each value is light-dark(light, dark), so the UI follows Windows' theme.
+  Theme tokens (DESIGN.md → Color). Each value is light-dark(light, dark), so the UI follows the theme picked in
+  Settings → Appearance, or Windows' (data-theme, below).
   Defining them in @theme makes Tailwind generate utilities from them: bg-surface, text-fg-muted, border-line…
 */
 @theme {
@@ -51,6 +52,16 @@
 
 :root {
   color-scheme: light dark;
+}
+
+/* Settings → Appearance (src/theme.ts): Light or Dark picks one side of every light-dark(); Auto keeps both, so the
+   UI follows Windows. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 html,

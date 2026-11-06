@@ -585,6 +585,14 @@ export const strings = {
     startWithWindows: "Start with Windows",
     startWithWindowsHint:
       "Opens Tsundoku when you sign in to Windows. With Keep Running in the Tray on, it starts there, without its window.",
+    appearance: "Appearance",
+    theme: "Theme",
+    themes: {
+      auto: "Auto",
+      light: "Light",
+      dark: "Dark",
+    },
+    themeHint: "Auto follows Windows' light or dark mode.",
     folder: "Download Folder",
     folderHint: "Where downloads go, unless a rule or their preset picks another folder.",
     folderTitle: "Choose Where Downloads Go",

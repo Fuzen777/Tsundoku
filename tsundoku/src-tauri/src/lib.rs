@@ -1,5 +1,6 @@
 //! The Tauri app: the window, the plugins, and the commands that expose `tsundoku_core` to the UI.
 
+mod appearance;
 mod background;
 mod downloads;
 mod history;
@@ -230,6 +231,10 @@ pub fn run() {
 
             let tool_manager = open_data(app)?;
             tools::start_daily_yt_dlp_update(app.handle().clone(), tool_manager);
+            // The saved theme, while the window is still hidden, so its title bar, Mica and the WebView match from the
+            // first frame. A window left in Windows' theme is still usable, so a failure doesn't stop the app.
+            let theme = app.state::<Arc<SettingsStore>>().get().appearance.theme;
+            let _ = appearance::apply_theme(&window, theme);
 
             // Started by Windows with the tray on, the window waits there until it's opened.
             if !app.state::<background::StartedInTray>().0 {
@@ -296,6 +301,8 @@ pub fn run() {
             pending::save_adding_options,
             background::background_options,
             background::save_background_options,
+            appearance::appearance_options,
+            appearance::save_appearance_options,
             downloads::download_options,
             downloads::save_download_options,
         ])

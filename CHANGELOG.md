@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.32 · 2026-11-06
+
+### Added
+
+- **Light, Dark or Auto**: Settings → Appearance picks Tsundoku's theme. Auto, the default, follows Windows' light or dark mode as before; Light and Dark keep it so whatever Windows uses. The colors, title bar, Mica backdrop, scrollbars and menus all change at once, and the next start opens in the chosen theme from its first frame.
+
 ## 0.1.31 · 2026-11-06
 
 ### Changed

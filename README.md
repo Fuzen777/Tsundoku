@@ -41,7 +41,7 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 - **Fixes on failures**: when a site changes and its links stop working, the error offers an update right there.
 - **Updates itself** from this repository's releases.
 - **Your data in one place**: the history, settings and tools live in one folder, which Settings → About opens.
-- **Fits Windows**: Windows 11's Mica backdrop, light and dark themes following Windows, and the window's size and position remembered.
+- **Fits Windows**: Windows 11's Mica backdrop, light and dark themes that follow Windows unless you pick one, and the window's size and position remembered.
 
 One video or post at a time for now: playlists, channels, profiles and live streams are refused with a plain message. Picking videos from a playlist is planned, along with a clipboard watcher. See [TODO](TODO.md) for what's next and the [changelog](CHANGELOG.md) for what each version added.
 
