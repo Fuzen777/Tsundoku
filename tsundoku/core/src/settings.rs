@@ -10,6 +10,7 @@ use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
 use crate::data_folder;
+use crate::post_names;
 use crate::presets::PresetsSettings;
 use crate::rules::{RulesSettings, catch_all_rule, posts_folder_rule, with_catch_all_last};
 use crate::sync::lock;
@@ -170,6 +171,9 @@ pub struct DownloadSettings {
     /// the browser profile signed in to the link's site (`browsers::cookies_for`), a browser its profile, `None`
     /// none at all.
     pub cookies_browser: Option<CookiesBrowser>,
+    /// How the files of a post are named, with placeholders such as `{account}` and `{number}` (`post_names`).
+    /// The extension is added to it.
+    pub post_file_name: String,
     /// How long to wait before each file of a post on a site that limits how fast it's read
     /// (`sites::paces_downloads`, Instagram), so the account isn't blocked.
     pub post_pause: PauseRange,
@@ -182,6 +186,7 @@ impl Default for DownloadSettings {
             at_once: 2,
             rate_limit: None,
             cookies_browser: Some(CookiesBrowser::Automatic),
+            post_file_name: post_names::DEFAULT_POST_FILE_NAME.to_owned(),
             post_pause: PauseRange::default(),
         }
     }

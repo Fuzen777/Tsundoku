@@ -104,6 +104,22 @@ yt-dlp prints a line starting with `@@tsundoku` and a space for every progress u
 - Postprocessor names map to stages: Merger → Merging; ExtractAudio, VideoConvertor and VideoRemuxer → Converting; Metadata, EmbedThumbnail and EmbedSubtitle → Embedding; MoveFiles → Finishing; anything else → Processing.
 - Only the fields Tsundoku reads are printed (`%(progress.{…})j`), so each line stays short.
 
+## Posts
+
+A post of images (`video.post` set) is downloaded by gallery-dl instead, in `post_runner.rs`:
+
+| Arguments | Why |
+| --- | --- |
+| `--config-ignore` | A user's gallery-dl config can't interfere |
+| `-o output.mode=pipe`, `-o output.stdout={"encoding": "utf-8", "line_buffering": true}` | One line per file saved (or `# ` and its path for one already there), in UTF-8, as it's saved: the progress and the files to record |
+| `-o downloader.part-directory=<folder>\.tsundoku-<id>` | Partial files in the item's temporary folder |
+| `--directory <folder>` | Exactly the item's folder, without gallery-dl's own subfolders |
+| `--filename <format>` | Settings → Posts of Images' name, as `post_names::gallery_format` writes it: `{username\|'natgeo'} 2026-11-04 DfPQchkG1tg {num\|filename}.{extension}` |
+| `--cookies-from-browser`, `--limit-rate` | As for a video |
+| `--sleep <min>-<max>`, `--sleep-request <min>-<max>` | On a paced site (Instagram), before each file and between the requests that find them |
+| `--no-skip` | Only for an item that replaces its files (`overwrite`), which a post never is: files already there are skipped, so downloading a post again only fetches what's missing |
+| `-- <link>` | After `--`, the link can't be read as an option |
+
 ## File Hosts
 
 File host downloads (MEGA, MediaFire, Google Drive, Dropbox) don't run a tool: `file_runner.rs` reads the link again (`core::hosts`), then fetches each file over HTTPS into `<n>.part` in the item's temporary folder. A part file resumes with a `Range` request, MEGA's decrypted from where it stopped. Each file is checked when it's complete (MEGA's MAC, MediaFire's SHA-256); a damaged one is deleted and the item fails with `damaged`, so Retry downloads it again. Google Drive and Dropbox give no checksum, so their files are checked by size, and an answer that isn't the file (such as Google Drive's download limit page) fails the item before anything is written. Its progress is the bytes of all the share's files, with the speed limit applied by sleeping between reads, and its log names each file and its size (MEGA's key is never written).

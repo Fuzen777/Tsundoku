@@ -1,5 +1,5 @@
-//! Downloading a post of images, such as an Instagram carousel, with gallery-dl: every file of the post, as the site
-//! gives it, into the item's folder. gallery-dl writes the path of each file it saves, which gives the progress and
+//! Downloading a post of images, such as an Instagram carousel, with gallery-dl: every file of the post, named as
+//! Settings → Posts of Images says (`post_names`), into the item's folder. gallery-dl writes the path of each file it saves, which gives the progress and
 //! the files made.
 
 use std::path::PathBuf;
@@ -92,8 +92,8 @@ pub(super) fn run(
     }
 }
 
-/// gallery-dl's arguments for a post: its files straight into the item's folder, partial files in the temporary
-/// folder, plain output with one path per line, then the link.
+/// gallery-dl's arguments for a post: its files straight into the item's folder under the names Settings gives,
+/// partial files in the temporary folder, plain output with one path per line, then the link.
 pub(crate) fn arguments(job: &JobSpec, post: &PostJob) -> Vec<String> {
     let mut args: Vec<String> = [
         // A config file of the user's can't change where files go or what is written.
@@ -114,6 +114,8 @@ pub(crate) fn arguments(job: &JobSpec, post: &PostJob) -> Vec<String> {
         // Exactly this folder, without gallery-dl's own subfolders.
         "--directory".to_owned(),
         job.folder.display().to_string(),
+        "--filename".to_owned(),
+        post.file_name.clone(),
     ]);
     if let Some(cookies) = &job.cookies {
         args.extend(["--cookies-from-browser".to_owned(), cookies.clone()]);
@@ -178,6 +180,8 @@ mod tests {
             gallery_dl: Some(PathBuf::from("gallery-dl.exe")),
             pause,
             files: 3,
+            file_name: "{username|'natgeo'} 2026-11-04 DfPQchkG1tg {num|filename}.{extension}"
+                .to_owned(),
         };
         (job, post)
     }
@@ -210,6 +214,10 @@ mod tests {
         let args = arguments(&job, &post);
         assert_eq!(args[0], "--config-ignore");
         assert_eq!(pair(&args, "--directory"), Some(r"D:\Pictures\Instagram"));
+        assert_eq!(
+            pair(&args, "--filename"),
+            Some("{username|'natgeo'} 2026-11-04 DfPQchkG1tg {num|filename}.{extension}")
+        );
         assert!(
             args.contains(
                 &r"downloader.part-directory=D:\Pictures\Instagram\.tsundoku-9".to_owned()

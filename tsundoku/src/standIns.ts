@@ -307,6 +307,7 @@ export const standIns = {
     atOnce: 2,
     rateLimit: null,
     cookiesBrowser: "automatic",
+    postFileName: "{account} {date} {post} {number}",
     postPause: { min: 5, max: 10 },
   } satisfies DownloadSettings,
   addingOptions: {

@@ -1,6 +1,7 @@
 import type { BackupError } from "./bindings/BackupError"
 import type { DownloadError } from "./bindings/DownloadError"
 import type { HistoryError } from "./bindings/HistoryError"
+import type { PostNameError } from "./bindings/PostNameError"
 import type { PresetError } from "./bindings/PresetError"
 import type { PreviewError } from "./bindings/PreviewError"
 import type { RuleError } from "./bindings/RuleError"
@@ -202,6 +203,8 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.storage, detail: error.detail }
     case "invalidRateLimit":
       return { message: text.invalidRateLimit, detail: error.value }
+    case "postFileName":
+      return describePostNameError(error.error)
     case "shortcutTaken":
       return { message: text.shortcutTaken(error.keys) }
     case "unexpected":
@@ -223,6 +226,18 @@ export function describeBackupError(error: unknown): ErrorDescription {
       return { message: text.newerVersion(error.version) }
     case "storage":
       return { message: text.storage, detail: error.detail }
+  }
+}
+
+export function describePostNameError(error: PostNameError): ErrorDescription {
+  const text = strings.settings.postNameErrors
+  switch (error.kind) {
+    case "missingPlaceholder":
+      return { message: text.missingPlaceholder(error.placeholder) }
+    case "unknownPlaceholder":
+      return { message: text.unknownPlaceholder(error.name) }
+    case "forbiddenCharacter":
+      return { message: text.forbiddenCharacter(error.character) }
   }
 }
 

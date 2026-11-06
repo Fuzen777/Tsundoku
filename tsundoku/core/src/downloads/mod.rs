@@ -27,6 +27,7 @@ use crate::cancel::CancelToken;
 use crate::database::Database;
 use crate::history::{History, NewDownload, SavedFile};
 use crate::metadata::{PreviewError, VideoInfo};
+use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::rules::{self, Destination, RuleSubject};
 use crate::settings::{DownloadSettings, SettingsStore};
@@ -185,6 +186,9 @@ pub enum DownloadError {
     /// A speed limit yt-dlp wouldn't understand.
     #[error("{value} isn't a speed limit")]
     InvalidRateLimit { value: String },
+    /// A name for posts' files (Settings → Posts of Images) that could lose files, or that Windows refuses.
+    #[error("post file name: {error}")]
+    PostFileName { error: PostNameError },
     /// The clipboard shortcut picked in Settings → Adding Links is taken by another app, so Windows won't give it to
     /// Tsundoku.
     #[error("{keys} is taken by another app")]
@@ -573,7 +577,8 @@ impl DownloadQueue {
     }
 
     /// Saves how downloads run, and starts more right away if more can run at once. The speed limit is checked and
-    /// written as yt-dlp writes it ("2M"); an empty one means no limit. A blank folder means the default one.
+    /// written as yt-dlp writes it ("2M"); an empty one means no limit. A blank folder means the default one, and so
+    /// does a blank name for posts' files; a name that could lose files is refused (`post_names::check`).
     pub fn set_options(
         &self,
         options: DownloadSettings,
@@ -586,6 +591,8 @@ impl DownloadQueue {
             at_once: options.at_once.clamp(1, MAX_AT_ONCE),
             rate_limit: normalize_rate_limit(options.rate_limit.as_deref())?,
             cookies_browser: options.cookies_browser,
+            post_file_name: post_names::check(&options.post_file_name)
+                .map_err(|error| DownloadError::PostFileName { error })?,
             post_pause: options.post_pause.normalized(),
         };
         self.settings
@@ -670,6 +677,7 @@ impl DownloadQueue {
                 gallery_dl: self.tools.executable(ToolId::GalleryDl),
                 pause: sites::paces_downloads(&item.video.url).then_some(options.post_pause),
                 files: contents.images + contents.videos,
+                file_name: post_names::gallery_format(&options.post_file_name, &item.video),
             }),
             files: item.video.files,
         }

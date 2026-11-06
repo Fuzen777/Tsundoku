@@ -586,10 +586,12 @@ fn checks_and_saves_the_options() {
             at_once: 9,
             rate_limit: Some(" 4.2m ".to_owned()),
             cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
+            post_file_name: "  {site} {post} {number} ".to_owned(),
             post_pause: crate::settings::PauseRange { min: 30, max: 5 },
         })
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
+    assert_eq!(saved.post_file_name, "{site} {post} {number}", "trimmed");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
     assert_eq!(saved.folder, None, "blank is the default folder");
     assert_eq!(
@@ -609,6 +611,20 @@ fn checks_and_saves_the_options() {
         ..saved.clone()
     };
     assert_eq!(test.queue.set_options(blank).unwrap().rate_limit, None);
+
+    let losing_files = DownloadSettings {
+        post_file_name: "{account} {date}".to_owned(),
+        ..test.queue.options()
+    };
+    assert!(matches!(
+        test.queue.set_options(losing_files),
+        Err(DownloadError::PostFileName { .. })
+    ));
+    assert_eq!(
+        test.queue.options().post_file_name,
+        "{site} {post} {number}",
+        "the name before stays"
+    );
 }
 
 #[test]

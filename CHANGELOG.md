@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.40 · 2026-11-06
+
+### Added
+
+- **Readable names for posts' files**: the files of an Instagram, X or other image post are now named after the account, the post's date, its ID and their place in it, such as "natgeo 2026-11-04 DfPQchkG1tg 1.jpg", instead of the long number the site gives them, so they still say whose post they came from once they're moved elsewhere. Settings → Posts of Images → File Name changes the name, with Insert buttons for {account}, {date}, {post}, {number} and {site} and an example of the result under the field. A name without {post} and {number}, which could give two files the same name, or with a character Windows refuses, isn't saved. Files downloaded before keep their names; downloading a post again saves it under the new one.
+
 ## 0.1.39 · 2026-11-06
 
 ### Added

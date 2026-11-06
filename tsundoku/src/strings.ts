@@ -20,6 +20,10 @@ export const strings = {
   dialogs: {
     cancel: "Cancel",
   },
+  /** The buttons that put a placeholder in a field (PlaceholderButtons.tsx). */
+  placeholders: {
+    insert: "Insert",
+  },
   nav: {
     queue: "Queue",
     pending: "Pending",
@@ -400,7 +404,6 @@ export const strings = {
     saveIn: "Save In",
     saveInHint: (downloadFolder: string) =>
       `{site} and {uploader} become the download's site and uploader: click one to put it where the cursor is. A folder that isn't a full path goes inside the download folder, ${downloadFolder}.`,
-    insert: "Insert",
     placeholderHints: {
       site: "The download's site, such as Instagram or YouTube.",
       uploader: "The download's uploader or account, or Unknown when there's none.",
@@ -661,6 +664,35 @@ export const strings = {
     rateLimitHint: "For each download, in bytes per second, such as 500K or 2M. Leave it empty for no limit.",
     defaultPreset: "Default Preset",
     defaultPresetHint: "Picked on the preview card unless you choose another.",
+    posts: "Posts of Images",
+    postFileName: "File Name",
+    postFileNameHint:
+      "How each file of a post is named, before its extension. It needs {post} and {number}, so every file gets a name of its own. Files downloaded before keep their names.",
+    postFileNameExample: "For example:",
+    useDefaultName: "Use Default",
+    postNamePlaceholderHints: {
+      account: "The account that posted, such as natgeo.",
+      date: "The day it was posted, such as 2026-11-04.",
+      post: "The post's ID on its site.",
+      number: "The file's place in the post: 1 for the first.",
+      site: "The site, such as Instagram or X.",
+    },
+    /** What the example under the field fills the placeholders with, and the extension it adds. */
+    postNameSamples: {
+      account: "natgeo",
+      date: "2026-11-04",
+      post: "DfPQchkG1tg",
+      number: "1",
+      site: "Instagram",
+    },
+    postNameSampleExtension: "jpg",
+    postNameErrors: {
+      missingPlaceholder: (placeholder: string) =>
+        `The name needs {${placeholder}}, so no two files get the same name.`,
+      unknownPlaceholder: (name: string) =>
+        `{${name}} isn't a placeholder. The buttons under the field insert the ones there are.`,
+      forbiddenCharacter: (character: string) => `A file name can't contain ${character}.`,
+    },
     instagram: "Instagram",
     chooseFolder: "Choose Folder…",
     useDefaultFolder: "Use Default",

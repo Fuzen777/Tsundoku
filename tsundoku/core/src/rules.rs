@@ -216,6 +216,16 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
     }
 }
 
+/// The site a download is from, as `{site}` gives it: its sign-in name ("X"), else the file host's ("MEGA"), else
+/// the tool's name for it ("tumblr"), made safe as a folder's or file's name.
+pub fn site_name(video: &VideoInfo) -> String {
+    let site = sites::sign_in_site(&video.url)
+        .map(|site| site.name)
+        .or_else(|| Host::of(&video.url).map(Host::name))
+        .unwrap_or(video.site.as_str());
+    safe_folder_name(site, "Other")
+}
+
 /// A download about to be queued, as rules see it.
 pub struct RuleSubject<'a> {
     pub video: &'a VideoInfo,
@@ -260,11 +270,7 @@ impl RuleSubject<'_> {
     /// The site as a folder's name: the name people know for sites that need an account ("Instagram", "X") and
     /// for file hosts ("MEGA"), otherwise the tools' own ("danbooru").
     fn site_folder_name(&self) -> String {
-        let site = sites::sign_in_site(&self.video.url)
-            .map(|site| site.name)
-            .or_else(|| Host::of(&self.video.url).map(Host::name))
-            .unwrap_or(self.video.site.as_str());
-        safe_folder_name(site, "Other")
+        site_name(self.video)
     }
 
     fn uploader_folder_name(&self) -> String {

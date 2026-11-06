@@ -10,6 +10,7 @@ import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
 import { IconButton } from "../../components/IconButton"
+import { PlaceholderButtons } from "../../components/PlaceholderButtons"
 import { StatusMessage } from "../../components/StatusMessage"
 import type { ErrorDescription } from "../../errors"
 import { useSupportedSites } from "../../queries"
@@ -19,10 +20,8 @@ import {
   DOWNLOAD_KINDS,
   FOLDER_PLACEHOLDERS,
   RULE_FIELDS,
-  insertPlaceholder,
   newCondition,
   operatorsFor,
-  type FolderPlaceholder,
 } from "./ruleLabels"
 
 const text = strings.rules
@@ -67,20 +66,6 @@ export function RuleEditor({
   async function chooseFolder() {
     const folder = await pickFolder(text.chooseFolderTitle)
     if (folder) update({ folder })
-  }
-
-  /** Puts `{site}` or `{uploader}` where the cursor is in the folder field, over any selected text. */
-  function insert(placeholder: FolderPlaceholder) {
-    const input = folderInput.current
-    const start = input?.selectionStart ?? draft.folder.length
-    const end = input?.selectionEnd ?? start
-    const { folder, cursor } = insertPlaceholder(draft.folder, placeholder, start, end)
-    update({ folder })
-    // Once the field shows the new text, since setting it moves the cursor to its end.
-    requestAnimationFrame(() => {
-      input?.focus()
-      input?.setSelectionRange(cursor, cursor)
-    })
   }
 
   return (
@@ -129,22 +114,13 @@ export function RuleEditor({
             />
             <Button onClick={() => void chooseFolder()}>{text.chooseFolder}</Button>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-fg-muted">{text.insert}</span>
-            {FOLDER_PLACEHOLDERS.map((placeholder) => (
-              <Button
-                key={placeholder}
-                size="sm"
-                className="font-mono"
-                title={text.placeholderHints[placeholder]}
-                // Keeps the cursor in the folder field, so the placeholder goes where it is.
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => insert(placeholder)}
-              >
-                {`{${placeholder}}`}
-              </Button>
-            ))}
-          </div>
+          <PlaceholderButtons
+            input={folderInput}
+            value={draft.folder}
+            placeholders={FOLDER_PLACEHOLDERS}
+            hints={text.placeholderHints}
+            onChange={(folder) => update({ folder })}
+          />
         </div>
       </Field>
       {error && <StatusMessage tone="danger" {...error} />}

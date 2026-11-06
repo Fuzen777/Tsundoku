@@ -26,6 +26,11 @@ rateLimit: string | null,
  */
 cookiesBrowser: CookiesBrowser | null, 
 /**
+ * How the files of a post are named, with placeholders such as `{account}` and `{number}` (`post_names`).
+ * The extension is added to it.
+ */
+postFileName: string, 
+/**
  * How long to wait before each file of a post on a site that limits how fast it's read
  * (`sites::paces_downloads`, Instagram), so the account isn't blocked.
  */

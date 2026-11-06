@@ -58,6 +58,8 @@ pub struct PostJob {
     pub pause: Option<PauseRange>,
     /// How many files the preview found, to show progress.
     pub files: u32,
+    /// gallery-dl's `-f` format for the files' names (`post_names::gallery_format`), extension included.
+    pub file_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
