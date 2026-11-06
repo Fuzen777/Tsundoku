@@ -1,14 +1,22 @@
-//! File hosts Tsundoku reads itself, without a tool: MEGA and MediaFire. A host's reader turns a share link into the
-//! files behind it (`Share`), once for the preview card and again when the download starts, since the addresses
-//! files download from expire. `downloads::file_runner` then saves them.
+//! File hosts Tsundoku reads itself, without a tool: MEGA, MediaFire, Google Drive and Dropbox. A host's reader turns
+//! a share link into the files behind it (`Share`), once for the preview card and again when the download starts,
+//! since the addresses files download from expire. `downloads::file_runner` then saves them.
 
+pub mod drive;
+pub mod dropbox;
 pub mod mediafire;
 pub mod mega;
 
+use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use reqwest::StatusCode;
 use reqwest::blocking::{Client, Response};
+use reqwest::header::{
+    ACCEPT_LANGUAGE, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_RANGE, HeaderMap, HeaderValue,
+    LAST_MODIFIED, RANGE,
+};
 
 use crate::cancel::CancelToken;
 use crate::metadata::{FileContents, PreviewError, VideoInfo};
@@ -22,15 +30,26 @@ const READ_TIMEOUT: Duration = Duration::from_secs(60);
 /// Sent with every request. MediaFire only shows its download button to a browser.
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
+/// Pages in English, for the error messages read from them (Google Drive's follow the address otherwise).
+const LANGUAGE: &str = "en-US,en;q=0.9";
+/// The most of a page read to explain why a file didn't come.
+const PAGE_LIMIT: u64 = 1 << 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Host {
     Mega,
     MediaFire,
+    GoogleDrive,
+    Dropbox,
 }
 
 impl Host {
-    pub const ALL: [Self; 2] = [Self::Mega, Self::MediaFire];
+    pub const ALL: [Self; 4] = [
+        Self::Mega,
+        Self::MediaFire,
+        Self::GoogleDrive,
+        Self::Dropbox,
+    ];
 
     /// The host a link belongs to, by its domain. `link` must come from `metadata::normalize_link`.
     pub fn of(link: &str) -> Option<Self> {
@@ -48,14 +67,19 @@ impl Host {
         match self {
             Self::Mega => "MEGA",
             Self::MediaFire => "MediaFire",
+            Self::GoogleDrive => "Google Drive",
+            Self::Dropbox => "Dropbox",
         }
     }
 
-    /// The site in the history, in lowercase as the tools' names are.
+    /// The site in the history, in lowercase as the tools' names are. Google Drive and Dropbox match yt-dlp's names
+    /// for them, so what it downloaded from them before still counts.
     pub fn site(self) -> &'static str {
         match self {
             Self::Mega => "mega",
             Self::MediaFire => "mediafire",
+            Self::GoogleDrive => "googledrive",
+            Self::Dropbox => "dropbox",
         }
     }
 
@@ -63,6 +87,27 @@ impl Host {
         match self {
             Self::Mega => &["mega.nz", "mega.co.nz"],
             Self::MediaFire => &["mediafire.com"],
+            Self::GoogleDrive => &["drive.google.com", "drive.usercontent.google.com"],
+            Self::Dropbox => &["dropbox.com", "dropboxusercontent.com"],
+        }
+    }
+
+    /// Whether the host marks every file it sends as an attachment, so that any other answer is a page saying why
+    /// the file didn't come.
+    pub(crate) fn sends_attachments(self) -> bool {
+        matches!(self, Self::GoogleDrive | Self::Dropbox)
+    }
+
+    /// Why the host answered with a page instead of a file.
+    pub(crate) fn page_error(self, page: &Page) -> PreviewError {
+        match self {
+            Self::GoogleDrive => drive::page_error(page),
+            Self::Dropbox => dropbox::page_error(page),
+            Self::Mega | Self::MediaFire => {
+                code_error(self, page.status).unwrap_or_else(|| PreviewError::Failed {
+                    detail: format!("{} answered with a page instead of the file", self.name()),
+                })
+            }
         }
     }
 
@@ -76,6 +121,8 @@ impl Host {
         let share = match self {
             Self::Mega => mega::read(client, link, cancel),
             Self::MediaFire => mediafire::read(client, link, cancel),
+            Self::GoogleDrive => drive::read(client, link, cancel),
+            Self::Dropbox => dropbox::read(client, link, cancel),
         }?;
         if share.files.is_empty() {
             return Err(PreviewError::NoVideo {
@@ -143,6 +190,8 @@ pub struct RemoteFile {
 pub enum FileSource {
     Mega(mega::MegaFile),
     MediaFire(mediafire::MediaFireFile),
+    GoogleDrive(drive::DriveFile),
+    Dropbox(dropbox::DropboxFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -158,6 +207,7 @@ pub enum FileCheck {
     Mega(mega::FileKey),
     /// The SHA-256 MediaFire gives, in lowercase hex.
     Sha256(String),
+    /// Google Drive and Dropbox give nothing to check by beyond the size.
     None,
 }
 
@@ -167,6 +217,15 @@ impl FileSource {
         match self {
             Self::Mega(file) => mega::address(client, file, cancel),
             Self::MediaFire(file) => mediafire::address(client, file, cancel),
+            // These links lead to the file whenever they're asked.
+            Self::GoogleDrive(file) => Ok(Address {
+                url: drive::download_url(file),
+                check: FileCheck::None,
+            }),
+            Self::Dropbox(file) => Ok(Address {
+                url: file.url.clone(),
+                check: FileCheck::None,
+            }),
         }
     }
 }
@@ -175,6 +234,10 @@ impl FileSource {
 pub fn client() -> Result<Client, PreviewError> {
     Client::builder()
         .user_agent(USER_AGENT)
+        .default_headers(HeaderMap::from_iter([(
+            ACCEPT_LANGUAGE,
+            HeaderValue::from_static(LANGUAGE),
+        )]))
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(READ_TIMEOUT)
         .build()
@@ -235,7 +298,11 @@ pub(crate) fn network_error(error: reqwest::Error) -> PreviewError {
 
 /// A host's answer that isn't a success, sorted as a preview's errors are.
 pub(crate) fn status_error(host: Host, response: &Response) -> Option<PreviewError> {
-    let status = response.status();
+    code_error(host, response.status())
+}
+
+/// What a status that isn't a success means, sorted as a preview's errors are.
+pub(crate) fn code_error(host: Host, status: StatusCode) -> Option<PreviewError> {
     if status.is_success() {
         return None;
     }
@@ -249,6 +316,273 @@ pub(crate) fn status_error(host: Host, response: &Response) -> Option<PreviewErr
         500..=599 => PreviewError::Network { detail },
         _ => PreviewError::Failed { detail },
     })
+}
+
+/// What a host says about a file when asked for its first byte.
+pub(crate) enum Answer {
+    File(Found),
+    /// A page instead: an error, a sign-in, or a check for a browser.
+    Page(Page),
+}
+
+/// A file's name and size, as its download answers.
+pub(crate) struct Found {
+    /// From Content-Disposition.
+    pub name: Option<String>,
+    pub size: u64,
+    /// From Last-Modified, as YYYY-MM-DD.
+    pub modified: Option<String>,
+}
+
+/// A page a host answered with instead of a file.
+pub(crate) struct Page {
+    /// Where it ended up, after redirects.
+    pub url: String,
+    pub status: StatusCode,
+    pub html: String,
+}
+
+impl Page {
+    /// Reads the start of the answer, which is all that explains an error.
+    pub(crate) fn read(response: Response) -> Self {
+        let url = response.url().to_string();
+        let status = response.status();
+        let mut bytes = Vec::new();
+        // A page that doesn't arrive whole still has its status.
+        let _ = response.take(PAGE_LIMIT).read_to_end(&mut bytes);
+        Self {
+            url,
+            status,
+            html: String::from_utf8_lossy(&bytes).into_owned(),
+        }
+    }
+}
+
+/// Asks for the first byte of the file at `url`, for its name and size, or the page the host answers instead.
+pub(crate) fn probe(
+    client: &Client,
+    url: &str,
+    cancel: &CancelToken,
+) -> Result<Answer, PreviewError> {
+    check_cancel(cancel)?;
+    let response = client
+        .get(url)
+        .header(RANGE, "bytes=0-0")
+        .send()
+        .map_err(network_error)?;
+    let headers = response.headers();
+    let header = |name| headers.get(name).and_then(|value| value.to_str().ok());
+    let size = match response.status() {
+        // An empty file has no first byte: "bytes */0".
+        StatusCode::PARTIAL_CONTENT | StatusCode::RANGE_NOT_SATISFIABLE => {
+            header(CONTENT_RANGE).and_then(range_total)
+        }
+        // The whole file instead.
+        StatusCode::OK if is_attachment(headers) => {
+            header(CONTENT_LENGTH).and_then(|value| value.trim().parse().ok())
+        }
+        _ => None,
+    };
+    let name = header(CONTENT_DISPOSITION).and_then(attachment_name);
+    let modified = header(LAST_MODIFIED).and_then(http_date);
+    Ok(match size {
+        Some(size) => Answer::File(Found {
+            name,
+            size,
+            modified,
+        }),
+        None => Answer::Page(Page::read(response)),
+    })
+}
+
+/// Whether an answer is a file to save rather than a page to show.
+pub(crate) fn is_attachment(headers: &HeaderMap) -> bool {
+    headers
+        .get(CONTENT_DISPOSITION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim_start().get(..10))
+        .is_some_and(|start| start.eq_ignore_ascii_case("attachment"))
+}
+
+/// The total in a Content-Range: "bytes 0-0/1234" or "bytes */1234".
+fn range_total(value: &str) -> Option<u64> {
+    value.rsplit_once('/')?.1.trim().parse().ok()
+}
+
+/// The file name in a Content-Disposition: `filename*=UTF-8''<percent-encoded>` when there is one, since `filename`
+/// may have lost its non-ASCII characters, or else `filename="<name>"`.
+pub(crate) fn attachment_name(header: &str) -> Option<String> {
+    let mut plain = None;
+    for parameter in parameters(header) {
+        let Some((key, value)) = parameter.split_once('=') else {
+            continue;
+        };
+        let value = value.trim();
+        match key.trim().to_ascii_lowercase().as_str() {
+            "filename*" => {
+                let mut pieces = value.trim_matches('"').splitn(3, '\'');
+                if let (Some(charset), Some(_language), Some(encoded)) =
+                    (pieces.next(), pieces.next(), pieces.next())
+                    && charset.eq_ignore_ascii_case("utf-8")
+                {
+                    let name = percent_decode(encoded);
+                    if !name.is_empty() {
+                        return Some(name);
+                    }
+                }
+            }
+            "filename" => plain = Some(unquote(value)),
+            _ => {}
+        }
+    }
+    plain.filter(|name| !name.is_empty())
+}
+
+/// A header's parameters: split at each ";" that isn't inside quotes.
+fn parameters(header: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut start = 0;
+    let mut quoted = false;
+    let mut escaped = false;
+    for (index, character) in header.char_indices() {
+        match character {
+            _ if escaped => escaped = false,
+            '\\' if quoted => escaped = true,
+            '"' => quoted = !quoted,
+            ';' if !quoted => {
+                parts.push(&header[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&header[start..]);
+    parts
+}
+
+/// A quoted header value without its quotes and backslashes.
+fn unquote(value: &str) -> String {
+    let Some(inner) = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+    else {
+        return value.to_owned();
+    };
+    let mut text = String::with_capacity(inner.len());
+    let mut characters = inner.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\\' => text.extend(characters.next()),
+            _ => text.push(character),
+        }
+    }
+    text
+}
+
+/// Text with its "%xx" escapes turned back into the UTF-8 they stand for.
+pub(crate) fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let escaped = (bytes[index] == b'%')
+            .then(|| bytes.get(index + 1..index + 3))
+            .flatten()
+            .filter(|hex| hex.iter().all(u8::is_ascii_hexdigit))
+            .and_then(|hex| u8::from_str_radix(std::str::from_utf8(hex).ok()?, 16).ok());
+        match escaped {
+            Some(byte) => {
+                decoded.push(byte);
+                index += 3;
+            }
+            None => {
+                decoded.push(bytes[index]);
+                index += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
+/// A date as an HTTP header gives it ("Fri, 11 Oct 2019 03:51:58 GMT"), as YYYY-MM-DD.
+fn http_date(value: &str) -> Option<String> {
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    let [_, day, month, year, ..] = parts.as_slice() else {
+        return None;
+    };
+    let day: u32 = day.parse().ok()?;
+    let year: u32 = year.parse().ok()?;
+    let month = MONTHS
+        .iter()
+        .position(|name| name.eq_ignore_ascii_case(month))?
+        + 1;
+    (1..=31)
+        .contains(&day)
+        .then(|| format!("{year:04}-{month:02}-{day:02}"))
+}
+
+/// HTML text with its entities ("&amp;", "&#39;", "&#x27;") turned back into characters.
+pub(crate) fn html_text(text: &str) -> String {
+    let mut decoded = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find('&') {
+        decoded.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let entity = rest
+            .find(';')
+            .filter(|&end| end <= 10)
+            .and_then(|end| Some((entity(&rest[1..end])?, end)));
+        match entity {
+            Some((character, end)) => {
+                decoded.push(character);
+                rest = &rest[end + 1..];
+            }
+            None => {
+                decoded.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    decoded.push_str(rest);
+    decoded
+}
+
+/// The character an HTML entity's name stands for: a few named ones, or any by number.
+fn entity(name: &str) -> Option<char> {
+    match name {
+        "amp" => Some('&'),
+        "lt" => Some('<'),
+        "gt" => Some('>'),
+        "quot" => Some('"'),
+        "apos" => Some('\''),
+        "nbsp" => Some('\u{a0}'),
+        _ => {
+            let number = name.strip_prefix('#')?;
+            let code = match number.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                None => number.parse().ok()?,
+            };
+            char::from_u32(code)
+        }
+    }
+}
+
+/// The text between `start` and the next `end` after it.
+pub(crate) fn between<'a>(text: &'a str, start: &str, end: &str) -> Option<&'a str> {
+    let from = text.find(start)? + start.len();
+    let length = text[from..].find(end)?;
+    Some(&text[from..from + length])
+}
+
+/// A page's title, as text.
+pub(crate) fn title_of(html: &str) -> Option<String> {
+    let start = html.find("<title")?;
+    let title = between(&html[start..], ">", "</title>")?;
+    let title = html_text(title.trim());
+    (!title.is_empty()).then_some(title)
 }
 
 #[cfg(test)]
@@ -265,11 +599,88 @@ mod tests {
                 Some(Host::MediaFire),
             ),
             ("https://mediafire.com/?abc123", Some(Host::MediaFire)),
+            (
+                "https://drive.google.com/file/d/1l_5RK28JRL19wpT22B-DY9We3TVXnnQQ/view",
+                Some(Host::GoogleDrive),
+            ),
+            (
+                "https://drive.usercontent.google.com/download?id=1l_5RK28JRL19wpT22B",
+                Some(Host::GoogleDrive),
+            ),
+            ("https://docs.google.com/document/d/1TFYNzuZJTgN/edit", None),
+            (
+                "https://www.dropbox.com/scl/fi/r2kd2skcy5ylbbta5y1pz/a.mp4?rlkey=w",
+                Some(Host::Dropbox),
+            ),
+            (
+                "https://dl.dropboxusercontent.com/s/abc/a.mp4",
+                Some(Host::Dropbox),
+            ),
             ("https://notmega.nz/file/AbCdEf12", None),
             ("https://www.youtube.com/watch?v=jNQXAC9IVRw", None),
         ] {
             assert_eq!(Host::of(link), host, "{link}");
         }
+    }
+
+    #[test]
+    fn reads_a_files_name_from_its_headers() {
+        assert_eq!(
+            attachment_name(
+                "attachment; filename=\"youtube-dl test video '?BaW_jenozKc.mp4\"; filename*=UTF-8''youtube-dl%20test%20video%20%27%C3%A4BaW_jenozKc.mp4"
+            )
+            .as_deref(),
+            Some("youtube-dl test video '\u{e4}BaW_jenozKc.mp4")
+        );
+        assert_eq!(
+            attachment_name("attachment; filename=\"spam.txt\"").as_deref(),
+            Some("spam.txt")
+        );
+        assert_eq!(
+            attachment_name(r#"attachment; filename="a; \"b\".txt""#).as_deref(),
+            Some(r#"a; "b".txt"#)
+        );
+        assert_eq!(
+            attachment_name("attachment; filename=plain.zip").as_deref(),
+            Some("plain.zip")
+        );
+        assert_eq!(attachment_name("attachment"), None);
+
+        assert_eq!(range_total("bytes 0-0/498881336"), Some(498_881_336));
+        assert_eq!(range_total("bytes */0"), Some(0));
+        assert_eq!(range_total("bytes 0-0/*"), None);
+        assert_eq!(
+            http_date("Fri, 11 Oct 2019 03:51:58 GMT").as_deref(),
+            Some("2019-10-11")
+        );
+        assert_eq!(http_date("yesterday"), None);
+
+        let mut headers = HeaderMap::new();
+        assert!(!is_attachment(&headers));
+        headers.insert(
+            CONTENT_DISPOSITION,
+            HeaderValue::from_static("Attachment; filename=\"a.zip\""),
+        );
+        assert!(is_attachment(&headers));
+    }
+
+    #[test]
+    fn reads_text_from_pages_and_links() {
+        assert_eq!(
+            html_text("Tom &amp; Jerry&#39;s &#x2014; &quot;x&quot; &lt;3 &bogus; & more"),
+            "Tom & Jerry's \u{2014} \"x\" <3 &bogus; & more"
+        );
+        assert_eq!(
+            percent_decode("4.5%20Food%20Drive/%C3%A9t%C3%A9%zz%2"),
+            "4.5 Food Drive/\u{e9}t\u{e9}%zz%2"
+        );
+        assert_eq!(
+            title_of("<html><head><title>\n Dropbox - Invalid Link - Simplify your life </title>")
+                .as_deref(),
+            Some("Dropbox - Invalid Link - Simplify your life")
+        );
+        assert_eq!(title_of("<title></title>"), None);
+        assert_eq!(between("a [b] c", "[", "]"), Some("b"));
     }
 
     #[test]

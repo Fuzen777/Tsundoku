@@ -29,7 +29,7 @@ rules:
 
 ### File Hosts
 
-- [ ] **Google Drive and Dropbox.** The other two of the big four file hosts, after MEGA and MediaFire, as hosts of their own in `core::hosts`.
+- [ ] **Google Docs, Sheets and Slides.** Left out of Drive folders for now. They could download as .docx, .xlsx and .pptx through `docs.google.com/KIND/d/ID/export?format=...`.
 - [ ] **Password-protected links.** MEGA's `#P!` links and MediaFire's protected files are refused with a message for now.
 
 ### Getting Links In

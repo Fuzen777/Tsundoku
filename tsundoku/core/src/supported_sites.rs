@@ -106,11 +106,13 @@ pub fn supported_sites(yt_dlp: Option<&Path>, gallery_dl: Option<&Path>) -> Supp
         .unwrap_or_default();
     SupportedSites {
         sites: merge(
-            yt_dlp_names
-                .iter()
-                .chain(&gallery_dl_names)
-                .map(String::as_str)
-                .chain(Host::ALL.map(Host::name)),
+            // Tsundoku's own hosts first, so their names win over a tool's for the same site ("GoogleDrive").
+            Host::ALL.map(Host::name).into_iter().chain(
+                yt_dlp_names
+                    .iter()
+                    .chain(&gallery_dl_names)
+                    .map(String::as_str),
+            ),
             &sign_ins(&profiles, browsers::cookie_uses),
         ),
         images_set_up: gallery_dl.is_some(),
@@ -187,8 +189,8 @@ fn sign_ins(
         .collect()
 }
 
-/// One entry per site whatever the case of its name or how many tools list it, sorted by name, without the parts of
-/// a listed site (`SITE_PARTS`). Sign-in sites take their own name ("X" for "twitter") and are always listed.
+/// One entry per site whatever the case or spaces of its name or how many tools list it, sorted by name, without the
+/// parts of a listed site (`SITE_PARTS`). Sign-in sites take their own name ("X" for "twitter") and are always listed.
 fn merge<'a>(
     names: impl Iterator<Item = &'a str>,
     sign_ins: &BTreeMap<&'static str, Vec<SignedInProfile>>,
@@ -205,7 +207,7 @@ fn merge<'a>(
     }
     for name in names {
         sites
-            .entry(name.to_lowercase())
+            .entry(name.to_lowercase().replace(' ', ""))
             .or_insert_with(|| SupportedSite {
                 name: name.to_owned(),
                 signed_in: None,
@@ -251,6 +253,20 @@ mod tests {
              Bilibili category extractor\n",
         ));
         assert_eq!(names, ["Instagram", "instagram", "youtube", "youtube"]);
+    }
+
+    #[test]
+    fn a_hosts_name_wins_over_a_tools() {
+        let sites = merge(
+            ["Google Drive", "Dropbox", "GoogleDrive", "dropbox", "Vimeo"].into_iter(),
+            &BTreeMap::new(),
+        );
+        let names: Vec<&str> = sites
+            .iter()
+            .filter(|site| site.signed_in.is_none())
+            .map(|site| site.name.as_str())
+            .collect();
+        assert_eq!(names, ["Dropbox", "Google Drive", "Vimeo"]);
     }
 
     #[test]

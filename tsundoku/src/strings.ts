@@ -232,10 +232,10 @@ export const strings = {
       signInRefused: (site: string) =>
         `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
       limitReached: (site: string) =>
-        `${site}'s free download limit for your connection is used up. Try again in a few hours.`,
+        `${site}'s download limit is used up for now. Try again in a few hours.`,
       passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
       linkIncomplete: (site: string) =>
-        `This ${site} link is missing its key, the part after #, or the key is cut off. Copy the whole link again.`,
+        `This ${site} link is missing its key, or it's cut off. Copy the whole link again.`,
       network: "Couldn't reach the site. Check your connection, then try again.",
       siteError: "Couldn't read this site's page. An update often fixes this.",
       failed: "Couldn't read this link.",

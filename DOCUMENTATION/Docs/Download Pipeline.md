@@ -94,7 +94,7 @@ yt-dlp prints a line starting with `@@tsundoku` and a space for every progress u
 
 ## File Hosts
 
-MEGA and MediaFire downloads don't run a tool: `file_runner.rs` reads the link again (`core::hosts`), then fetches each file over HTTPS into `<n>.part` in the item's temporary folder. A part file resumes with a `Range` request, MEGA's decrypted from where it stopped. Each file is checked when it's complete (MEGA's MAC, MediaFire's SHA-256); a damaged one is deleted and the item fails with `damaged`, so Retry downloads it again. Its progress is the bytes of all the share's files, with the speed limit applied by sleeping between reads, and its log names each file and its size (MEGA's key is never written).
+File host downloads (MEGA, MediaFire, Google Drive, Dropbox) don't run a tool: `file_runner.rs` reads the link again (`core::hosts`), then fetches each file over HTTPS into `<n>.part` in the item's temporary folder. A part file resumes with a `Range` request, MEGA's decrypted from where it stopped. Each file is checked when it's complete (MEGA's MAC, MediaFire's SHA-256); a damaged one is deleted and the item fails with `damaged`, so Retry downloads it again. Google Drive and Dropbox give no checksum, so their files are checked by size, and an answer that isn't the file (such as Google Drive's download limit page) fails the item before anything is written. Its progress is the bytes of all the share's files, with the speed limit applied by sleeping between reads, and its log names each file and its size (MEGA's key is never written).
 
 ## Temporary Folders
 

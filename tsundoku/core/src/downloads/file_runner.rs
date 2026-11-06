@@ -17,7 +17,7 @@ use sha2::{Digest, Sha256};
 use super::runner::{JobOutcome, JobSpec, make_folders, open_log, seconds_since_epoch, write_log};
 use super::{DownloadError, DownloadProgress, DownloadStage};
 use crate::cancel::CancelToken;
-use crate::hosts::{self, Address, FileCheck, Host, RemoteFile};
+use crate::hosts::{self, Address, FileCheck, Host, Page, RemoteFile};
 use crate::metadata::PreviewError;
 
 /// How much is read from the network or the disk at a time.
@@ -170,6 +170,10 @@ fn fetch(
     if let Some(error) = hosts::status_error(host, &response) {
         return Err(error.into());
     }
+    // A page about an error, such as Google Drive's download limit, mustn't be saved as part of the file.
+    if host.sends_attachments() && !hosts::is_attachment(response.headers()) {
+        return Err(host.page_error(&Page::read(response)).into());
+    }
     if offset > 0 {
         if response.status() == StatusCode::PARTIAL_CONTENT {
             write_log(log, &format!("continuing at {offset} bytes"));
@@ -235,7 +239,8 @@ fn fetch(
     Ok(())
 }
 
-/// Whether a downloaded file is what the host sent: MEGA's MAC, or MediaFire's SHA-256.
+/// Whether a downloaded file is what the host sent: MEGA's MAC, or MediaFire's SHA-256. Google Drive and Dropbox
+/// files are only checked by their size.
 fn check(check: &FileCheck, part: &Path, cancel: &CancelToken) -> Result<bool, Stop> {
     match check {
         FileCheck::None => Ok(true),

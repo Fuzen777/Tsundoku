@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.21 · 2026-11-06
+
+### New
+
+- **Google Drive and Dropbox**: pasting a Google Drive or Dropbox link, to one file or a shared folder, shows its name and what it holds on the preview card, with Download, like MEGA and MediaFire links: no account or setup needed, a shared folder keeps its own folders, files already there are skipped, and Stop and Retry continue where they stopped. Google Docs, Sheets and Slides in a Drive folder are left out, since they aren't files. Both are in Settings → Supported Sites, and {site} names them in rules ("Google Drive", "Dropbox").
+
+### Changed
+
+- A Google Drive or Dropbox link to a video now downloads the file exactly as it was uploaded, like any other file there, instead of being treated as a video with a preset.
+- The messages for a used-up download limit and for a link missing its key now fit every file host.
+
 ## 0.1.20 · 2026-11-06
 
 ### New
