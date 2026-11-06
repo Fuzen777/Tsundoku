@@ -162,10 +162,15 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
 pub fn run() {
     tauri::Builder::default()
         // First, as the plugin requires: a second launch focuses the running window instead of opening another copy,
-        // so two copies never share the data folder.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            focus_main_window(app)
+        // so two copies never share the data folder. A launch for a page a browser sent hands it to the deep link
+        // plugin instead (background::start), leaving the browser in front.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !background::is_sent_link(&args) {
+                focus_main_window(app);
+            }
         }))
+        // tsundoku://add?url=… links, which the browser bookmark in Settings → Adding Links opens.
+        .plugin(tauri_plugin_deep_link::init())
         // Visibility is left out: the window stays hidden until the UI has painted.
         .plugin(
             tauri_plugin_window_state::Builder::new()

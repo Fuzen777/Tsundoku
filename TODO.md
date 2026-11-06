@@ -36,7 +36,7 @@ rules:
 
 - [ ] **Pick any clipboard shortcut.** Settings offers four fixed key combinations; recording one the user presses would fit any keyboard.
 - [ ] **Shortcut taken at startup.** A clipboard shortcut another app took since it was picked fails quietly at startup; Settings could say so.
-- [ ] **Browser send to app.** A browser button or right-click entry that queues the current page, through a `tsundoku://` link (Tauri's deep-link plugin) or a local endpoint.
+- [ ] **Browser extension.** A toolbar button and a right-click Send Link to Tsundoku entry for a link on the page, through the same `tsundoku://add?url=…` links as the bookmark. Firefox-family browsers (Zen) need it signed by Mozilla.
 
 ---
 

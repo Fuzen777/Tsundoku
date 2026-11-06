@@ -22,7 +22,7 @@ tsundoku-core = { path = "../core" }
 serde_json.workspace = true
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
-tauri-plugin-single-instance = "2.5.5"
+tauri-plugin-single-instance = { version = "2.5.5", features = ["deep-link"] }
 tauri-plugin-window-state = "2.5.0"
 window-vibrancy = "0.8.1"
 tauri-plugin-dialog = "2"
@@ -31,3 +31,4 @@ tauri-plugin-process = "2"
 tauri-plugin-autostart = "2.7.0"
 tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-notification = "2.8.0"
+tauri-plugin-deep-link = "2.6.3"

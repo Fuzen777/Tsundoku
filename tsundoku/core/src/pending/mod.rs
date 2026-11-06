@@ -102,6 +102,26 @@ pub fn links_in(text: &str) -> Vec<String> {
     links
 }
 
+/// The scheme of the links that send a page to Tsundoku: the browser bookmark in Settings → Adding Links opens
+/// `tsundoku://add?url=…` with the page it's on, and Windows starts Tsundoku with it, or hands it to the running one.
+pub const SEND_SCHEME: &str = "tsundoku";
+
+/// The links a `tsundoku://add?url=…` link sends, each `url` once (`links_in`). Any other link sends none.
+pub fn links_in_sent_link(link: &str) -> Vec<String> {
+    let Ok(parsed) = reqwest::Url::parse(link) else {
+        return Vec::new();
+    };
+    if parsed.scheme() != SEND_SCHEME || parsed.host_str() != Some("add") {
+        return Vec::new();
+    }
+    let sent: Vec<String> = parsed
+        .query_pairs()
+        .filter(|(key, _)| key == "url")
+        .map(|(_, value)| value.into_owned())
+        .collect();
+    links_in(&sent.join("\n"))
+}
+
 /// Reads what a link is, as the preview card does (`preview::ToolReader`). Tests use a fake.
 pub trait LinkReader: Send + Sync {
     /// Without `any_page`, yt-dlp reads only sites it knows (`FetchTools::any_page`), turning others down at once.
@@ -225,9 +245,10 @@ impl PendingLinks {
         self.insert(&new, true, false)
     }
 
-    /// Adds the links on the clipboard, for the clipboard shortcut: as if pasted, so each shows even when nothing can
-    /// download it, but started once read with Download Right Away on, unless it was downloaded before.
-    pub fn add_from_clipboard(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
+    /// Adds links sent from outside the window: the clipboard shortcut's, and the page a browser sends
+    /// (`links_in_sent_link`). As if pasted, so each shows even when nothing can download it, but started once read
+    /// with Download Right Away on, unless it was downloaded before.
+    pub fn add_sent(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
         self.insert(links, false, self.options().download_right_away)
     }
 

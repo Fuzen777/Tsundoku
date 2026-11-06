@@ -379,6 +379,12 @@ export function onAddingOptionsChanged(handler: (options: AddingSettings) => voi
   return listen<AddingSettings>(ADDING_OPTIONS_CHANGED_EVENT, (event) => handler(event.payload))
 }
 
+/** Puts text on the clipboard, such as the browser bookmark's address. Tsundoku's own copies never reach the
+ * clipboard watcher. */
+export function copyText(text: string): Promise<void> {
+  return navigator.clipboard.writeText(text)
+}
+
 /** Whether closing the window keeps Tsundoku in the tray, and whether it starts with Windows. */
 export function getBackgroundOptions(): Promise<BackgroundSettings> {
   if (!isTauri()) return Promise.resolve(standIns.backgroundOptions)

@@ -511,10 +511,15 @@ export const strings = {
     },
     downloadRightAway: "Download Right Away",
     downloadRightAwayHint:
-      "Links the clipboard watcher or the shortcut adds start downloading once they're read, with the default preset, instead of waiting in Pending. A link that needs something from you first, such as signing in, still waits there, and so does one downloaded before.",
+      "Links the clipboard watcher, the shortcut or your browser adds start downloading once they're read, with the default preset, instead of waiting in Pending. A link that needs something from you first, such as signing in, still waits there, and so does one downloaded before.",
+    browserBookmark: "Send from Your Browser",
+    browserBookmarkHint:
+      "A bookmark that sends the page you're on to Pending in one click. Copy its address, add a new bookmark to your browser's toolbar (name it Send to Tsundoku, say) and paste the address as its URL. The first time, your browser asks whether to open Tsundoku.",
+    copyBookmark: "Copy Bookmark Address",
+    bookmarkCopied: "Copied. Paste it as the new bookmark's URL.",
     notify: "Show Notifications",
     notifyHint:
-      "While Tsundoku's window isn't in front: when a copied link is added or starts downloading, and when the shortcut adds links. Clicking one opens Tsundoku.",
+      "While Tsundoku's window isn't in front: when a copied link is added or starts downloading, and when the shortcut or your browser adds links. Clicking one opens Tsundoku.",
     background: "Running in the Background",
     keepInTray: "Keep Running in the Tray",
     keepInTrayHint:

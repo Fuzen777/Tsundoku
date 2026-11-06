@@ -376,6 +376,35 @@ fn finds_the_links_in_pasted_text() {
 }
 
 #[test]
+fn finds_the_page_a_browser_sends() {
+    let video = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+    let sent = "tsundoku://add?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DjNQXAC9IVRw";
+    assert_eq!(links_in_sent_link(sent), [video]);
+    assert_eq!(
+        links_in_sent_link(&sent.replace("add?", "add/?")),
+        [video],
+        "a browser may add a slash"
+    );
+    assert_eq!(
+        links_in_sent_link(&format!(
+            "{sent}&url=https%3A%2F%2Fx.com%2Fsomeone%2Fstatus%2F1&url={}",
+            "https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DjNQXAC9IVRw"
+        )),
+        [video, "https://x.com/someone/status/1"],
+        "each link once"
+    );
+    for other in [
+        "tsundoku://open?url=https%3A%2F%2Fwww.youtube.com%2F",
+        "https://add?url=https%3A%2F%2Fwww.youtube.com%2F",
+        "tsundoku://add?link=https%3A%2F%2Fwww.youtube.com%2F",
+        "tsundoku://add?url=about%3Ablank",
+        "--in-tray",
+    ] {
+        assert!(links_in_sent_link(other).is_empty(), "{other}");
+    }
+}
+
+#[test]
 fn reads_each_link_once_in_the_order_added() {
     let test = Test::new();
     let added = test.add(&[FIRST, SECOND, "not a link", THIRD]);
@@ -723,7 +752,7 @@ fn a_copied_link_is_still_copied_after_a_restart() {
 }
 
 #[test]
-fn the_clipboard_shortcut_adds_links_as_if_pasted() {
+fn links_sent_from_the_shortcut_or_a_browser_are_added_as_if_pasted() {
     let test = Test::new();
     test.download_right_away(true);
     let unsupported = "https://github.com/Fuzen777/Tsundoku";
@@ -734,7 +763,7 @@ fn the_clipboard_shortcut_adds_links_as_if_pasted() {
         .iter()
         .map(|link| (*link).to_owned())
         .collect();
-    assert_eq!(test.links.add_from_clipboard(&links).unwrap().added, 3);
+    assert_eq!(test.links.add_sent(&links).unwrap().added, 3);
 
     wait_until("the first is in the queue", || {
         test.queued("first").is_some()
@@ -754,7 +783,7 @@ fn the_clipboard_shortcut_adds_links_as_if_pasted() {
     assert!(test.reader.read_any_page(unsupported));
 
     test.download_right_away(false);
-    test.links.add_from_clipboard(&[THIRD.to_owned()]).unwrap();
+    test.links.add_sent(&[THIRD.to_owned()]).unwrap();
     test.wait_until_read(THIRD);
     assert!(test.queued("third").is_none());
 }

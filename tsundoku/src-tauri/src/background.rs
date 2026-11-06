@@ -1,14 +1,16 @@
-//! Tsundoku in the background: the tray icon and its menu, starting with Windows, the clipboard shortcut, and the
-//! notifications for links added while the window isn't in front. Settings → Running in the Background and Adding
-//! Links turn them on; each is off until then, except notifications.
+//! Tsundoku in the background: the tray icon and its menu, starting with Windows, the clipboard shortcut, pages sent
+//! from a browser (`tsundoku://add?url=…`), and the notifications for links added while the window isn't in front.
+//! Settings → Running in the Background and Adding Links turn them on; each is off until then, except notifications
+//! and the browser's links.
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, State, Wry};
+use tauri::{AppHandle, Manager, State, Url, Wry};
 use tauri_plugin_autostart::ManagerExt as _;
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent, ShortcutState,
@@ -72,21 +74,35 @@ mod text {
     pub const ADDED_TO_PENDING: &str = "Added to Pending";
     pub const NOTHING_TO_ADD: &str = "Nothing to Add";
     pub const NO_LINKS: &str = "There's no link on the clipboard.";
-    pub const ALREADY_PENDING: &str = "The links on the clipboard are pending already.";
     pub const STARTED: &str = "Started";
 
-    pub fn links_added(count: u32, right_away: bool) -> String {
+    pub const NO_LINKS_SENT: &str = "Your browser sent no link.";
+
+    pub fn links_added(count: u32, from_browser: bool, right_away: bool) -> String {
         let links = if count == 1 {
             "A link".to_owned()
         } else {
             format!("{count} links")
+        };
+        let from = if from_browser {
+            "your browser"
+        } else {
+            "the clipboard"
         };
         let then = match (right_away, count == 1) {
             (true, true) => " It starts once read.",
             (true, false) => " They start once read.",
             (false, _) => "",
         };
-        format!("{links} from the clipboard.{then}")
+        format!("{links} from {from}.{then}")
+    }
+
+    pub fn already_pending(from_browser: bool) -> &'static str {
+        if from_browser {
+            "The page your browser sent is pending already."
+        } else {
+            "The links on the clipboard are pending already."
+        }
     }
 
     pub fn links_started(count: usize) -> String {
@@ -127,7 +143,8 @@ impl TrayMenu {
     }
 }
 
-/// Whether this launch is Windows starting Tsundoku at sign-in with the tray on, so the window stays hidden.
+/// Whether the window stays hidden at launch: the tray is on and Windows started Tsundoku, at sign-in or for a page
+/// a browser sent.
 pub struct StartedInTray(pub bool);
 
 /// Sets up what runs in the background once the data is open: the tray icon if it's on, the clipboard shortcut if
@@ -135,8 +152,9 @@ pub struct StartedInTray(pub bool);
 pub fn start(app: &AppHandle, settings: &SettingsStore) {
     let saved = settings.get();
     let in_tray = saved.background.keep_in_tray;
+    let sent = app.deep_link().get_current().ok().flatten();
     app.manage(StartedInTray(
-        in_tray && std::env::args().any(|arg| arg == IN_TRAY_ARG),
+        in_tray && (sent.is_some() || std::env::args().any(|arg| arg == IN_TRAY_ARG)),
     ));
     app.manage(TrayMenu::default());
     if in_tray {
@@ -152,6 +170,35 @@ pub fn start(app: &AppHandle, settings: &SettingsStore) {
     let _ = app
         .notification()
         .on_action(move |_| focus_main_window(&handle));
+
+    // Pages a browser sends: the one Tsundoku was started for, then those handed to it while it runs (the single
+    // instance plugin passes a second launch's link on). Registering again each start keeps the browser bookmark
+    // working if Tsundoku moved; the installer registers it too.
+    let _ = app.deep_link().register_all();
+    if let Some(urls) = sent {
+        add_sent_from_browser(app, &urls);
+    }
+    let handle = app.clone();
+    app.deep_link()
+        .on_open_url(move |event| add_sent_from_browser(&handle, &event.urls()));
+}
+
+/// Whether a launch's arguments are a page a browser sent, which adds it without bringing the window forward.
+pub fn is_sent_link(args: &[String]) -> bool {
+    args.iter().any(|arg| {
+        arg.get(..pending::SEND_SCHEME.len() + 1)
+            .is_some_and(|start| start.eq_ignore_ascii_case(&format!("{}:", pending::SEND_SCHEME)))
+    })
+}
+
+fn add_sent_from_browser(app: &AppHandle, urls: &[Url]) {
+    let links: Vec<String> = urls
+        .iter()
+        .flat_map(|url| pending::links_in_sent_link(url.as_str()))
+        .collect();
+    let app = app.clone();
+    // Off the main thread, as the shortcut's links are: saving them may wait for the pending links' lock.
+    thread::spawn(move || add_sent(&app, &links, true));
 }
 
 /// Settings → Running in the Background.
@@ -393,20 +440,33 @@ fn add_copied_links(app: &AppHandle) {
     let text = tsundoku_core::clipboard::copied_text().unwrap_or_default();
     #[cfg(not(windows))]
     let text = String::new();
-    let links = pending::links_in(&text);
+    add_sent(app, &pending::links_in(&text), false);
+}
+
+/// Adds links sent from outside the window, the clipboard shortcut's or a browser's, and says what came of it.
+fn add_sent(app: &AppHandle, links: &[String], from_browser: bool) {
     if links.is_empty() {
-        announce(app, text::NOTHING_TO_ADD, text::NO_LINKS);
+        let why = if from_browser {
+            text::NO_LINKS_SENT
+        } else {
+            text::NO_LINKS
+        };
+        announce(app, text::NOTHING_TO_ADD, why);
         return;
     }
     let pending = app.state::<Arc<PendingLinks>>();
     let right_away = pending.options().download_right_away;
-    match pending.add_from_clipboard(&links) {
+    match pending.add_sent(links) {
         Ok(added) if added.added > 0 => announce(
             app,
             text::ADDED_TO_PENDING,
-            &text::links_added(added.added, right_away),
+            &text::links_added(added.added, from_browser, right_away),
         ),
-        Ok(_) => announce(app, text::NOTHING_TO_ADD, text::ALREADY_PENDING),
+        Ok(_) => announce(
+            app,
+            text::NOTHING_TO_ADD,
+            text::already_pending(from_browser),
+        ),
         // Saving failed; the Pending view shows nothing new, and pasting there tells why.
         Err(_) => {}
     }

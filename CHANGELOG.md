@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.18 · 2026-11-06
+
+### New
+
+- **Send from Your Browser**: Settings → Adding Links offers a bookmark for your browser's toolbar (Copy Bookmark Address, then paste it as a new bookmark's URL). Clicking it on a video's or a post's page sends that page to Pending while you stay in the browser: Tsundoku starts if it isn't running (in the tray, with Keep Running in the Tray on), and a notification says what was added. The first time, the browser asks whether to open Tsundoku.
+
+### Changed
+
+- Download Right Away also applies to pages sent from the browser, and no longer needs Watch Clipboard on.
+
 ## 0.1.17 · 2026-11-06
 
 ### New
