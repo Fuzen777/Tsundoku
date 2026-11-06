@@ -172,6 +172,10 @@ export function describeRuleError(error: unknown): ErrorDescription {
   switch (error.kind) {
     case "emptyFolder":
       return { message: text.emptyFolder(error.rule) }
+    case "noAction":
+      return { message: text.noAction(error.rule) }
+    case "circularPreset":
+      return { message: text.circularPreset(error.rule) }
     case "emptyValue":
       return { message: text.emptyValue(error.rule) }
     case "storage":

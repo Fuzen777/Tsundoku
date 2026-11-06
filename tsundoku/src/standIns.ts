@@ -17,6 +17,7 @@ import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { RulePreset } from "./bindings/RulePreset"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
@@ -330,6 +331,8 @@ export const standIns = {
         { field: "uploader", operator: "is", value: "natgeo" },
       ],
       folder: String.raw`D:\Hydrus\Import\{site}\{uploader}`,
+      presetId: null,
+      downloadRightAway: null,
     },
     {
       id: "rule-2",
@@ -339,20 +342,37 @@ export const standIns = {
         { field: "title", operator: "contains", value: "podcast" },
       ],
       folder: "Podcasts",
+      presetId: null,
+      downloadRightAway: null,
+    },
+    {
+      id: "rule-3",
+      enabled: true,
+      conditions: [{ field: "title", operator: "contains", value: "zoo" }],
+      folder: "",
+      presetId: "best-audio",
+      downloadRightAway: true,
     },
     {
       id: "catch-all",
       enabled: true,
       conditions: [],
       folder: "{site}",
+      presetId: null,
+      downloadRightAway: null,
     },
   ] satisfies FolderRule[],
   /** The last rule's folder for the video's site, as a new install has it. */
   destination(video: VideoInfo): Destination {
     return {
       folder: ["C:", "Users", "You", "Downloads", "Tsundoku", video.siteName].join("\\"),
-      source: { kind: "rule", number: 3 },
+      source: { kind: "rule", number: 4 },
     }
+  },
+  /** Rule 3's preset for a title with "zoo" in it, as the stand-in rules have it. */
+  rulePreset(video: VideoInfo): RulePreset | null {
+    if (video.post || video.files || !video.title.toLowerCase().includes("zoo")) return null
+    return { presetId: "best-audio", rule: 3 }
   },
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {

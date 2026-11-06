@@ -25,8 +25,9 @@ use crate::database::Database;
 use crate::downloads::{DownloadError, DownloadQueue};
 use crate::history::History;
 use crate::metadata::{self, Fetched, PreviewError, VideoInfo};
-use crate::presets::{PresetError, PresetManager};
+use crate::presets::{Preset, PresetError, PresetManager};
 use crate::preview::VideoPreview;
+use crate::rules::{self, RuleSubject};
 use crate::settings::{AddingSettings, PauseRange, SettingsStore};
 use crate::sites;
 use crate::sync::lock;
@@ -164,10 +165,25 @@ struct Entry {
     state: PendingState,
     fetched: Option<Fetched>,
     error: Option<PreviewError>,
+    /// The preset picked for this link. For one started before it was read, the one picked for them all then, which
+    /// a rule's comes before.
     preset_id: Option<String>,
-    start_when_read: bool,
+    start_when_read: StartWhenRead,
     added_at: i64,
     caught: bool,
+}
+
+/// Whether a link not read yet starts once it's read. Kept in `pending_links.start_when_read` as 0, 1 and 2, so a
+/// version from before 0.1.35 reads a sent link as started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StartWhenRead {
+    /// It waits to be started.
+    No,
+    /// Started before it was read.
+    Yes,
+    /// Sent from outside the window (the clipboard shortcut, a browser): it starts once read if Download Right Away
+    /// says so for what it turns out to be, by a rule or Settings, as a copied link does.
+    IfRightAway,
 }
 
 #[derive(Default)]
@@ -228,7 +244,7 @@ impl PendingLinks {
 
     /// Adds links to read, skipping those already here and anything that isn't a link.
     pub fn add(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
-        self.insert(links, false, false)
+        self.insert(links, false, StartWhenRead::No)
     }
 
     /// Adds links copied in another app (`watcher`), skipping those already here and those the queue or the history
@@ -242,14 +258,14 @@ impl PendingLinks {
             })
             .cloned()
             .collect();
-        self.insert(&new, true, false)
+        self.insert(&new, true, StartWhenRead::No)
     }
 
     /// Adds links sent from outside the window: the clipboard shortcut's, and the page a browser sends
     /// (`links_in_sent_link`). As if pasted, so each shows even when nothing can download it, but started once read
-    /// with Download Right Away on, unless it was downloaded before.
+    /// when Download Right Away is on for it (by a rule or Settings), unless it was downloaded before.
     pub fn add_sent(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
-        self.insert(links, false, self.options().download_right_away)
+        self.insert(links, false, StartWhenRead::IfRightAway)
     }
 
     /// Starts every link Start All would (`starts_with_all`), each video with its own preset or `preset_id`. How many
@@ -286,7 +302,7 @@ impl PendingLinks {
         &self,
         links: &[String],
         caught: bool,
-        start_when_read: bool,
+        start_when_read: StartWhenRead,
     ) -> Result<AddedLinks, DownloadError> {
         let mut outcome = AddedLinks {
             added: 0,
@@ -372,11 +388,11 @@ impl PendingLinks {
         Ok(())
     }
 
-    /// Starts links. One that was read joins the download queue now, with its own preset or else `preset_id`, and
-    /// leaves the pending links; one not read yet joins once it's read, unless it turns out to be downloaded already.
-    /// One that couldn't be read stays. A video downloaded before with the same preset replaces its file, as Download
-    /// Again does once the user confirms it (the UI asks first). The first error is returned once every other link
-    /// has been started.
+    /// Starts links. One that was read joins the download queue now, with its own preset, else the one a rule picks,
+    /// else `preset_id`, and leaves the pending links; one not read yet joins once it's read, unless it turns out to be
+    /// downloaded already, with the preset a rule picks then, else `preset_id`. One that couldn't be read stays. A
+    /// video downloaded before with the same preset replaces its file, as Download Again does once the user confirms
+    /// it (the UI asks first). The first error is returned once every other link has been started.
     pub fn start(&self, ids: &[i64], preset_id: &str) -> Result<(), DownloadError> {
         let mut first_error = None;
         {
@@ -388,14 +404,16 @@ impl PendingLinks {
                 .filter(|entry| ids.contains(&entry.id))
             {
                 match entry.state {
-                    PendingState::Ready => match self.enqueue(entry, preset_id) {
-                        Ok(()) => started.push(entry.id),
-                        Err(error) => {
-                            first_error.get_or_insert(error);
+                    PendingState::Ready => {
+                        match self.enqueue(entry, entry.preset_id.as_deref(), Some(preset_id)) {
+                            Ok(()) => started.push(entry.id),
+                            Err(error) => {
+                                first_error.get_or_insert(error);
+                            }
                         }
-                    },
+                    }
                     PendingState::Waiting | PendingState::Reading => {
-                        entry.start_when_read = true;
+                        entry.start_when_read = StartWhenRead::Yes;
                         entry.preset_id.get_or_insert_with(|| preset_id.to_owned());
                         if let Err(error) = self.store.update(entry) {
                             first_error.get_or_insert(error);
@@ -415,9 +433,14 @@ impl PendingLinks {
         first_error.map_or(Ok(()), Err)
     }
 
-    /// Adds a link that was read to the download queue: a post or a file host's link as it is, a video with its preset,
-    /// or the default one if that preset was deleted meanwhile. A video already in the queue counts as started.
-    fn enqueue(&self, entry: &Entry, preset_id: &str) -> Result<(), DownloadError> {
+    /// Adds a link that was read to the download queue: a post or a file host's link as it is, a video with the preset
+    /// `start_preset` gives. A video already in the queue counts as started.
+    fn enqueue(
+        &self,
+        entry: &Entry,
+        chosen: Option<&str>,
+        otherwise: Option<&str>,
+    ) -> Result<(), DownloadError> {
         let video = entry
             .fetched
             .as_ref()
@@ -426,13 +449,11 @@ impl PendingLinks {
         let added = if video.post.is_some() || video.files.is_some() {
             self.queue.add_post(video)
         } else {
-            let preset = self
-                .presets
-                .get(entry.preset_id.as_deref().unwrap_or(preset_id))
-                .or_else(|| self.presets.get(&self.presets.overview().default_id))
-                .ok_or(DownloadError::Preset {
-                    error: PresetError::NotFound,
-                })?;
+            let preset =
+                self.start_preset(&video, chosen, otherwise)
+                    .ok_or(DownloadError::Preset {
+                        error: PresetError::NotFound,
+                    })?;
             let overwrite = self
                 .history
                 .last_download(&video.site, &video.video_id)
@@ -444,6 +465,52 @@ impl PendingLinks {
         match added {
             Ok(_) | Err(DownloadError::AlreadyQueued) => Ok(()),
             Err(error) => Err(error),
+        }
+    }
+
+    /// The preset a video starts with: `chosen` for it, else the one a rule picks, else `otherwise`, else the default
+    /// one, each only if it still exists.
+    fn start_preset(
+        &self,
+        video: &VideoInfo,
+        chosen: Option<&str>,
+        otherwise: Option<&str>,
+    ) -> Option<Preset> {
+        let rules = self.settings.get().rules.list;
+        let by_rule = rules::start_preset(&rules, video, |id| self.presets.get(id).is_some());
+        [
+            chosen,
+            by_rule.as_ref().map(|pick| pick.preset_id.as_str()),
+            otherwise,
+        ]
+        .into_iter()
+        .flatten()
+        .find_map(|id| self.presets.get(id))
+        .or_else(|| self.presets.get(&self.presets.overview().default_id))
+    }
+
+    /// Whether a copied or sent link starts once read: what the first rule that says so for it gives, else Settings.
+    /// A video counts with the preset it would start with.
+    fn downloads_right_away(&self, entry: &Entry, video: &VideoInfo) -> bool {
+        let settings = self.settings.get();
+        let preset = (video.post.is_none() && video.files.is_none())
+            .then(|| self.start_preset(video, None, entry.preset_id.as_deref()))
+            .flatten();
+        let subject = RuleSubject {
+            video,
+            preset: preset.as_ref(),
+        };
+        rules::download_right_away(&settings.rules.list, &subject)
+            .unwrap_or(settings.adding.download_right_away)
+    }
+
+    /// Whether the UI shows a link as starting once it's read. A sent link does while Settings' Download Right Away
+    /// is on, as no rule can tell until it's read.
+    fn shows_starting_once_read(&self, start_when_read: StartWhenRead) -> bool {
+        match start_when_read {
+            StartWhenRead::No => false,
+            StartWhenRead::Yes => true,
+            StartWhenRead::IfRightAway => self.options().download_right_away,
         }
     }
 
@@ -491,7 +558,6 @@ impl PendingLinks {
     fn read(&self, turn: &Turn) {
         let outcome = self.reader.read(&turn.link, !turn.caught, &turn.cancel);
         let settings = self.settings.get();
-        let right_away = turn.caught && settings.adding.download_right_away;
         let mut announce = None;
         {
             let mut state = lock(&self.state);
@@ -534,8 +600,15 @@ impl PendingLinks {
                     entry.state = PendingState::Ready;
                     entry.fetched = Some(fetched);
                     entry.error = None;
-                    let started =
-                        (entry.start_when_read || right_away) && self.start_once_read(entry);
+                    let starts = match entry.start_when_read {
+                        StartWhenRead::Yes => true,
+                        StartWhenRead::IfRightAway => self.downloads_right_away(entry, &video),
+                        StartWhenRead::No => {
+                            turn.caught && self.downloads_right_away(entry, &video)
+                        }
+                    };
+                    let started = starts && self.start_once_read(entry);
+                    entry.start_when_read = StartWhenRead::No;
                     if started {
                         state.entries.remove(index);
                         let _ = self.store.delete(turn.id);
@@ -554,7 +627,7 @@ impl PendingLinks {
                     } else {
                         entry.state = PendingState::Failed;
                         entry.error = Some(error);
-                        entry.start_when_read = false;
+                        entry.start_when_read = StartWhenRead::No;
                     }
                     let _ = self.store.update(entry);
                 }
@@ -577,10 +650,11 @@ impl PendingLinks {
                 .is_some()
     }
 
-    /// Adds a link started before it was read to the queue, unless the history has it: then it stays, marked, for the
-    /// user to decide. Whether it went to the queue.
+    /// Adds a link started before it was read, or that downloads right away, to the queue, unless the history has it:
+    /// then it stays, marked, for the user to decide. A video starts with the preset a rule picks, else the one picked
+    /// when it was started, else the default one. Whether it went to the queue.
     fn start_once_read(&self, entry: &mut Entry) -> bool {
-        entry.start_when_read = false;
+        entry.start_when_read = StartWhenRead::No;
         let Some(fetched) = &entry.fetched else {
             return false;
         };
@@ -593,8 +667,8 @@ impl PendingLinks {
         if downloaded_before {
             return false;
         }
-        let default_id = self.presets.overview().default_id;
-        self.enqueue(entry, &default_id).is_ok()
+        self.enqueue(entry, None, entry.preset_id.as_deref())
+            .is_ok()
     }
 
     fn present(&self, entry: Entry) -> PendingLink {
@@ -617,7 +691,7 @@ impl PendingLinks {
             preview,
             error: entry.error,
             preset_id: entry.preset_id,
-            start_when_read: entry.start_when_read,
+            start_when_read: self.shows_starting_once_read(entry.start_when_read),
             added_at: entry.added_at,
             caught: entry.caught,
         }

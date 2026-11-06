@@ -291,6 +291,7 @@ pub fn run() {
             downloads::folder_rules,
             downloads::save_folder_rules,
             downloads::download_destination,
+            downloads::rule_preset,
             downloads::queue_items,
             downloads::add_to_queue,
             downloads::add_post_to_queue,

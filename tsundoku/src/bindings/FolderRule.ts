@@ -2,7 +2,8 @@
 import type { RuleCondition } from "./RuleCondition";
 
 /**
- * When every condition matches a download, it goes in `folder`.
+ * When every condition matches a download, it goes in `folder`, starts with `preset_id` and downloads right away or
+ * not, each when set. A rule sets at least one; the catch-all only its folder.
  */
 export type FolderRule = { 
 /**
@@ -19,7 +20,18 @@ enabled: boolean,
  */
 conditions: Array<RuleCondition>, 
 /**
- * Where matching downloads go. `{site}` and `{uploader}` become the download's, and a folder that isn't a full
- * path is inside the download folder.
+ * Where matching downloads go, or empty to leave the folder to the rules after it. `{site}` and `{uploader}`
+ * become the download's, and a folder that isn't a full path is inside the download folder. Empty rather than
+ * missing, so a version from before 0.1.35 still reads the rule.
  */
-folder: string, };
+folder: string, 
+/**
+ * The preset matching videos start with, by its ID, or `None` to leave it to the rules after it. A rule that
+ * checks the kind or the preset can't pick one (`can_pick_preset`), since both depend on the preset.
+ */
+presetId: string | null, 
+/**
+ * Whether matching links that Download Right Away covers (copied, or sent with the clipboard shortcut or from a
+ * browser) start once read, or `None` to leave it to the rules after it, then Settings.
+ */
+downloadRightAway: boolean | null, };

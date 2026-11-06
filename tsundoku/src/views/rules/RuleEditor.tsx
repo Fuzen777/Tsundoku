@@ -12,6 +12,7 @@ import { Field, SelectInput, TextInput } from "../../components/Field"
 import { IconButton } from "../../components/IconButton"
 import { PlaceholderButtons } from "../../components/PlaceholderButtons"
 import { StatusMessage } from "../../components/StatusMessage"
+import { SegmentedControl } from "../../components/SegmentedControl"
 import type { ErrorDescription } from "../../errors"
 import { useSupportedSites } from "../../queries"
 import { strings } from "../../strings"
@@ -21,10 +22,20 @@ import {
   FOLDER_PLACEHOLDERS,
   RULE_FIELDS,
   newCondition,
+  canPickPreset,
   operatorsFor,
 } from "./ruleLabels"
 
 const text = strings.rules
+
+/** A rule's Download Right Away: unset follows the rules below it, then Settings. */
+type RightAwayChoice = "unset" | "on" | "off"
+
+const RIGHT_AWAY_CHOICES: readonly { value: RightAwayChoice; label: string }[] = [
+  { value: "unset", label: text.leaveAsIs },
+  { value: "on", label: text.on },
+  { value: "off", label: text.off },
+]
 
 /** The site field's suggestions: every supported site. */
 const SITES_LIST_ID = "rule-sites"
@@ -43,7 +54,8 @@ interface RuleEditorProps {
   onDiscard: () => void
 }
 
-/** One rule's conditions and folder, kept as a draft until Save. The catch-all has no conditions, only a folder. */
+/** One rule's conditions and what it does (its folder, the preset videos start with, Download Right Away), kept as a
+ * draft until Save. The catch-all has no conditions, only a folder. */
 export function RuleEditor({
   draft,
   number,
@@ -102,7 +114,11 @@ export function RuleEditor({
           </div>
         </Field>
       )}
-      <Field label={text.saveIn} hint={text.saveInHint(downloadFolder)} htmlFor="rule-folder">
+      <Field
+        label={text.saveIn}
+        hint={isCatchAll ? text.saveInHint(downloadFolder) : `${text.saveInHint(downloadFolder)} ${text.saveInEmptyHint}`}
+        htmlFor="rule-folder"
+      >
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <TextInput
@@ -123,6 +139,7 @@ export function RuleEditor({
           />
         </div>
       </Field>
+      {!isCatchAll && <RuleActions draft={draft} presets={presets} onChange={update} />}
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" disabled={saving} onClick={onDiscard}>
@@ -138,6 +155,55 @@ export function RuleEditor({
         ))}
       </datalist>
     </Card>
+  )
+}
+
+interface RuleActionsProps {
+  draft: FolderRule
+  presets: readonly Preset[]
+  onChange: (changes: Partial<FolderRule>) => void
+}
+
+/** What a rule does besides picking a folder: the preset matching videos start with, and Download Right Away. A rule
+ * that checks the kind or the preset can't pick the preset, so Start As is off for it, or says why it can't stay. */
+function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
+  const presetAllowed = canPickPreset(draft.conditions)
+  const presetMissing = draft.presetId !== null && !presets.some((preset) => preset.id === draft.presetId)
+  const rightAway: RightAwayChoice =
+    draft.downloadRightAway === null ? "unset" : draft.downloadRightAway ? "on" : "off"
+  return (
+    <>
+      <Field
+        label={text.startAs}
+        hint={presetAllowed ? text.startAsHint : text.startAsUnavailable}
+        error={!presetAllowed && draft.presetId !== null ? text.startAsUnavailable : undefined}
+        htmlFor="rule-preset"
+      >
+        <SelectInput
+          id="rule-preset"
+          className="self-start"
+          value={draft.presetId ?? ""}
+          disabled={!presetAllowed && draft.presetId === null}
+          onChange={(event) => onChange({ presetId: event.target.value || null })}
+        >
+          <option value="">{text.leaveAsIs}</option>
+          {presets.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name}
+            </option>
+          ))}
+          {presetMissing && <option value={draft.presetId ?? ""}>{text.deletedPreset}</option>}
+        </SelectInput>
+      </Field>
+      <Field label={text.downloadRightAway} hint={text.downloadRightAwayHint}>
+        <SegmentedControl
+          label={text.downloadRightAway}
+          options={RIGHT_AWAY_CHOICES}
+          value={rightAway}
+          onChange={(choice) => onChange({ downloadRightAway: choice === "unset" ? null : choice === "on" })}
+        />
+      </Field>
+    </>
   )
 }
 

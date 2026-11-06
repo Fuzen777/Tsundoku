@@ -10,7 +10,7 @@ use tsundoku_core::downloads::{
 };
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
-use tsundoku_core::rules::{Destination, FolderRule, RuleError, RuleManager};
+use tsundoku_core::rules::{Destination, FolderRule, RuleError, RuleManager, RulePreset};
 use tsundoku_core::settings::{DownloadSettings, ListArrangements, SettingsStore};
 
 use crate::queue_status::QueueStatus;
@@ -117,6 +117,17 @@ pub fn download_destination(
 ) -> Destination {
     let preset = preset_id.and_then(|id| presets.get(&id));
     queue.destination(&video, preset.as_ref())
+}
+
+/// The preset a rule picks for a video, and which rule, for the preview card and Pending: `None` when no rule picks
+/// one, and for a post or a file host's files.
+#[tauri::command]
+pub fn rule_preset(
+    manager: Rules<'_>,
+    presets: Presets<'_>,
+    video: VideoInfo,
+) -> Option<RulePreset> {
+    manager.start_preset(&video, |id| presets.get(id).is_some())
 }
 
 #[tauri::command]

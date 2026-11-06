@@ -13,11 +13,12 @@ import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
 import { classes } from "../components/styles"
 import { describeRuleError, type ErrorDescription } from "../errors"
+import { joinDetails } from "../format"
 import { useAppActions } from "../navigation"
 import { useDefaultDownloadFolder, useDownloadOptions, useFolderRules, usePresets } from "../queries"
 import { strings } from "../strings"
 import { RuleEditor } from "./rules/RuleEditor"
-import { CATCH_ALL_RULE_ID, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
+import { CATCH_ALL_RULE_ID, describeActions, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
 
 const text = strings.rules
 
@@ -58,8 +59,9 @@ export function RulesView() {
     setSaving(true)
     try {
       queryClient.setQueryData(queryKeys.folderRules, await saveFolderRules(list))
-      // The preview card says which rule picks a download's folder.
+      // The preview card and Pending say which rule picks a download's folder and preset.
       void queryClient.invalidateQueries({ queryKey: queryKeys.downloadDestination })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rulePreset })
       return true
     } catch (caught) {
       setError(describeRuleError(caught))
@@ -133,7 +135,7 @@ export function RulesView() {
         rule={rule}
         number={numberOf(index)}
         presets={presets}
-        folder={shownFolder(rule.folder, downloadFolder)}
+        folder={rule.folder ? shownFolder(rule.folder, downloadFolder) : null}
         disabled={busy}
         canMoveUp={index > 0 && index < movableCount}
         canMoveDown={index < movableCount - 1}
@@ -186,8 +188,8 @@ interface RuleRowProps {
   rule: FolderRule
   number: number
   presets: readonly Preset[]
-  /** The rule's folder as it will be used. */
-  folder: string
+  /** The rule's folder as it will be used, if it picks one. */
+  folder: string | null
   /** While another rule is edited or the list is saving. */
   disabled: boolean
   canMoveUp: boolean
@@ -198,8 +200,8 @@ interface RuleRowProps {
   onDelete: () => void
 }
 
-/** A rule as a sentence and its folder, with its number, moving, Edit and a menu. The catch-all says it's always
- * last, and can't be deleted. */
+/** A rule as a sentence, its folder and what else it does, with its number, moving, Edit and a menu. The catch-all
+ * says it's always last, and can't be deleted. */
 function RuleRow({
   rule,
   number,
@@ -215,6 +217,7 @@ function RuleRow({
 }: RuleRowProps) {
   const isCatchAll = rule.id === CATCH_ALL_RULE_ID
   const sentence = isCatchAll ? text.sentence.everythingElse : describeConditions(rule.conditions, presets)
+  const actions = describeActions(rule, presets)
   const toggleItem: MenuItem = { label: rule.enabled ? text.turnOff : text.turnOn, onSelect: onToggle }
   const menuItems: MenuItem[] = isCatchAll
     ? [toggleItem]
@@ -232,9 +235,12 @@ function RuleRow({
       </span>
       <div className={classes("flex min-w-0 flex-1 flex-col gap-0.5", !rule.enabled && "opacity-60")}>
         <p className="break-words">{sentence}</p>
-        <p className="truncate font-mono text-xs text-fg-secondary" title={folder}>
-          {folder}
-        </p>
+        {folder && (
+          <p className="truncate font-mono text-xs text-fg-secondary" title={folder}>
+            {folder}
+          </p>
+        )}
+        {actions.length > 0 && <p className="text-xs text-fg-secondary">{joinDetails(actions)}</p>}
       </div>
       {isCatchAll && (
         <span

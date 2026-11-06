@@ -11,7 +11,7 @@ import {
   type ErrorDescription,
 } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
-import { useDownloadDestination, usePresets } from "../queries"
+import { useDownloadDestination, usePresets, useRulePreset } from "../queries"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
@@ -20,6 +20,7 @@ import { DestinationLine } from "./DestinationLine"
 import { FailureFixes } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
+import { PresetRuleLink } from "./PresetRuleLink"
 import { StatusMessage } from "./StatusMessage"
 import { Thumbnail } from "./Thumbnail"
 
@@ -103,15 +104,18 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
   )
 }
 
-/** The preset picker and Download. Downloading again with the preset used before asks first, since the new file
- * replaces the old one. */
+/** The preset picker and Download. The preset a rule picks comes first, with the rule beside it, else the default one.
+ * Downloading again with the preset used before asks first, since the new file replaces the old one. */
 function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
   const { data: presets } = usePresets()
+  const { data: rulePreset, isPending: pickingPreset } = useRulePreset(preview.video)
   const [chosenId, setChosenId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
-  const presetId = chosenId ?? presets?.defaultId ?? null
-  const { data: destination } = useDownloadDestination(preview.video, presetId, presetId !== null)
+  const presetId = chosenId ?? rulePreset?.presetId ?? presets?.defaultId ?? null
+  const pickedByRule = rulePreset && rulePreset.presetId === presetId ? rulePreset.rule : null
+  const ready = presetId !== null && !pickingPreset
+  const { data: destination } = useDownloadDestination(preview.video, presetId, ready)
 
   async function download() {
     const preset = presets?.presets.find((candidate) => candidate.id === presetId)
@@ -144,11 +148,12 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex w-full items-center gap-2">
         <DestinationLine destination={destination} className="flex-1" />
+        <PresetRuleLink rule={pickedByRule} />
         <SelectInput
           aria-label={strings.preview.preset}
           title={strings.preview.preset}
           value={presetId ?? ""}
-          disabled={!presets || adding}
+          disabled={!presets || adding || pickingPreset}
           onChange={(event) => setChosenId(event.target.value)}
         >
           {presets?.presets.map((preset) => (
@@ -157,7 +162,7 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
             </option>
           ))}
         </SelectInput>
-        <Button variant="primary" loading={adding} disabled={!presetId} onClick={() => void download()}>
+        <Button variant="primary" loading={adding} disabled={!ready} onClick={() => void download()}>
           {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
         </Button>
       </div>

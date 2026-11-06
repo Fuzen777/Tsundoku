@@ -27,6 +27,7 @@ import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { RulePreset } from "./bindings/RulePreset"
 import type { ShownError } from "./bindings/ShownError"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolCaches } from "./bindings/ToolCaches"
@@ -58,6 +59,7 @@ export const queryKeys = {
   presetArguments: ["preset-arguments"],
   folderRules: ["folder-rules"],
   downloadDestination: ["download-destination"],
+  rulePreset: ["rule-preset"],
   queue: ["queue"],
   pending: ["pending"],
   listArrangements: ["list-arrangements"],
@@ -334,6 +336,13 @@ export function saveFolderRules(rules: FolderRule[]): Promise<FolderRule[]> {
 export function getDownloadDestination(video: VideoInfo, presetId: string | null): Promise<Destination> {
   if (!isTauri()) return Promise.resolve(standIns.destination(video))
   return invoke<Destination>("download_destination", { video, presetId })
+}
+
+/** The preset a rule picks for a video, and which rule: null when no rule picks one, and for a post or a file host's
+ * files. */
+export function getRulePreset(video: VideoInfo): Promise<RulePreset | null> {
+  if (!isTauri()) return Promise.resolve(standIns.rulePreset(video))
+  return invoke<RulePreset | null>("rule_preset", { video })
 }
 
 /** Where downloads go when no folder is chosen: a Tsundoku folder in Downloads. */

@@ -39,9 +39,35 @@ export function newCondition(field: RuleField, defaultPresetId: string): RuleCon
   }
 }
 
-/** A rule not saved yet: one empty condition on the site, and no folder. Saving gives it its ID. */
+/** A rule not saved yet: one empty condition on the site, and nothing it does yet. Saving gives it its ID. */
 export function newRule(): FolderRule {
-  return { id: "", enabled: true, conditions: [newCondition("site", "")], folder: "" }
+  return {
+    id: "",
+    enabled: true,
+    conditions: [newCondition("site", "")],
+    folder: "",
+    presetId: null,
+    downloadRightAway: null,
+  }
+}
+
+/** Whether a rule with these conditions may pick the preset: not when it checks the kind or the preset, which both
+ * depend on it (`FolderRule::can_pick_preset` in the core). */
+export function canPickPreset(conditions: readonly RuleCondition[]): boolean {
+  return !conditions.some((condition) => condition.field === "kind" || condition.field === "preset")
+}
+
+/** What a rule does besides picking a folder, as short phrases: the preset it starts videos with, and whether
+ * matching links download right away. */
+export function describeActions(rule: FolderRule, presets: readonly Preset[]): string[] {
+  const actions = text.actions
+  const phrases: string[] = []
+  if (rule.presetId !== null) {
+    const preset = presets.find((candidate) => candidate.id === rule.presetId)
+    phrases.push(preset ? actions.startsAs(preset.name) : actions.presetDeleted)
+  }
+  if (rule.downloadRightAway !== null) phrases.push(rule.downloadRightAway ? actions.rightAway : actions.notRightAway)
+  return phrases
 }
 
 /** A rule's conditions as a sentence: "When the site is Instagram and the uploader is “natgeo”". */

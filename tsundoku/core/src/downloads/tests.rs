@@ -899,6 +899,8 @@ fn a_rule_picks_the_folder() {
                         value: "YouTube".to_owned(),
                     }],
                     folder: by_uploader.join("{uploader}").display().to_string(),
+                    preset_id: None,
+                    download_right_away: None,
                 },
             );
         })

@@ -12,6 +12,7 @@ import type { Destination } from "../bindings/Destination"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { PendingLink } from "../bindings/PendingLink"
 import type { PresetsOverview } from "../bindings/PresetsOverview"
+import type { RulePreset } from "../bindings/RulePreset"
 import type { VideoInfo } from "../bindings/VideoInfo"
 import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
@@ -22,6 +23,7 @@ import { FailureFixes } from "../components/FailureFixes"
 import { Checkbox, SelectInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Page } from "../components/Page"
+import { PresetRuleLink } from "../components/PresetRuleLink"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
@@ -33,6 +35,7 @@ import {
   useListArrangement,
   usePendingLinks,
   usePresets,
+  useRulePresets,
   useSaveAddingOptions,
   type DestinationRequest,
 } from "../queries"
@@ -68,8 +71,15 @@ export function PendingView() {
   const { group } = arrangement
   // Where each read link will be saved, to group them by folder. The rows ask the same, so they share the answers.
   const readLinks = links.flatMap((link) => (link.preview ? [{ link, video: link.preview.video }] : []))
+  // The preset a rule picks for each read video. A link follows it, else the one picked for them all, until it gets
+  // its own.
+  const rulePresets = useRulePresets(readLinks.map(({ video }) => video))
+  const rulePresetOf = new Map(readLinks.map(({ link }, index) => [link.id, rulePresets[index] ?? null]))
+  const followedPreset = (link: PendingLink) => rulePresetOf.get(link.id)?.presetId ?? presetId
   const destinations = useDownloadDestinations(
-    readLinks.map(({ link, video }) => destinationRequest(video, link.presetId ?? presetId, group === "destination")),
+    readLinks.map(({ link, video }) =>
+      destinationRequest(video, link.presetId ?? followedPreset(link), group === "destination"),
+    ),
   )
   const destinationOf = new Map(readLinks.map(({ link }, index) => [link.id, destinations[index]]))
   const groups = arrange(
@@ -94,7 +104,7 @@ export function PendingView() {
 
   async function start(toStart: PendingLink[]) {
     if (!presetId || toStart.length === 0) return
-    const replacing = toStart.filter((link) => replacesFile(link, presetId, presets)).length
+    const replacing = toStart.filter((link) => replacesFile(link, followedPreset(link), presets)).length
     if (
       replacing > 0 &&
       !(await confirmWithUser({
@@ -212,7 +222,7 @@ export function PendingView() {
               disabled={!ready}
               onChange={(changes) => void changeArrangement(changes)}
             />
-            <label className="ml-auto flex items-center gap-2 text-fg-secondary">
+            <label className="ml-auto flex items-center gap-2 text-fg-secondary" title={strings.pending.videosStartAsHint}>
               {strings.pending.videosStartAs}
               <SelectInput
                 value={presetId ?? ""}
@@ -237,7 +247,8 @@ export function PendingView() {
               <PendingRow
                 link={link}
                 presets={presets}
-                allPresetId={presetId}
+                allPresetId={followedPreset(link)}
+                rulePreset={rulePresetOf.get(link.id) ?? null}
                 selected={selection.has(link.id)}
                 onSelect={(on) => toggle(link.id, on)}
                 onStart={() => void start([link])}
@@ -254,15 +265,17 @@ export function PendingView() {
 interface PendingRowProps {
   link: PendingLink
   presets: PresetsOverview | undefined
-  /** The preset picked for them all, which a link follows until it gets its own. */
+  /** The preset a link follows until it gets its own: the one a rule picks, else the one picked for them all. */
   allPresetId: string | null
+  /** The preset a rule picks for the link, and which rule. */
+  rulePreset: RulePreset | null
   selected: boolean
   onSelect: (selected: boolean) => void
   onStart: () => void
   busy: boolean
 }
 
-function PendingRow({ link, presets, allPresetId, selected, onSelect, onStart, busy }: PendingRowProps) {
+function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect, onStart, busy }: PendingRowProps) {
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const preview = link.preview
   const video = preview?.video ?? null
@@ -330,22 +343,25 @@ function PendingRow({ link, presets, allPresetId, selected, onSelect, onStart, b
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
         {video && !video.post && !video.files && !preview?.inQueue && (
-          <SelectInput
-            aria-label={strings.pending.preset}
-            title={strings.pending.preset}
-            value={presetId ?? ""}
-            disabled={!presets}
-            onChange={(event) => {
-              const chosen = event.target.value
-              act(() => setPendingPreset(link.id, chosen === allPresetId ? null : chosen))
-            }}
-          >
-            {presets?.presets.map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.name}
-              </option>
-            ))}
-          </SelectInput>
+          <>
+            <PresetRuleLink rule={rulePreset && rulePreset.presetId === presetId ? rulePreset.rule : null} />
+            <SelectInput
+              aria-label={strings.pending.preset}
+              title={strings.pending.preset}
+              value={presetId ?? ""}
+              disabled={!presets}
+              onChange={(event) => {
+                const chosen = event.target.value
+                act(() => setPendingPreset(link.id, chosen === allPresetId ? null : chosen))
+              }}
+            >
+              {presets?.presets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </SelectInput>
+          </>
         )}
         {link.state === "failed" ? (
           <IconButton
@@ -447,10 +463,10 @@ function startsWithAll(link: PendingLink): boolean {
 
 /** Whether starting the link replaces a file: a video downloaded before with the preset it would start with. A post
  * or a file host's link only fetches the files that are missing. */
-function replacesFile(link: PendingLink, allPresetId: string, presets: PresetsOverview | undefined): boolean {
+function replacesFile(link: PendingLink, followedPresetId: string | null, presets: PresetsOverview | undefined): boolean {
   const last = link.preview?.lastDownload
   const video = link.preview?.video
   if (!last || video?.post || video?.files) return false
-  const preset = presets?.presets.find((candidate) => candidate.id === (link.presetId ?? allPresetId))
+  const preset = presets?.presets.find((candidate) => candidate.id === (link.presetId ?? followedPresetId))
   return preset?.name === last.preset
 }

@@ -3,8 +3,9 @@
 use std::sync::Arc;
 
 use rusqlite::params;
+use rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 
-use super::{Entry, PendingState};
+use super::{Entry, PendingState, StartWhenRead};
 use crate::database::Database;
 use crate::downloads::DownloadError;
 use crate::metadata::Fetched;
@@ -37,7 +38,7 @@ impl PendingStore {
                     row.get::<_, bool>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, Option<String>>(6)?,
-                    row.get::<_, bool>(7)?,
+                    row.get::<_, StartWhenRead>(7)?,
                     row.get::<_, i64>(8)?,
                     row.get::<_, bool>(9)?,
                 ))
@@ -147,6 +148,28 @@ fn state_name(state: PendingState) -> &'static str {
         PendingState::Waiting | PendingState::Reading => "waiting",
         PendingState::Ready => "ready",
         PendingState::Failed => "failed",
+    }
+}
+
+/// 0 waits, 1 was started before it was read, 2 was sent and follows Download Right Away. The column was a yes or no
+/// before 0.1.35, so older versions read 2 as started.
+impl ToSql for StartWhenRead {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::from(match self {
+            Self::No => 0_i64,
+            Self::Yes => 1,
+            Self::IfRightAway => 2,
+        }))
+    }
+}
+
+impl FromSql for StartWhenRead {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(match i64::column_result(value)? {
+            1 => Self::Yes,
+            2 => Self::IfRightAway,
+            _ => Self::No,
+        })
     }
 }
 

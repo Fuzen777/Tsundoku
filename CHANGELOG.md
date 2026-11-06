@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.43 · 2026-11-06
+
+### Added
+
+- **Rules that pick the preset too**: a rule can now say how a download starts as well as where it goes, such as "When the site is SoundCloud, start as Audio MP3". Its editor has Start As (a preset, or Leave as Is) and Download Right Away (On, Off or Leave as Is), and a rule does any of the three, so it can leave the folder to a rule below it. The preview card preselects the rule's preset with "Rule 3" beside it, which opens the rules, and Pending's rows, Start All and links that download right away use it too; picking another preset on the card or a row still wins. Download Right Away On or Off in a rule beats Settings for the copied, shortcut and browser links it matches. A rule that checks the kind or the preset can't pick the preset, since both depend on it, and if a rule's preset is deleted the default one is used. Rules saved before work as they did.
+
 ## 0.1.42 · 2026-11-06
 
 ### Added

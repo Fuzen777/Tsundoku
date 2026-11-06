@@ -22,6 +22,7 @@ import {
   getPendingLinks,
   getPresetsOverview,
   getQueueItems,
+  getRulePreset,
   getToolDownloads,
   getToolsNeedSetup,
   getToolsOverview,
@@ -41,6 +42,7 @@ import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListArrangements } from "./bindings/ListArrangements"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
+import type { RulePreset } from "./bindings/RulePreset"
 import type { ToolCaches } from "./bindings/ToolCaches"
 import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
@@ -139,6 +141,8 @@ export function useStorePresets() {
     (overview: PresetsOverview) => {
       queryClient.setQueryData(queryKeys.presets, overview)
       void queryClient.invalidateQueries({ queryKey: queryKeys.downloadDestination })
+      // A rule's preset may have been deleted.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.rulePreset })
     },
     [queryClient],
   )
@@ -177,6 +181,30 @@ function destinationQuery({ video, presetId, enabled }: DestinationRequest) {
 }
 
 function destinationsOf(results: QueryObserverResult<Destination>[]): (Destination | undefined)[] {
+  return results.map((result) => result.data)
+}
+
+/** The preset a rule picks for a video, and which rule: null when none does. Not asked for a post or a file host's
+ * files, which have no preset. */
+export function useRulePreset(video: VideoInfo) {
+  return useQuery(rulePresetQuery(video))
+}
+
+/** The presets rules pick for several videos, in the order asked: undefined until known, null when no rule picks one.
+ * They share their answers with `useRulePreset`. */
+export function useRulePresets(videos: readonly VideoInfo[]): (RulePreset | null | undefined)[] {
+  return useQueries({ queries: videos.map(rulePresetQuery), combine: rulePresetsOf })
+}
+
+function rulePresetQuery(video: VideoInfo) {
+  return {
+    queryKey: [...queryKeys.rulePreset, video.site, video.videoId],
+    queryFn: () => getRulePreset(video),
+    enabled: !video.post && !video.files,
+  }
+}
+
+function rulePresetsOf(results: QueryObserverResult<RulePreset | null>[]): (RulePreset | null | undefined)[] {
   return results.map((result) => result.data)
 }
 

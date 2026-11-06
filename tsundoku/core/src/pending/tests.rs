@@ -499,6 +499,181 @@ fn a_link_started_before_it_is_read_joins_the_queue_once_read() {
     wait_until("it leaves", || test.link(FIRST).is_none());
 }
 
+/// A rule above the catch-all that matches titles containing `title` and does `actions` (a preset, Download Right
+/// Away) without picking a folder.
+fn add_rule(test: &Test, title: &str, actions: rules::FolderRule) {
+    test.settings
+        .update(|settings| {
+            let at = settings.rules.list.len() - 1;
+            settings.rules.list.insert(
+                at,
+                rules::FolderRule {
+                    conditions: vec![rules::RuleCondition {
+                        field: rules::RuleField::Title,
+                        operator: rules::RuleOperator::Contains,
+                        value: title.to_owned(),
+                    }],
+                    ..actions
+                },
+            );
+        })
+        .unwrap();
+}
+
+/// A rule's actions: none, for a test to set the ones it wants.
+fn no_actions() -> rules::FolderRule {
+    rules::FolderRule {
+        id: String::new(),
+        enabled: true,
+        conditions: Vec::new(),
+        folder: String::new(),
+        preset_id: None,
+        download_right_away: None,
+    }
+}
+
+#[test]
+fn a_rule_picks_the_preset_unless_the_link_has_its_own() {
+    let test = Test::new();
+    add_rule(
+        &test,
+        "Title of",
+        rules::FolderRule {
+            preset_id: Some("audio-mp3".to_owned()),
+            ..no_actions()
+        },
+    );
+    test.add(&[FIRST, SECOND]);
+    test.wait_until_read(FIRST);
+    test.wait_until_read(SECOND);
+    let first = test.link(FIRST).unwrap().id;
+    let second = test.link(SECOND).unwrap().id;
+    test.links
+        .set_preset(second, Some("best-audio".to_owned()))
+        .unwrap();
+
+    test.reader.hold(THIRD);
+    test.add(&[THIRD]);
+    wait_until("the third is being read", || {
+        test.state(THIRD) == Some(PendingState::Reading)
+    });
+    let third = test.link(THIRD).unwrap().id;
+    test.links
+        .start(&[first, second, third], "1080p-mp4")
+        .unwrap();
+    test.reader.release(THIRD);
+    wait_until("the third is in the queue", || {
+        test.queued("third").is_some()
+    });
+
+    let preset_of = |id: &str| test.queued(id).unwrap().preset.unwrap().id;
+    assert_eq!(
+        preset_of("first"),
+        "audio-mp3",
+        "the rule's, over Start All's"
+    );
+    assert_eq!(preset_of("second"), "best-audio", "the link's own");
+    assert_eq!(
+        preset_of("third"),
+        "audio-mp3",
+        "started before it was read, the rule's"
+    );
+}
+
+#[test]
+fn a_rules_deleted_preset_is_passed_over() {
+    let test = Test::new();
+    add_rule(
+        &test,
+        "Title of",
+        rules::FolderRule {
+            preset_id: Some("custom-9".to_owned()),
+            ..no_actions()
+        },
+    );
+    test.add(&[FIRST]);
+    test.wait_until_read(FIRST);
+    let id = test.link(FIRST).unwrap().id;
+    test.links.start(&[id], "best-audio").unwrap();
+    assert_eq!(
+        test.queued("first").unwrap().preset.unwrap().id,
+        "best-audio"
+    );
+}
+
+#[test]
+fn a_rule_turns_download_right_away_on_or_off() {
+    let test = Test::new();
+    test.download_right_away(false);
+    add_rule(
+        &test,
+        "first",
+        rules::FolderRule {
+            download_right_away: Some(true),
+            preset_id: Some("best-audio".to_owned()),
+            ..no_actions()
+        },
+    );
+    add_rule(
+        &test,
+        "second",
+        rules::FolderRule {
+            download_right_away: Some(false),
+            ..no_actions()
+        },
+    );
+
+    test.copy(&[FIRST]);
+    wait_until("the copied first is in the queue", || {
+        test.queued("first").is_some()
+    });
+    assert_eq!(
+        test.queued("first").unwrap().preset.unwrap().id,
+        "best-audio",
+        "with the rule's preset"
+    );
+    test.links.add_sent(&[THIRD.to_owned()]).unwrap();
+    test.wait_until_read(THIRD);
+    assert!(test.queued("third").is_none(), "no rule: Settings, off");
+    let pasted = "https://www.youtube.com/watch?v=first-pasted";
+    test.add(&[pasted]);
+    test.wait_until_read(pasted);
+    assert!(
+        test.queued("first-pasted").is_none(),
+        "a link added by hand still waits"
+    );
+
+    test.download_right_away(true);
+    test.links.add_sent(&[SECOND.to_owned()]).unwrap();
+    test.wait_until_read(SECOND);
+    assert!(test.queued("second").is_none(), "the rule turns it off");
+    let post = "https://www.instagram.com/p/Post1/";
+    test.links.add_sent(&[post.to_owned()]).unwrap();
+    wait_until("the sent post is in the queue", || {
+        test.queued("Post1").is_some()
+    });
+}
+
+#[test]
+fn a_sent_link_still_follows_download_right_away_after_a_restart() {
+    let test = Test::new();
+    test.download_right_away(true);
+    test.reader.hold(FIRST);
+    test.links.add_sent(&[FIRST.to_owned()]).unwrap();
+    wait_until("it's being read", || {
+        test.state(FIRST) == Some(PendingState::Reading)
+    });
+    assert!(test.link(FIRST).unwrap().start_when_read);
+    let reopened = test.reopen();
+    assert!(reopened.list()[0].start_when_read);
+    test.download_right_away(false);
+    assert!(
+        !reopened.list()[0].start_when_read,
+        "it goes by Download Right Away, not a start"
+    );
+    test.reader.release(FIRST);
+}
+
 #[test]
 fn a_link_downloaded_before_waits_for_the_user_even_when_started() {
     let test = Test::new();

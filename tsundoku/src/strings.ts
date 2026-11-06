@@ -207,6 +207,7 @@ export const strings = {
     selectAll: "Select All",
     select: "Select",
     videosStartAs: "Videos Start As",
+    videosStartAsHint: "For videos no rule picks a preset for, and that have none of their own.",
     startAll: "Start All",
     startSelected: "Start Selected",
     removeSelected: "Remove Selected",
@@ -263,6 +264,9 @@ export const strings = {
       preset: "Preset's Folder",
       downloadFolder: "Download Folder",
     },
+    /** Beside the preset picker when a rule picked the preset, opening the rules. */
+    presetByRule: (number: number) => `Rule ${number}`,
+    presetByRuleHint: (number: number) => `Rule ${number} picks this preset`,
     inQueue: "This video is already in the queue.",
     overwriteTitle: "Download Again?",
     overwriteMessage: (preset: string) =>
@@ -377,10 +381,11 @@ export const strings = {
   },
   rules: {
     intro:
-      "The first rule that matches a download picks its folder. A preset with a folder of its own comes before the last rule, which takes everything else.",
+      "Rules pick where downloads go, the preset videos start with, and whether copied links download right away. For each, the first rule that matches and picks it decides. A preset with a folder of its own comes before the last rule, which takes everything else.",
     addRule: "Add Rule",
     emptyTitle: "No Rules",
-    emptyBody: "Add a rule to send downloads to a folder of their own, by site, uploader, title, link, kind or preset.",
+    emptyBody:
+      "Add a rule to pick the folder, the preset or Download Right Away for downloads by site, uploader, title, link, kind or preset.",
     otherwise: (folder: string) => `The download folder is ${folder}.`,
     changeDownloadFolder: "Change Download Folder",
     number: (number: number) => `Rule ${number}`,
@@ -414,6 +419,23 @@ export const strings = {
     catchAllWhen: "Every download no rule above takes, unless its preset has a folder of its own.",
     chooseFolder: "Choose Folder…",
     chooseFolderTitle: "Choose Where Matching Downloads Go",
+    saveInEmptyHint: "Leave it empty to let a rule below pick the folder.",
+    startAs: "Start As",
+    startAsHint: "The preset matching videos start with, unless you pick another. Posts and shared files have none.",
+    startAsUnavailable: "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",
+    leaveAsIs: "Leave as Is",
+    deletedPreset: "Deleted Preset",
+    downloadRightAway: "Download Right Away",
+    downloadRightAwayHint:
+      "Whether matching links you copy, or that the clipboard shortcut or your browser send, start downloading once they're read. Leave as Is follows Settings.",
+    on: "On",
+    /** What a rule does besides picking a folder, under its folder in the list. */
+    actions: {
+      startsAs: (preset: string) => `Starts as ${preset}`,
+      presetDeleted: "Starts with the default preset, since the one it picked was deleted",
+      rightAway: "Downloads right away",
+      notRightAway: "Waits to be started",
+    },
     fields: {
       site: "Site",
       uploader: "Uploader",
@@ -470,6 +492,10 @@ export const strings = {
     deleteMessage: (number: number) => `Delete rule ${number}? Downloads already in the queue keep their folder.`,
     errors: {
       emptyFolder: (rule: number) => `Rule ${rule} needs a folder.`,
+      noAction: (rule: number) =>
+        `Rule ${rule} doesn't do anything yet. Pick a folder, a preset to start with or Download Right Away.`,
+      circularPreset: (rule: number) =>
+        `Rule ${rule} checks the kind or the preset, so it can't pick the preset too. Remove that condition, or set Start As to Leave as Is.`,
       emptyValue: (rule: number) => `A condition of rule ${rule} is empty. Fill it in or remove it.`,
       storage: "Couldn't save the rules.",
     },
@@ -622,7 +648,7 @@ export const strings = {
     },
     downloadRightAway: "Download Right Away",
     downloadRightAwayHint:
-      "Links the clipboard watcher, the shortcut or your browser adds start downloading once they're read, with the default preset, instead of waiting in Pending. A link that needs something from you first, such as signing in, still waits there, and so does one downloaded before.",
+      "Links the clipboard watcher, the shortcut or your browser adds start downloading once they're read, with the default preset or the one a rule picks, instead of waiting in Pending. A rule can turn this on or off for the links it matches. A link that needs something from you first, such as signing in, still waits there, and so does one downloaded before.",
     browserBookmark: "Send from Your Browser",
     browserBookmarkHint:
       "A bookmark that sends the page you're on to Pending in one click. Copy its address, add a new bookmark to your browser's toolbar (name it Send to Tsundoku, say) and paste the address as its URL. The first time, your browser asks whether to open Tsundoku.",
