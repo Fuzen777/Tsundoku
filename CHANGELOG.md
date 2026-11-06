@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.28 · 2026-11-06
+
+### Fixed
+
+- **MediaFire's direct links**: the link behind a MediaFire page's Download button (download1234.mediafire.com/…), which download managers' browser add-ons and userscripts copy, now counts as that file's link. Watch Clipboard used to drop it without a word, and pasting it said Tsundoku couldn't download from the site.
+
 ## 0.1.27 · 2026-11-06
 
 ### Changed

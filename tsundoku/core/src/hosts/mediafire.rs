@@ -336,14 +336,16 @@ fn sha256(hash: &str) -> Option<String> {
 }
 
 /// Reads a MediaFire link: "mediafire.com/file/<key>/<name>/file" (or /file_premium/, /download/, /view/, /i/?<key>),
-/// "mediafire.com/?<key>", or "mediafire.com/folder/<key>/<name>".
+/// "mediafire.com/?<key>", "mediafire.com/folder/<key>/<name>", or the Download button's own link,
+/// "download<n>.mediafire.com/<token>/<key>/<name>", which browser add-ons copy. Its token runs out, so only the key
+/// is kept and the file is read as from its page.
 fn parse_link(link: &str) -> Option<MediaFireLink> {
     let after_scheme = link.split_once("://").map_or(link, |(_, rest)| rest);
     let without_fragment = after_scheme.split('#').next().unwrap_or_default();
     let (address, query) = without_fragment
         .split_once('?')
         .unwrap_or((without_fragment, ""));
-    let path = address.split_once('/').map_or("", |(_, path)| path);
+    let (host, path) = address.split_once('/').unwrap_or((address, ""));
     let segments: Vec<&str> = path
         .split('/')
         .filter(|segment| !segment.is_empty())
@@ -354,7 +356,15 @@ fn parse_link(link: &str) -> Option<MediaFireLink> {
                 .chars()
                 .all(|character| character.is_ascii_alphanumeric())
     };
+    let is_download_server = host
+        .to_ascii_lowercase()
+        .strip_suffix(".mediafire.com")
+        .and_then(|server| server.strip_prefix("download"))
+        .is_some_and(|number| number.chars().all(|character| character.is_ascii_digit()));
     match segments.as_slice() {
+        [_token, key, ..] if is_download_server && is_key(key) => {
+            Some(MediaFireLink::File((*key).to_owned()))
+        }
         ["file" | "file_premium" | "download" | "view", key, ..] if is_key(key) => {
             Some(MediaFireLink::File((*key).to_owned()))
         }
@@ -431,6 +441,19 @@ mod tests {
             (
                 "https://www.mediafire.com/folder/ab12cd34ef56g/My_Folder",
                 Some(MediaFireLink::Folder("ab12cd34ef56g".to_owned())),
+            ),
+            (
+                "https://download2390.mediafire.com/gf8b0u3kzm4gV2h1mR7wq0Xc_KdPj/x7k2j9q4zbbwm1n/Pack_v2.zip",
+                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+            ),
+            (
+                "https://DOWNLOAD1.MediaFire.com/abc/x7k2j9q4zbbwm1n/Pack%20v2.7z?a=1",
+                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+            ),
+            ("https://download2390.mediafire.com/abc", None),
+            (
+                "https://www.mediafire.com/abc/x7k2j9q4zbbwm1n/Pack_v2.zip",
+                None,
             ),
             ("https://www.mediafire.com/", None),
             ("https://www.mediafire.com/help/", None),

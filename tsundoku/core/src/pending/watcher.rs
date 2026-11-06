@@ -204,6 +204,12 @@ mod tests {
             [shared],
             "a file host's link is meant to be downloaded"
         );
+        let button = "https://download2390.mediafire.com/gf8b0u3kzm4g/abc123/holiday.zip";
+        assert_eq!(
+            copied_links(button),
+            [button],
+            "so is the link behind its Download button, which browser add-ons copy"
+        );
     }
 
     #[test]
