@@ -6,6 +6,7 @@ mod backup;
 mod downloads;
 mod history;
 mod pending;
+mod queue_status;
 mod tools;
 
 use std::error::Error;
@@ -119,6 +120,9 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         Arc::clone(&settings),
         app.package_info().version.to_string(),
     ));
+    // The taskbar's progress and the tray's tooltip, from the queue's changes.
+    let queue_status = Arc::new(queue_status::QueueStatus::default());
+    app.manage(Arc::clone(&queue_status));
     let queue = DownloadQueue::open(QueueServices {
         database: Arc::clone(&database),
         history: Arc::clone(&history),
@@ -129,6 +133,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         runner: Arc::new(ToolRunner),
         listener: Arc::new(downloads::EventListener {
             app: app.handle().clone(),
+            status: queue_status,
         }),
     })?;
     let pending = PendingLinks::open(PendingServices {

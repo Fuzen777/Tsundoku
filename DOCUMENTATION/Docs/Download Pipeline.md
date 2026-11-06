@@ -49,6 +49,16 @@ stateDiagram-v2
 - Pause All, Resume All and Retry Failed (`stop_all`, `resume_all`, `retry_failed`) do Stop, Resume and Retry for every item in the state each acts on, through the same code as the single-item actions. Pause All holds the waiting items before it ends the running ones, so none starts in between, and leaves an item being cancelled to its cancel.
 - Download Next (`download_next`) moves a waiting item to the front. `queue_items.position` is 0 for a new item and one less than the lowest for a moved one; the queue loads and starts by position, then ID, so the order holds through a restart.
 
+## The Run
+
+The downloads started since the queue was last idle make up its run (`downloads::run::QueueRun`), which the app crate's `queue_status.rs` follows through the queue listener to fill the taskbar button and write the tray icon's tooltip.
+
+- An item waiting or running joins the run; when there's none, that starts one. Items added or resumed meanwhile join it.
+- An item removed from the queue leaves the run, unless it was done (Clear Finished), which still counts. A cancelled one doesn't.
+- The run ends once none of its items is waiting, running or stopped.
+- Its progress is by bytes when every item's size is known (a file host's link from the start, a single file once it downloads, any download once done), otherwise the average of each item's share. Done and failed items count as whole, waiting ones as nothing. yt-dlp reports a fraction per file, so a video downloaded as two files counts its video file as 90% and its audio as the rest; merging and converting keep what the download reached.
+- The taskbar is red (`Error`) once an item failed, yellow (`Paused`) while every item left is stopped, an indeterminate bar while nothing is known yet, and cleared once the run ends. Progress alone updates it at most every 250 ms; changes update it at once. Both are applied on the main thread, which the tray's setters wait for.
+
 ## Arguments
 
 `runner.rs` builds the command, Tsundoku's arguments first so the preset's can change them:

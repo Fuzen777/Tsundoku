@@ -5,6 +5,7 @@
 mod file_runner;
 mod post_runner;
 mod progress;
+mod run;
 mod runner;
 mod store;
 
@@ -18,6 +19,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub use self::run::{QueueRun, RunSummary, TaskbarProgress};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
 use crate::browsers;

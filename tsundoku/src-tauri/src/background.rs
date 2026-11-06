@@ -23,6 +23,7 @@ use tsundoku_core::presets::PresetManager;
 use tsundoku_core::settings::{BackgroundSettings, ClipboardShortcut, SettingsStore};
 
 use crate::focus_main_window;
+use crate::queue_status::QueueStatus;
 
 /// The argument Windows starts Tsundoku with at sign-in (Start with Windows), so it starts in the tray.
 pub const IN_TRAY_ARG: &str = "--in-tray";
@@ -300,8 +301,11 @@ fn show_tray(app: &AppHandle, show: bool) -> tauri::Result<()> {
             &quit,
         ],
     )?;
+    let tooltip = app
+        .try_state::<Arc<QueueStatus>>()
+        .and_then(|status| status.tooltip());
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip(text::TOOLTIP)
+        .tooltip(tooltip.as_deref().unwrap_or(text::TOOLTIP))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| on_menu_item(app, event.id().as_ref()))
@@ -362,6 +366,14 @@ fn pause_all_text(action: Option<WholeQueueAction>) -> &'static str {
     match action {
         Some(WholeQueueAction::ResumeAll) => text::RESUME_ALL,
         Some(WholeQueueAction::PauseAll) | None => text::PAUSE_ALL,
+    }
+}
+
+/// The tray icon's tooltip: where the queue's run stands, or `None` for the app's name. On the main thread, since the
+/// tray waits for it otherwise (`queue_status`).
+pub fn set_tray_tooltip(app: &AppHandle, tooltip: Option<&str>) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(tooltip.unwrap_or(text::TOOLTIP)));
     }
 }
 

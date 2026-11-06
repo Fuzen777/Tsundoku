@@ -454,7 +454,8 @@ fn download_next_moves_a_waiting_download_to_the_front_for_good() {
     test.queue.stop_all().unwrap();
 }
 
-fn item_in(state: QueueState) -> QueueItem {
+/// A queue item in `state`, for tests that only need its state (`run.rs`'s too).
+pub(super) fn item_in(state: QueueState) -> QueueItem {
     QueueItem {
         id: 1,
         video: video("a"),

@@ -13,6 +13,8 @@ use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview
 use tsundoku_core::rules::{Destination, FolderRule, RuleError, RuleManager};
 use tsundoku_core::settings::{DownloadSettings, ListArrangements, SettingsStore};
 
+use crate::queue_status::QueueStatus;
+
 /// Sent with every item when the queue changes.
 const QUEUE_CHANGED_EVENT: &str = "queue-changed";
 /// Sent with a `DownloadProgressEvent` while a download runs.
@@ -22,15 +24,17 @@ type Presets<'a> = State<'a, Arc<PresetManager>>;
 type Queue<'a> = State<'a, Arc<DownloadQueue>>;
 type Rules<'a> = State<'a, Arc<RuleManager>>;
 
-/// Passes the queue's changes on to the UI as events.
+/// Passes the queue's changes on to the UI as events, and to the taskbar and the tray (`QueueStatus`).
 pub struct EventListener {
     pub app: AppHandle,
+    pub status: Arc<QueueStatus>,
 }
 
 impl QueueListener for EventListener {
     fn changed(&self, items: &[QueueItem]) {
         let _ = self.app.emit(QUEUE_CHANGED_EVENT, items);
         crate::background::queue_changed(&self.app, items);
+        self.status.changed(&self.app, items);
     }
 
     fn progress(&self, id: i64, progress: &DownloadProgress) {
@@ -41,6 +45,7 @@ impl QueueListener for EventListener {
                 progress: progress.clone(),
             },
         );
+        self.status.progress(&self.app, id, progress);
     }
 }
 

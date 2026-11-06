@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.39 · 2026-11-06
+
+### Added
+
+- **Progress on the taskbar and in the tray**: Tsundoku's taskbar button fills with the progress of the downloads started since the queue was last idle. It turns yellow while they're all stopped, red once one failed, and moves across while no size is known yet. Hovering the tray icon sums them up, such as "3 downloading · 45% · 1 failed", instead of always reading Tsundoku.
+
 ## 0.1.38 · 2026-11-06
 
 ### Added
