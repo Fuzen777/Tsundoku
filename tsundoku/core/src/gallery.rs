@@ -354,13 +354,15 @@ fn classify_message(kind: &str, message: &str) -> PreviewError {
     if matches!(
         kind.as_str(),
         "AuthRequired" | "AuthorizationError" | "AuthenticationError" | "LoginRequired"
-    ) || mentions(&[
-        "login page",
-        "log in",
-        "logged in",
-        "cookies needed",
-        "sign in",
-    ]) {
+    ) || missing_signed_in_field(&kind, message)
+        || mentions(&[
+            "login page",
+            "log in",
+            "logged in",
+            "cookies needed",
+            "sign in",
+        ])
+    {
         PreviewError::sign_in(detail)
     } else if kind == "NotFoundError"
         || mentions(&[
@@ -375,7 +377,8 @@ fn classify_message(kind: &str, message: &str) -> PreviewError {
         PreviewError::sign_in(detail)
     } else if mentions(&TOO_MANY_REQUESTS_PHRASES) {
         PreviewError::too_many_requests(detail)
-    } else if mentions(&["timed out", "connection"]) {
+    } else if kind != "KeyError" && mentions(&["timed out", "connection"]) {
+        // A KeyError is about the shape of the site's answer, whatever word its key holds.
         PreviewError::Network { detail }
     } else {
         // The site answered in a way gallery-dl didn't expect, which an update of gallery-dl often fixes.
@@ -384,6 +387,18 @@ fn classify_message(kind: &str, message: &str) -> PreviewError {
             detail,
         }
     }
+}
+
+/// What Instagram's API answers gallery-dl without a signed-in account: a `KeyError` about a field whose name ends in
+/// `_connection` (`'xdt_api__v1__feed__user_timeline_graphql_connection'`,
+/// `'PolarisProfilePostsTabContentQuery_connection'`), which only a signed-in answer has. It asks for a sign-in rather
+/// than being taken for a dropped connection, so it's never tried again by itself.
+fn missing_signed_in_field(kind: &str, message: &str) -> bool {
+    kind == "KeyError"
+        && message
+            .trim()
+            .trim_matches(['\'', '"'])
+            .ends_with("_connection")
 }
 
 /// The post's ID on its site: with the site, it identifies the post whatever link led to it. Instagram's shortcode
@@ -842,6 +857,46 @@ mod tests {
         assert!(matches!(
             classify_download_failure(Some(1), &["Traceback (most recent call last):"]),
             PreviewError::Failed { .. }
+        ));
+    }
+
+    #[test]
+    fn instagram_signed_out_asks_for_a_sign_in_not_a_connection() {
+        // What Instagram's API answers without a signed-in account, read from a preview's answer and a download's
+        // error line.
+        let answer = parse_answer(
+            r#"[[-1, {"error": "KeyError", "message": "'xdt_api__v1__feed__user_timeline_graphql_connection'"}]]"#,
+            "https://www.instagram.com/p/DfPQchkG1tg/",
+        );
+        assert!(
+            matches!(answer, Err(PreviewError::SignInRequired { .. })),
+            "{answer:?}"
+        );
+        assert!(matches!(
+            classify_download_failure(
+                Some(4),
+                &["[instagram][error] KeyError: 'PolarisProfilePostsTabContentQuery_connection'"]
+            ),
+            PreviewError::SignInRequired { .. }
+        ));
+
+        // Other KeyErrors stay the site's, even when their key holds the word.
+        for key in ["'data'", "'connection_id'", "'edge_connection_count'"] {
+            assert!(
+                matches!(
+                    classify_message("KeyError", key),
+                    PreviewError::SiteError { .. }
+                ),
+                "{key}"
+            );
+        }
+        // A dropped connection is still one.
+        assert!(matches!(
+            classify_download_failure(
+                Some(4),
+                &["[instagram][error] HttpError: Connection aborted. ('Connection reset by peer')"]
+            ),
+            PreviewError::Network { .. }
         ));
     }
 

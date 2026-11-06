@@ -321,6 +321,24 @@ mod tests {
     }
 
     #[test]
+    fn instagram_signed_out_isnt_tried_again_but_a_dropped_connection_is() {
+        let download_failure =
+            |line: &str| failure(crate::gallery::classify_download_failure(Some(4), &[line]));
+        let mut recovery = Recovery::default();
+        let signed_out = download_failure(
+            "[instagram][error] KeyError: 'xdt_api__v1__feed__user_timeline_graphql_connection'",
+        );
+        assert_eq!(recovery.after_failure(&signed_out, 0), None);
+        let dropped = download_failure(
+            "[instagram][error] HttpError: Connection aborted. ('Connection reset by peer')",
+        );
+        assert!(matches!(
+            recovery.after_failure(&dropped, 0),
+            Some(Hold::Retry { attempt: 1, .. })
+        ));
+    }
+
+    #[test]
     fn a_used_up_limit_waits_longer_each_time_up_to_four_hours() {
         let minutes: Vec<u64> = (1..=6)
             .map(|times| limit_wait(times).as_secs() / 60)

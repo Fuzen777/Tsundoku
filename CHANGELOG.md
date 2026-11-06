@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.61 · 2026-11-06
+
+### Fixed
+
+- **Instagram signed out asks for a sign-in**: an Instagram link Instagram won't show without a signed-in account said "Couldn't reach the site", and its download was tried again and again as if the connection had dropped. It now says Instagram needs you signed in, with the fixes for that (Set Up Cookies, or signing in in your browser), and isn't tried again by itself. A connection that really drops is still tried again.
+
 ## 0.1.60 · 2026-11-06
 
 ### Added
