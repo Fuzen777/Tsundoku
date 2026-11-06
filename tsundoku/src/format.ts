@@ -43,6 +43,13 @@ export function formatDay(secondsSinceEpoch: number, locale?: string, timeZone?:
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone }).format(new Date(secondsSinceEpoch * 1000))
 }
 
+/** A moment's day in the reader's time zone as a file name has it, so files sort by it: "2026-11-06". */
+export function formatFileDate(moment: Date): string {
+  return [moment.getFullYear(), moment.getMonth() + 1, moment.getDate()]
+    .map((part) => String(part).padStart(2, "0"))
+    .join("-")
+}
+
 /** Joins the parts of a line of details that are known, skipping the rest: "jawed · youtube.com". */
 export function joinDetails(parts: readonly (string | null | undefined | false)[]): string {
   return parts.filter(Boolean).join(strings.separator)

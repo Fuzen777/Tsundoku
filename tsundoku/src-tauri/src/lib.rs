@@ -2,6 +2,7 @@
 
 mod appearance;
 mod background;
+mod backup;
 mod downloads;
 mod history;
 mod pending;
@@ -107,6 +108,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
 
     let settings = Arc::new(SettingsStore::open(paths.settings_file())?);
     let database = Arc::new(Database::open(&paths.database_file())?);
+    // For Back Up and Restore, which copy the history out of it and back in.
+    app.manage(Arc::clone(&database));
     let history = Arc::new(History::new(Arc::clone(&database), paths.archive_file())?);
     let presets = Arc::new(PresetManager::new(Arc::clone(&settings)));
     let rules = Arc::new(RuleManager::new(Arc::clone(&settings)));
@@ -245,6 +248,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             open_data_folder,
+            backup::save_backup,
+            backup::restore_backup,
             tools::tools_need_setup,
             tools::first_run_options,
             tools::save_first_run_choices,

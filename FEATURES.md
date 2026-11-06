@@ -30,6 +30,7 @@ type: Features
 - **Sidebar**: Queue, Pending, History, Presets and Rules at the top, Settings at the bottom.
 - **About**: Settings shows the app's version, and "Portable" for a portable copy.
 - **Data folder**: Settings → About shows the data folder's path, with Open Folder to open it in File Explorer.
+- **Back up and restore**: Settings → About's Back Up… saves the settings, presets, folder rules and history, with what was downloaded before so the duplicate warnings keep working, in one zip file named with the day's date ("Tsundoku Backup 2026-11-06.zip"). Restore… loads one on another PC or after a reinstall: after you confirm, it saves the current ones as an automatic backup in the data folder's `backups` folder, so a wrong restore can be undone by restoring that, replaces them with the backup's and restarts Tsundoku. The tools, their caches, the logs, the queue and Pending are never in a backup, and a restore keeps which tools this PC uses and whether Tsundoku starts with Windows; finished downloads leave the queue. A backup from a newer Tsundoku is refused, and a portable copy's download folder beside it goes back to the default in an installed copy. Folders that don't exist on this PC are kept: a download to one fails with "Couldn't create the download folder" until it's changed.
 
 ## Adding a Video or Post
 

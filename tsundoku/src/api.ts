@@ -1,7 +1,7 @@
 import { invoke, isTauri } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { ask, open } from "@tauri-apps/plugin-dialog"
+import { ask, open, save } from "@tauri-apps/plugin-dialog"
 import { openUrl } from "@tauri-apps/plugin-opener"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { check } from "@tauri-apps/plugin-updater"
@@ -105,6 +105,35 @@ export function getAppInfo(): Promise<AppInfo> {
 export async function openDataFolder(): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("open_data_folder")
+}
+
+/** Asks where to save a backup, suggesting `fileName`. Resolves to its path, or null if the user cancelled. */
+export async function chooseBackupDestination(title: string, fileName: string, filterName: string): Promise<string | null> {
+  if (!isTauri()) return null
+  return save({ title, defaultPath: fileName, filters: [{ name: filterName, extensions: ["zip"] }] })
+}
+
+/** Asks for a backup to restore. Resolves to its path, or null if the user cancelled. */
+export async function pickBackup(title: string, filterName: string): Promise<string | null> {
+  if (!isTauri()) return null
+  return open({ title, multiple: false, directory: false, filters: [{ name: filterName, extensions: ["zip"] }] })
+}
+
+/** Saves the settings, presets, folder rules and history in a backup file. Rejects with a BackupError. */
+export async function saveBackup(path: string): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("save_backup", { path })
+}
+
+/**
+ * Replaces the settings, presets, folder rules and history with a backup's, after saving the current ones as an
+ * automatic backup in the data folder, then restarts Tsundoku so everything reads what was restored. Rejects with a
+ * BackupError, having changed nothing.
+ */
+export async function restoreBackup(path: string): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("restore_backup", { path })
+  await relaunch()
 }
 
 /** The window starts hidden (tauri.conf.json); the UI shows it once its first frame is painted. */

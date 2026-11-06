@@ -35,8 +35,8 @@ pub struct Settings {
 impl Settings {
     /// Reads `settings.json`. A file from before folder rules (0.1.10 and older) gets a rule for posts in the posts
     /// folder it chose, if it chose one, above the catch-all. The catch-all is put last, where it has been since 0.1.19,
-    /// and the posts rule before 0.1.30 becomes it.
-    fn from_json(contents: &[u8]) -> Option<Self> {
+    /// and the posts rule before 0.1.30 becomes it. A backup's settings are read the same way.
+    pub(crate) fn from_json(contents: &[u8]) -> Option<Self> {
         let mut settings: Self = serde_json::from_slice(contents).ok()?;
         let earlier: BeforeRules = serde_json::from_slice(contents).unwrap_or_default();
         if earlier.rules.is_none()

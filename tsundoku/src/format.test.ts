@@ -5,9 +5,17 @@ import {
   formatContents,
   formatDay,
   formatDuration,
+  formatFileDate,
   formatSpeed,
   joinDetails,
 } from "./format"
+
+describe("formatFileDate", () => {
+  it("writes the local day with leading zeros", () => {
+    expect(formatFileDate(new Date(2026, 10, 6, 23, 59))).toBe("2026-11-06")
+    expect(formatFileDate(new Date(2027, 0, 1))).toBe("2027-01-01")
+  })
+})
 
 describe("formatBytes", () => {
   it("keeps bytes whole", () => {

@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.37 · 2026-11-06
+
+### Added
+
+- **Back up and restore**: Settings → About's Back Up… saves your settings, presets, folder rules and history in one file, such as Tsundoku Backup 2026-11-06.zip, with what you downloaded before, so the warnings about downloading something again keep working. Restore… loads one on another PC or after a reinstall: it replaces those with the backup's, then restarts Tsundoku. What it replaces is saved first as a backup in the data folder's backups folder, so a wrong restore can be undone. The tools, logs, the queue and Pending aren't in a backup, and a restore keeps which tools this PC uses and whether Tsundoku starts with Windows. A backup from a newer Tsundoku is refused.
+
 ## 0.1.35 · 2026-11-06
 
 ### Added

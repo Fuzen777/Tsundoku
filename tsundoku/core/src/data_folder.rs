@@ -117,6 +117,11 @@ impl DataPaths {
     pub fn logs_folder(&self) -> PathBuf {
         self.root.join("logs")
     }
+
+    /// The automatic backups a restore makes of what it replaces, and the files of a backup while it's made or read.
+    pub fn backups_folder(&self) -> PathBuf {
+        self.root.join("backups")
+    }
 }
 
 #[cfg(test)]

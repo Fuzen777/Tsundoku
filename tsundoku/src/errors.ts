@@ -1,3 +1,4 @@
+import type { BackupError } from "./bindings/BackupError"
 import type { DownloadError } from "./bindings/DownloadError"
 import type { HistoryError } from "./bindings/HistoryError"
 import type { PresetError } from "./bindings/PresetError"
@@ -205,6 +206,23 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.shortcutTaken(error.keys) }
     case "unexpected":
       return { message: strings.errors.unexpected, detail: error.detail }
+  }
+}
+
+export function describeBackupError(error: unknown): ErrorDescription {
+  if (!isCoreError<BackupError>(error)) return unexpected(error)
+  const text = strings.settings.backupErrors
+  switch (error.kind) {
+    case "write":
+      return { message: text.write, detail: error.detail }
+    case "read":
+      return { message: text.read, detail: error.detail }
+    case "notABackup":
+      return { message: text.notABackup, detail: error.detail }
+    case "newerVersion":
+      return { message: text.newerVersion(error.version) }
+    case "storage":
+      return { message: text.storage, detail: error.detail }
   }
 }
 

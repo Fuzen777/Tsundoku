@@ -10,6 +10,7 @@ import { strings } from "../strings"
 import { AddingSection } from "./settings/AddingSection"
 import { AppearanceSection } from "./settings/AppearanceSection"
 import { BackgroundSection } from "./settings/BackgroundSection"
+import { BackupRow } from "./settings/BackupRow"
 import { CookiesSection, DownloadsSection, InstagramSection } from "./settings/DownloadsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { ToolsSection } from "./settings/ToolsSection"
@@ -96,6 +97,7 @@ function AboutSection() {
         {openFolderError !== null && (
           <StatusMessage tone="danger" message={strings.settings.dataFolderOpenFailed} detail={openFolderError} />
         )}
+        <BackupRow />
       </Card>
     </Section>
   )

@@ -693,5 +693,28 @@ export const strings = {
     dataFolderHint: "Settings, the history, the tools and each download's log.",
     openDataFolder: "Open Folder",
     dataFolderOpenFailed: "Couldn't open the data folder.",
+    backup: "Back Up and Restore",
+    backupHint:
+      "Your settings, presets, folder rules and history in one file, to keep them safe or move them to another PC. The tools and logs aren't in it.",
+    backUp: "Back Up…",
+    restore: "Restore…",
+    /** The name a new backup is offered, with today's date as 2026-11-06. */
+    backupFileName: (date: string) => `Tsundoku Backup ${date}.zip`,
+    backupDialogTitle: "Save a Backup",
+    restoreDialogTitle: "Choose a Backup to Restore",
+    backupFilter: "Tsundoku Backups",
+    backupSaved: "Backup saved.",
+    restoreTitle: "Restore This Backup?",
+    restoreMessage:
+      "Your settings, presets, folder rules and history will be replaced by the backup's. They're saved first as a backup in the data folder's backups folder, so restoring that undoes this. Tsundoku then restarts: downloads running now stop, and can be resumed.",
+    restoreConfirm: "Restore",
+    backupErrors: {
+      write: "Couldn't save the backup.",
+      read: "Couldn't open this file.",
+      notABackup: "This file isn't a Tsundoku backup, or it's damaged.",
+      newerVersion: (version: string) =>
+        `This backup was made by Tsundoku ${version}, which is newer than this one. Update Tsundoku, then restore it.`,
+      storage: "Couldn't restore the backup, so nothing was changed.",
+    },
   },
 } as const

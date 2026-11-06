@@ -25,8 +25,8 @@ ts-rs = "12.0.1"
 which = "8"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
-# Job objects, so ending a program also ends everything it started (process.rs), and the clipboard the clipboard
-# watcher reads (clipboard.rs).
+# Job objects, so ending a program also ends everything it started (process.rs), the clipboard the clipboard
+# watcher reads (clipboard.rs), and the local time an automatic backup is named after (backup.rs).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
@@ -36,6 +36,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_JobObjects",
     "Win32_System_Memory",
     "Win32_System_Ole",
+    "Win32_System_SystemInformation",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }
