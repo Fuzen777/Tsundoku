@@ -79,6 +79,8 @@ export const strings = {
     cancel: "Cancel",
     retry: "Retry",
     openLog: "Open Log",
+    copyDetails: "Copy Details",
+    detailsCopied: "Copied",
     openFile: "Open File",
     showInFolder: "Show in Folder",
     progress: (downloaded: string, total: string) => `${downloaded} of ${total}`,
