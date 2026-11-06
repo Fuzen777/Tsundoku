@@ -20,7 +20,7 @@ import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
-import type { HistoryVideo } from "./bindings/HistoryVideo"
+import type { HistoryPage } from "./bindings/HistoryPage"
 import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
@@ -96,6 +96,12 @@ function outsideTauri(): Promise<never> {
 /** In a browser, whether the address has `?name` (`?setup`, `&portable`), to see what the stand-ins don't show. */
 function addressHas(name: string): boolean {
   return new URLSearchParams(window.location.search).has(name)
+}
+
+/** In a browser, the number in `?name=5000`, or null without one. */
+function addressNumber(name: string): number | null {
+  const value = Number(new URLSearchParams(window.location.search).get(name))
+  return Number.isInteger(value) && value > 0 ? value : null
 }
 
 /** In a browser, adding `?portable` to the address shows a portable copy. */
@@ -583,10 +589,11 @@ export async function onCloseRequested(choose: () => Promise<CloseChoice>): Prom
   })
 }
 
-/** The history matching a search, filters and a sort, each video with its latest download. */
-export function searchHistory(query: HistoryQuery): Promise<HistoryVideo[]> {
-  if (!isTauri()) return Promise.resolve(standIns.searchHistory(query))
-  return invoke<HistoryVideo[]>("search_history", { query })
+/** One page of the history matching a search, filters and a sort, from the `offset`th video on, each with its latest
+ * download, and how many match in all. In a browser, `?history=5000` gives that many stand-ins. */
+export function getHistoryPage(query: HistoryQuery, offset: number, limit: number): Promise<HistoryPage> {
+  if (!isTauri()) return Promise.resolve(standIns.historyPage(query, offset, limit, addressNumber("history")))
+  return invoke<HistoryPage>("history_page", { query, offset, limit })
 }
 
 /** The sites and presets in the history, for its filters. */

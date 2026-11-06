@@ -24,13 +24,21 @@ const progress = createLiveStore<number, DownloadProgress>()
 /** Starts listening to the queue's events, and decides what closing the window does: with the tray on, it hides;
  * otherwise, it asks first while downloads run. Called once, before the first render (main.tsx). */
 export function trackQueue(queryClient: QueryClient): void {
+  let doneIds = new Set<number>()
   void onQueueChanged((items) => {
     queryClient.setQueryData(queryKeys.queue, items)
-    // A download that finished is in the history now, and a pending link may now be downloaded already or queued.
-    void queryClient.invalidateQueries({ queryKey: queryKeys.history })
+    // A pending link may now be downloaded already or queued.
     void queryClient.invalidateQueries({ queryKey: queryKeys.pending })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
-    void queryClient.invalidateQueries({ queryKey: queryKeys.videoDownloads })
+    // A download that finished is in the history now. Only then is the history read again, since an open History
+    // reads every page it has shown.
+    const done = new Set(items.filter((item) => item.state === "done").map((item) => item.id))
+    const finished = [...done].some((id) => !doneIds.has(id))
+    doneIds = done
+    if (finished) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.history })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.videoDownloads })
+    }
     for (const item of items) {
       if (item.progress) {
         progress.set(item.id, item.progress)

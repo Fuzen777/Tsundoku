@@ -275,7 +275,7 @@ pub fn run() {
             history::cancel_preview,
             history::open_download,
             history::show_download_in_folder,
-            history::search_history,
+            history::history_page,
             history::history_filters,
             history::video_downloads,
             history::forget_video,

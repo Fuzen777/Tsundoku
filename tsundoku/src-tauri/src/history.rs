@@ -6,7 +6,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
-    History, HistoryError, HistoryFile, HistoryFilters, HistoryQuery, HistoryVideo, PastDownload,
+    History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, PastDownload,
 };
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::preview::{PreviewService, VideoPreview};
@@ -109,15 +109,17 @@ pub fn show_download_file_in_folder(
     app.opener().reveal_item_in_dir(path).map_err(open_failed)
 }
 
-/// The history matching the view's search, filters and sort. Off the async runtime's threads, since it checks each
-/// file still exists.
+/// One page of the history matching the view's search, filters and sort, from the `offset`th video on, with how many
+/// match in all. Off the async runtime's threads, since it checks each file on the page still exists.
 #[tauri::command]
-pub async fn search_history(
+pub async fn history_page(
     history: State<'_, Arc<History>>,
     query: HistoryQuery,
-) -> Result<Vec<HistoryVideo>, HistoryError> {
+    offset: u32,
+    limit: u32,
+) -> Result<HistoryPage, HistoryError> {
     let history = Arc::clone(&history);
-    tauri::async_runtime::spawn_blocking(move || history.search(&query))
+    tauri::async_runtime::spawn_blocking(move || history.page(&query, offset, limit))
         .await
         .unwrap_or_else(|error| {
             Err(HistoryError::Database {

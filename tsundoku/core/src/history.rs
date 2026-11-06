@@ -4,6 +4,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -118,6 +119,16 @@ pub struct HistoryVideo {
     pub download_count: u32,
 }
 
+/// One page of the history view's results.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HistoryPage {
+    pub videos: Vec<HistoryVideo>,
+    /// How many videos match the query, across every page.
+    pub total: u32,
+}
+
 /// What the history can be filtered by.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -195,6 +206,10 @@ const DOWNLOAD_COLUMNS: &str =
 const DOWNLOAD_OFFSET: usize = 16;
 /// How many columns `DOWNLOAD_COLUMNS` has.
 const DOWNLOAD_WIDTH: usize = 7;
+/// Each video (`v`) with its latest download (`d`), for the history view.
+const VIDEOS_WITH_LATEST_DOWNLOAD: &str = "FROM videos v
+    JOIN downloads d ON d.id =
+        (SELECT l.id FROM downloads l WHERE l.video = v.id ORDER BY l.downloaded_at DESC, l.id DESC LIMIT 1)";
 
 pub struct History {
     database: Arc<Database>,
@@ -277,8 +292,9 @@ impl History {
         site: &str,
         video_id: &str,
     ) -> Result<Option<PastDownload>, HistoryError> {
-        let connection = self.database.lock();
-        let download = connection
+        let download = self
+            .database
+            .lock()
             .query_row(
                 &format!(
                     "SELECT {DOWNLOAD_COLUMNS} FROM downloads d JOIN videos v ON v.id = d.video
@@ -288,7 +304,7 @@ impl History {
                 |row| download_from_row(row, 0),
             )
             .optional()?;
-        Ok(download)
+        Ok(download.map(PastDownload::with_file_checked))
     }
 
     /// The downloads from `site` (as the history names it, "instagram") that finished since `since`, in seconds since
@@ -323,73 +339,72 @@ impl History {
 
     /// Every download of a video in the history, newest first.
     pub fn downloads_of(&self, video_row: i64) -> Result<Vec<PastDownload>, HistoryError> {
-        let connection = self.database.lock();
-        let mut statement = connection.prepare(&format!(
-            "SELECT {DOWNLOAD_COLUMNS} FROM downloads d WHERE d.video = ?1 ORDER BY d.downloaded_at DESC, d.id DESC"
-        ))?;
-        let downloads = statement
-            .query_map([video_row], |row| download_from_row(row, 0))?
-            .collect::<Result<_, _>>()?;
-        Ok(downloads)
+        let downloads: Vec<PastDownload> = {
+            let connection = self.database.lock();
+            let mut statement = connection.prepare(&format!(
+                "SELECT {DOWNLOAD_COLUMNS} FROM downloads d WHERE d.video = ?1 ORDER BY d.downloaded_at DESC, d.id DESC"
+            ))?;
+            statement
+                .query_map([video_row], |row| download_from_row(row, 0))?
+                .collect::<Result<_, _>>()?
+        };
+        Ok(downloads
+            .into_iter()
+            .map(PastDownload::with_file_checked)
+            .collect())
     }
 
-    /// The videos matching the query, each with its latest download.
-    pub fn search(&self, query: &HistoryQuery) -> Result<Vec<HistoryVideo>, HistoryError> {
-        let mut conditions = Vec::new();
-        let mut values = Vec::new();
-        for word in query
-            .search
-            .as_deref()
-            .unwrap_or_default()
-            .split_whitespace()
-        {
-            values.push(format!("%{}%", escape_like(word)));
-            let index = values.len();
-            conditions.push(format!(
-                "(v.title LIKE ?{index} ESCAPE '\\' OR v.uploader LIKE ?{index} ESCAPE '\\')"
-            ));
-        }
-        if let Some(site) = &query.site {
-            values.push(site.clone());
-            conditions.push(format!("v.site = ?{}", values.len()));
-        }
-        if let Some(preset) = &query.preset {
-            values.push(preset.clone());
-            conditions.push(format!(
-                "EXISTS (SELECT 1 FROM downloads p WHERE p.video = v.id AND p.preset = ?{})",
-                values.len()
-            ));
-        }
-        let filter = if conditions.is_empty() {
-            String::new()
-        } else {
-            format!("WHERE {}", conditions.join(" AND "))
-        };
+    /// One page of the videos matching the query, each with its latest download, from the `offset`th on, and how
+    /// many match in all. Whether each file is still there is checked for this page's videos only, once the database
+    /// is free again.
+    pub fn page(
+        &self,
+        query: &HistoryQuery,
+        offset: u32,
+        limit: u32,
+    ) -> Result<HistoryPage, HistoryError> {
+        let (filter, mut values) = filter_of(query);
         let direction = if query.descending { "DESC" } else { "ASC" };
-
-        let connection = self.database.lock();
-        let mut statement = connection.prepare(&format!(
-            "SELECT {VIDEO_COLUMNS}, {DOWNLOAD_COLUMNS},
-                (SELECT COUNT(*) FROM downloads c WHERE c.video = v.id)
-            FROM videos v
-            JOIN downloads d ON d.id =
-                (SELECT l.id FROM downloads l WHERE l.video = v.id ORDER BY l.downloaded_at DESC, l.id DESC LIMIT 1)
-            {filter}
-            ORDER BY {column} {direction}, d.downloaded_at DESC, v.id DESC",
-            column = query.sort.column(),
-        ))?;
-        let videos = statement
-            .query_map(params_from_iter(values), |row| {
-                Ok(HistoryVideo {
-                    id: row.get(0)?,
-                    video: video_from_row(row)?,
-                    first_downloaded_at: row.get(11)?,
-                    last_download: download_from_row(row, DOWNLOAD_OFFSET)?,
-                    download_count: row.get(DOWNLOAD_OFFSET + DOWNLOAD_WIDTH)?,
-                })
-            })?
-            .collect::<Result<_, _>>()?;
-        Ok(videos)
+        let (videos, total): (Vec<HistoryVideo>, u32) = {
+            let connection = self.database.lock();
+            let total = connection.query_row(
+                &format!("SELECT COUNT(*) {VIDEOS_WITH_LATEST_DOWNLOAD} {filter}"),
+                params_from_iter(&values),
+                |row| row.get(0),
+            )?;
+            values.push(Value::Integer(limit.into()));
+            values.push(Value::Integer(offset.into()));
+            let mut statement = connection.prepare(&format!(
+                "SELECT {VIDEO_COLUMNS}, {DOWNLOAD_COLUMNS}, (SELECT COUNT(*) FROM downloads c WHERE c.video = v.id)
+                {VIDEOS_WITH_LATEST_DOWNLOAD}
+                {filter}
+                ORDER BY {column} {direction}, d.downloaded_at DESC, v.id DESC
+                LIMIT ?{limit} OFFSET ?{offset}",
+                column = query.sort.column(),
+                limit = values.len() - 1,
+                offset = values.len(),
+            ))?;
+            let videos = statement
+                .query_map(params_from_iter(&values), |row| {
+                    Ok(HistoryVideo {
+                        id: row.get(0)?,
+                        video: video_from_row(row)?,
+                        first_downloaded_at: row.get(11)?,
+                        last_download: download_from_row(row, DOWNLOAD_OFFSET)?,
+                        download_count: row.get(DOWNLOAD_OFFSET + DOWNLOAD_WIDTH)?,
+                    })
+                })?
+                .collect::<Result<_, _>>()?;
+            (videos, total)
+        };
+        let videos = videos
+            .into_iter()
+            .map(|video| HistoryVideo {
+                last_download: video.last_download.with_file_checked(),
+                ..video
+            })
+            .collect();
+        Ok(HistoryPage { videos, total })
     }
 
     /// The sites and presets in the history, for the history view's filters.
@@ -544,14 +559,59 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
     })
 }
 
-/// Reads `DOWNLOAD_COLUMNS` starting at column `offset`.
+/// The WHERE clause for a query's search and filters over `VIDEOS_WITH_LATEST_DOWNLOAD`, empty for none, and the
+/// values its `?1`, `?2`… stand for.
+fn filter_of(query: &HistoryQuery) -> (String, Vec<Value>) {
+    let mut conditions = Vec::new();
+    let mut values = Vec::new();
+    for word in query
+        .search
+        .as_deref()
+        .unwrap_or_default()
+        .split_whitespace()
+    {
+        values.push(Value::Text(format!("%{}%", escape_like(word))));
+        let index = values.len();
+        conditions.push(format!(
+            "(v.title LIKE ?{index} ESCAPE '\\' OR v.uploader LIKE ?{index} ESCAPE '\\')"
+        ));
+    }
+    if let Some(site) = &query.site {
+        values.push(Value::Text(site.clone()));
+        conditions.push(format!("v.site = ?{}", values.len()));
+    }
+    if let Some(preset) = &query.preset {
+        values.push(Value::Text(preset.clone()));
+        conditions.push(format!(
+            "EXISTS (SELECT 1 FROM downloads p WHERE p.video = v.id AND p.preset = ?{})",
+            values.len()
+        ));
+    }
+    let filter = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+    (filter, values)
+}
+
+impl PastDownload {
+    /// With `file_exists` checked on the disk: done once the database is free, since the disk can be slow.
+    fn with_file_checked(self) -> Self {
+        Self {
+            file_exists: Path::new(&self.file_path).exists(),
+            ..self
+        }
+    }
+}
+
+/// Reads `DOWNLOAD_COLUMNS` starting at column `offset`. Its `file_exists` is false until `with_file_checked`.
 fn download_from_row(row: &Row, offset: usize) -> rusqlite::Result<PastDownload> {
-    let file_path: String = row.get(offset + 2)?;
     Ok(PastDownload {
         id: row.get(offset)?,
         preset: row.get(offset + 1)?,
-        file_exists: Path::new(&file_path).exists(),
-        file_path,
+        file_exists: false,
+        file_path: row.get(offset + 2)?,
         file_size: row.get(offset + 3)?,
         format: row.get(offset + 4)?,
         downloaded_at: row.get(offset + 5)?,
@@ -572,6 +632,13 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    impl History {
+        /// Every video matching the query, as one page.
+        fn search(&self, query: &HistoryQuery) -> Result<Vec<HistoryVideo>, HistoryError> {
+            Ok(self.page(query, 0, u32::MAX)?.videos)
+        }
+    }
 
     struct TestHistory {
         history: History,
@@ -1185,6 +1252,239 @@ mod tests {
         assert_eq!(found[0].video.post, None);
         assert_eq!(found[0].last_download.file_count, 2);
         assert_eq!(test.history.files_of(id).unwrap().len(), 2);
+    }
+
+    /// Fills a history with `count` videos, a third of them Instagram posts of 1 to 8 files and a tenth of the rest
+    /// downloaded twice, over three years. Their files are made in `files_folder`, except one in ten, which is missing.
+    fn seed(history: &History, files_folder: &Path, count: usize) {
+        const WORDS: [&str; 16] = [
+            "zoo", "cats", "tour", "live", "remix", "trailer", "review", "guide", "music",
+            "travel", "sunset", "city", "night", "cooking", "dance", "story",
+        ];
+        let mut connection = history.database.lock();
+        let transaction = connection.transaction().unwrap();
+        for index in 0..count {
+            let is_post = index % 3 == 0;
+            let (site, site_name) = if is_post {
+                ("instagram", "Instagram")
+            } else {
+                [
+                    ("youtube", "YouTube"),
+                    ("vimeo", "Vimeo"),
+                    ("soundcloud", "SoundCloud"),
+                ][index % 3]
+            };
+            let title = format!(
+                "{} {} {} #{index}",
+                WORDS[index % 16],
+                WORDS[(index / 16) % 16],
+                WORDS[(index / 7) % 16]
+            );
+            let downloaded_at = 1_700_000_000 + (index as i64 * 18_917) % 94_000_000;
+            let video_row: i64 = transaction
+                .query_row(
+                    "INSERT INTO videos (site, site_name, video_id, url, title, uploader, duration_seconds,
+                        upload_date, thumbnail_url, best_height, first_downloaded_at, post_images, post_videos)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, '2024-01-01', ?8, ?9, ?10, ?11, ?12) RETURNING id",
+                    params![
+                        site,
+                        site_name,
+                        format!("id{index}"),
+                        format!("https://{site}.com/id{index}"),
+                        title,
+                        format!("uploader{}", index % 200),
+                        (!is_post).then_some(30.0 + (index % 600) as f64),
+                        format!("https://example.com/{index}.jpg"),
+                        (!is_post).then_some(1080),
+                        downloaded_at,
+                        is_post.then_some(1 + index as i64 % 5),
+                        is_post.then_some(index as i64 % 3),
+                    ],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            let file_count = if is_post { 1 + index % 8 } else { 1 };
+            let downloads = if !is_post && index % 10 == 1 { 2 } else { 1 };
+            for download in 0..downloads {
+                let paths: Vec<String> = (0..file_count)
+                    .map(|file| {
+                        files_folder
+                            .join(format!("{index}-{download}-{file}.bin"))
+                            .display()
+                            .to_string()
+                    })
+                    .collect();
+                if index % 10 != 7 {
+                    for path in &paths {
+                        fs::write(path, b"x").unwrap();
+                    }
+                }
+                let download_id: i64 = transaction
+                    .query_row(
+                        "INSERT INTO downloads (video, preset, file_path, file_size, format, downloaded_at)
+                        VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id",
+                        params![
+                            video_row,
+                            if is_post { "" } else if download == 0 { "Best Video" } else { "Best Audio" },
+                            paths[0],
+                            1_000_000 + index as i64,
+                            (!is_post).then_some("1080p · avc1 + mp4a"),
+                            downloaded_at + download as i64 * 1000,
+                        ],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                if is_post {
+                    for (position, path) in paths.iter().enumerate() {
+                        transaction
+                            .execute(
+                                "INSERT INTO download_files (download, position, file_path, file_size)
+                                VALUES (?1, ?2, ?3, 1)",
+                                params![download_id, position as i64, path],
+                            )
+                            .unwrap();
+                    }
+                }
+            }
+        }
+        transaction.commit().unwrap();
+    }
+
+    /// The median time of `runs` calls, in milliseconds.
+    fn median_milliseconds(runs: usize, mut action: impl FnMut()) -> f64 {
+        let mut times: Vec<f64> = (0..runs)
+            .map(|_| {
+                let started = std::time::Instant::now();
+                action();
+                started.elapsed().as_secs_f64() * 1000.0
+            })
+            .collect();
+        times.sort_by(f64::total_cmp);
+        times[runs / 2]
+    }
+
+    /// How long the history view's queries take with 5,000 videos. Run with
+    /// `cargo test -p tsundoku-core --release history::tests::measure_at_scale -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a measurement, not a check"]
+    fn measure_at_scale() {
+        let test = TestHistory::new();
+        let files = tempfile::tempdir().unwrap();
+        seed(&test.history, files.path(), 5000);
+        let query = |search: Option<&str>, sort: HistorySort| HistoryQuery {
+            search: search.map(str::to_owned),
+            sort,
+            descending: true,
+            ..HistoryQuery::default()
+        };
+        for (name, query) in [
+            (
+                "everything, newest first",
+                query(None, HistorySort::Downloaded),
+            ),
+            (
+                "search \"zoo\"",
+                query(Some("zoo"), HistorySort::Downloaded),
+            ),
+            (
+                "search \"zoo cats\"",
+                query(Some("zoo cats"), HistorySort::Downloaded),
+            ),
+            ("everything, by title", query(None, HistorySort::Title)),
+            ("everything, by size", query(None, HistorySort::Size)),
+        ] {
+            let mut found = 0;
+            let whole =
+                median_milliseconds(9, || found = test.history.search(&query).unwrap().len());
+            let first_page = median_milliseconds(9, || {
+                test.history.page(&query, 0, 100).unwrap();
+            });
+            let last_page = median_milliseconds(9, || {
+                test.history
+                    .page(&query, found.saturating_sub(100) as u32, 100)
+                    .unwrap();
+            });
+            println!(
+                "{name}: {found} videos; all at once {whole:.1} ms, first page {first_page:.1} ms, last page {last_page:.1} ms"
+            );
+        }
+    }
+
+    #[test]
+    fn pages_through_the_history_in_order_with_its_total() {
+        let test = TestHistory::new();
+        // Equal titles and dates, so the order rests on the video's row ID across page boundaries.
+        for index in 0..7 {
+            test.history
+                .record(
+                    &video("youtube", &index.to_string(), "Same", "x", 1.0),
+                    &download("p", 1, 1),
+                )
+                .unwrap();
+        }
+        test.history
+            .record(
+                &video("vimeo", "other", "Other", "x", 1.0),
+                &download("p", 1, 1),
+            )
+            .unwrap();
+        let query = HistoryQuery {
+            site: Some("youtube".to_owned()),
+            sort: HistorySort::Title,
+            ..HistoryQuery::default()
+        };
+        let whole: Vec<i64> = test
+            .history
+            .search(&query)
+            .unwrap()
+            .iter()
+            .map(|video| video.id)
+            .collect();
+        let mut paged = Vec::new();
+        for offset in [0, 3, 6] {
+            let page = test.history.page(&query, offset, 3).unwrap();
+            assert_eq!(page.total, 7, "the total counts every page, filtered");
+            paged.extend(page.videos.iter().map(|video| video.id));
+        }
+        assert_eq!(paged, whole, "pages neither repeat nor skip a video");
+        let past_the_end = test.history.page(&query, 9, 3).unwrap();
+        assert!(past_the_end.videos.is_empty());
+        assert_eq!(past_the_end.total, 7);
+    }
+
+    #[test]
+    fn checks_whether_a_pages_files_are_still_there() {
+        let test = TestHistory::new();
+        let file = test.folder.path().join("here.mkv");
+        fs::write(&file, b"video").unwrap();
+        let mut here = download("p", 2, 5);
+        here.file_path = file.display().to_string();
+        test.history
+            .record(&video("youtube", "here", "Here", "x", 1.0), &here)
+            .unwrap();
+        test.history
+            .record(
+                &video("youtube", "gone", "Gone", "x", 1.0),
+                &download("p", 1, 5),
+            )
+            .unwrap();
+        let page = test
+            .history
+            .page(
+                &HistoryQuery {
+                    sort: HistorySort::Title,
+                    ..HistoryQuery::default()
+                },
+                0,
+                10,
+            )
+            .unwrap();
+        let exists: Vec<_> = page
+            .videos
+            .iter()
+            .map(|video| (video.video.title.as_str(), video.last_download.file_exists))
+            .collect();
+        assert_eq!(exists, [("Gone", false), ("Here", true)]);
     }
 
     #[test]

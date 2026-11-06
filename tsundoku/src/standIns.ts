@@ -9,6 +9,7 @@ import type { FirstRunOptions } from "./bindings/FirstRunOptions"
 import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
+import type { HistoryPage } from "./bindings/HistoryPage"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
 import type { ListArrangements } from "./bindings/ListArrangements"
@@ -151,6 +152,17 @@ const historyStandIns: HistoryVideo[] = [
   historyStandIn(1, "A Song Saved as MP3", "Audio MP3", 1, false),
 ]
 
+/** A long history, to check how the view copes: a third of it posts, one in ten with its file missing. */
+function manyHistoryStandIns(count: number): HistoryVideo[] {
+  return Array.from({ length: count }, (_, index) => {
+    const id = index + 100
+    const video = historyStandIn(id, `Video number ${id}`, "Best Video", index % 10 === 1 ? 2 : 1, index % 10 !== 7)
+    return index % 3 === 0
+      ? { ...postHistoryStandIn, id, videoId: `post${id}`, title: `Post number ${id}`, lastDownload: video.lastDownload }
+      : video
+  })
+}
+
 const pastDownloadStandIns: PastDownload[] = [
   historyStandIns[0].lastDownload,
   { ...historyStandIns[0].lastDownload, id: 9, preset: "Best Audio", format: "opus", downloadedAt: 1_792_800_000 },
@@ -283,9 +295,13 @@ export const standIns = {
     defaultFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   } satisfies PresetsOverview,
   presetArguments: ["-f", "bv*+ba/b", "--merge-output-format", "mkv", "-o", "%(title).150B [%(id)s].%(ext)s"],
-  /** The history, searched by title only. */
-  searchHistory: (query: HistoryQuery): HistoryVideo[] =>
-    historyStandIns.filter((video) => video.title.toLowerCase().includes((query.search ?? "").toLowerCase())),
+  /** A page of the history, searched by title only: a few videos, or `count` of them. */
+  historyPage: (query: HistoryQuery, offset: number, limit: number, count: number | null): HistoryPage => {
+    const found = (count === null ? historyStandIns : manyHistoryStandIns(count)).filter((video) =>
+      video.title.toLowerCase().includes((query.search ?? "").toLowerCase()),
+    )
+    return { videos: found.slice(offset, offset + limit), total: found.length }
+  },
   historyFilters: {
     sites: [{ site: "youtube", siteName: "youtube.com" }],
     presets: ["1080p MP4", "Audio MP3", "Best Audio", "Best Video"],

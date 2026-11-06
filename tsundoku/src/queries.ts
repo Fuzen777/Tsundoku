@@ -1,5 +1,12 @@
 import { useCallback, useState } from "react"
-import { keepPreviousData, useQueries, useQuery, useQueryClient, type QueryObserverResult } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type QueryObserverResult,
+} from "@tanstack/react-query"
 import {
   checkForAppUpdate,
   detectTools,
@@ -16,8 +23,8 @@ import {
   getListArrangements,
   getSupportedSites,
   getHistoryFilters,
+  getHistoryPage,
   getVideoDownloads,
-  searchHistory,
   getPresetArguments,
   getPendingLinks,
   getPresetsOverview,
@@ -253,11 +260,20 @@ export function useListArrangement(list: keyof ListArrangements) {
   return { arrangement: arrangements?.[list] ?? STORED_ORDER, ready: arrangements !== undefined, change, error }
 }
 
-/** The history view's results. Refetched when a download finishes or a video is forgotten (queueEvents.ts). */
+/** How many videos the history view reads at a time. */
+const HISTORY_PAGE_SIZE = 100
+
+/** The history view's results, read a page at a time as the list scrolls, the last results kept while new ones load.
+ * Refetched when a download finishes or a video is forgotten (queueEvents.ts). */
 export function useHistory(query: HistoryQuery) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: [...queryKeys.history, query],
-    queryFn: () => searchHistory(query),
+    queryFn: ({ pageParam }) => getHistoryPage(query, pageParam, HISTORY_PAGE_SIZE),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, pages) => {
+      const loaded = pages.reduce((count, page) => count + page.videos.length, 0)
+      return lastPage.videos.length === HISTORY_PAGE_SIZE && loaded < lastPage.total ? loaded : undefined
+    },
     placeholderData: keepPreviousData,
   })
 }

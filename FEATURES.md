@@ -124,7 +124,8 @@ type: Features
 ## History
 
 - **History view**: every video downloaded, newest first: thumbnail, title, uploader, site, length, and its latest download's preset, date and size.
-- **Search, filters, sorting**: search titles and uploaders word by word; filter by site and by preset; sort by date downloaded, title, uploader, site, length, size or preset, either way.
+- **Search, filters, sorting**: search titles and uploaders word by word, as soon as typing pauses; filter by site and by preset; sort by date downloaded, title, uploader, site, length, size or preset, either way.
+- **Quick at any size**: the history reads more as you scroll and draws only what's on screen, so opening it, searching and scrolling stay instant with thousands of downloads. A row you expanded is still expanded when you scroll back to it.
 - **Several downloads**: a video downloaded more than once (as video, then as audio) expands to list each download, with its format, path, Open File and Show in Folder.
 - **Posts**: a downloaded post shows what it held ("2 images, 1 video") and expands to list every file it saved, each with its size, Open File and Show in Folder, or File Missing.
 - **Actions**: Open File, Show in Folder and Open Source Page, and in its menu Download Again (the link goes in the add bar and its preview opens) and Forget.

@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.50 · 2026-11-06
+
+### Changed
+
+- **A history that stays quick at thousands of downloads**: History now reads your downloads a page at a time as you scroll and draws only the rows on screen, so it opens, searches and scrolls at once however long it gets: with 5,000 downloads it opens in about a fiftieth of a second instead of a second and a half. A search runs as soon as you pause typing, and a row you expanded is still expanded when you scroll back to it.
+
 ## 0.1.49 · 2026-11-06
 
 ### Added
