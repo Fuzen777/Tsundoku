@@ -39,7 +39,7 @@ title: AGENTS
 | `Scripts\Dev.cmd` | Starts the app with `tauri dev`: the UI reloads live, and Rust changes rebuild and restart the app |
 | `Scripts\Check.cmd` | `cargo fmt --check`, Clippy with warnings as errors, `cargo test` (which also regenerates `src/bindings`), then `tsc`, ESLint with no warnings allowed, and Vitest. Run it before every commit. |
 | `Scripts\Build.cmd` | Builds the release app and its NSIS installer |
-| `Scripts\Build-Portable.cmd` | Builds the release app without an installer and puts it, with `.portable.txt`, in a portable copy's folder: the first argument, or `portable` beside the Rust build folder (`D:\Dev\tsundoku\portable` on this PC). The copy's `data` folder is kept. Close the copy first |
+| `Scripts\Build-Portable.cmd` | Builds the release app without an installer and puts it, with `.portable.txt`, in a portable copy's folder: the first argument, or `portable` beside the Rust build folder (`D:\Dev\tsundoku\portable` on this PC). The copy's `data` folder is kept. A copy running from that folder is quit (its tools stop with it) and started again once replaced |
 | `Scripts\Capture-Fixtures.ps1` | Runs yt-dlp on the test links and saves its answers, trimmed, as the metadata tests' fixtures. Run it when yt-dlp's output changes; it needs the network |
 
 - First setup: `npm install` in `tsundoku/`. Needs Rust (MSVC toolchain), Node and Visual Studio's C++ build tools.
