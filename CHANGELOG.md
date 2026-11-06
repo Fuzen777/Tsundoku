@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.22 · 2026-11-06
+
+### Fixed
+
+- **Back from the tools kept the first screen's picks**: going back to "Where Things Go" showed it blank again. It now shows what was picked, also after closing Tsundoku before the tools were set up.
+
 ## 0.1.21 · 2026-11-06
 
 ### New

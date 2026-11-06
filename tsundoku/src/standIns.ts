@@ -223,6 +223,7 @@ export const standIns = {
       cacheFolder: String.raw`${dataFolder}\cache`,
       defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
       besideAppFolder: portable ? String.raw`E:\Tsundoku\Downloads` : null,
+      chosen: null,
     }
   },
   toolsOverview: {

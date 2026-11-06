@@ -28,10 +28,12 @@ pub struct FirstRunOptions {
     pub default_download_folder: String,
     /// A portable copy's `Downloads` folder beside it, or `None` for an installed copy.
     pub beside_app_folder: Option<String>,
+    /// What was chosen, once saved, so going back from the tools shows it, even after a restart.
+    pub chosen: Option<FirstRunChoices>,
 }
 
 /// What the user chose.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct FirstRunChoices {
@@ -42,7 +44,7 @@ pub struct FirstRunChoices {
 }
 
 /// Where downloads go.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum DownloadFolderChoice {
@@ -69,7 +71,29 @@ pub fn options(
         default_download_folder: default_download_folder().display().to_string(),
         beside_app_folder: portable_folder
             .map(|folder| folder.join(BESIDE_APP_DOWNLOADS).display().to_string()),
+        chosen: chosen(settings, portable_folder),
     }
+}
+
+/// The choices as saved, or `None` until they are.
+fn chosen(settings: &Settings, portable_folder: Option<&Path>) -> Option<FirstRunChoices> {
+    let caches = settings.tools.caches?;
+    let download_folder = match settings.downloads.folder.as_deref().map(str::trim) {
+        None | Some("") => DownloadFolderChoice::Default,
+        Some(BESIDE_APP_DOWNLOADS) if portable_folder.is_some() => DownloadFolderChoice::BesideApp,
+        Some(path) => DownloadFolderChoice::Chosen {
+            path: path.to_owned(),
+        },
+    };
+    Some(FirstRunChoices {
+        tools_folder: settings
+            .tools
+            .folder
+            .as_ref()
+            .map(|folder| folder.display().to_string()),
+        caches,
+        download_folder,
+    })
 }
 
 /// Saves the choices. After this, the setup goes on to the tools.
@@ -122,6 +146,7 @@ mod tests {
         let offered = options(&store.get(), &paths, None);
         assert!(offered.needed);
         assert_eq!(offered.beside_app_folder, None);
+        assert_eq!(offered.chosen, None);
         assert!(offered.tools_folder.ends_with("tools"));
 
         save(
@@ -137,7 +162,19 @@ mod tests {
         )
         .unwrap();
         let settings = store.get();
-        assert!(!options(&settings, &paths, None).needed);
+        let offered = options(&settings, &paths, None);
+        assert!(!offered.needed);
+        assert_eq!(
+            offered.chosen,
+            Some(FirstRunChoices {
+                tools_folder: Some(r"D:\Tools".to_owned()),
+                caches: ToolCaches::DataFolder,
+                download_folder: DownloadFolderChoice::Chosen {
+                    path: r"D:\Videos".to_owned(),
+                },
+            }),
+            "shown again when going back"
+        );
         assert_eq!(settings.tools.folder, Some(PathBuf::from(r"D:\Tools")));
         assert_eq!(settings.tools.caches, Some(ToolCaches::DataFolder));
         assert_eq!(settings.downloads.folder.as_deref(), Some(r"D:\Videos"));
@@ -184,6 +221,10 @@ mod tests {
             Some(BESIDE_APP_DOWNLOADS)
         );
         assert_eq!(settings.tools.folder, None);
+        assert_eq!(
+            options(&settings, &paths, Some(portable)).chosen,
+            Some(choices.clone())
+        );
 
         save(&store, choices, None).unwrap();
         assert_eq!(

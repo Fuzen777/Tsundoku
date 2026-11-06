@@ -74,10 +74,12 @@ function SetupPage({ title, body, children, footer }: SetupPageProps) {
 function ChoicesScreen({ options }: { options: FirstRunOptions }) {
   const queryClient = useQueryClient()
   const text = strings.setup
+  // What was saved before, when the tools screen's Back (or a restart before the tools were set up) led back here.
+  const { chosen } = options
   /** A folder picked for the tools, or null for the data folder. */
-  const [toolsFolder, setToolsFolder] = useState<string | null>(null)
-  const [caches, setCaches] = useState<ToolCaches | null>(null)
-  const [downloadFolder, setDownloadFolder] = useState<DownloadFolderChoice | null>(null)
+  const [toolsFolder, setToolsFolder] = useState<string | null>(chosen?.toolsFolder ?? null)
+  const [caches, setCaches] = useState<ToolCaches | null>(chosen?.caches ?? null)
+  const [downloadFolder, setDownloadFolder] = useState<DownloadFolderChoice | null>(chosen?.downloadFolder ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const chosenDownloadFolder = downloadFolder?.kind === "chosen" ? downloadFolder.path : null
@@ -97,10 +99,11 @@ function ChoicesScreen({ options }: { options: FirstRunOptions }) {
     setSaving(true)
     setError(null)
     try {
-      await saveFirstRunChoices({ toolsFolder, caches, downloadFolder })
+      const saved = { toolsFolder, caches, downloadFolder }
+      await saveFirstRunChoices(saved)
       // The tools are looked for again, in the folder picked for them.
       queryClient.removeQueries({ queryKey: queryKeys.detectedTools })
-      queryClient.setQueryData<FirstRunOptions>(queryKeys.firstRunOptions, { ...options, needed: false })
+      queryClient.setQueryData<FirstRunOptions>(queryKeys.firstRunOptions, { ...options, needed: false, chosen: saved })
     } catch (caught) {
       setError(describeDownloadError(caught))
       setSaving(false)
