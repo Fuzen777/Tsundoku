@@ -121,6 +121,7 @@ function historyStandIn(id: number, title: string, preset: string, count: number
       fileCount: 1,
     },
     downloadCount: count,
+    thumbnailFile: null,
   }
 }
 

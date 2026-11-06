@@ -1,4 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core"
+import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open, save } from "@tauri-apps/plugin-dialog"
@@ -677,6 +677,13 @@ export async function onCloseRequested(choose: () => Promise<CloseChoice>): Prom
 export function getHistoryPage(query: HistoryQuery, offset: number, limit: number): Promise<HistoryPage> {
   if (!isTauri()) return Promise.resolve(standIns.historyPage(query, offset, limit, addressNumber("history")))
   return invoke<HistoryPage>("history_page", { query, offset, limit })
+}
+
+/** Where the window reads a thumbnail kept in the data folder (`HistoryVideo.thumbnailFile`): the app's `thumbnail`
+ * protocol. None in a browser, where the site's picture shows instead. */
+export function keptThumbnailUrl(fileName: string): string | null {
+  if (!isTauri()) return null
+  return convertFileSrc(fileName, "thumbnail")
 }
 
 /** The sites and presets in the history, for its filters. */

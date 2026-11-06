@@ -13,6 +13,7 @@ use crate::atomic_file::write_atomically;
 use crate::database::Database;
 use crate::metadata::{FileContents, PostContents, VideoInfo};
 use crate::rules::DownloadKind;
+use crate::thumbnails::{self, ThumbnailJob, ThumbnailSource};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -120,6 +121,8 @@ pub struct HistoryVideo {
     pub first_downloaded_at: i64,
     pub last_download: PastDownload,
     pub download_count: u32,
+    /// The thumbnail kept in the data folder's `thumbnails\`, by its name (`thumbnails::file_name`), once made.
+    pub thumbnail_file: Option<String>,
 }
 
 /// One page of the history view's results.
@@ -227,6 +230,9 @@ const VIDEOS_WITH_LATEST_DOWNLOAD: &str = "FROM videos v
 pub struct History {
     database: Arc<Database>,
     archive_path: PathBuf,
+    /// Where the videos' thumbnails are kept (`thumbnails`), whose files Forget deletes. None in tests that don't
+    /// keep any.
+    thumbnails_folder: Option<PathBuf>,
 }
 
 impl History {
@@ -235,6 +241,7 @@ impl History {
         let history = Self {
             database,
             archive_path,
+            thumbnails_folder: None,
         };
         {
             let connection = history.database.lock();
@@ -445,7 +452,8 @@ impl History {
             values.push(Value::Integer(limit.into()));
             values.push(Value::Integer(offset.into()));
             let mut statement = connection.prepare(&format!(
-                "SELECT {VIDEO_COLUMNS}, {DOWNLOAD_COLUMNS}, (SELECT COUNT(*) FROM downloads c WHERE c.video = v.id)
+                "SELECT {VIDEO_COLUMNS}, {DOWNLOAD_COLUMNS}, (SELECT COUNT(*) FROM downloads c WHERE c.video = v.id),
+                    nullif(v.thumbnail_file, '')
                 {VIDEOS_WITH_LATEST_DOWNLOAD}
                 {filter}
                 ORDER BY {column} {direction}, d.downloaded_at DESC, v.id DESC
@@ -462,6 +470,7 @@ impl History {
                         first_downloaded_at: row.get(11)?,
                         last_download: download_from_row(row, DOWNLOAD_OFFSET)?,
                         download_count: row.get(DOWNLOAD_OFFSET + DOWNLOAD_WIDTH)?,
+                        thumbnail_file: row.get(DOWNLOAD_OFFSET + DOWNLOAD_WIDTH + 1)?,
                     })
                 })?
                 .collect::<Result<_, _>>()?;
@@ -665,15 +674,110 @@ impl History {
         let mut connection = self.database.lock();
         let transaction = connection.transaction()?;
         let mut removed = 0;
+        let mut thumbnails = Vec::new();
         {
+            let mut thumbnail = transaction.prepare(
+                "SELECT thumbnail_file FROM videos WHERE id = ?1 AND thumbnail_file <> ''",
+            )?;
             let mut delete = transaction.prepare("DELETE FROM videos WHERE id = ?1")?;
             for video_row in video_rows {
+                if let Some(name) = thumbnail
+                    .query_row([video_row], |row| row.get::<_, String>(0))
+                    .optional()?
+                {
+                    thumbnails.push(name);
+                }
                 removed += delete.execute([video_row])?;
             }
         }
         transaction.commit()?;
         self.write_archive(&connection)?;
+        // Its thumbnail goes with it; one left behind would only take room.
+        if let Some(folder) = &self.thumbnails_folder {
+            for name in thumbnails {
+                let _ = std::fs::remove_file(folder.join(name));
+            }
+        }
         Ok(removed as u32)
+    }
+
+    /// The history with the folder its thumbnails are kept in, so Forget deletes them too.
+    pub fn with_thumbnails_folder(self, folder: PathBuf) -> Self {
+        Self {
+            thumbnails_folder: Some(folder),
+            ..self
+        }
+    }
+
+    /// Every video without a thumbnail kept (none made yet, and not one that can't be), newest first, with what one
+    /// can be made from: a post's first file, then its picture on the site; a video's or a song's picture on the site,
+    /// then a frame or the cover of its own file; nothing for a file host's files.
+    pub fn needing_thumbnails(&self) -> Result<Vec<ThumbnailJob>, HistoryError> {
+        let connection = self.database.lock();
+        let mut statement = connection.prepare(&format!(
+            "SELECT v.id, v.site, v.video_id, v.thumbnail_url, v.post_images IS NOT NULL,
+                v.file_count IS NOT NULL, d.file_path
+            {VIDEOS_WITH_LATEST_DOWNLOAD}
+            WHERE v.thumbnail_file IS NULL
+            ORDER BY v.id DESC"
+        ))?;
+        let jobs = statement
+            .query_map([], |row| {
+                let site: String = row.get(1)?;
+                let video_id: String = row.get(2)?;
+                let link = row.get::<_, Option<String>>(3)?.map(ThumbnailSource::Link);
+                let file = ThumbnailSource::File(PathBuf::from(row.get::<_, String>(6)?));
+                let (is_post, is_share): (bool, bool) = (row.get(4)?, row.get(5)?);
+                let sources = if is_share {
+                    Vec::new()
+                } else if is_post {
+                    std::iter::once(file).chain(link).collect()
+                } else {
+                    link.into_iter().chain(std::iter::once(file)).collect()
+                };
+                Ok(ThumbnailJob {
+                    video_row: row.get(0)?,
+                    file_name: thumbnails::file_name(&site, &video_id),
+                    sources,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(jobs)
+    }
+
+    /// Notes a video's kept thumbnail by its name, or "" when none can be made, so it isn't tried again.
+    pub fn set_thumbnail(&self, video_row: i64, file_name: &str) -> Result<(), HistoryError> {
+        self.database.lock().execute(
+            "UPDATE videos SET thumbnail_file = ?2 WHERE id = ?1",
+            params![video_row, file_name],
+        )?;
+        Ok(())
+    }
+
+    /// Every kept thumbnail's video and name.
+    pub fn thumbnail_files(&self) -> Result<Vec<(i64, String)>, HistoryError> {
+        let connection = self.database.lock();
+        let mut statement = connection
+            .prepare("SELECT id, thumbnail_file FROM videos WHERE thumbnail_file <> ''")?;
+        let files = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        Ok(files)
+    }
+
+    /// Forgets that these videos' thumbnails were made, so they're made again: their files are gone.
+    pub fn clear_thumbnails(&self, video_rows: &[i64]) -> Result<(), HistoryError> {
+        let mut connection = self.database.lock();
+        let transaction = connection.transaction()?;
+        {
+            let mut clear =
+                transaction.prepare("UPDATE videos SET thumbnail_file = NULL WHERE id = ?1")?;
+            for video_row in video_rows {
+                clear.execute([video_row])?;
+            }
+        }
+        transaction.commit()?;
+        Ok(())
     }
 
     /// Rewrites `archive.txt` from the database: one `<site> <id>` line per video, in the order they were first

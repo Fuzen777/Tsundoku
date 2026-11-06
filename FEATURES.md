@@ -153,6 +153,7 @@ type: Features
 - **Actions**: Open File, Show in Folder and Open Source Page, and in its menu Download Again (the link goes in the add bar and its preview opens) and Forget.
 - **Forget**: after asking, removes the video from the history and from `archive.txt`, so Tsundoku no longer warns before it's downloaded again. Its files stay where they are.
 - **File Missing**: a download whose file was moved or deleted says so, and its Open File is off.
+- **Thumbnails that don't go blank**: Tsundoku keeps a small copy of each download's picture in its data folder (a post's own first image, a video's picture on the site, or a frame of the video itself), so a row keeps its picture after the site's link stops working, as Instagram's do, or the post is deleted. Downloads from before get theirs in the background, as far as their files or the sites' pictures still allow. Forget deletes it with the rest.
 - **Kept for good**: every finished download is recorded, with the video's details, the preset, the file's path, size and format ("1080p · avc1 + mp4a", or "mp3"), and the date. A file yt-dlp found already there is recorded too.
 - **yt-dlp's archive**: `archive.txt` lists every video in yt-dlp's own format (`youtube jNQXAC9IVRw`), kept up to date, so yt-dlp on the command line skips them too with `--download-archive`.
 

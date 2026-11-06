@@ -1,8 +1,12 @@
-//! The preview and history commands: `tsundoku_core`'s preview service and history exposed to the UI.
+//! The preview and history commands: `tsundoku_core`'s preview service and history exposed to the UI, and the
+//! `thumbnail` protocol that shows it the history's kept thumbnails.
 
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{AppHandle, State};
+use tauri::http::{Request, Response, StatusCode, header};
+use tauri::{AppHandle, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
 use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
@@ -12,6 +16,7 @@ use tsundoku_core::history::{
 use tsundoku_core::listing::{self, ListingKind};
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::preview::{LinkPreview, PreviewService};
+use tsundoku_core::thumbnails;
 use tsundoku_core::tools::ToolManager;
 
 /// What a link is, for the preview card: a video or post, or a channel's, playlist's or account's items.
@@ -211,6 +216,41 @@ pub async fn show_videos_in_folders(
     let history = Arc::clone(&history);
     let files = blocking(move || history.latest_files(&video_ids)).await?;
     app.opener().reveal_items_in_dir(files).map_err(open_failed)
+}
+
+/// Where the history's thumbnails are kept, for the `thumbnail` protocol.
+pub struct ThumbnailsFolder(pub PathBuf);
+
+/// Serves a kept thumbnail to the window, at `thumbnail://localhost/<name>` (`http://thumbnail.localhost/<name>` in
+/// WebView2), read off the async runtime's threads. Only names `thumbnails::file_name` gives are served, from the
+/// thumbnails folder alone, so the window can't read any other file.
+pub fn serve_thumbnail<R: Runtime>(
+    context: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
+    let folder = context
+        .app_handle()
+        .try_state::<ThumbnailsFolder>()
+        .map(|folder| folder.0.clone());
+    let name = request.uri().path().trim_start_matches('/').to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = folder
+            .filter(|_| thumbnails::is_file_name(&name))
+            .and_then(|folder| fs::read(folder.join(&name)).ok());
+        let response = match bytes {
+            Some(bytes) => Response::builder()
+                .header(header::CONTENT_TYPE, "image/jpeg")
+                .header(header::CACHE_CONTROL, "max-age=3600")
+                .body(bytes),
+            None => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Vec::new()),
+        };
+        if let Ok(response) = response {
+            responder.respond(response);
+        }
+    });
 }
 
 /// Runs `work` off the async runtime's threads, which must never wait on the disk.

@@ -122,6 +122,11 @@ impl DataPaths {
     pub fn backups_folder(&self) -> PathBuf {
         self.root.join("backups")
     }
+
+    /// The history's thumbnails (thumbnails.rs), kept so they don't go blank when a site's picture does.
+    pub fn thumbnails_folder(&self) -> PathBuf {
+        self.root.join("thumbnails")
+    }
 }
 
 #[cfg(test)]

@@ -34,4 +34,5 @@ pub mod sites;
 pub mod supported_sites;
 mod sync;
 pub mod system;
+pub mod thumbnails;
 pub mod tools;

@@ -32,6 +32,7 @@ use tsundoku_core::presets::PresetManager;
 use tsundoku_core::preview::{PreviewService, ToolReader};
 use tsundoku_core::rules::RuleManager;
 use tsundoku_core::settings::SettingsStore;
+use tsundoku_core::thumbnails::{FfmpegMaker, Thumbnails};
 use tsundoku_core::tools::ToolManager;
 
 /// How long the hidden main window waits for the UI to show it before showing itself, so a UI that fails to start
@@ -113,7 +114,11 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let database = Arc::new(Database::open(&paths.database_file())?);
     // For Back Up and Restore, which copy the history out of it and back in.
     app.manage(Arc::clone(&database));
-    let history = Arc::new(History::new(Arc::clone(&database), paths.archive_file())?);
+    let thumbnails_folder = paths.thumbnails_folder();
+    let history = Arc::new(
+        History::new(Arc::clone(&database), paths.archive_file())?
+            .with_thumbnails_folder(thumbnails_folder.clone()),
+    );
     let presets = Arc::new(PresetManager::new(Arc::clone(&settings)));
     let rules = Arc::new(RuleManager::new(Arc::clone(&settings)));
     let logs_folder = paths.logs_folder();
@@ -122,6 +127,17 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         Arc::clone(&settings),
         app.package_info().version.to_string(),
     ));
+    // The history's thumbnails, made in the background and kept in the data folder.
+    Thumbnails::new(
+        thumbnails_folder.clone(),
+        Arc::clone(&history),
+        Arc::new(FfmpegMaker {
+            tools: Arc::clone(&tools),
+            work_folder: thumbnails_folder.clone(),
+        }),
+    )
+    .start();
+    app.manage(history::ThumbnailsFolder(thumbnails_folder));
     // The taskbar's progress and the tray's tooltip, from the queue's changes.
     let queue_status = Arc::new(queue_status::QueueStatus::default());
     app.manage(Arc::clone(&queue_status));
@@ -231,6 +247,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
+        .register_asynchronous_uri_scheme_protocol("thumbnail", history::serve_thumbnail)
         .setup(|app| {
             let window = app
                 .get_webview_window("main")

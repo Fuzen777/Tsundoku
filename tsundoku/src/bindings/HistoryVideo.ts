@@ -13,6 +13,10 @@ export type HistoryVideo = { id: number,
  */
 firstDownloadedAt: number, lastDownload: PastDownload, downloadCount: number, 
 /**
+ * The thumbnail kept in the data folder's `thumbnails\`, by its name (`thumbnails::file_name`), once made.
+ */
+thumbnailFile: string | null, 
+/**
  * yt-dlp's name for the site, in lowercase, as in its download archive ("youtube").
  */
 site: string, 

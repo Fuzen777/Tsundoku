@@ -15,6 +15,7 @@ import {
   forgetVideo,
   forgetVideos,
   getHistoryIds,
+  keptThumbnailUrl,
   openDownload,
   openDownloadFile,
   openWebPage,
@@ -438,6 +439,8 @@ const HistoryRow = memo(function HistoryRow({
   const queryClient = useQueryClient()
   const [error, setError] = useState<ErrorDescription | null>(null)
   const { lastDownload } = video
+  // The thumbnail kept in the data folder, else the site's picture, which may have stopped loading.
+  const kept = video.thumbnailFile && keptThumbnailUrl(video.thumbnailFile)
 
   const run = (action: () => Promise<void>) => {
     setError(null)
@@ -468,7 +471,12 @@ const HistoryRow = memo(function HistoryRow({
           checked={selected}
           onChange={(event) => onSelect(video.id, event.target.checked)}
         />
-        <Thumbnail key={video.thumbnailUrl} url={video.thumbnailUrl} className="w-28" />
+        <Thumbnail
+          key={`${video.thumbnailFile}|${video.thumbnailUrl}`}
+          url={kept ?? video.thumbnailUrl}
+          fallbackUrl={kept && video.thumbnailUrl}
+          className="w-28"
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <p className="truncate font-medium select-text" title={video.title}>
             {video.title}

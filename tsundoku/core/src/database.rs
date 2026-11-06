@@ -98,6 +98,9 @@ const MIGRATIONS: &[&str] = &[
     // 9: each file's number in its post (`PostFile::number`), so a post downloaded again shows which files were left
     // out. NULL for posts downloaded before, which took every file.
     "ALTER TABLE download_files ADD COLUMN post_number INTEGER;",
+    // 10: the thumbnail kept in the data folder's `thumbnails\` for each video (thumbnails.rs), by its name: NULL until
+    // it's made, "" when none can be.
+    "ALTER TABLE videos ADD COLUMN thumbnail_file TEXT;",
 ];
 
 pub struct Database {

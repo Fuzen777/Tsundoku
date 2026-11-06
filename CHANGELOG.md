@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.60 · 2026-11-06
+
+### Added
+
+- **Thumbnails that don't go blank**: History keeps a small copy of each download's picture in Tsundoku's data folder (a post's own first image, a video's picture on the site, or a frame of the video itself), so rows keep their pictures after a site's link stops working, as Instagram's do after a while, or the post is deleted. Downloads from before get theirs in the background, as far as their files or the sites' pictures still allow. Forget deletes it with the rest.
+
 ## 0.1.59 · 2026-11-06
 
 ### Added
