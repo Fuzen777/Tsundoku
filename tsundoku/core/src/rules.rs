@@ -78,7 +78,7 @@ pub struct RuleCondition {
 pub enum RuleField {
     /// The site, by any of its names: "YouTube", "youtube" or "youtube.com".
     Site,
-    /// The channel or account.
+    /// The channel or account, by its name or its handle ("National Geographic" or "natgeo").
     Uploader,
     Title,
     /// The link to the video or post.
@@ -310,7 +310,12 @@ impl RuleSubject<'_> {
                 names.extend(Host::of(&video.url).map(Host::name));
                 names
             }
-            RuleField::Uploader => video.uploader.as_deref().into_iter().collect(),
+            RuleField::Uploader => video
+                .uploader
+                .iter()
+                .chain(&video.account)
+                .map(String::as_str)
+                .collect(),
             RuleField::Title => vec![video.title.as_str()],
             RuleField::Link => vec![video.url.as_str()],
             RuleField::Kind => vec![self.kind().as_str()],
@@ -617,6 +622,13 @@ fn placeholder_value(
     let (value, fallback): (Option<&str>, &str) = match name.to_ascii_lowercase().as_str() {
         SITE_PLACEHOLDER => return Some(site_name(video)),
         "uploader" => (video.uploader.as_deref(), "Unknown"),
+        // The name stands in on a site without handles.
+        "account" => (
+            video.account.as_deref().or(video.uploader.as_deref()),
+            "Unknown",
+        ),
+        // Only a download picked from a playlist, channel or account has one.
+        "playlist" => (video.playlist.as_deref(), "No Playlist"),
         "title" => (Some(video.title.as_str()), "Untitled"),
         "id" => (Some(video.video_id.as_str()), "Unknown"),
         "kind" => (Some(kind), kind),
@@ -760,6 +772,7 @@ mod tests {
             url: "https://www.youtube.com/watch?v=jNQXAC9IVRw".to_owned(),
             title: "Me at the zoo".to_owned(),
             uploader: Some("jawed".to_owned()),
+            account: None,
             duration_seconds: Some(19.0),
             upload_date: None,
             thumbnail_url: None,
@@ -767,6 +780,7 @@ mod tests {
             post: None,
             files: None,
             post_files: Vec::new(),
+            playlist: None,
         }
     }
 
@@ -1101,6 +1115,40 @@ mod tests {
             "a post has no preset or, here, upload date, and a long title is cut"
         );
         assert!(folder_on(&rules, &mega_file(), None).contains(r"\Files\Files\"));
+    }
+
+    #[test]
+    fn knows_the_uploader_by_their_handle_too() {
+        let mut post = tweet();
+        post.uploader = Some("National Geographic".to_owned());
+        post.account = Some("natgeo".to_owned());
+        let subject = RuleSubject {
+            video: &post,
+            preset: None,
+        };
+        assert!(condition(RuleField::Uploader, RuleOperator::Is, "NatGeo").matches(&subject));
+        assert!(
+            condition(RuleField::Uploader, RuleOperator::Is, "national geographic")
+                .matches(&subject)
+        );
+        assert!(
+            !condition(RuleField::Uploader, RuleOperator::IsNot, "natgeo").matches(&subject),
+            "not the uploader by either name"
+        );
+        assert!(condition(RuleField::Uploader, RuleOperator::Matches, "^nat").matches(&subject));
+
+        let rules = [rule(Vec::new(), r"D:\{uploader}\{Account}\{playlist}")];
+        assert_eq!(
+            folder_on(&rules, &post, None),
+            r"D:\National Geographic\natgeo\No Playlist"
+        );
+        post.account = None;
+        post.playlist = Some("Best of 2026".to_owned());
+        assert_eq!(
+            folder_on(&rules, &post, None),
+            r"D:\National Geographic\National Geographic\Best of 2026",
+            "the name stands in for a site without handles"
+        );
     }
 
     #[test]

@@ -22,7 +22,16 @@ videoId: string,
 /**
  * The video's own page.
  */
-url: string, title: string, uploader: string | null, durationSeconds: number | null, 
+url: string, title: string, 
+/**
+ * The channel's or account's name as the site shows it ("National Geographic").
+ */
+uploader: string | null, 
+/**
+ * The handle behind it, when the site has one ("natgeo"): `{account}` in a rule's folder, and the Uploader
+ * condition matches it too. `None` when the site gives none, or only a number.
+ */
+account?: string, durationSeconds: number | null, 
 /**
  * As YYYY-MM-DD.
  */
@@ -43,4 +52,9 @@ files: FileContents | null,
  * A post's files, in the order the site gives them, and which of them its download takes. Empty for a video, a
  * file host's link, or a post read before Tsundoku listed them, whose download takes every file.
  */
-postFiles?: Array<PostFile>, };
+postFiles?: Array<PostFile>, 
+/**
+ * The playlist, channel or account it was picked from (`listing`), for `{playlist}` in a rule's folder. `None` for
+ * a link added on its own.
+ */
+playlist?: string, };

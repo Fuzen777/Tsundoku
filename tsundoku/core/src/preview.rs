@@ -359,6 +359,7 @@ mod tests {
             url: String::new(),
             title: id.to_owned(),
             uploader: None,
+            account: None,
             duration_seconds: None,
             upload_date: None,
             thumbnail_url: None,
@@ -366,6 +367,7 @@ mod tests {
             post,
             files: None,
             post_files: Vec::new(),
+            playlist: None,
         }
     }
 

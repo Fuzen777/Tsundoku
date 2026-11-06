@@ -473,6 +473,7 @@ mod tests {
                 url: format!("https://example.com/{video_id}"),
                 title: video_id.to_owned(),
                 uploader: None,
+                account: None,
                 duration_seconds: None,
                 upload_date: None,
                 thumbnail_url: picture.map(str::to_owned),
@@ -483,6 +484,7 @@ mod tests {
                 }),
                 files: (kind == DownloadKind::File).then_some(FileContents { count: 1, bytes: 1 }),
                 post_files: Vec::new(),
+                playlist: None,
             };
             self.history
                 .record(

@@ -330,6 +330,7 @@ fn video_at(link: &str) -> VideoInfo {
         url: link.to_owned(),
         title: format!("Title of {id}"),
         uploader: None,
+        account: None,
         duration_seconds: (!post && !shared).then_some(10.0),
         upload_date: None,
         thumbnail_url: None,
@@ -343,6 +344,7 @@ fn video_at(link: &str) -> VideoInfo {
             bytes: 1000,
         }),
         post_files: Vec::new(),
+        playlist: None,
     }
 }
 

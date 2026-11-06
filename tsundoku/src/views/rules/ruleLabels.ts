@@ -17,6 +17,8 @@ export const CATCH_ALL_RULE_ID = "catch-all"
 export const FOLDER_PLACEHOLDERS = [
   "site",
   "uploader",
+  "account",
+  "playlist",
   "title",
   "id",
   "kind",

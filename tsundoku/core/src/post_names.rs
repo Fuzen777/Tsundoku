@@ -256,6 +256,7 @@ mod tests {
             url: url.to_owned(),
             title: "A carousel".to_owned(),
             uploader: Some("National Geographic".to_owned()),
+            account: None,
             duration_seconds: None,
             upload_date: Some("2026-11-04".to_owned()),
             thumbnail_url: None,
@@ -266,6 +267,7 @@ mod tests {
             }),
             files: None,
             post_files: Vec::new(),
+            playlist: None,
         }
     }
 

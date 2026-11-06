@@ -169,6 +169,7 @@ impl Share {
             url: self.url.clone(),
             title: self.title.clone(),
             uploader: None,
+            account: None,
             duration_seconds: None,
             upload_date: self.upload_date.clone(),
             thumbnail_url: None,
@@ -179,6 +180,7 @@ impl Share {
                 bytes: self.total_bytes(),
             }),
             post_files: Vec::new(),
+            playlist: None,
         }
     }
 }

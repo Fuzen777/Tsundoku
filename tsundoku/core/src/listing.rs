@@ -331,6 +331,7 @@ pub(crate) fn from_yt_dlp(
     })?;
     let rough_dates = text(&answer, "extractor_key").as_deref() == Some("YoutubeTab");
     let owner = text(&answer, "channel").or_else(|| text(&answer, "uploader"));
+    let owner_account = text(&answer, "uploader_id").and_then(|id| metadata::handle(&id));
     let entries = answer
         .get("entries")
         .and_then(Value::as_array)
@@ -349,8 +350,13 @@ pub(crate) fn from_yt_dlp(
         let Some(mut item) = item_from_entry(entry, rough_dates) else {
             return Err(not_listable(link));
         };
-        if item.video.uploader.is_none() && kind == Some(ListingKind::Channel) {
-            item.video.uploader.clone_from(&owner);
+        if kind == Some(ListingKind::Channel) {
+            if item.video.uploader.is_none() {
+                item.video.uploader.clone_from(&owner);
+            }
+            if item.video.account.is_none() {
+                item.video.account.clone_from(&owner_account);
+            }
         }
         if let Some(other) = items.iter().find(|other| other.video.url == item.video.url) {
             if other.video.site == item.video.site && other.video.video_id == item.video.video_id {
@@ -365,13 +371,16 @@ pub(crate) fn from_yt_dlp(
 
     let kind = kind.unwrap_or(ListingKind::Playlist);
     let url = text(&answer, "webpage_url").unwrap_or_else(|| link.to_owned());
-    let title = text(&answer, "title")
-        .map(|title| channel_title(&title, owner.as_deref(), kind))
-        .or_else(|| owner.clone())
-        .unwrap_or_else(|| url.clone());
+    let title = shorten(
+        &text(&answer, "title")
+            .map(|title| channel_title(&title, owner.as_deref(), kind))
+            .or_else(|| owner.clone())
+            .unwrap_or_else(|| url.clone()),
+    );
+    name_items(&mut items, &title);
     Ok(Listing {
         kind,
-        title: shorten(&title),
+        title,
         uploader: (kind == ListingKind::Playlist).then_some(owner).flatten(),
         site_name: text(&answer, "webpage_url_domain")
             .or_else(|| site_name(&url))
@@ -435,6 +444,7 @@ fn item_from_entry(entry: &Value, rough_dates: bool) -> Option<ListedItem> {
                 .unwrap_or_else(|| video_id.clone()),
             video_id,
             uploader: text(entry, "uploader").or_else(|| text(entry, "channel")),
+            account: text(entry, "uploader_id").and_then(|id| metadata::handle(&id)),
             duration_seconds: duration,
             upload_date,
             thumbnail_url: text(entry, "thumbnail").or_else(|| entry_thumbnail(entry)),
@@ -443,6 +453,8 @@ fn item_from_entry(entry: &Value, rough_dates: bool) -> Option<ListedItem> {
             post_files: Vec::new(),
             files: None,
             url,
+            // The listing's own name, once it's known (`name_items`).
+            playlist: None,
         },
         approximate_date,
         last_download: None,
@@ -543,9 +555,11 @@ pub(crate) fn from_gallery_dl(json: &str, link: &str) -> Result<Listing, Preview
         .or_else(|| account.username.clone())
         .or(name_in_link)
         .unwrap_or_else(|| link.to_owned());
+    let title = shorten(&title);
+    name_items(&mut items, &title);
     Ok(Listing {
         kind: ListingKind::Account,
-        title: shorten(&title),
+        title,
         uploader: None,
         site_name: site_name(link).unwrap_or_default(),
         url: account.username.as_ref().map_or_else(
@@ -559,6 +573,13 @@ pub(crate) fn from_gallery_dl(json: &str, link: &str) -> Result<Listing, Preview
         newest_only: true,
         items,
     })
+}
+
+/// Gives every item the listing's name, which `{playlist}` puts in a rule's folder once it's picked.
+fn name_items(items: &mut [ListedItem], title: &str) {
+    for item in items {
+        item.video.playlist = Some(title.to_owned());
+    }
 }
 
 /// The path (without its leading "/") and the query of a link.

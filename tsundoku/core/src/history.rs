@@ -809,6 +809,7 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
         url: row.get(4)?,
         title: row.get(5)?,
         uploader: row.get(6)?,
+        account: None,
         duration_seconds: row.get(7)?,
         upload_date: row.get(8)?,
         thumbnail_url: row.get(9)?,
@@ -825,6 +826,7 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
             _ => None,
         },
         post_files: Vec::new(),
+        playlist: None,
     })
 }
 
@@ -986,6 +988,7 @@ mod tests {
             url: format!("https://{site}.com/{video_id}"),
             title: title.to_owned(),
             uploader: Some(uploader.to_owned()),
+            account: None,
             duration_seconds: Some(duration),
             upload_date: Some("2005-04-24".to_owned()),
             thumbnail_url: None,
@@ -993,6 +996,7 @@ mod tests {
             post: None,
             files: None,
             post_files: Vec::new(),
+            playlist: None,
         }
     }
 

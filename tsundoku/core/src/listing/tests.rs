@@ -174,6 +174,47 @@ fn reads_a_youtube_channels_newest_videos() {
 }
 
 #[test]
+fn names_what_its_items_were_picked_from() {
+    let mut answer: Value = serde_json::from_str(&fixture("youtube-channel.json")).unwrap();
+    answer["uploader_id"] = "@NASA".into();
+    let channel = from_yt_dlp(
+        &answer.to_string(),
+        Some(ListingKind::Channel),
+        "https://www.youtube.com/@NASA/videos",
+    )
+    .unwrap();
+    let first = &channel.items[0].video;
+    assert_eq!(first.playlist.as_deref(), Some("NASA"));
+    assert_eq!(
+        first.account.as_deref(),
+        Some("NASA"),
+        "the channel's handle"
+    );
+
+    let playlist = from_yt_dlp(
+        &fixture("youtube-playlist.json"),
+        Some(ListingKind::Playlist),
+        "https://www.youtube.com/playlist?list=PLwP_SiAcdui0KVebT0mU9Apz359a4ubsC",
+    )
+    .unwrap();
+    assert!(
+        playlist
+            .items
+            .iter()
+            .all(|item| item.video.playlist.as_deref() == Some("29C3: Not my department"))
+    );
+
+    let account = from_gallery_dl(
+        &fixture("instagram-account.json"),
+        "https://www.instagram.com/instagram/posts/",
+    )
+    .unwrap();
+    let post = &account.items[0].video;
+    assert_eq!(post.playlist.as_deref(), Some("Instagram"));
+    assert_eq!(post.account.as_deref(), Some("instagram"));
+}
+
+#[test]
 fn reads_a_youtube_playlist_whole() {
     let link = "https://www.youtube.com/playlist?list=PLwP_SiAcdui0KVebT0mU9Apz359a4ubsC";
     let listing = from_yt_dlp(

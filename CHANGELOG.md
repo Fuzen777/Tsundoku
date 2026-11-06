@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.63 · 2026-11-06
+
+### Added
+
+- **{account} and {playlist} in rules' folders**: {account} becomes the uploader's handle, such as natgeo, while {uploader} stays the name the site shows, such as National Geographic; on a site without handles, {account} is the name too. {playlist} becomes the playlist, channel or account a download was picked from in a list, such as `D:\Channels\{playlist}`, or No Playlist for a link added on its own.
+
+### Changed
+
+- **Rules know an uploader by either name**: a condition on the uploader now checks the handle as well as the name, so "uploader is natgeo" catches National Geographic's Instagram posts, which it missed since a post's uploader is the name the account shows.
+
 ## 0.1.62 · 2026-11-06
 
 ### Changed

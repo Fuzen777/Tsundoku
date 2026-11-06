@@ -205,6 +205,7 @@ fn video(video_id: &str) -> VideoInfo {
         url: format!("https://www.youtube.com/watch?v={video_id}"),
         title: format!("Video {video_id}"),
         uploader: None,
+        account: None,
         duration_seconds: Some(10.0),
         upload_date: None,
         thumbnail_url: None,
@@ -212,6 +213,7 @@ fn video(video_id: &str) -> VideoInfo {
         post: None,
         files: None,
         post_files: Vec::new(),
+        playlist: None,
     }
 }
 
@@ -793,6 +795,7 @@ fn post(post_id: &str) -> VideoInfo {
         url: format!("https://www.instagram.com/p/{post_id}/"),
         title: format!("Post {post_id}"),
         uploader: Some("someone".to_owned()),
+        account: None,
         duration_seconds: None,
         upload_date: None,
         thumbnail_url: None,
@@ -803,6 +806,7 @@ fn post(post_id: &str) -> VideoInfo {
         }),
         files: None,
         post_files: Vec::new(),
+        playlist: None,
     }
 }
 

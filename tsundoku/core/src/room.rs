@@ -308,6 +308,7 @@ mod tests {
             url: format!("https://www.youtube.com/watch?v={id}"),
             title: id.to_owned(),
             uploader: None,
+            account: None,
             duration_seconds: None,
             upload_date: None,
             thumbnail_url: None,
@@ -315,6 +316,7 @@ mod tests {
             post: None,
             files: None,
             post_files: Vec::new(),
+            playlist: None,
         }
     }
 

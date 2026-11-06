@@ -32,7 +32,13 @@ pub struct VideoInfo {
     /// The video's own page.
     pub url: String,
     pub title: String,
+    /// The channel's or account's name as the site shows it ("National Geographic").
     pub uploader: Option<String>,
+    /// The handle behind it, when the site has one ("natgeo"): `{account}` in a rule's folder, and the Uploader
+    /// condition matches it too. `None` when the site gives none, or only a number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub account: Option<String>,
     pub duration_seconds: Option<f64>,
     /// As YYYY-MM-DD.
     pub upload_date: Option<String>,
@@ -49,6 +55,11 @@ pub struct VideoInfo {
     /// file host's link, or a post read before Tsundoku listed them, whose download takes every file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub post_files: Vec<PostFile>,
+    /// The playlist, channel or account it was picked from (`listing`), for `{playlist}` in a rule's folder. `None` for
+    /// a link added on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub playlist: Option<String>,
 }
 
 impl VideoInfo {
@@ -440,6 +451,7 @@ struct InfoJson {
     webpage_url: Option<String>,
     webpage_url_domain: Option<String>,
     uploader: Option<String>,
+    uploader_id: Option<String>,
     channel: Option<String>,
     duration: Option<f64>,
     upload_date: Option<String>,
@@ -519,6 +531,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         title: info.title.unwrap_or_else(|| video_id.clone()),
         video_id,
         uploader: info.uploader.or(info.channel),
+        account: info.uploader_id.as_deref().and_then(handle),
         duration_seconds: info.duration,
         upload_date: info.upload_date.as_deref().and_then(iso_date),
         thumbnail_url: info.thumbnail,
@@ -526,6 +539,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         post: None,
         files: None,
         post_files: Vec::new(),
+        playlist: None,
     };
     // Kept for when it's downloaded, to check there's room for it first.
     room::remember_sizes(&video, sizes);
@@ -556,6 +570,15 @@ fn format_size(format: &FormatJson) -> FormatSize {
             .filter(|bytes| *bytes >= 1.0)
             .map(|bytes| bytes as u64),
     }
+}
+
+/// yt-dlp's `uploader_id` as a handle: "@natgeo" becomes "natgeo". `None` for one that's only a number (TikTok) or a
+/// YouTube channel ID ("UC" and 22 more), which aren't names anyone goes by.
+pub(crate) fn handle(id: &str) -> Option<String> {
+    let id = id.trim().trim_start_matches('@');
+    let channel_id = id.len() == 24 && id.starts_with("UC");
+    let number = id.chars().all(|character| character.is_ascii_digit());
+    (!id.is_empty() && !number && !channel_id).then(|| id.to_owned())
 }
 
 /// "20050424" to "2005-04-24".
@@ -684,6 +707,19 @@ mod tests {
                 .is_some_and(|url| url.starts_with("https://i.ytimg.com/"))
         );
         assert_eq!(video.best_height, Some(240));
+    }
+
+    #[test]
+    fn reads_the_uploaders_handle() {
+        let video = parse_info(
+            r#"{"id": "jNQXAC9IVRw", "extractor_key": "Youtube", "uploader": "jawed", "uploader_id": "@jawed"}"#,
+        )
+        .unwrap();
+        assert_eq!(video.account.as_deref(), Some("jawed"));
+        assert_eq!(handle("NASA").as_deref(), Some("NASA"));
+        assert_eq!(handle("6812314569234"), None, "a number");
+        assert_eq!(handle("UC4QobU6STFB0P71PMvOGN5A"), None, "a channel ID");
+        assert_eq!(handle(" @ "), None);
     }
 
     /// The duplicate check relies on every link to a video giving the same site and ID.

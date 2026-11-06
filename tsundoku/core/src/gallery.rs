@@ -290,6 +290,7 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         videos: count(videos),
     };
     let uploader = uploader(post);
+    let account = account(&site, post);
     let title = caption_title(post)
         .or_else(|| uploader.as_ref().map(|name| format!("Post by {name}")))
         .unwrap_or_else(|| post_id.clone());
@@ -305,11 +306,13 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         video_id: post_id,
         title,
         uploader,
+        account,
         duration_seconds: None,
         best_height: None,
         post: Some(contents),
         files: None,
         post_files: post_files(files),
+        playlist: None,
     })
 }
 
@@ -410,6 +413,35 @@ fn post_id(site: &str, post: &Value) -> Option<String> {
         _ => &["post_id", "id", "index"],
     };
     fields.iter().find_map(|field| text(post, field))
+}
+
+/// The handle of who posted, apart from their display name: Instagram's `username`, X's `author.name` (its `nick` is
+/// the display name), and on other sites the first field they give one in. The same fields as `{account}` in post
+/// file names (`post_names`).
+fn account(site: &str, post: &Value) -> Option<String> {
+    let fields: &[(&str, &str)] = match site {
+        "instagram" => &[("", "username")],
+        "twitter" => &[("author", "name"), ("user", "name")],
+        _ => &[
+            ("", "username"),
+            ("author", "name"),
+            ("author", "username"),
+            ("author", "handle"),
+            ("user", "account"),
+            ("user", "name"),
+            ("user", "username"),
+            ("blog", "name"),
+        ],
+    };
+    fields.iter().find_map(|&(object, field)| {
+        if object.is_empty() {
+            text(post, field)
+        } else {
+            post.get(object)
+                .filter(|inner| inner.is_object())
+                .and_then(|inner| text(inner, field))
+        }
+    })
 }
 
 /// The person who posted: their display name, or their account name.
@@ -588,7 +620,8 @@ mod tests {
             })
         );
         assert!(post.thumbnail_url.is_some());
-        assert!(post.uploader.is_some());
+        assert_eq!(post.uploader.as_deref(), Some("Instagram"));
+        assert_eq!(post.account.as_deref(), Some("instagram"));
         assert_eq!(post.best_height, None);
     }
 
@@ -624,6 +657,7 @@ mod tests {
             ("twitter", "2105698284354367897")
         );
         assert_eq!(images.site_name, "x.com");
+        assert_eq!(images.account.as_deref(), Some("NASA"));
         assert_eq!(
             images.post,
             Some(PostContents {
@@ -740,6 +774,7 @@ mod tests {
         assert_eq!(post.url, "https://www.instagram.com/p/Abc123/");
         assert_eq!(post.title, "First line of the caption");
         assert_eq!(post.uploader.as_deref(), Some("Some One"));
+        assert_eq!(post.account.as_deref(), Some("someone"));
         assert_eq!(post.upload_date.as_deref(), Some("2026-11-02"));
         assert_eq!(
             post.thumbnail_url.as_deref(),

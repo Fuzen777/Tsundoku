@@ -568,7 +568,9 @@ export const strings = {
       `Placeholders such as {site} become the download's own: click one to put it where the cursor is, and hover over it to see what it becomes. A folder that isn't a full path goes inside the download folder, ${downloadFolder}.`,
     placeholderHints: {
       site: "The download's site, such as Instagram or YouTube.",
-      uploader: "The download's uploader or account, or Unknown when there's none.",
+      uploader: "The uploader's name, such as National Geographic, or Unknown when there's none.",
+      account: "The uploader's handle, such as natgeo, or their name on a site without handles.",
+      playlist: "The playlist, channel or account you picked it from, or No Playlist.",
       title: "The title of the video or post, or the shared file's name, cut to 80 characters.",
       id: "The video's or post's ID on its site, such as jNQXAC9IVRw.",
       kind: "Videos, Audio, Posts or Files.",

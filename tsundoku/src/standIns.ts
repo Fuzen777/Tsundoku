@@ -415,7 +415,7 @@ export const standIns = {
         { field: "site", operator: "is", value: "Instagram" },
         { field: "uploader", operator: "is", value: "natgeo" },
       ],
-      folder: String.raw`D:\Hydrus\Import\{site}\{uploader}`,
+      folder: String.raw`D:\Hydrus\Import\{site}\{account}`,
       presetId: null,
       downloadRightAway: null,
     },
