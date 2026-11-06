@@ -105,6 +105,9 @@ describe("file host errors", () => {
     expect(describePreviewError({ kind: "linkIncomplete", site: "MEGA" }).message).toBe(
       strings.preview.errors.linkIncomplete("MEGA"),
     )
+    expect(describePreviewError({ kind: "linkNotRecognized", site: "MediaFire" }).message).toBe(
+      strings.preview.errors.linkNotRecognized("MediaFire"),
+    )
     expect(describePreviewError({ kind: "limitReached", site: "MEGA", detail: "MEGA answered -17" })).toEqual({
       message: strings.preview.errors.limitReached("MEGA"),
       detail: "MEGA answered -17",

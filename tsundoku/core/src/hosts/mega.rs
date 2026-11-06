@@ -503,7 +503,7 @@ fn parse_link(link: &str) -> Result<MegaLink, PreviewError> {
                 folder_link(handle, key, rest.first().map(|node| (*node).to_owned()))
             }
             ["", _] | ["F", _] => Err(incomplete()),
-            _ => Err(PreviewError::UnsupportedSite),
+            _ => Err(Host::Mega.link_not_recognized()),
         };
     }
     match segments.as_slice() {
@@ -526,7 +526,7 @@ fn parse_link(link: &str) -> Result<MegaLink, PreviewError> {
             };
             folder_link(handle, key, within)
         }
-        _ => Err(PreviewError::UnsupportedSite),
+        _ => Err(Host::Mega.link_not_recognized()),
     }
 }
 

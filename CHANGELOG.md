@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.29 · 2026-11-06
+
+### Changed
+
+- **Copied file host links Tsundoku can't read stay in Pending**: a MEGA, MediaFire, Google Drive or Dropbox link that isn't one Tsundoku recognizes, such as a kind of link it doesn't know yet, stays with "This MediaFire link isn't one Tsundoku recognizes" instead of leaving without a word, so a file you meant to download doesn't go missing. Pasting one says the same, instead of that the site isn't supported. Links on sites Tsundoku doesn't know still leave quietly.
+
 ## 0.1.28 · 2026-11-06
 
 ### Fixed

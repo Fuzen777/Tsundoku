@@ -236,6 +236,8 @@ export const strings = {
       passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
       linkIncomplete: (site: string) =>
         `This ${site} link is missing its key, or it's cut off. Copy the whole link again.`,
+      linkNotRecognized: (site: string) =>
+        `This ${site} link isn't one Tsundoku recognizes. Try the link to the file or folder itself.`,
       network: "Couldn't reach the site. Check your connection, then try again.",
       siteError: "Couldn't read this site's page. An update often fixes this.",
       failed: "Couldn't read this link.",

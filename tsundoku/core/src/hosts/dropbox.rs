@@ -53,7 +53,7 @@ pub(super) fn read(
     link: &str,
     cancel: &CancelToken,
 ) -> Result<Share, PreviewError> {
-    let parsed = parse_link(link).ok_or(PreviewError::UnsupportedSite)?;
+    let parsed = parse_link(link).ok_or_else(|| Host::Dropbox.link_not_recognized())?;
     if !parsed.old && !parsed.has_rlkey {
         return Err(PreviewError::LinkIncomplete {
             site: Host::Dropbox.name().to_owned(),
@@ -62,7 +62,7 @@ pub(super) fn read(
     if parsed.kind == Kind::Folder {
         return read_folder(client, link, parsed, cancel);
     }
-    let url = download_link(link).ok_or(PreviewError::UnsupportedSite)?;
+    let url = download_link(link).ok_or_else(|| Host::Dropbox.link_not_recognized())?;
     let found = match probe(client, &url, cancel)? {
         Answer::File(found) => found,
         Answer::Page(page) => return Err(page_error(&page)),

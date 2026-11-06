@@ -44,7 +44,7 @@ pub(super) fn read(
     link: &str,
     cancel: &CancelToken,
 ) -> Result<Share, PreviewError> {
-    match parse_link(link).ok_or(PreviewError::UnsupportedSite)? {
+    match parse_link(link).ok_or_else(|| Host::GoogleDrive.link_not_recognized())? {
         DriveLink::File(file) => {
             let found = match probe(client, &download_url(&file), cancel)? {
                 Answer::File(found) => found,

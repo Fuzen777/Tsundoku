@@ -72,6 +72,13 @@ impl Host {
         }
     }
 
+    /// The error for a link on this host that isn't to a file or folder Tsundoku can read.
+    pub(crate) fn link_not_recognized(self) -> PreviewError {
+        PreviewError::LinkNotRecognized {
+            site: self.name().to_owned(),
+        }
+    }
+
     /// The site in the history, in lowercase as the tools' names are. Google Drive and Dropbox match yt-dlp's names
     /// for them, so what it downloaded from them before still counts.
     pub fn site(self) -> &'static str {
@@ -632,6 +639,29 @@ mod tests {
         ] {
             assert_eq!(Host::of(link), host, "{link}");
         }
+    }
+
+    #[test]
+    fn names_the_host_of_a_link_it_cant_read() {
+        // These fail before anything is fetched, so the test needs no network.
+        for (link, site) in [
+            ("https://mega.nz/pro", "MEGA"),
+            ("https://www.mediafire.com/upgrade/", "MediaFire"),
+            ("https://drive.google.com/drive/my-drive", "Google Drive"),
+            ("https://www.dropbox.com/home", "Dropbox"),
+        ] {
+            assert_eq!(
+                read(link, &CancelToken::new()).err(),
+                Some(PreviewError::LinkNotRecognized {
+                    site: site.to_owned()
+                }),
+                "{link}"
+            );
+        }
+        assert_eq!(
+            read("https://example.com/file.zip", &CancelToken::new()).err(),
+            Some(PreviewError::UnsupportedSite)
+        );
     }
 
     #[test]

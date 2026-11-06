@@ -111,6 +111,11 @@ pub enum PreviewError {
     /// A link missing part of itself, such as a MEGA link without its key, or with a key that doesn't open it.
     #[error("incomplete {site} link")]
     LinkIncomplete { site: String },
+    /// A link on a file host that isn't to a file or folder Tsundoku can read, such as the host's home page or a
+    /// form of link it doesn't know yet. Unlike `UnsupportedSite`, the clipboard watcher keeps it in Pending, so a
+    /// file the user meant to download doesn't go missing.
+    #[error("{site} link Tsundoku doesn't recognize")]
+    LinkNotRecognized { site: String },
     #[error("network error: {detail}")]
     Network { detail: String },
     /// The tool couldn't read the site's page, which an update of the tool often fixes.

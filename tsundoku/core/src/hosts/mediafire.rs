@@ -41,7 +41,7 @@ pub(super) fn read(
     link: &str,
     cancel: &CancelToken,
 ) -> Result<Share, PreviewError> {
-    match parse_link(link).ok_or(PreviewError::UnsupportedSite)? {
+    match parse_link(link).ok_or_else(|| Host::MediaFire.link_not_recognized())? {
         MediaFireLink::File(quick_key) => {
             let answer: FileInfoAnswer = api(
                 client,

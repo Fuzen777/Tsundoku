@@ -112,7 +112,9 @@ fn says_when_a_link_is_missing_its_key_or_a_password() {
     );
     assert_eq!(
         parse_link("https://mega.nz/pro"),
-        Err(PreviewError::UnsupportedSite)
+        Err(PreviewError::LinkNotRecognized {
+            site: "MEGA".to_owned()
+        })
     );
 }
 

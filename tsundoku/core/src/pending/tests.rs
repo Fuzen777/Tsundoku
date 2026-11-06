@@ -690,6 +690,21 @@ fn a_copied_link_that_needs_a_fix_stays_to_say_so() {
 }
 
 #[test]
+fn a_copied_file_host_link_tsundoku_cant_read_stays_to_say_so() {
+    let test = Test::new();
+    let link = "https://www.mediafire.com/some/new/form/of/link";
+    let error = PreviewError::LinkNotRecognized {
+        site: "MediaFire".to_owned(),
+    };
+    test.reader.answer(link, Err(error.clone()));
+    test.copy(&[link]);
+    test.wait_until_read(link);
+    let pending = test.link(link).unwrap();
+    assert_eq!(pending.state, PendingState::Failed);
+    assert_eq!(pending.error, Some(error));
+}
+
+#[test]
 fn a_copied_link_downloaded_or_queued_already_leaves_quietly() {
     let test = Test::new();
     // The history and the queue have these by the same address, so they're never read.
