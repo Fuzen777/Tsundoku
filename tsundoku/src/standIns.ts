@@ -1,6 +1,8 @@
 import type { AppInfo } from "./bindings/AppInfo"
+import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
@@ -238,10 +240,39 @@ export const standIns = {
     atOnce: 2,
     rateLimit: null,
     cookiesBrowser: "automatic",
-    postsFolder: null,
     postPause: { min: 10, max: 20 },
   } satisfies DownloadSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
+  folderRules: [
+    {
+      id: "rule-1",
+      enabled: true,
+      conditions: [
+        { field: "site", operator: "is", value: "Instagram" },
+        { field: "uploader", operator: "is", value: "natgeo" },
+      ],
+      folder: String.raw`D:\Hydrus\Import\{site}\{uploader}`,
+    },
+    {
+      id: "posts",
+      enabled: true,
+      conditions: [{ field: "kind", operator: "is", value: "post" }],
+      folder: "{site}",
+    },
+    {
+      id: "rule-2",
+      enabled: false,
+      conditions: [
+        { field: "kind", operator: "is", value: "audio" },
+        { field: "title", operator: "contains", value: "podcast" },
+      ],
+      folder: "Podcasts",
+    },
+  ] satisfies FolderRule[],
+  destination: {
+    folder: String.raw`C:\Users\You\Downloads\Tsundoku\Instagram`,
+    source: { kind: "rule", number: 2 },
+  } satisfies Destination,
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {
       progress: {

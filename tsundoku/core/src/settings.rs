@@ -10,6 +10,7 @@ use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
 use crate::presets::PresetsSettings;
+use crate::rules::{RulesSettings, posts_rule};
 use crate::sync::lock;
 use crate::tools::ToolId;
 
@@ -21,6 +22,41 @@ pub struct Settings {
     pub tools: ToolsSettings,
     pub presets: PresetsSettings,
     pub downloads: DownloadSettings,
+    pub rules: RulesSettings,
+}
+
+impl Settings {
+    /// Reads `settings.json`. A file from before folder rules (0.1.10 and older) gets the posts rule in the posts
+    /// folder it chose, if it chose one.
+    fn from_json(contents: &[u8]) -> Option<Self> {
+        let mut settings: Self = serde_json::from_slice(contents).ok()?;
+        let earlier: BeforeRules = serde_json::from_slice(contents).unwrap_or_default();
+        if earlier.rules.is_none()
+            && let Some(posts_folder) = earlier
+                .downloads
+                .posts_folder
+                .as_deref()
+                .map(str::trim)
+                .filter(|folder| !folder.is_empty())
+        {
+            settings.rules.list = vec![posts_rule(Some(posts_folder))];
+        }
+        Some(settings)
+    }
+}
+
+/// What `settings.json` held before folder rules, to carry the posts folder over into the posts rule.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct BeforeRules {
+    rules: Option<serde::de::IgnoredAny>,
+    downloads: DownloadsBeforeRules,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct DownloadsBeforeRules {
+    posts_folder: Option<String>,
 }
 
 /// How downloads run. Settings → Downloads edits it.
@@ -28,8 +64,8 @@ pub struct Settings {
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
 pub struct DownloadSettings {
-    /// Where downloads go when their preset has no folder of its own, and posts unless `posts_folder` is set, or
-    /// `None` for a Tsundoku folder in Downloads (`default_download_folder`).
+    /// Where downloads go when no rule matches and their preset has no folder of its own, or `None` for a Tsundoku
+    /// folder in Downloads (`default_download_folder`). A rule's folder that isn't a full path is inside it.
     pub folder: Option<String>,
     /// How many downloads run at the same time.
     pub at_once: u32,
@@ -39,8 +75,6 @@ pub struct DownloadSettings {
     /// the browser profile signed in to the link's site (`browsers::cookies_for`), a browser its profile, `None`
     /// none at all.
     pub cookies_browser: Option<CookiesBrowser>,
-    /// Where posts of images go, each site in a folder of its own, or `None` for the download folder.
-    pub posts_folder: Option<String>,
     /// How long to wait before each file of a post on a site that limits how fast it's read
     /// (`sites::paces_downloads`, Instagram), so the account isn't blocked.
     pub post_pause: PauseRange,
@@ -53,31 +87,20 @@ impl Default for DownloadSettings {
             at_once: 2,
             rate_limit: None,
             cookies_browser: Some(CookiesBrowser::Automatic),
-            posts_folder: None,
             post_pause: PauseRange::default(),
         }
     }
 }
 
 impl DownloadSettings {
-    /// Where downloads go when their preset has no folder of its own: the chosen folder, or a Tsundoku folder in
-    /// Downloads.
+    /// The download folder: the chosen one, or a Tsundoku folder in Downloads.
     pub fn resolved_folder(&self) -> PathBuf {
-        chosen_folder(self.folder.as_deref()).unwrap_or_else(default_download_folder)
+        self.folder
+            .as_deref()
+            .map(str::trim)
+            .filter(|folder| !folder.is_empty())
+            .map_or_else(default_download_folder, PathBuf::from)
     }
-
-    /// Where posts go, each site in a folder of its own: the posts folder, or else the download folder.
-    pub fn resolved_posts_folder(&self) -> PathBuf {
-        chosen_folder(self.posts_folder.as_deref()).unwrap_or_else(|| self.resolved_folder())
-    }
-}
-
-/// A folder the user chose, unless it's blank.
-fn chosen_folder(folder: Option<&str>) -> Option<PathBuf> {
-    folder
-        .map(str::trim)
-        .filter(|folder| !folder.is_empty())
-        .map(PathBuf::from)
 }
 
 /// Where downloads go when no folder is chosen: a Tsundoku folder in Downloads, or in the user's folder if Windows
@@ -276,7 +299,7 @@ impl SettingsStore {
     /// settings is renamed to `settings.invalid.json`, kept for a look, and the app starts from the defaults.
     pub fn open(path: PathBuf) -> Result<Self, SettingsError> {
         let settings = match fs::read(&path) {
-            Ok(contents) => serde_json::from_slice(&contents).unwrap_or_else(|_| {
+            Ok(contents) => Settings::from_json(&contents).unwrap_or_else(|| {
                 let _ = fs::rename(&path, path.with_extension("invalid.json"));
                 Settings::default()
             }),
@@ -374,24 +397,9 @@ mod tests {
         let mut downloads = DownloadSettings::default();
         assert!(default_download_folder().ends_with("Tsundoku"));
         assert_eq!(downloads.resolved_folder(), default_download_folder());
-        assert_eq!(
-            downloads.resolved_posts_folder(),
-            default_download_folder(),
-            "posts too"
-        );
 
         downloads.folder = Some(r"D:\Tsundoku".to_owned());
         assert_eq!(downloads.resolved_folder(), PathBuf::from(r"D:\Tsundoku"));
-        assert_eq!(
-            downloads.resolved_posts_folder(),
-            PathBuf::from(r"D:\Tsundoku")
-        );
-
-        downloads.posts_folder = Some(r"D:\Posts".to_owned());
-        assert_eq!(
-            downloads.resolved_posts_folder(),
-            PathBuf::from(r"D:\Posts")
-        );
 
         downloads.folder = Some("  ".to_owned());
         assert_eq!(
@@ -399,6 +407,32 @@ mod tests {
             default_download_folder(),
             "blank is the default"
         );
+    }
+
+    #[test]
+    fn carries_the_posts_folder_into_the_posts_rule() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "downloads": { "postsFolder": "D:\\Posts", "atOnce": 3 } }"#,
+        )
+        .unwrap();
+        let settings = store_in(&folder).get();
+        assert_eq!(settings.rules.list, vec![posts_rule(Some(r"D:\Posts"))]);
+        assert_eq!(settings.downloads.at_once, 3);
+
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "downloads": { "postsFolder": "D:\\Posts" }, "rules": { "list": [] } }"#,
+        )
+        .unwrap();
+        assert!(
+            store_in(&folder).get().rules.list.is_empty(),
+            "saved rules stay as they are"
+        );
+
+        fs::write(folder.path().join("settings.json"), "{}").unwrap();
+        assert_eq!(store_in(&folder).get().rules.list, vec![posts_rule(None)]);
     }
 
     #[test]

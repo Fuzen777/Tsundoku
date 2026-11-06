@@ -11,6 +11,7 @@ import { useLinkDrop, usePreview } from "./usePreview"
 import { HistoryView } from "./views/HistoryView"
 import { PresetsView } from "./views/PresetsView"
 import { QueueView } from "./views/QueueView"
+import { RulesView } from "./views/RulesView"
 import { SettingsView } from "./views/SettingsView"
 import { SetupView } from "./views/SetupView"
 
@@ -86,6 +87,8 @@ function CurrentView({ view }: { view: ViewId }) {
       return <HistoryView />
     case "presets":
       return <PresetsView />
+    case "rules":
+      return <RulesView />
     case "settings":
       return <SettingsView />
   }

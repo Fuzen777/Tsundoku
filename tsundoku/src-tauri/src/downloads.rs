@@ -1,5 +1,5 @@
-//! The preset and queue commands: `tsundoku_core`'s presets and download queue exposed to the UI, with the queue's
-//! changes and progress sent as events.
+//! The preset, folder rule and queue commands: `tsundoku_core`'s presets, rules and download queue exposed to the
+//! UI, with the queue's changes and progress sent as events.
 
 use std::sync::Arc;
 
@@ -10,6 +10,7 @@ use tsundoku_core::downloads::{
 };
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
+use tsundoku_core::rules::{Destination, FolderRule, RuleError, RuleManager};
 use tsundoku_core::settings::DownloadSettings;
 
 /// Sent with every item when the queue changes.
@@ -19,6 +20,7 @@ const DOWNLOAD_PROGRESS_EVENT: &str = "download-progress";
 
 type Presets<'a> = State<'a, Arc<PresetManager>>;
 type Queue<'a> = State<'a, Arc<DownloadQueue>>;
+type Rules<'a> = State<'a, Arc<RuleManager>>;
 
 /// Passes the queue's changes on to the UI as events.
 pub struct EventListener {
@@ -82,6 +84,33 @@ pub fn set_default_preset(
 #[tauri::command]
 pub fn preset_arguments(preset: Preset) -> Result<Vec<String>, PresetError> {
     preset.to_args()
+}
+
+/// The folder rules, in the order they're tried.
+#[tauri::command]
+pub fn folder_rules(manager: Rules<'_>) -> Vec<FolderRule> {
+    manager.list()
+}
+
+/// Replaces every folder rule, and answers with them as saved: trimmed, new ones with their ID.
+#[tauri::command]
+pub fn save_folder_rules(
+    manager: Rules<'_>,
+    rules: Vec<FolderRule>,
+) -> Result<Vec<FolderRule>, RuleError> {
+    manager.save(rules)
+}
+
+/// Where a download would go and what decided it, for the preview card: with a preset for a video, none for a post.
+#[tauri::command]
+pub fn download_destination(
+    queue: Queue<'_>,
+    presets: Presets<'_>,
+    video: VideoInfo,
+    preset_id: Option<String>,
+) -> Destination {
+    let preset = preset_id.and_then(|id| presets.get(&id));
+    queue.destination(&video, preset.as_ref())
 }
 
 #[tauri::command]

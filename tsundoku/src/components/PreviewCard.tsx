@@ -1,6 +1,7 @@
 import { useState } from "react"
-import { Loader2, X } from "lucide-react"
+import { Folder, Loader2, X } from "lucide-react"
 import { addPostToQueue, addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
+import type { Destination } from "../bindings/Destination"
 import type { PastDownload } from "../bindings/PastDownload"
 import type { VideoPreview } from "../bindings/VideoPreview"
 import {
@@ -11,7 +12,8 @@ import {
   type ErrorDescription,
 } from "../errors"
 import { formatCalendarDate, formatDay, formatDuration, joinDetails } from "../format"
-import { usePresets } from "../queries"
+import { useAppActions } from "../navigation"
+import { useDownloadDestination, usePresets } from "../queries"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
@@ -118,6 +120,7 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const presetId = chosenId ?? presets?.defaultId ?? null
+  const { data: destination } = useDownloadDestination(preview.video, presetId, presetId !== null)
 
   async function download() {
     const preset = presets?.presets.find((candidate) => candidate.id === presetId)
@@ -148,7 +151,8 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
   return (
     <div className="flex flex-col items-end gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
-      <div className="flex items-center gap-2">
+      <div className="flex w-full items-center gap-2">
+        <DestinationLine destination={destination} />
         <SelectInput
           aria-label={strings.preview.preset}
           title={strings.preview.preset}
@@ -175,6 +179,7 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
 function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
+  const { data: destination } = useDownloadDestination(preview.video, null)
 
   async function download() {
     setAdding(true)
@@ -191,9 +196,42 @@ function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onA
   return (
     <div className="flex flex-col items-end gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
-      <Button variant="primary" loading={adding} onClick={() => void download()}>
-        {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
-      </Button>
+      <div className="flex w-full items-center gap-2">
+        <DestinationLine destination={destination} />
+        <Button variant="primary" loading={adding} onClick={() => void download()}>
+          {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/** Where the download will go, and what picked that folder: a rule, the preset or the download folder, each opening
+ * where it's set. */
+function DestinationLine({ destination }: { destination: Destination | undefined }) {
+  const { navigate } = useAppActions()
+  if (!destination) return <div className="flex-1" />
+  const { source } = destination
+  const sources = strings.preview.destinationSources
+  const [label, view] =
+    source.kind === "rule"
+      ? ([sources.rule(source.number), "rules"] as const)
+      : source.kind === "preset"
+        ? ([sources.preset, "presets"] as const)
+        : ([sources.downloadFolder, "settings"] as const)
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-fg-secondary">
+      <Folder size={14} className="shrink-0" />
+      <span className="truncate" title={strings.preview.savesIn(destination.folder)}>
+        {destination.folder}
+      </span>
+      <button
+        type="button"
+        className="shrink-0 rounded-sm text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
+        onClick={() => navigate(view)}
+      >
+        {strings.preview.destinationFrom(label)}
+      </button>
     </div>
   )
 }

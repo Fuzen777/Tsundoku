@@ -21,7 +21,7 @@ type: Features
 
 ## Navigation
 
-- **Sidebar**: Queue, History and Presets at the top, Settings at the bottom.
+- **Sidebar**: Queue, History, Presets and Rules at the top, Settings at the bottom.
 - **About**: Settings shows the app's version.
 
 ## Adding a Video or Post
@@ -32,9 +32,10 @@ type: Features
 - **Already downloaded**: when the history has the video, the card says when and with which preset, shows the file's path with Open File and Show in Folder, and Download becomes Download Again. If the file was moved or deleted, it says so. The check uses the site and the video's ID, so every link to a video is caught: `youtu.be`, Shorts, a timestamp, a playlist it's in.
 - **Refused links**: playlists and channels, live streams, and premieres that haven't started each get a plain message. So do unsupported sites, unavailable videos, videos needing a sign-in or an age check, and network errors, with yt-dlp's own error underneath.
 - **Image posts**: an Instagram, X, Bluesky, Pixiv or other image post shows its caption, author, date and what it holds ("2 images, 4 videos"). Each link is read by whichever tool suits it, yt-dlp or gallery-dl, and by the other when the first can't, so the user never has to choose.
-- **Download a post**: a post has Download without a preset, since its files are kept as the site gives them. They all go into the site's folder (Instagram, X, or the site's name) in the posts folder. Files already there are skipped, so Download Again only fetches what's missing.
+- **Download a post**: a post has Download without a preset, since its files are kept as the site gives them. They all go into the site's folder (Instagram, X, or the site's name) in the download folder, by a rule that can be changed. Files already there are skipped, so Download Again only fetches what's missing.
 - **Without Deno**: a YouTube preview warns that some formats may be missing.
 - **Download**: pick a preset (the default is preselected) and Download: the video joins the queue, and the card and the add bar clear. With a video already downloaded, it's Download Again; with the same preset as before, it asks first, since the new file replaces the old one.
+- **Where it goes**: beside Download, the folder the download will be saved in and what picked it: a rule ("Rule 2"), the preset's folder or the download folder. Clicking it opens the rules, the presets or Settings.
 - **Already in the queue**: the card says so, without Download.
 
 ## Queue
@@ -59,6 +60,15 @@ type: Features
 - **Set as Default, Duplicate, Delete**, and **Reset** for the four built-ins, which can be edited but not deleted.
 - **Kept per download**: a download keeps the preset as it was when it was added, so editing a preset doesn't change downloads already in the queue.
 
+## Rules
+
+- **Folder rules**: "when all of these match, save in this folder". A condition checks the site (by any of its names, such as X, twitter or x.com, with every supported site suggested), the uploader or account, the title, the link, the kind (video, audio or post of images) or the preset, with Is, Is Not, Contains or Doesn't Contain, ignoring case. A rule without conditions matches every download.
+- **In order**: rules are tried from the top, and the first one that's on and matches decides. Without one, a preset's own folder is used, then the download folder.
+- **Folders that follow the download**: `{site}` and `{uploader}` in a folder become the download's site and uploader (Unknown without one), made safe as folder names. A folder that isn't a full path goes inside the download folder.
+- **Each as a sentence**: "When the site is Instagram and the uploader is “natgeo”", with its number and its folder as it will be used. Move Up, Move Down, Edit, Turn Off or On, and Delete (after asking). An edit is a draft until Save.
+- **Posts**: every install starts with "When it's a post of images → {site}", so each site's posts get a folder of their own, and it can be edited, moved or deleted like any other.
+- **Kept per download**: a download keeps the folder it got when it was added, so changing the rules doesn't move downloads already in the queue.
+
 ## History
 
 - **History view**: every video downloaded, newest first: thumbnail, title, uploader, site, length, and its latest download's preset, date and size.
@@ -73,11 +83,11 @@ type: Features
 
 ## Settings
 
-- **Download Folder**: where everything goes unless its preset has a folder of its own: a Tsundoku folder in Downloads by default, with Choose Folder… and Use Default. Posts of images go there too, each site in a folder of its own.
+- **Download Folder**: where everything goes unless a rule or its preset picks another folder: a Tsundoku folder in Downloads by default, with Choose Folder… and Use Default. Rules' folders that aren't full paths go inside it.
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
-- **Posts of Images**: the posts folder, where each site gets a folder of its own (the download folder by default, with Choose Folder… and Use Default), and the pause before each Instagram file: a random time in a range, 10 to 20 seconds to start with, up to 600.
+- **Posts of Images**: Open Rules, where the rule for posts' folders is, and the pause before each Instagram file: a random time in a range, 10 to 20 seconds to start with, up to 600.
 - **Cookies**: where to read cookies from, for links that need a signed-in account or an age check. It applies to previews and downloads. Automatic (the default) finds every browser profile on the PC and picks, for each link, the one signed in to its site (by which cookies exist, never their values), or for an unknown site the one that visited it last. A single browser (Firefox, Zen, LibreWolf, Floorp, Waterfox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium) uses its profile signed in to the site, else its default one. Choosing a Chromium browser warns that they lock and encrypt their cookies on Windows; Firefox and its forks work.
 - **Supported Sites**: every site yt-dlp and gallery-dl can read, merged into one searchable list without saying which tool reads which, each site once (its playlists, channels and other parts that the tools list on their own are left out). Sites that need an account (Instagram, X, YouTube, TikTok, Reddit, Facebook, Twitch, Niconico, Bilibili) come first, under Signed In with the browser profiles signed in to them, most recent first, or under Not Signed In. The list is read again when Settings opens after a minute, since sign-ins change in the browser.
 

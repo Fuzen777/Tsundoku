@@ -10,6 +10,7 @@ import { Field, SelectInput, TextInput } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { describeDownloadError, describePresetError, type ErrorDescription } from "../../errors"
+import { useAppActions } from "../../navigation"
 import { useDefaultDownloadFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
 
@@ -73,8 +74,10 @@ export function DownloadsSection() {
   const folder = options?.folder ?? null
 
   async function saveFolder(chosen: string | null) {
-    // Presets without a folder of their own show the download folder.
-    if (await save({ folder: chosen })) await queryClient.invalidateQueries({ queryKey: queryKeys.presets })
+    if (!(await save({ folder: chosen }))) return
+    // Presets without a folder of their own, rules and the preview card show the download folder.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.downloadDestination })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.presets })
   }
 
   async function chooseFolder() {
@@ -175,22 +178,14 @@ export function DownloadsSection() {
   )
 }
 
-/** Settings → Posts of Images: where posts go, each site in its own folder, and the pause between Instagram's files. */
+/** Settings → Posts of Images: where posts go (a rule, so a link to Rules), and the pause between Instagram's files. */
 export function PostsSection() {
+  const { navigate } = useAppActions()
   const { options, save, error } = useSaveOptions()
-  const { data: defaultDownloadFolder } = useDefaultDownloadFolder()
   // The pause is saved when a field is left or Enter is pressed, not at every key.
   const [pause, setPause] = useState<{ min: string; max: string } | null>(null)
   const savedPause = options?.postPause ?? { min: 10, max: 20 }
   const shownPause = pause ?? { min: String(savedPause.min), max: String(savedPause.max) }
-  const folder = options?.postsFolder ?? null
-  // Without a folder of their own, posts go to the download folder.
-  const defaultFolder = options?.folder ?? defaultDownloadFolder ?? null
-
-  async function chooseFolder() {
-    const chosen = await pickFolder(text.postsFolderTitle)
-    if (chosen) await save({ postsFolder: chosen })
-  }
 
   async function savePause() {
     if (pause === null) return
@@ -221,22 +216,12 @@ export function PostsSection() {
   return (
     <Section title={text.posts}>
       <Card className="flex flex-col gap-4 p-4">
-        <Field
-          label={text.postsFolder}
-          hint={folder ? text.postsFolderHint : `${text.postsFolderHint} ${text.postsInDownloadFolder}`}
-        >
-          <div className="flex gap-2">
-            <TextInput readOnly className="flex-1" value={folder ?? defaultFolder ?? ""} title={folder ?? defaultFolder ?? ""} />
-            <Button disabled={!options} onClick={() => void chooseFolder()}>
-              {text.chooseFolder}
-            </Button>
-            {folder && (
-              <Button variant="ghost" onClick={() => void save({ postsFolder: null })}>
-                {text.useDefaultFolder}
-              </Button>
-            )}
-          </div>
-        </Field>
+        <div className="flex items-center gap-3">
+          <p className="min-w-0 flex-1 text-fg-secondary">{text.postsRule}</p>
+          <Button size="sm" onClick={() => navigate("rules")}>
+            {text.openRules}
+          </Button>
+        </div>
         <Field label={text.postPause} hint={text.postPauseHint(LONGEST_PAUSE)} htmlFor="settings-pause-min">
           <div className="flex items-center gap-2 text-fg-secondary">
             <span>{text.pauseFrom}</span>

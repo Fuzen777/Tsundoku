@@ -7,8 +7,8 @@ import type { PauseRange } from "./PauseRange";
  */
 export type DownloadSettings = { 
 /**
- * Where downloads go when their preset has no folder of its own, and posts unless `posts_folder` is set, or
- * `None` for a Tsundoku folder in Downloads (`default_download_folder`).
+ * Where downloads go when no rule matches and their preset has no folder of its own, or `None` for a Tsundoku
+ * folder in Downloads (`default_download_folder`). A rule's folder that isn't a full path is inside it.
  */
 folder: string | null, 
 /**
@@ -25,10 +25,6 @@ rateLimit: string | null,
  * none at all.
  */
 cookiesBrowser: CookiesBrowser | null, 
-/**
- * Where posts of images go, each site in a folder of its own, or `None` for the download folder.
- */
-postsFolder: string | null, 
 /**
  * How long to wait before each file of a post on a site that limits how fast it's read
  * (`sites::paces_downloads`, Instagram), so the account isn't blocked.

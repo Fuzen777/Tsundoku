@@ -24,7 +24,8 @@ use crate::cancel::CancelToken;
 use crate::database::Database;
 use crate::history::{History, NewDownload, SavedFile};
 use crate::metadata::{PreviewError, VideoInfo};
-use crate::presets::{PresetError, PresetManager};
+use crate::presets::{Preset, PresetError, PresetManager};
+use crate::rules::{self, Destination, RuleSubject};
 use crate::settings::{DownloadSettings, SettingsStore};
 use crate::sites;
 use crate::sync::lock;
@@ -298,12 +299,10 @@ impl DownloadQueue {
         if self.contains(&video.site, &video.video_id) {
             return Err(DownloadError::AlreadyQueued);
         }
+        let folder = self.destination(&video, Some(&preset)).folder;
         let mut item = QueueItem {
             id: 0,
-            folder: preset
-                .resolved_folder(&self.settings.get().downloads.resolved_folder())
-                .display()
-                .to_string(),
+            folder,
             video,
             preset: Some(preset),
             state: QueueState::Waiting,
@@ -320,8 +319,8 @@ impl DownloadQueue {
     }
 
     /// Adds a post of images (a video whose `post` is set, from gallery-dl), to download all its files into the
-    /// site's folder in the posts folder. Files already there are skipped, so adding a post again only fetches what's
-    /// missing.
+    /// folder the rules give it (by default the site's folder in the download folder). Files already there are
+    /// skipped, so adding a post again only fetches what's missing.
     pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
         if video.post.is_none() {
             return Err(DownloadError::WrongState);
@@ -329,9 +328,10 @@ impl DownloadQueue {
         if self.contains(&video.site, &video.video_id) {
             return Err(DownloadError::AlreadyQueued);
         }
+        let folder = self.destination(&video, None).folder;
         let mut item = QueueItem {
             id: 0,
-            folder: post_folder(&self.options(), &video).display().to_string(),
+            folder,
             video,
             preset: None,
             state: QueueState::Waiting,
@@ -431,8 +431,19 @@ impl DownloadQueue {
         Ok(())
     }
 
-    /// How downloads run: where they go, how many at once, the speed limit, the cookies browser, and where posts go
-    /// and how fast.
+    /// Where a download of `video` would go, with `preset` (`None` for a post): the folder of the first rule that
+    /// matches, else the preset's own folder, else the download folder. Adding uses it, and the preview card shows it.
+    pub fn destination(&self, video: &VideoInfo, preset: Option<&Preset>) -> Destination {
+        let settings = self.settings.get();
+        rules::destination(
+            &settings.rules.list,
+            &RuleSubject { video, preset },
+            &settings.downloads.resolved_folder(),
+        )
+    }
+
+    /// How downloads run: where they go, how many at once, the speed limit, the cookies browser, and how fast posts
+    /// are read.
     pub fn options(&self) -> DownloadSettings {
         self.settings.get().downloads
     }
@@ -443,17 +454,14 @@ impl DownloadQueue {
         &self,
         options: DownloadSettings,
     ) -> Result<DownloadSettings, DownloadError> {
-        let chosen = |folder: Option<String>| {
-            folder
-                .map(|folder| folder.trim().to_owned())
-                .filter(|folder| !folder.is_empty())
-        };
         let options = DownloadSettings {
-            folder: chosen(options.folder),
+            folder: options
+                .folder
+                .map(|folder| folder.trim().to_owned())
+                .filter(|folder| !folder.is_empty()),
             at_once: options.at_once.clamp(1, MAX_AT_ONCE),
             rate_limit: normalize_rate_limit(options.rate_limit.as_deref())?,
             cookies_browser: options.cookies_browser,
-            posts_folder: chosen(options.posts_folder),
             post_pause: options.post_pause.normalized(),
         };
         self.settings
@@ -684,25 +692,6 @@ fn normalize_rate_limit(text: Option<&str>) -> Result<Option<String>, DownloadEr
             value: text.to_owned(),
         }),
     }
-}
-
-/// A post's folder: the posts folder (by default the download folder), then a folder for the site ("Instagram", "X",
-/// or gallery-dl's name such as "danbooru"), so each site's files can be imported on their own.
-fn post_folder(options: &DownloadSettings, video: &VideoInfo) -> PathBuf {
-    let base = options.resolved_posts_folder();
-    let site = sites::sign_in_site(&video.url).map_or(video.site.as_str(), |site| site.name);
-    let name: String = site
-        .chars()
-        .map(|character| {
-            if character.is_control() || r#"<>:"/\|?*"#.contains(character) {
-                '_'
-            } else {
-                character
-            }
-        })
-        .collect();
-    let name = name.trim_matches(['.', ' ']);
-    base.join(if name.is_empty() { "Other" } else { name })
 }
 
 fn find(items: &mut [QueueItem], id: i64) -> Result<&mut QueueItem, DownloadError> {

@@ -5,8 +5,10 @@ import {
   detectTools,
   getAppInfo,
   getDefaultDownloadFolder,
+  getDownloadDestination,
   getDownloadFiles,
   getDownloadOptions,
+  getFolderRules,
   getSupportedSites,
   getHistoryFilters,
   getVideoDownloads,
@@ -25,6 +27,7 @@ import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
+import type { VideoInfo } from "./bindings/VideoInfo"
 
 /*
   React Query hooks over api.ts. The tool queries never go stale on their own: they change only through the app's
@@ -94,13 +97,30 @@ export function usePresets() {
   return useQuery({ queryKey: queryKeys.presets, queryFn: getPresetsOverview, staleTime: Infinity })
 }
 
-/** Puts the presets, as an action returned them, in place. */
+/** Puts the presets, as an action returned them, in place. A preset's folder can change where a download goes. */
 export function useStorePresets() {
   const queryClient = useQueryClient()
   return useCallback(
-    (overview: PresetsOverview) => queryClient.setQueryData(queryKeys.presets, overview),
+    (overview: PresetsOverview) => {
+      queryClient.setQueryData(queryKeys.presets, overview)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.downloadDestination })
+    },
     [queryClient],
   )
+}
+
+export function useFolderRules() {
+  return useQuery({ queryKey: queryKeys.folderRules, queryFn: getFolderRules, staleTime: Infinity })
+}
+
+/** Where a download would go, kept while the next answer loads so the preview card doesn't flicker. */
+export function useDownloadDestination(video: VideoInfo, presetId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: [...queryKeys.downloadDestination, video.site, video.videoId, presetId],
+    queryFn: () => getDownloadDestination(video, presetId),
+    placeholderData: keepPreviousData,
+    enabled,
+  })
 }
 
 /** The yt-dlp arguments a preset gives, kept while the next ones load so the editor doesn't flicker. */

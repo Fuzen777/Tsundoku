@@ -19,6 +19,7 @@ use tsundoku_core::downloads::{DownloadQueue, QueueServices, ToolRunner};
 use tsundoku_core::history::History;
 use tsundoku_core::presets::PresetManager;
 use tsundoku_core::preview::PreviewService;
+use tsundoku_core::rules::RuleManager;
 use tsundoku_core::settings::SettingsStore;
 use tsundoku_core::tools::ToolManager;
 
@@ -60,9 +61,9 @@ fn show_main_window_if_still_hidden(window: WebviewWindow) {
     });
 }
 
-/// Opens what lives in the data folder (the settings, the tools they set up, the history and the download queue) and
-/// gives each to Tauri's state for the commands. Development builds keep their own data folder (AGENTS.md → Data and
-/// Testing).
+/// Opens what lives in the data folder (the settings with the presets and rules, the tools they set up, the history
+/// and the download queue) and gives each to Tauri's state for the commands. Development builds keep their own data
+/// folder (AGENTS.md → Data and Testing).
 fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let build = if cfg!(debug_assertions) {
         BuildKind::Development
@@ -78,6 +79,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let database = Arc::new(Database::open(&paths.database_file())?);
     let history = Arc::new(History::new(Arc::clone(&database), paths.archive_file())?);
     let presets = Arc::new(PresetManager::new(Arc::clone(&settings)));
+    let rules = Arc::new(RuleManager::new(Arc::clone(&settings)));
     let logs_folder = paths.logs_folder();
     let tools = Arc::new(ToolManager::new(
         paths,
@@ -100,6 +102,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(Arc::clone(&tools));
     app.manage(history);
     app.manage(presets);
+    app.manage(rules);
     app.manage(queue);
     app.manage(Arc::new(PreviewService::new()));
     Ok(tools)
@@ -170,6 +173,9 @@ pub fn run() {
             downloads::reset_preset,
             downloads::set_default_preset,
             downloads::preset_arguments,
+            downloads::folder_rules,
+            downloads::save_folder_rules,
+            downloads::download_destination,
             downloads::queue_items,
             downloads::add_to_queue,
             downloads::add_post_to_queue,

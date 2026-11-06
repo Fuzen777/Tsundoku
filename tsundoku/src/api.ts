@@ -6,9 +6,11 @@ import { openUrl } from "@tauri-apps/plugin-opener"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { check } from "@tauri-apps/plugin-updater"
 import type { AppInfo } from "./bindings/AppInfo"
+import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
@@ -43,6 +45,8 @@ export const queryKeys = {
   toolDownloads: ["tool-downloads"],
   presets: ["presets"],
   presetArguments: ["preset-arguments"],
+  folderRules: ["folder-rules"],
+  downloadDestination: ["download-destination"],
   queue: ["queue"],
   history: ["history"],
   historyFilters: ["history-filters"],
@@ -233,6 +237,25 @@ export function addPostToQueue(video: VideoInfo): Promise<QueueItem> {
   return invoke<QueueItem>("add_post_to_queue", { video })
 }
 
+/** The folder rules, in the order they're tried. */
+export function getFolderRules(): Promise<FolderRule[]> {
+  if (!isTauri()) return Promise.resolve(standIns.folderRules)
+  return invoke<FolderRule[]>("folder_rules")
+}
+
+/** Replaces every folder rule, and resolves to them as saved. Rejects with a RuleError for a rule without a folder
+ * or with an empty condition. */
+export function saveFolderRules(rules: FolderRule[]): Promise<FolderRule[]> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<FolderRule[]>("save_folder_rules", { rules })
+}
+
+/** Where a download would go and what decided it: with a preset for a video, none for a post. */
+export function getDownloadDestination(video: VideoInfo, presetId: string | null): Promise<Destination> {
+  if (!isTauri()) return Promise.resolve(standIns.destination)
+  return invoke<Destination>("download_destination", { video, presetId })
+}
+
 /** Where downloads go when no folder is chosen: a Tsundoku folder in Downloads. */
 export function getDefaultDownloadFolder(): Promise<string> {
   if (!isTauri()) return Promise.resolve(standIns.defaultDownloadFolder)
@@ -369,7 +392,8 @@ export function getSupportedSites(): Promise<SupportedSites> {
   return invoke<SupportedSites>("supported_sites")
 }
 
-/** How downloads run: where they go, how many at once, the speed limit, the cookies browser and posts. */
+/** How downloads run: the download folder, how many at once, the speed limit, the cookies browser and the pause
+ * between a post's files. */
 export function getDownloadOptions(): Promise<DownloadSettings> {
   if (!isTauri()) return Promise.resolve(standIns.downloadOptions)
   return invoke<DownloadSettings>("download_options")

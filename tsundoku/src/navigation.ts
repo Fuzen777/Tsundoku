@@ -1,8 +1,8 @@
 import { createContext, useContext } from "react"
-import { History, ListVideo, Settings, SlidersHorizontal, type LucideIcon } from "lucide-react"
+import { FolderTree, History, ListVideo, Settings, SlidersHorizontal, type LucideIcon } from "lucide-react"
 import { strings } from "./strings"
 
-export type ViewId = "queue" | "history" | "presets" | "settings"
+export type ViewId = "queue" | "history" | "presets" | "rules" | "settings"
 
 export interface NavItem {
   id: ViewId
@@ -15,6 +15,7 @@ export const mainNavItems: readonly NavItem[] = [
   { id: "queue", label: strings.nav.queue, icon: ListVideo },
   { id: "history", label: strings.nav.history, icon: History },
   { id: "presets", label: strings.nav.presets, icon: SlidersHorizontal },
+  { id: "rules", label: strings.nav.rules, icon: FolderTree },
 ]
 
 /** Settings sits apart, at the bottom of the sidebar. */

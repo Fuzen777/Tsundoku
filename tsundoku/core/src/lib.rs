@@ -16,6 +16,7 @@ pub mod metadata;
 pub mod presets;
 pub mod preview;
 pub mod process;
+pub mod rules;
 pub mod settings;
 pub mod sites;
 pub mod supported_sites;

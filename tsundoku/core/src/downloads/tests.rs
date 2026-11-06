@@ -100,8 +100,9 @@ impl Test {
                 // No cookies, so the tests never look at this PC's browsers.
                 settings.downloads.cookies_browser = None;
                 settings.downloads.folder = Some(downloads.clone());
-                settings.downloads.posts_folder =
-                    Some(folder.path().join("posts").display().to_string());
+                settings.rules.list = vec![crate::rules::posts_rule(Some(
+                    &folder.path().join("posts").display().to_string(),
+                ))];
             })
             .unwrap();
         let runner = Arc::new(FakeRunner::default());
@@ -432,14 +433,12 @@ fn checks_and_saves_the_options() {
             at_once: 9,
             rate_limit: Some(" 4.2m ".to_owned()),
             cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
-            posts_folder: Some("   ".to_owned()),
             post_pause: crate::settings::PauseRange { min: 30, max: 5 },
         })
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
     assert_eq!(saved.folder, None, "blank is the default folder");
-    assert_eq!(saved.posts_folder, None, "blank is the download folder");
     assert_eq!(
         saved.post_pause,
         crate::settings::PauseRange { min: 5, max: 5 },
@@ -635,39 +634,38 @@ fn a_preset_without_a_folder_saves_in_the_download_folder() {
 }
 
 #[test]
-fn posts_go_to_the_download_folder_unless_they_have_their_own() {
-    let mut options = DownloadSettings {
-        folder: Some(r"D:\Tsundoku".to_owned()),
-        ..DownloadSettings::default()
-    };
-    let post = post("1");
-    assert_eq!(
-        post_folder(&options, &post),
-        Path::new(r"D:\Tsundoku").join("Instagram")
-    );
-    options.posts_folder = Some(r"D:\Posts".to_owned());
-    assert_eq!(
-        post_folder(&options, &post),
-        Path::new(r"D:\Posts").join("Instagram")
-    );
-}
+fn a_rule_picks_the_folder() {
+    use crate::rules::{DestinationSource, FolderRule, RuleCondition, RuleField, RuleOperator};
 
-#[test]
-fn names_site_folders_safely() {
-    let options = DownloadSettings {
-        posts_folder: Some(r"D:\Posts".to_owned()),
-        ..DownloadSettings::default()
-    };
-    let mut odd = post("1");
-    odd.site = "a:b/c.".to_owned();
-    odd.url = "https://example.org/1".to_owned();
+    let test = Test::new();
+    let by_uploader = test.folder.path().join("by-uploader");
+    test.settings
+        .update(|settings| {
+            settings.rules.list.insert(
+                0,
+                FolderRule {
+                    id: "rule-1".to_owned(),
+                    enabled: true,
+                    conditions: vec![RuleCondition {
+                        field: RuleField::Site,
+                        operator: RuleOperator::Is,
+                        value: "YouTube".to_owned(),
+                    }],
+                    folder: by_uploader.join("{uploader}").display().to_string(),
+                },
+            );
+        })
+        .unwrap();
+    let preset = test.queue.presets.get("best-video");
+    let destination = test.queue.destination(&video("a"), preset.as_ref());
+    assert_eq!(destination.source, DestinationSource::Rule { number: 1 });
+    let item = test.queue.add(video("a"), "best-video", false).unwrap();
     assert_eq!(
-        post_folder(&options, &odd),
-        Path::new(r"D:\Posts").join("a_b_c")
+        item.folder,
+        by_uploader.join("Unknown").display().to_string(),
+        "a video without an uploader"
     );
-    odd.site = "..".to_owned();
-    assert_eq!(
-        post_folder(&options, &odd),
-        Path::new(r"D:\Posts").join("Other")
-    );
+    assert_eq!(item.folder, destination.folder);
+    wait_until("it runs", || test.runner.started().contains(&item.id));
+    test.queue.cancel(item.id).unwrap();
 }

@@ -1,7 +1,6 @@
 //! Presets: how a video is downloaded (formats, container, file name, folder, what to embed), the yt-dlp arguments
 //! each one gives, and the user's list of them, kept in `settings.json`.
 
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -23,7 +22,7 @@ pub struct Preset {
     pub output: PresetOutput,
     /// yt-dlp's output template for the file name.
     pub file_name: String,
-    /// Where files go, or `None` for the download folder (Settings → Downloads).
+    /// Where files go when no rule matches, or `None` for the download folder (Settings → Downloads).
     pub folder: Option<String>,
     pub embed_metadata: bool,
     pub embed_thumbnail: bool,
@@ -240,12 +239,12 @@ impl Preset {
         }
     }
 
-    /// Where the preset's files go: its folder, or else the download folder.
-    pub fn resolved_folder(&self, download_folder: &Path) -> PathBuf {
-        match &self.folder {
-            Some(folder) if !folder.trim().is_empty() => PathBuf::from(folder),
-            _ => download_folder.to_path_buf(),
-        }
+    /// The preset's own folder, unless it has none (then the download folder is used).
+    pub fn own_folder(&self) -> Option<&str> {
+        self.folder
+            .as_deref()
+            .map(str::trim)
+            .filter(|folder| !folder.is_empty())
     }
 }
 
@@ -646,13 +645,11 @@ mod tests {
     #[test]
     fn resolves_the_folder() {
         let mut preset = built_in("best-audio");
-        let downloads = Path::new(r"D:\Tsundoku");
-        assert_eq!(preset.resolved_folder(downloads), downloads.to_path_buf());
-        preset.folder = Some(r"D:\Music\Rips".to_owned());
-        assert_eq!(
-            preset.resolved_folder(downloads),
-            PathBuf::from(r"D:\Music\Rips")
-        );
+        assert_eq!(preset.own_folder(), None);
+        preset.folder = Some("  ".to_owned());
+        assert_eq!(preset.own_folder(), None, "blank is none");
+        preset.folder = Some(r" D:\Music\Rips ".to_owned());
+        assert_eq!(preset.own_folder(), Some(r"D:\Music\Rips"));
     }
 
     fn manager_in(folder: &tempfile::TempDir) -> PresetManager {
