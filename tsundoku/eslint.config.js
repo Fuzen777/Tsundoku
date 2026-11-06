@@ -27,4 +27,13 @@ export default defineConfig([
       ],
     },
   },
+  // The send buttons' userscript (Settings → Adding Links copies it), which runs on the sites themselves.
+  {
+    files: ['userscripts/**/*.user.js'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: globals.browser,
+      sourceType: 'script',
+    },
+  },
 ])

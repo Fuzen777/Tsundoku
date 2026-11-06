@@ -22,6 +22,13 @@ export const mainNavItems: readonly NavItem[] = [
 /** Settings sits apart, at the bottom of the sidebar. */
 export const settingsNavItem: NavItem = { id: "settings", label: strings.nav.settings, icon: Settings }
 
+/** Places in Settings that another view sends the user to, as the IDs of their elements. */
+export const SETTINGS_PLACES = {
+  clipboardShortcut: "settings-clipboard-shortcut",
+  sendPage: "settings-send-page",
+  sendButtons: "settings-send-buttons",
+} as const
+
 /** What any view can ask of the app around it. */
 export interface AppActions {
   navigate: (view: ViewId) => void

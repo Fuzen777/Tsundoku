@@ -6,8 +6,9 @@ import { Card } from "../../components/Card"
 import { Checkbox, Field, SelectInput } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
+import { SETTINGS_PLACES } from "../../navigation"
 import { useSaveAddingOptions } from "../../queries"
-import { SEND_PAGE_BOOKMARK } from "../../sendPage"
+import { SEND_BUTTONS_USERSCRIPT, SEND_PAGE_BOOKMARK } from "../../sendPage"
 import { strings } from "../../strings"
 
 const text = strings.settings
@@ -16,8 +17,8 @@ const text = strings.settings
 const SHORTCUTS = Object.keys(text.shortcutKeys) as ClipboardShortcut[]
 
 /**
- * Settings → Adding Links: the clipboard watcher, the clipboard shortcut, the browser bookmark, Download Right Away
- * for the links they add, and notifications.
+ * Settings → Adding Links: the clipboard watcher, the clipboard shortcut, the browser bookmark and the send buttons'
+ * userscript, Download Right Away for the links they add, and notifications.
  */
 export function AddingSection() {
   const { options, save, error } = useSaveAddingOptions()
@@ -37,9 +38,9 @@ export function AddingSection() {
           <p className="pl-6 text-xs text-fg-muted">{text.watchClipboardHint}</p>
         </div>
         <div className="max-w-xs">
-          <Field label={text.clipboardShortcut} hint={text.clipboardShortcutHint} htmlFor="settings-clipboard-shortcut">
+          <Field label={text.clipboardShortcut} hint={text.clipboardShortcutHint} htmlFor={SETTINGS_PLACES.clipboardShortcut}>
             <SelectInput
-              id="settings-clipboard-shortcut"
+              id={SETTINGS_PLACES.clipboardShortcut}
               value={shortcut ?? ""}
               disabled={!options}
               onChange={(event) =>
@@ -55,7 +56,23 @@ export function AddingSection() {
             </SelectInput>
           </Field>
         </div>
-        <BrowserBookmark />
+        <CopyBlock
+          id={SETTINGS_PLACES.sendPage}
+          title={text.browserBookmark}
+          hint={text.browserBookmarkHint}
+          copyLabel={text.copyBookmark}
+          copiedMessage={text.bookmarkCopied}
+          value={SEND_PAGE_BOOKMARK}
+        />
+        <CopyBlock
+          id={SETTINGS_PLACES.sendButtons}
+          title={text.sendButtons}
+          hint={text.sendButtonsHint}
+          howTo={text.userscriptHowTo}
+          copyLabel={text.copyUserscript}
+          copiedMessage={text.userscriptCopied}
+          value={SEND_BUTTONS_USERSCRIPT}
+        />
         <div className="flex flex-col gap-1">
           <Checkbox
             label={text.downloadRightAway}
@@ -98,13 +115,25 @@ export function AddingSection() {
   )
 }
 
-/** Send from Your Browser: what the bookmark does and how to add it, with Copy Bookmark Address. */
-function BrowserBookmark() {
+interface CopyBlockProps {
+  /** Where Settings scrolls to when another view opens it there. */
+  id: string
+  title: string
+  hint: string
+  /** How to use what's copied, under the button. */
+  howTo?: string
+  copyLabel: string
+  copiedMessage: string
+  value: string
+}
+
+/** A way to add links from a browser: what it does, a button that copies what it takes, and how to use it. */
+function CopyBlock({ id, title, hint, howTo, copyLabel, copiedMessage, value }: CopyBlockProps) {
   const [copied, setCopied] = useState<boolean | null>(null)
 
   async function copy() {
     try {
-      await copyText(SEND_PAGE_BOOKMARK)
+      await copyText(value)
       setCopied(true)
     } catch {
       setCopied(false)
@@ -112,16 +141,17 @@ function BrowserBookmark() {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="font-medium">{text.browserBookmark}</p>
-      <p className="text-xs text-fg-muted">{text.browserBookmarkHint}</p>
+    <div id={id} className="flex scroll-mt-4 flex-col gap-1.5">
+      <p className="font-medium">{title}</p>
+      <p className="text-xs text-fg-muted">{hint}</p>
       <div className="flex items-center gap-3">
         <Button size="sm" onClick={() => void copy()}>
-          {text.copyBookmark}
+          {copyLabel}
         </Button>
-        {copied === true && <StatusMessage tone="success" message={text.bookmarkCopied} />}
+        {copied === true && <StatusMessage tone="success" message={copiedMessage} />}
         {copied === false && <StatusMessage tone="danger" message={strings.errors.unexpected} />}
       </div>
+      {howTo && <p className="text-xs text-fg-muted">{howTo}</p>}
     </div>
   )
 }

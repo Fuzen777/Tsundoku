@@ -703,6 +703,13 @@ export const strings = {
       "A bookmark that sends the page you're on to Pending in one click. Copy its address, add a new bookmark to your browser's toolbar (name it Send to Tsundoku, say) and paste the address as its URL. The first time, your browser asks whether to open Tsundoku.",
     copyBookmark: "Copy Bookmark Address",
     bookmarkCopied: "Copied. Paste it as the new bookmark's URL.",
+    sendButtons: "Send Buttons on Instagram, X and YouTube",
+    sendButtonsHint:
+      "A Send to Tsundoku button on each Instagram and X post, each YouTube video and Short, and YouTube's thumbnails, that sends it to Pending in one click. It needs the Tampermonkey or Violentmonkey add-on in your browser.",
+    copyUserscript: "Copy Userscript",
+    userscriptHowTo:
+      "Open Tampermonkey or Violentmonkey, create a new script, paste the userscript over everything in it, then save.",
+    userscriptCopied: "Copied. Paste it into a new script.",
     notify: "Show Notifications",
     notifyHint:
       "While Tsundoku's window isn't in front: when a copied link is added or starts downloading, and when the shortcut or your browser adds links. Clicking one opens Tsundoku.",

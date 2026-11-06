@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.53 · 2026-11-06
+
+### Added
+
+- **Send buttons on Instagram, X and YouTube**: a userscript puts a Send to Tsundoku button on each Instagram post and reel, each X post, YouTube's watch pages and Shorts, and in the corner of YouTube's thumbnails in feeds, search results, channels and the list beside a video. One click sends that post or video to Pending, as the bookmark does, without opening it or copying anything, and a sent one keeps a check while the tab is open. Settings → Adding Links → Copy Userscript copies it for the Tampermonkey or Violentmonkey add-on, with how to add it.
+
 ## 0.1.52 · 2026-11-06
 
 ### Added
