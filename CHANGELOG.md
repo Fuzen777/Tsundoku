@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.59 · 2026-11-06
+
+### Added
+
+- **Ways to add links on the empty screens**: an empty queue now says it takes videos, posts of images and shared files, and lists every way to add links, each with where it stands and one button: Paste adds what you copied, as Ctrl+V does; Choose File… adds files of links, as dropping them does; Watch Clipboard has Turn On, or a check once it's on; the Clipboard Shortcut shows its keys, with Change or Set Up; and Send from Your Browser and the send buttons have Set Up, which opens Settings → Adding Links right at them. An empty Pending lists the same ways, the ones that work on their own first.
+
 ## 0.1.58 · 2026-11-06
 
 ### Added

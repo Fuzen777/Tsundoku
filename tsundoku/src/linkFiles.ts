@@ -1,4 +1,5 @@
-import { checkLinkFile, linksInLinkFile } from "./api"
+import { checkLinkFile, linksInFileAt, linksInLinkFile, pickLinkFiles } from "./api"
+import type { LinkFileError } from "./bindings/LinkFileError"
 import { describeLinkFileError, type ErrorDescription } from "./errors"
 import { strings } from "./strings"
 
@@ -26,24 +27,53 @@ export interface LinkFilesRead {
   problems: ErrorDescription[]
 }
 
+/** A file to read links from: its name, and how its links are read. */
+interface LinkSource {
+  name: string
+  read: () => Promise<string[]>
+}
+
+/** The files the file dialog offers: those the core reads links from (`check_link_file`), which decides anyway. */
+const LINK_FILE_EXTENSIONS = ["txt", "html", "htm", "url"]
+
 /**
  * Reads the links in files dropped on the window, one after another: the core checks each by its name and size
  * before its bytes are read, then reads its links from them (a text file, a bookmarks export or an Internet
  * shortcut).
  */
-export async function readLinkFiles(files: readonly File[]): Promise<LinkFilesRead> {
+export function readLinkFiles(files: readonly File[]): Promise<LinkFilesRead> {
+  return readSources(
+    files.map((file) => ({
+      name: file.name,
+      read: async () => {
+        await checkLinkFile(file.name, file.size)
+        return linksInLinkFile(file.name, new Uint8Array(await file.arrayBuffer()))
+      },
+    })),
+  )
+}
+
+/** Asks for files of links on this PC (Choose File… in the empty views), and reads them, by the core: none when the
+ * dialog is cancelled. */
+export async function chooseLinkFiles(): Promise<LinkFilesRead | null> {
+  const text = strings.addBar.files
+  const paths = await pickLinkFiles(text.chooseTitle, text.chooseFilter, LINK_FILE_EXTENSIONS)
+  if (paths.length === 0) return null
+  return readSources(paths.map((path) => ({ name: path.split(/[\\/]/).pop() ?? path, read: () => linksInFileAt(path) })))
+}
+
+async function readSources(files: readonly LinkSource[]): Promise<LinkFilesRead> {
   const links = new Set<string>()
   const problems: ErrorDescription[] = []
   let readable = 0
   const sources: string[] = []
   for (const file of files) {
     try {
-      await checkLinkFile(file.name, file.size)
+      for (const link of await file.read()) links.add(link)
       readable += 1
-      const bytes = new Uint8Array(await file.arrayBuffer())
-      for (const link of await linksInLinkFile(file.name, bytes)) links.add(link)
       sources.push(file.name)
     } catch (error) {
+      if ((error as Partial<LinkFileError> | null)?.kind !== "unsupportedType") readable += 1
       const problem = describeLinkFileError(error, file.name)
       const same = problems.find((known) => known.message === problem.message)
       if (!same) problems.push(problem)

@@ -330,7 +330,8 @@ export function getPresetArguments(preset: Preset): Promise<string[]> {
 }
 
 export function getQueueItems(): Promise<QueueItem[]> {
-  if (!isTauri()) return Promise.resolve(standIns.queueItems)
+  // `?empty` shows an empty queue, with its ways to add links.
+  if (!isTauri()) return Promise.resolve(addressHas("empty") ? [] : standIns.queueItems)
   return invoke<QueueItem[]>("queue_items")
 }
 
@@ -476,7 +477,8 @@ export function onQueueChanged(handler: (items: QueueItem[]) => void): Promise<U
 
 /** Links waiting to be started, oldest first. */
 export function getPendingLinks(): Promise<PendingLink[]> {
-  if (!isTauri()) return Promise.resolve(standIns.pendingLinks)
+  // `?empty` shows an empty Pending, with its ways to add links.
+  if (!isTauri()) return Promise.resolve(addressHas("empty") ? [] : standIns.pendingLinks)
   return invoke<PendingLink[]>("pending_links")
 }
 
@@ -502,6 +504,24 @@ export function linksInLinkFile(name: string, bytes: Uint8Array): Promise<string
     (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
   )
   return invoke<string[]>("links_in_link_file", bytes, { headers: { "tsundoku-file-name": asciiName } })
+}
+
+/** The links in a file chosen on this PC, read by the core. Rejects with a LinkFileError. */
+export function linksInFileAt(path: string): Promise<string[]> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<string[]>("links_in_file_at", { path })
+}
+
+/** Files of links to choose on this PC, several at once. None when the dialog is cancelled, and in a browser. */
+export async function pickLinkFiles(title: string, filterName: string, extensions: string[]): Promise<string[]> {
+  if (!isTauri()) return []
+  return (await open({ title, multiple: true, directory: false, filters: [{ name: filterName, extensions }] })) ?? []
+}
+
+/** The text on the clipboard, or null when it holds none. In a browser, the browser's clipboard. */
+export async function clipboardText(): Promise<string | null> {
+  if (!isTauri()) return navigator.clipboard.readText().catch(() => null)
+  return invoke<string | null>("clipboard_text")
 }
 
 /** Adds the links read from dropped files: they're checked as copied links are, and those with nothing to download

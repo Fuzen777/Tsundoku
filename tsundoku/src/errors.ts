@@ -259,6 +259,8 @@ export function describeLinkFileError(error: unknown, name: string): ErrorDescri
       return { message: text.tooLarge(error.name, formatBytes(error.maxBytes)) }
     case "noLinks":
       return { message: text.noLinks(error.name) }
+    case "unreadable":
+      return { message: text.unreadable(error.name), detail: error.detail }
   }
 }
 

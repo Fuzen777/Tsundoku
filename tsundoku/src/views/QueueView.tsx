@@ -33,6 +33,7 @@ import { Page } from "../components/Page"
 import { ProgressBar } from "../components/ProgressBar"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
+import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
 import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
 import { pickSummary } from "../postFiles"
@@ -67,6 +68,9 @@ async function clearFinishedWithUndo(offerUndo: (offer: UndoOffer) => void): Pro
   }
 }
 
+/** The ways to add links an empty queue offers: by hand first. */
+const QUEUE_WAYS: readonly WayToAdd[] = ["paste", "drop", "watch", "shortcut", "bookmark", "sendButtons"]
+
 /** Every download added and not cleared yet, grouped and sorted as its toolbar says. */
 export function QueueView() {
   const { data: items = [] } = useQueue()
@@ -96,7 +100,9 @@ export function QueueView() {
     >
       {queueError && <StatusMessage tone="danger" {...queueError} />}
       {items.length === 0 ? (
-        <EmptyState icon={ListVideo} title={strings.queue.emptyTitle} body={strings.queue.emptyBody} />
+        <EmptyState icon={ListVideo} title={strings.queue.emptyTitle} body={strings.queue.emptyBody}>
+          <WaysToAdd ways={QUEUE_WAYS} />
+        </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

@@ -95,6 +95,7 @@ type: Features
 - **Each row**: Start (or Download Again), Remove, and the preset picker for a video, with "Rule 3" beside it when a rule picked the preset. A link that couldn't be read shows why, the same fixes as the preview card, and Try Again.
 - **Where it goes**: under a read link's details, the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder), as the preview card shows it. It follows the preset the link would start with, and clicking it opens the rules, the presets or Settings.
 - **Sidebar count**: the number of links waiting, beside Pending, leaving out copied links and links from files still being checked.
+- **Ways to add links**: an empty Pending lists the same ways as an empty queue, the ones that work on their own first.
 
 ## Queue
 
@@ -119,6 +120,7 @@ type: Features
 - **After a restart**: the queue comes back; downloads that were running come back stopped, and waiting ones start.
 - **Closing while downloading**: asks first. Downloads continue where they stopped next time.
 - **Sidebar count**: the number of downloads not done yet, beside Queue.
+- **Ways to add links**: an empty queue says it takes videos, posts of images and shared files, and lists every way to add links, each with where it stands and one button: Paste (what you copied, as Ctrl+V does), Choose File… (files of links, as dropping them does), Watch Clipboard with Turn On or a check once it's on, the Clipboard Shortcut with its keys and Change (or Set Up), and Send from Your Browser and the send buttons with Set Up, which opens Settings → Adding Links at that spot.
 
 ## Presets
 

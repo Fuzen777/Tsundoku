@@ -1,10 +1,11 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { openDataFolder } from "../api"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { Page } from "../components/Page"
 import { Section } from "../components/Section"
 import { StatusMessage } from "../components/StatusMessage"
+import type { SettingsTarget } from "../navigation"
 import { useAppInfo, useAppUpdate } from "../queries"
 import { strings } from "../strings"
 import { AddingSection } from "./settings/AddingSection"
@@ -16,7 +17,17 @@ import { ShortcutsSection } from "./settings/ShortcutsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { ToolsSection } from "./settings/ToolsSection"
 
-export function SettingsView() {
+/** `place`: where another view sent the user, such as the clipboard shortcut from the empty queue's Set Up. */
+export function SettingsView({ place = null }: { place?: SettingsTarget | null }) {
+  useEffect(() => {
+    if (!place) return
+    const target = document.getElementById(place.place)
+    target?.scrollIntoView({ block: "center" })
+    // The control itself (the clipboard shortcut's list), or the place's first button.
+    const control = target?.matches("select, button") ? target : target?.querySelector<HTMLElement>("select, button")
+    control?.focus({ preventScroll: true })
+  }, [place])
+
   return (
     <Page title={strings.nav.settings}>
       <div className="flex max-w-3xl flex-col gap-6">

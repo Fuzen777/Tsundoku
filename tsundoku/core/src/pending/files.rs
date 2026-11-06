@@ -2,6 +2,9 @@
 //! format Firefox, Zen and Chrome export) or an Internet shortcut (`.url`). Only http and https links are kept, each
 //! once, in the order the file has them. The UI hands over the file's name, then its bytes once `check` has passed it.
 
+use std::fs;
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -52,6 +55,9 @@ pub enum LinkFileError {
     /// Read, but with no http or https link in it.
     #[error("no links found in {name}")]
     NoLinks { name: String },
+    /// A file chosen on this PC that couldn't be read.
+    #[error("couldn't read {name}: {detail}")]
+    Unreadable { name: String, detail: String },
 }
 
 /// Whether a file of this name and size can be read, and as what, before its bytes are read.
@@ -83,6 +89,23 @@ pub fn links_in_file(name: &str, bytes: &[u8]) -> Result<Vec<String>, LinkFileEr
         });
     }
     Ok(links)
+}
+
+/// The links in a file chosen on this PC (the empty views' Choose File…), checked by its name and size before it's
+/// read.
+pub fn links_in_path(path: &Path) -> Result<Vec<String>, LinkFileError> {
+    let name = path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    let unreadable = |error: std::io::Error| LinkFileError::Unreadable {
+        name: name.clone(),
+        detail: error.to_string(),
+    };
+    let size = fs::metadata(path).map_err(unreadable)?.len();
+    check(&name, size)?;
+    let bytes = fs::read(path).map_err(unreadable)?;
+    links_in_file(&name, &bytes)
 }
 
 /// The file's text: UTF-16 when it starts with that byte order mark (Notepad's "Unicode"), else UTF-8, with any byte
@@ -374,6 +397,20 @@ mod tests {
             }),
             "only the URL= line under [InternetShortcut] counts, and only an http or https one",
         );
+    }
+
+    #[test]
+    fn reads_a_file_chosen_on_this_pc() {
+        let path = Path::new(FIXTURES).join("shortcut.url");
+        assert_eq!(
+            links_in_path(&path).unwrap(),
+            ["https://www.youtube.com/watch?v=jNQXAC9IVRw"]
+        );
+        let missing = Path::new(FIXTURES).join("missing.txt");
+        assert!(matches!(
+            links_in_path(&missing),
+            Err(LinkFileError::Unreadable { name, .. }) if name == "missing.txt"
+        ));
     }
 
     #[test]

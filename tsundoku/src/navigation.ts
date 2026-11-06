@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react"
 import { FolderTree, History, Inbox, ListVideo, Settings, SlidersHorizontal, type LucideIcon } from "lucide-react"
+import type { LinkFilesRead } from "./linkFiles"
 import { strings } from "./strings"
 
 export type ViewId = "queue" | "pending" | "history" | "presets" | "rules" | "settings"
@@ -29,14 +30,32 @@ export const SETTINGS_PLACES = {
   sendButtons: "settings-send-buttons",
 } as const
 
-/** What any view can ask of the app around it. */
-export interface AppActions {
-  navigate: (view: ViewId) => void
-  /** Puts a link in the add bar and fetches its preview, as a dropped link is. */
-  showLink: (link: string) => void
+export type SettingsPlace = (typeof SETTINGS_PLACES)[keyof typeof SETTINGS_PLACES]
+
+/** A place Settings was asked to open at: a new object each time, so asking again scrolls there again. */
+export interface SettingsTarget {
+  place: SettingsPlace
 }
 
-export const AppActionsContext = createContext<AppActions>({ navigate: () => {}, showLink: () => {} })
+/** What any view can ask of the app around it. */
+export interface AppActions {
+  /** Opens a view; Settings at a place in it, when one is given. */
+  navigate: (view: ViewId, place?: SettingsPlace) => void
+  /** Puts a link in the add bar and fetches its preview, as a dropped link is. */
+  showLink: (link: string) => void
+  /** Adds text as if pasted in the add bar and submitted: one link's preview, or several links to Pending. */
+  addText: (text: string) => void
+  /** Adds links read from files to Pending, as a dropped file's are (asking first for many), or says why there were
+   * none. */
+  addFileLinks: (read: LinkFilesRead) => void
+}
+
+export const AppActionsContext = createContext<AppActions>({
+  navigate: () => {},
+  showLink: () => {},
+  addText: () => {},
+  addFileLinks: () => {},
+})
 
 export function useAppActions(): AppActions {
   return useContext(AppActionsContext)

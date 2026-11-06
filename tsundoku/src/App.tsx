@@ -11,8 +11,8 @@ import { UndoToastProvider } from "./components/UndoToast"
 import { UpdateBanner } from "./components/UpdateBanner"
 import { WhatsNewCard } from "./components/WhatsNewCard"
 import { describeDownloadError, type ErrorDescription } from "./errors"
-import { ASK_BEFORE_ADDING_OVER, checkingTime, readLinkFiles } from "./linkFiles"
-import { AppActionsContext, type ViewId } from "./navigation"
+import { ASK_BEFORE_ADDING_OVER, checkingTime, type LinkFilesRead, readLinkFiles } from "./linkFiles"
+import { AppActionsContext, type SettingsPlace, type SettingsTarget, type ViewId } from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
 import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup } from "./queries"
 import { useAppShortcuts, useWindowPaste } from "./shortcuts"
@@ -85,43 +85,45 @@ export function App() {
   // they're checked as copied links are: those with nothing to download leave once read. Over 300 links, it asks
   // first. When a drop holds text too and none of its files is one Tsundoku reads, such as a linked image dragged
   // from a browser, the text goes in instead.
+  const addFileLinks = useCallback(
+    async (read: LinkFilesRead) => {
+      setAddError(null)
+      setFileProblems(read.problems)
+      if (read.links.length === 0) return
+      if (
+        read.links.length > ASK_BEFORE_ADDING_OVER &&
+        !(await confirmWithUser({
+          title: strings.addBar.files.manyTitle(read.links.length),
+          message: strings.addBar.files.manyMessage(read.sources, read.links.length, checkingTime(read.links.length)),
+          confirmLabel: strings.addBar.files.addThem,
+          cancelLabel: strings.dialogs.cancel,
+        }))
+      ) {
+        return
+      }
+      try {
+        await addPendingLinksFromFiles(read.links)
+        setLink("")
+        closePreview()
+        setView("pending")
+      } catch (error) {
+        setAddError(describeDownloadError(error))
+      }
+    },
+    [closePreview],
+  )
   const addDrop = useCallback(
     async ({ text, files }: Drop) => {
       if (files.length > 0) {
-        setAddError(null)
         const read = await readLinkFiles(files)
         if (read.readable > 0 || !text) {
-          setFileProblems(read.problems)
-          if (read.links.length === 0) return
-          if (
-            read.links.length > ASK_BEFORE_ADDING_OVER &&
-            !(await confirmWithUser({
-              title: strings.addBar.files.manyTitle(read.links.length),
-              message: strings.addBar.files.manyMessage(
-                read.sources,
-                read.links.length,
-                checkingTime(read.links.length),
-              ),
-              confirmLabel: strings.addBar.files.addThem,
-              cancelLabel: strings.dialogs.cancel,
-            }))
-          ) {
-            return
-          }
-          try {
-            await addPendingLinksFromFiles(read.links)
-            setLink("")
-            closePreview()
-            setView("pending")
-          } catch (error) {
-            setAddError(describeDownloadError(error))
-          }
+          await addFileLinks(read)
           return
         }
       }
       if (text) await addText(text)
     },
-    [addText, closePreview],
+    [addText, addFileLinks],
   )
   const takeDrop = useCallback((drop: Drop) => void addDrop(drop), [addDrop])
   useLinkDrop(takeDrop)
@@ -137,7 +139,22 @@ export function App() {
   }, [])
   useAppShortcuts({ focusAddBar, navigate: setView }, shortcutsOn)
 
-  const actions = useMemo(() => ({ navigate: setView, showLink }), [showLink])
+  // Where Settings opens, when another view sends the user to a place in it. A new object each time, so going to the
+  // same place again scrolls there again.
+  const [settingsPlace, setSettingsPlace] = useState<SettingsTarget | null>(null)
+  const navigate = useCallback((to: ViewId, place?: SettingsPlace) => {
+    setView(to)
+    setSettingsPlace(place ? { place } : null)
+  }, [])
+  const actions = useMemo(
+    () => ({
+      navigate,
+      showLink,
+      addText: takeText,
+      addFileLinks: (read: LinkFilesRead) => void addFileLinks(read),
+    }),
+    [navigate, showLink, takeText, addFileLinks],
+  )
 
   if (needsSetup) return <SetupView />
 
@@ -200,7 +217,7 @@ export function App() {
         <main className="relative col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
           {/* Outside the views, so an offer to undo stays when another view is opened. */}
           <UndoToastProvider>
-            <CurrentView view={view} />
+            <CurrentView view={view} settingsPlace={settingsPlace} />
           </UndoToastProvider>
         </main>
       </div>
@@ -208,7 +225,7 @@ export function App() {
   )
 }
 
-function CurrentView({ view }: { view: ViewId }) {
+function CurrentView({ view, settingsPlace }: { view: ViewId; settingsPlace: SettingsTarget | null }) {
   switch (view) {
     case "queue":
       return <QueueView />
@@ -221,6 +238,6 @@ function CurrentView({ view }: { view: ViewId }) {
     case "rules":
       return <RulesView />
     case "settings":
-      return <SettingsView />
+      return <SettingsView place={settingsPlace} />
   }
 }

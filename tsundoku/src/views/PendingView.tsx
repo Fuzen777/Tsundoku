@@ -29,6 +29,7 @@ import { Page } from "../components/Page"
 import { PresetRuleLink } from "../components/PresetRuleLink"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
+import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
 import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { pickedOf, pickSummary } from "../postFiles"
@@ -48,6 +49,9 @@ import {
 import { useDeleteKey } from "../shortcuts"
 import { strings } from "../strings"
 import { useOfferUndo } from "../undo"
+
+/** The ways to add links an empty Pending offers: the ones that work on their own first. */
+const PENDING_WAYS: readonly WayToAdd[] = ["watch", "shortcut", "bookmark", "sendButtons", "drop", "paste"]
 
 /** How many links Pending shows at first, and how many more Show More adds. */
 const PENDING_PAGE = 200
@@ -193,11 +197,6 @@ export function PendingView() {
       )
     )
 
-  const emptyBody = !watching
-    ? strings.pending.emptyBody
-    : adding.options?.downloadRightAway
-      ? strings.pending.emptyBodyRightAway
-      : strings.pending.emptyBodyWatching
 
   return (
     <Page
@@ -223,7 +222,9 @@ export function PendingView() {
           ),
       )}
       {links.length === 0 ? (
-        <EmptyState icon={Inbox} title={strings.pending.emptyTitle} body={emptyBody} />
+        <EmptyState icon={Inbox} title={strings.pending.emptyTitle} body={strings.pending.emptyBody}>
+          <WaysToAdd ways={PENDING_WAYS} />
+        </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

@@ -1,6 +1,7 @@
 //! The pending links' commands: `tsundoku_core`'s pending links exposed to the UI, with their changes sent as an
 //! event.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use tauri::ipc::{InvokeBody, Request};
@@ -87,6 +88,26 @@ pub fn add_pending_links(
 }
 
 /// Removes links, and answers how many: Undo puts them back (`restore_removed_pending_links`).
+/// The links in a file chosen on this PC, read off the main thread since it can be several megabytes.
+#[tauri::command]
+pub async fn links_in_file_at(path: String) -> Result<Vec<String>, LinkFileError> {
+    let name = path.clone();
+    tauri::async_runtime::spawn_blocking(move || files::links_in_path(Path::new(&path)))
+        .await
+        .unwrap_or_else(|error| {
+            Err(LinkFileError::Unreadable {
+                name,
+                detail: error.to_string(),
+            })
+        })
+}
+
+/// The text on the clipboard, for the empty views' Paste, which adds it as if pasted in the add bar.
+#[tauri::command]
+pub fn clipboard_text() -> Option<String> {
+    tsundoku_core::clipboard::copied_text()
+}
+
 /// Adds the links read from files dropped on the window: they're checked as copied links are, and those with
 /// nothing to download leave once read.
 #[tauri::command]

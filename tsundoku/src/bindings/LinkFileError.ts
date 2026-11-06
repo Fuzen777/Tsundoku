@@ -3,4 +3,4 @@
 /**
  * Why a dropped file gave no links.
  */
-export type LinkFileError = { "kind": "unsupportedType", name: string, } | { "kind": "tooLarge", name: string, maxBytes: number, } | { "kind": "noLinks", name: string, };
+export type LinkFileError = { "kind": "unsupportedType", name: string, } | { "kind": "tooLarge", name: string, maxBytes: number, } | { "kind": "noLinks", name: string, } | { "kind": "unreadable", name: string, detail: string, };

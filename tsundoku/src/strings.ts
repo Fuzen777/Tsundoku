@@ -65,6 +65,30 @@ export const strings = {
     views: (last: number) => `Ctrl+1 to Ctrl+${last}`,
     delete: "Delete",
   },
+  /** The ways to add links, as the empty Queue and Pending list them (WaysToAdd). */
+  waysToAdd: {
+    paste: "Paste a Link",
+    pasteState: "Ctrl+V anywhere, or the add bar above.",
+    pasteAction: "Paste",
+    drop: "Drop Links or Files",
+    dropState: "From a browser, or a text file, bookmarks export or shortcut.",
+    dropAction: "Choose File…",
+    watch: "Watch Clipboard",
+    watchOn: (rightAway: boolean) =>
+      rightAway ? "Links you copy in any app start downloading once they're read." : "Links you copy in any app come here.",
+    watchOff: "Catches links you copy in any app.",
+    watchAction: "Turn On",
+    on: "On",
+    shortcut: "Clipboard Shortcut",
+    shortcutState: (keys: string) => `${keys} adds the links you copied, from any app.`,
+    shortcutNone: "Keys that add the links you copied, from any app.",
+    bookmark: "Send from Your Browser",
+    bookmarkState: "A bookmark that sends the page you're on.",
+    sendButtons: "Send Buttons on Instagram, X and YouTube",
+    sendButtonsState: "A button on each post and video that sends it here.",
+    setUp: "Set Up",
+    change: "Change",
+  },
   addBar: {
     placeholder: "Paste One Link or Several",
     add: "Add",
@@ -77,6 +101,8 @@ export const strings = {
       tooLarge: (name: string, size: string) => `${name} is too large to read links from: the most is ${size}.`,
       noLinks: (name: string) => `No links found in ${name}.`,
       unreadable: (name: string) => `Couldn't read ${name}.`,
+      chooseTitle: "Choose Files of Links",
+      chooseFilter: "Text Files, Bookmarks and Shortcuts",
       manyTitle: (count: number) => `Add ${count.toLocaleString()} Links?`,
       /** `files`: the names of the files the links came from. */
       manyMessage: (files: string[], count: number, duration: string) =>
@@ -88,7 +114,7 @@ export const strings = {
   },
   queue: {
     emptyTitle: "Nothing in the Queue",
-    emptyBody: "Paste a video link above to download it.",
+    emptyBody: "Add a link to a video, a post of images or a shared file, and it downloads here.",
     clearFinished: "Clear Finished",
     pauseAll: "Pause All",
     resumeAll: "Resume All",
@@ -290,9 +316,7 @@ export const strings = {
   },
   pending: {
     emptyTitle: "Nothing Pending",
-    emptyBody: "Paste or drop several links at once, and they wait here until you start them.",
-    emptyBodyWatching: "Copy links in your browser, or paste or drop several at once, and they wait here until you start them.",
-    emptyBodyRightAway: "Links you copy in your browser start downloading once they're read. Links pasted or dropped several at once wait here until you start them.",
+    emptyBody: "Links you send from your browser, copy, or paste or drop several at once wait here until you start them.",
     watchClipboard: "Watch Clipboard",
     watchClipboardHint: "Catch links you copy in any app",
     checkingCopied: (count: number) => (count === 1 ? "Checking a copied link…" : `Checking ${count} copied links…`),

@@ -331,6 +331,8 @@ pub fn run() {
             pending::links_in_text,
             pending::check_link_file,
             pending::links_in_link_file,
+            pending::links_in_file_at,
+            pending::clipboard_text,
             pending::add_pending_links,
             pending::add_pending_links_from_files,
             pending::remove_pending_links,
