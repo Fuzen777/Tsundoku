@@ -297,10 +297,26 @@ impl History {
             ],
             |row| row.get(0),
         )?;
+        // A post's files come in the order of the files it took, which gives each its number in the post. Files that
+        // don't match them in count (the post changed since it was read) stay unnumbered, like a whole post's.
+        let numbers: Vec<u32> = video
+            .post_files
+            .iter()
+            .filter(|file| file.picked)
+            .map(|file| file.number)
+            .collect();
+        let numbered = numbers.len() == download.files.len();
         for (position, file) in download.files.iter().enumerate() {
             transaction.execute(
-                "INSERT INTO download_files (download, position, file_path, file_size) VALUES (?1, ?2, ?3, ?4)",
-                params![download_id, position as i64, file.path, file.size],
+                "INSERT INTO download_files (download, position, file_path, file_size, post_number)
+                VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    download_id,
+                    position as i64,
+                    file.path,
+                    file.size,
+                    numbered.then(|| numbers[position]),
+                ],
             )?;
         }
         transaction.commit()?;
@@ -357,6 +373,34 @@ impl History {
             |row| row.get(0),
         )?;
         Ok(found)
+    }
+
+    /// The files of a post that its downloads so far left out, by their number (`PostFile::number`), in the post's
+    /// order: what the strip marks Not Picked Last Time and ticks to start with. `None` when it was never downloaded,
+    /// when a download took every file (or was made before numbers were kept), or when the preview didn't list its
+    /// files.
+    pub fn left_out_files(&self, video: &VideoInfo) -> Result<Option<Vec<u32>>, HistoryError> {
+        if video.post_files.is_empty() {
+            return Ok(None);
+        }
+        let connection = self.database.lock();
+        let mut statement = connection.prepare(
+            "SELECT f.post_number FROM download_files f JOIN downloads d ON d.id = f.download
+            JOIN videos v ON v.id = d.video WHERE v.site = ?1 AND v.video_id = ?2",
+        )?;
+        let taken: Vec<Option<u32>> = statement
+            .query_map(params![video.site, video.video_id], |row| row.get(0))?
+            .collect::<Result<_, _>>()?;
+        if taken.is_empty() || taken.contains(&None) {
+            return Ok(None);
+        }
+        let left_out: Vec<u32> = video
+            .post_files
+            .iter()
+            .map(|file| file.number)
+            .filter(|number| !taken.contains(&Some(*number)))
+            .collect();
+        Ok((!left_out.is_empty()).then_some(left_out))
     }
 
     /// Every download of a video in the history, newest first.
@@ -676,6 +720,7 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
             }),
             _ => None,
         },
+        post_files: Vec::new(),
     })
 }
 
@@ -843,6 +888,7 @@ mod tests {
             best_height: Some(1080),
             post: None,
             files: None,
+            post_files: Vec::new(),
         }
     }
 
@@ -1387,6 +1433,124 @@ mod tests {
             Err(HistoryError::NotFound),
             "forgotten with its video"
         );
+    }
+
+    fn carousel() -> VideoInfo {
+        VideoInfo {
+            post: Some(PostContents {
+                images: 2,
+                videos: 2,
+            }),
+            post_files: (1..=4)
+                .map(|number| crate::metadata::PostFile {
+                    number,
+                    video: number > 2,
+                    thumbnail_url: None,
+                    picked: true,
+                })
+                .collect(),
+            ..video("instagram", "Abc", "A carousel", "someone", 0.0)
+        }
+    }
+
+    fn saved(paths: &[&str]) -> NewDownload {
+        NewDownload {
+            file_path: paths[0].to_owned(),
+            files: paths
+                .iter()
+                .map(|path| SavedFile {
+                    path: (*path).to_owned(),
+                    size: Some(1),
+                })
+                .collect(),
+            ..download("", 1, 2)
+        }
+    }
+
+    fn picking(post: &VideoInfo, numbers: &[u32]) -> VideoInfo {
+        let mut picked = post.clone();
+        for file in &mut picked.post_files {
+            file.picked = numbers.contains(&file.number);
+        }
+        picked
+    }
+
+    #[test]
+    fn knows_which_files_of_a_post_were_left_out() {
+        let test = TestHistory::new();
+        let post = carousel();
+        assert_eq!(
+            test.history.left_out_files(&post),
+            Ok(None),
+            "never downloaded"
+        );
+
+        let first = test
+            .history
+            .record(
+                &picking(&post, &[1, 3]),
+                &saved(&[r"C:\a 1.jpg", r"C:\a 3.mp4"]),
+            )
+            .unwrap();
+        assert_eq!(test.history.left_out_files(&post), Ok(Some(vec![2, 4])));
+        let numbers: Vec<Option<u32>> = test
+            .history
+            .database
+            .lock()
+            .prepare("SELECT post_number FROM download_files WHERE download = ?1 ORDER BY position")
+            .unwrap()
+            .query_map([first], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(numbers, [Some(1), Some(3)]);
+
+        test.history
+            .record(&picking(&post, &[4]), &saved(&[r"C:\a 4.mp4"]))
+            .unwrap();
+        assert_eq!(
+            test.history.left_out_files(&post),
+            Ok(Some(vec![2])),
+            "what every download took counts"
+        );
+
+        test.history
+            .record(&picking(&post, &[2]), &saved(&[r"C:\a 2.jpg"]))
+            .unwrap();
+        assert_eq!(test.history.left_out_files(&post), Ok(None), "all taken");
+    }
+
+    #[test]
+    fn a_post_downloaded_without_its_files_listed_left_nothing_out() {
+        let test = TestHistory::new();
+        let listed = carousel();
+        let unlisted = VideoInfo {
+            post_files: Vec::new(),
+            ..listed.clone()
+        };
+        test.history
+            .record(&unlisted, &saved(&[r"C:\a.jpg", r"C:\b.jpg"]))
+            .unwrap();
+        assert_eq!(test.history.left_out_files(&listed), Ok(None));
+        assert_eq!(
+            test.history.left_out_files(&unlisted),
+            Ok(None),
+            "nothing to compare with"
+        );
+
+        // A post whose files don't match what was picked in count (it changed since it was read) isn't numbered.
+        let other = VideoInfo {
+            video_id: "Other".to_owned(),
+            ..picking(&listed, &[1, 2])
+        };
+        test.history
+            .record(&other, &saved(&[r"C:\o 1.jpg"]))
+            .unwrap();
+        let other_listed = VideoInfo {
+            video_id: "Other".to_owned(),
+            ..listed
+        };
+        assert_eq!(test.history.left_out_files(&other_listed), Ok(None));
     }
 
     #[test]

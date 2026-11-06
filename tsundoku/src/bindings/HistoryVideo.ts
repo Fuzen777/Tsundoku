@@ -2,6 +2,7 @@
 import type { FileContents } from "./FileContents";
 import type { PastDownload } from "./PastDownload";
 import type { PostContents } from "./PostContents";
+import type { PostFile } from "./PostFile";
 
 /**
  * A video in the history, with its latest download.
@@ -42,4 +43,9 @@ post: PostContents | null,
 /**
  * What a file host's link holds (`hosts`): one file, or a shared folder's. `None` for a video or a post.
  */
-files: FileContents | null, };
+files: FileContents | null, 
+/**
+ * A post's files, in the order the site gives them, and which of them its download takes. Empty for a video, a
+ * file host's link, or a post read before Tsundoku listed them, whose download takes every file.
+ */
+postFiles?: Array<PostFile>, };

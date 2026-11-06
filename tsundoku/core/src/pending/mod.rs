@@ -430,6 +430,38 @@ impl PendingLinks {
         Ok(())
     }
 
+    /// Picks which files of a read post the link downloads, by their number (`PostFile::picked`). Any number the post
+    /// doesn't have is ignored.
+    pub fn set_post_files(&self, id: i64, picked: &[u32]) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let entry = find(&mut state.entries, id)?;
+            let video = entry
+                .fetched
+                .as_mut()
+                .map(|fetched| &mut fetched.video)
+                .filter(|video| !video.post_files.is_empty())
+                .ok_or(DownloadError::WrongState)?;
+            for file in &mut video.post_files {
+                file.picked = picked.contains(&file.number);
+            }
+            self.store.update(entry)?;
+        }
+        self.notify();
+        Ok(())
+    }
+
+    /// What was read, with a post downloaded before ticking only the files left out then (`History::left_out_files`),
+    /// as the preview card ticks them.
+    fn with_left_out_ticked(&self, mut fetched: Fetched) -> Fetched {
+        if let Ok(Some(left_out)) = self.history.left_out_files(&fetched.video) {
+            for file in &mut fetched.video.post_files {
+                file.picked = left_out.contains(&file.number);
+            }
+        }
+        fetched
+    }
+
     /// Picks the preset for one link, or `None` for the one picked for them all.
     pub fn set_preset(&self, id: i64, preset_id: Option<String>) -> Result<(), DownloadError> {
         {
@@ -660,7 +692,7 @@ impl PendingLinks {
                     let video = fetched.video.clone();
                     let entry = &mut state.entries[index];
                     entry.state = PendingState::Ready;
-                    entry.fetched = Some(fetched);
+                    entry.fetched = Some(self.with_left_out_ticked(fetched));
                     entry.error = None;
                     let starts = match entry.start_when_read {
                         StartWhenRead::Yes => true,

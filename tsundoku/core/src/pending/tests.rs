@@ -339,6 +339,7 @@ fn video_at(link: &str) -> VideoInfo {
             count: 3,
             bytes: 1000,
         }),
+        post_files: Vec::new(),
     }
 }
 

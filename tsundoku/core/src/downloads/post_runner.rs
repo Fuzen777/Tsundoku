@@ -117,6 +117,11 @@ pub(crate) fn arguments(job: &JobSpec, post: &PostJob) -> Vec<String> {
         "--filename".to_owned(),
         post.file_name.clone(),
     ]);
+    if let Some(range) = &post.range {
+        // Only the files picked, by their place in the post, which the preview listed in the same order.
+        let numbers: Vec<String> = range.iter().map(u32::to_string).collect();
+        args.extend(["--range".to_owned(), numbers.join(",")]);
+    }
     if let Some(cookies) = &job.cookies {
         args.extend(["--cookies-from-browser".to_owned(), cookies.clone()]);
     }
@@ -180,6 +185,7 @@ mod tests {
             gallery_dl: Some(PathBuf::from("gallery-dl.exe")),
             pause,
             files: 3,
+            range: None,
             file_name: "{username|'natgeo'} 2026-11-04 DfPQchkG1tg {num|filename}.{extension}"
                 .to_owned(),
         };
@@ -231,6 +237,19 @@ mod tests {
         assert_eq!(pair(&args, "--sleep"), Some("10-20"));
         assert_eq!(pair(&args, "--sleep-request"), Some("10-20"));
         assert!(!args.contains(&"--no-skip".to_owned()));
+        assert_eq!(
+            &args[args.len() - 2..],
+            ["--", "https://www.instagram.com/p/DfPQchkG1tg/"]
+        );
+    }
+
+    #[test]
+    fn downloads_only_the_files_picked() {
+        let (job, mut post) = job(None, false);
+        assert_eq!(pair(&arguments(&job, &post), "--range"), None);
+        post.range = Some(vec![1, 3, 6]);
+        let args = arguments(&job, &post);
+        assert_eq!(pair(&args, "--range"), Some("1,3,6"));
         assert_eq!(
             &args[args.len() - 2..],
             ["--", "https://www.instagram.com/p/DfPQchkG1tg/"]

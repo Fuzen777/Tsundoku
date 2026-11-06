@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.55 · 2026-11-06
+
+### Added
+
+- **Pick which files of a post to download**: the preview card shows a post's images and videos as a strip of small pictures, with a play mark on videos and each file's number in the post, all ticked. Untick the ones you don't want and only the others are downloaded, still named after their place in the post; the queue says how many it takes ("2 of 6 files"). In Pending, Pick Files on a post's row opens the same strip, and Start downloads what's ticked there, even after a restart. The history now remembers which files each download took, so when you preview a post you downloaded only part of, the files you left out are marked Not Picked and come ticked, the others are marked Downloaded, and Download Again gets just the rest. Posts downloaded before this version count as taken whole.
+
 ## 0.1.54 · 2026-11-06
 
 ### Added

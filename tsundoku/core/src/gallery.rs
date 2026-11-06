@@ -195,6 +195,7 @@ pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewE
         best_height: None,
         post: Some(contents),
         files: None,
+        post_files: post_files(&files),
     })
 }
 
@@ -317,6 +318,35 @@ fn thumbnail(files: &[(&str, &Value)]) -> Option<String> {
     })
 }
 
+/// The post's files for the strip, numbered from 1 in the answer's order, which is the order gallery-dl's `--range`
+/// counts in when it downloads them, all picked.
+fn post_files(files: &[(&str, &Value)]) -> Vec<crate::metadata::PostFile> {
+    files
+        .iter()
+        .zip(1..)
+        .map(|((url, file), number)| {
+            let video = is_video(file);
+            crate::metadata::PostFile {
+                number,
+                video,
+                thumbnail_url: text(file, "display_url")
+                    .or_else(|| (!video).then(|| small_image(url)))
+                    .filter(|url| url.starts_with("https://")),
+                picked: true,
+            }
+        })
+        .collect()
+}
+
+/// An image's address, asking X for its small size rather than the original, which can be 4K.
+fn small_image(url: &str) -> String {
+    if url.starts_with("https://pbs.twimg.com/") {
+        url.replace("name=orig", "name=small")
+    } else {
+        url.to_owned()
+    }
+}
+
 fn is_video(file: &Value) -> bool {
     text(file, "extension").is_some_and(|extension| {
         VIDEO_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
@@ -353,6 +383,64 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         );
         std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"))
+    }
+
+    #[test]
+    fn lists_a_posts_files_in_order() {
+        let carousel = parse_answer(
+            &fixture("instagram-carousel.json"),
+            "https://www.instagram.com/p/DfPQchkG1tg/",
+        )
+        .unwrap();
+        let numbers: Vec<u32> = carousel.post_files.iter().map(|file| file.number).collect();
+        assert_eq!(numbers, [1, 2, 3, 4, 5, 6]);
+        let videos: Vec<bool> = carousel.post_files.iter().map(|file| file.video).collect();
+        assert_eq!(videos, [false, true, true, true, true, false]);
+        assert!(
+            carousel
+                .post_files
+                .iter()
+                .all(|file| file.picked && file.thumbnail_url.is_some()),
+            "Instagram gives every file a picture, its videos' covers too"
+        );
+        assert_eq!(carousel.picked_post_files(), None);
+        assert_eq!(carousel.post_file_count(), Some(6));
+
+        let video = parse_answer(
+            &fixture("twitter-video.json"),
+            "https://x.com/NASA/status/2118397868562071609",
+        )
+        .unwrap();
+        assert_eq!(video.post_files.len(), 1);
+        assert_eq!(
+            video.post_files[0].thumbnail_url, None,
+            "X gives no cover for a video"
+        );
+
+        let images = parse_answer(
+            r#"[[2, {"category": "twitter", "tweet_id": 1}],
+                [3, "https://pbs.twimg.com/media/A?format=jpg&name=orig", {"extension": "jpg"}]]"#,
+            "https://x.com/a/status/1",
+        )
+        .unwrap();
+        assert_eq!(
+            images.post_files[0].thumbnail_url.as_deref(),
+            Some("https://pbs.twimg.com/media/A?format=jpg&name=small")
+        );
+    }
+
+    #[test]
+    fn counts_the_files_picked() {
+        let mut carousel = parse_answer(
+            &fixture("instagram-carousel.json"),
+            "https://www.instagram.com/p/DfPQchkG1tg/",
+        )
+        .unwrap();
+        for file in &mut carousel.post_files {
+            file.picked = file.number % 2 == 1;
+        }
+        assert_eq!(carousel.picked_post_files(), Some(vec![1, 3, 5]));
+        assert_eq!(carousel.post_file_count(), Some(3));
     }
 
     #[test]

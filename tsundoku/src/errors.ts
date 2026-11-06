@@ -219,6 +219,8 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.invalidRateLimit, detail: error.value }
     case "postFileName":
       return describePostNameError(error.error)
+    case "nothingPicked":
+      return { message: text.nothingPicked }
     case "shortcutTaken":
       return { message: text.shortcutTaken(error.keys) }
     case "unexpected":

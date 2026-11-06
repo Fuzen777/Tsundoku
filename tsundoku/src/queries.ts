@@ -19,6 +19,7 @@ import {
   getDownloadDestination,
   getDownloadFiles,
   getDownloadOptions,
+  getLeftOutFiles,
   getFirstRunOptions,
   getFolderRules,
   getListArrangements,
@@ -191,6 +192,15 @@ function destinationQuery({ video, presetId, enabled }: DestinationRequest) {
 
 function destinationsOf(results: QueryObserverResult<Destination>[]): (Destination | undefined)[] {
   return results.map((result) => result.data)
+}
+
+/** The files of a post its downloads left out (`getLeftOutFiles`), asked only for a post downloaded before. */
+export function useLeftOutFiles(video: VideoInfo, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.leftOutFiles, video.site, video.videoId],
+    queryFn: () => getLeftOutFiles(video),
+    enabled,
+  })
 }
 
 /** The preset a rule picks for a video, and which rule: null when none does. Not asked for a post or a file host's

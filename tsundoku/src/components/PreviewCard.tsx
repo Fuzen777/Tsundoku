@@ -11,7 +11,8 @@ import {
   type ErrorDescription,
 } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
-import { useDownloadDestination, usePresets, useRulePreset } from "../queries"
+import { defaultPick, withPicked } from "../postFiles"
+import { useDownloadDestination, useLeftOutFiles, usePresets, useRulePreset } from "../queries"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
@@ -20,6 +21,7 @@ import { DestinationLine } from "./DestinationLine"
 import { FailureFixes } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
+import { PostFilesStrip } from "./PostFilesStrip"
 import { PresetRuleLink } from "./PresetRuleLink"
 import { StatusMessage } from "./StatusMessage"
 import { Thumbnail } from "./Thumbnail"
@@ -173,15 +175,23 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
 /** Download for a post of images or a file host's link: every file as the site gives it, so there's no preset to
  * pick. Downloading again only fetches the files that aren't in the folder any more. */
 function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
+  const { video, lastDownload } = preview
+  const files = video.postFiles ?? []
+  // A post of one file has nothing to pick.
+  const picksFiles = files.length > 1
+  const leftOutQuery = useLeftOutFiles(video, picksFiles && lastDownload !== null)
+  const leftOut = leftOutQuery.data ?? null
+  const [chosen, setChosen] = useState<ReadonlySet<number> | null>(null)
+  const picked = chosen ?? defaultPick(files, leftOut)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
-  const { data: destination } = useDownloadDestination(preview.video, null)
+  const { data: destination } = useDownloadDestination(video, null)
 
   async function download() {
     setAdding(true)
     setError(null)
     try {
-      await addPostToQueue(preview.video)
+      await addPostToQueue(picksFiles ? withPicked(video, picked) : video)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))
@@ -190,13 +200,34 @@ function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onA
   }
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      {error && <StatusMessage tone="danger" {...error} />}
-      <div className="flex w-full items-center gap-2">
-        <DestinationLine destination={destination} className="flex-1" />
-        <Button variant="primary" loading={adding} onClick={() => void download()}>
-          {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
-        </Button>
+    <div className="flex flex-col gap-3">
+      {picksFiles && (
+        <>
+          {leftOut && <StatusMessage tone="neutral" message={strings.postFiles.leftOut(leftOut.length)} />}
+          <PostFilesStrip
+            files={files}
+            picked={picked}
+            leftOut={leftOut}
+            downloadedBefore={lastDownload !== null}
+            disabled={adding}
+            onChange={setChosen}
+          />
+        </>
+      )}
+      <div className="flex flex-col items-end gap-2">
+        {error && <StatusMessage tone="danger" {...error} />}
+        <div className="flex w-full items-center gap-2">
+          <DestinationLine destination={destination} className="flex-1" />
+          <Button
+            variant="primary"
+            loading={adding}
+            // Until the history says which files were left out, the ticks may still change.
+            disabled={picksFiles && (picked.size === 0 || (lastDownload !== null && leftOutQuery.isPending))}
+            onClick={() => void download()}
+          >
+            {lastDownload ? strings.preview.downloadAgain : strings.preview.download}
+          </Button>
+        </div>
       </div>
     </div>
   )

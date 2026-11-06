@@ -37,6 +37,15 @@ pub async fn fetch_preview(
         })
 }
 
+/// The files of a post its downloads left out, by number, or `None` when there were none (or no download).
+#[tauri::command]
+pub fn left_out_files(
+    history: State<'_, Arc<History>>,
+    video: tsundoku_core::metadata::VideoInfo,
+) -> Result<Option<Vec<u32>>, HistoryError> {
+    history.left_out_files(&video)
+}
+
 #[tauri::command]
 pub fn cancel_preview(previews: State<'_, Arc<PreviewService>>) {
     previews.cancel();

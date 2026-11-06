@@ -1,10 +1,11 @@
 import { useState } from "react"
-import { Download, Inbox, Loader2, RefreshCw, X } from "lucide-react"
+import { Download, Images, Inbox, Loader2, RefreshCw, X } from "lucide-react"
 import {
   confirmWithUser,
   readPendingLinkAgain,
   removePendingLinks,
   restoreRemovedPendingLinks,
+  setPendingPostFiles,
   setPendingPreset,
   startPendingLinks,
 } from "../api"
@@ -21,6 +22,7 @@ import { Card } from "../components/Card"
 import { DestinationLine } from "../components/DestinationLine"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
+import { PostFilesStrip } from "../components/PostFilesStrip"
 import { Checkbox, SelectInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Page } from "../components/Page"
@@ -29,11 +31,13 @@ import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
+import { pickedOf, pickSummary } from "../postFiles"
 import { describeSiteWait, useTimeLeft } from "../holds"
 import { shownPendingLinks } from "../pendingLinks"
 import {
   useDownloadDestination,
   useDownloadDestinations,
+  useLeftOutFiles,
   useListArrangement,
   usePendingLinks,
   usePresets,
@@ -287,6 +291,11 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
   const preview = link.preview
   const video = preview?.video ?? null
   const presetId = link.presetId ?? allPresetId
+  const [showsFiles, setShowsFiles] = useState(false)
+  const files = video?.postFiles ?? []
+  // A post of one file has nothing to pick.
+  const picksFiles = files.length > 1 && !preview?.inQueue
+  const nothingPicked = files.length > 0 && files.every((file) => !file.picked)
   const hold = link.state === "waiting" ? link.hold : null
   const holdTimeLeft = useTimeLeft(hold?.until ?? null)
 
@@ -317,7 +326,8 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
               video.siteName,
               video.durationSeconds !== null && formatDuration(video.durationSeconds),
               video.uploadDate && formatCalendarDate(video.uploadDate),
-              formatContents(video) ??
+              pickSummary(video) ??
+                formatContents(video) ??
                 (video.bestHeight === null ? strings.preview.audioOnly : strings.preview.quality(video.bestHeight)),
             ])}
           </p>
@@ -336,6 +346,13 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
           />
         )}
         {preview?.inQueue && <StatusMessage tone="neutral" message={strings.pending.inQueue} />}
+        {video && picksFiles && showsFiles && (
+          <PendingPostFiles
+            video={video}
+            downloadedBefore={!!preview?.lastDownload}
+            onPick={(picked) => act(() => setPendingPostFiles(link.id, [...picked]))}
+          />
+        )}
         {link.state === "failed" && link.error && (
           <StatusMessage tone="danger" {...describePreviewError(link.error)}>
             {fixFor(link.error) && (
@@ -373,6 +390,14 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
             </SelectInput>
           </>
         )}
+        {picksFiles && (
+          <IconButton
+            label={showsFiles ? strings.postFiles.hideFiles : strings.postFiles.pickFiles}
+            icon={Images}
+            aria-expanded={showsFiles}
+            onClick={() => setShowsFiles((shown) => !shown)}
+          />
+        )}
         {link.state === "failed" ? (
           <IconButton
             label={strings.pending.tryAgain}
@@ -387,7 +412,7 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
               label={preview?.lastDownload ? strings.pending.downloadAgain : strings.pending.start}
               icon={Download}
               variant="secondary"
-              disabled={busy || !presetId}
+              disabled={busy || !presetId || nothingPicked}
               onClick={onStart}
             />
           )
@@ -395,6 +420,33 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
         <IconButton label={strings.pending.remove} icon={X} onClick={() => act(() => removeLinks([link.id]))} />
       </div>
     </Card>
+  )
+}
+
+/** A read post's files to pick from, as on the preview card. The ticks are the link's own, saved as they change; a
+ * post downloaded before starts with the files left out then. */
+function PendingPostFiles({
+  video,
+  downloadedBefore,
+  onPick,
+}: {
+  video: VideoInfo
+  downloadedBefore: boolean
+  onPick: (picked: Set<number>) => void
+}) {
+  const { data: leftOut } = useLeftOutFiles(video, downloadedBefore)
+  const files = video.postFiles ?? []
+  return (
+    <div className="flex flex-col gap-2 pt-1">
+      {leftOut && <StatusMessage tone="neutral" message={strings.postFiles.leftOut(leftOut.length)} />}
+      <PostFilesStrip
+        files={files}
+        picked={pickedOf(files)}
+        leftOut={leftOut ?? null}
+        downloadedBefore={downloadedBefore}
+        onChange={onPick}
+      />
+    </div>
   )
 }
 

@@ -194,10 +194,30 @@ const postStandIn: VideoPreview = {
     bestHeight: null,
     post: { images: 2, videos: 4 },
     files: null,
+    postFiles: [
+      "jNQXAC9IVRw",
+      "dQw4w9WgXcQ",
+      "aqz-KE-bpKQ",
+      null,
+      "M7lc1UVf-VE",
+      "9bZkp7q19f0",
+    ].map((id, index) => ({
+      number: index + 1,
+      video: index > 0 && index < 5,
+      thumbnailUrl: id && `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+      picked: true,
+    })),
   },
   lastDownload: null,
   inQueue: false,
   missingJsRuntime: false,
+}
+
+/** The carousel again, downloaded before with two of its files left out (`leftOutFiles`). */
+const postAgainStandIn: VideoPreview = {
+  ...postStandIn,
+  video: { ...postStandIn.video, videoId: "DfPQchkAgain", url: "https://www.instagram.com/p/DfPQchkAgain/" },
+  lastDownload: { ...historyStandIns[0].lastDownload, preset: "", format: null, fileCount: 4 },
 }
 
 const sharedFolderStandIn: VideoPreview = {
@@ -464,8 +484,29 @@ export const standIns = {
       },
     }),
   ] satisfies QueueItem[],
+  /** The carousel downloaded before (`postAgainStandIn`) left its second and fifth files out. */
+  leftOutFiles(video: VideoInfo): number[] | null {
+    return video.videoId === postAgainStandIn.video.videoId ? [2, 5] : null
+  },
   pendingLinks: [
-    pendingStandIn(1, "https://www.instagram.com/p/DfPQchkG1tg/", { preview: postStandIn }),
+    pendingStandIn(1, "https://www.instagram.com/p/DfPQchkG1tg/", {
+      preview: {
+        ...postStandIn,
+        video: {
+          ...postStandIn.video,
+          postFiles: postStandIn.video.postFiles?.map((file) => ({ ...file, picked: file.number !== 3 })),
+        },
+      },
+    }),
+    pendingStandIn(8, "https://www.instagram.com/p/DfPQchkAgain/", {
+      preview: {
+        ...postAgainStandIn,
+        video: {
+          ...postAgainStandIn.video,
+          postFiles: postAgainStandIn.video.postFiles?.map((file) => ({ ...file, picked: [2, 5].includes(file.number) })),
+        },
+      },
+    }),
     pendingStandIn(2, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", {
       preview: {
         ...previewStandIn,

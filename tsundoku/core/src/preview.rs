@@ -253,6 +253,7 @@ mod tests {
             best_height: None,
             post,
             files: None,
+            post_files: Vec::new(),
         }
     }
 

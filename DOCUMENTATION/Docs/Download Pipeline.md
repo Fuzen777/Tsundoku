@@ -129,6 +129,7 @@ A post of images (`video.post` set) is downloaded by gallery-dl instead, in `pos
 | `-o downloader.part-directory=<folder>\.tsundoku-<id>` | Partial files in the item's temporary folder |
 | `--directory <folder>` | Exactly the item's folder, without gallery-dl's own subfolders |
 | `--filename <format>` | Settings → Posts of Images' name, as `post_names::gallery_format` writes it: `{username\|'natgeo'} 2026-11-04 DfPQchkG1tg {num\|filename}.{extension}` |
+| `--range 1,3,6` | Only when some files were unticked (`VideoInfo::picked_post_files`): the files picked, by their place in the post, which the preview listed in the same order. Each keeps its `num`, so its name keeps its place |
 | `--cookies-from-browser`, `--limit-rate` | As for a video |
 | `--sleep <min>-<max>`, `--sleep-request <min>-<max>` | On a paced site (Instagram), before each file and between the requests that find them |
 | `--no-skip` | Only for an item that replaces its files (`overwrite`), which a post never is: files already there are skipped, so downloading a post again only fetches what's missing |

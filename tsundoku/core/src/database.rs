@@ -95,6 +95,9 @@ const MIGRATIONS: &[&str] = &[
             AND lower(preset) LIKE '%audio%' THEN 'audio'
         ELSE 'video'
     END;",
+    // 9: each file's number in its post (`PostFile::number`), so a post downloaded again shows which files were left
+    // out. NULL for posts downloaded before, which took every file.
+    "ALTER TABLE download_files ADD COLUMN post_number INTEGER;",
 ];
 
 pub struct Database {

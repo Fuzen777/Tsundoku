@@ -75,6 +75,16 @@ pub fn read_pending_link_again(pending: Pending<'_>, id: i64) -> Result<(), Down
     pending.read_again(id)
 }
 
+/// Picks which files of a read post one link downloads, by their number in the post.
+#[tauri::command]
+pub fn set_pending_post_files(
+    pending: Pending<'_>,
+    id: i64,
+    picked: Vec<u32>,
+) -> Result<(), DownloadError> {
+    pending.set_post_files(id, &picked)
+}
+
 /// Picks one link's preset, or `None` for the one picked for them all.
 #[tauri::command]
 pub fn set_pending_preset(

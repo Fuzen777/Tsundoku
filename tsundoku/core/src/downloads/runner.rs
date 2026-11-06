@@ -56,8 +56,10 @@ pub struct PostJob {
     pub gallery_dl: Option<PathBuf>,
     /// The pause before each file, on a site that blocks fast readers (`sites::paces_downloads`).
     pub pause: Option<PauseRange>,
-    /// How many files the preview found, to show progress.
+    /// How many files it downloads, to show progress: those picked, or all the preview found.
     pub files: u32,
+    /// The numbers of the files picked when not all are (`VideoInfo::picked_post_files`), for `--range`.
+    pub range: Option<Vec<u32>>,
     /// gallery-dl's `-f` format for the files' names (`post_names::gallery_format`), extension included.
     pub file_name: String,
 }

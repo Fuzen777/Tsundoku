@@ -201,6 +201,9 @@ pub enum DownloadError {
     /// A name for posts' files (Settings → Posts of Images) that could lose files, or that Windows refuses.
     #[error("post file name: {error}")]
     PostFileName { error: PostNameError },
+    /// A post with every file unticked.
+    #[error("no file of the post is picked")]
+    NothingPicked,
     /// The clipboard shortcut picked in Settings → Adding Links is taken by another app, so Windows won't give it to
     /// Tsundoku.
     #[error("{keys} is taken by another app")]
@@ -401,6 +404,10 @@ impl DownloadQueue {
     pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
         if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
+        }
+        // A post's files can be unticked (`PostFile::picked`), but not all of them.
+        if !video.post_files.is_empty() && !video.post_files.iter().any(|file| file.picked) {
+            return Err(DownloadError::NothingPicked);
         }
         if self.contains(&video.site, &video.video_id) {
             return Err(DownloadError::AlreadyQueued);
@@ -767,7 +774,11 @@ impl DownloadQueue {
             post: item.video.post.map(|contents| PostJob {
                 gallery_dl: self.tools.executable(ToolId::GalleryDl),
                 pause: sites::paces_downloads(&item.video.url).then_some(options.post_pause),
-                files: contents.images + contents.videos,
+                files: item
+                    .video
+                    .post_file_count()
+                    .unwrap_or(contents.images + contents.videos),
+                range: item.video.picked_post_files(),
                 file_name: post_names::gallery_format(&options.post_file_name, &item.video),
             }),
             files: item.video.files,

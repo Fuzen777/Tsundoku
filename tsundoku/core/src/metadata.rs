@@ -44,6 +44,33 @@ pub struct VideoInfo {
     /// What a file host's link holds (`hosts`): one file, or a shared folder's. `None` for a video or a post.
     #[serde(default)]
     pub files: Option<FileContents>,
+    /// A post's files, in the order the site gives them, and which of them its download takes. Empty for a video, a
+    /// file host's link, or a post read before Tsundoku listed them, whose download takes every file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub post_files: Vec<PostFile>,
+}
+
+impl VideoInfo {
+    /// The numbers of the post's files its download takes, when it leaves some out (`PostFile::picked`); `None` when
+    /// it takes them all, or isn't a post.
+    pub fn picked_post_files(&self) -> Option<Vec<u32>> {
+        let picked: Vec<u32> = self
+            .post_files
+            .iter()
+            .filter(|file| file.picked)
+            .map(|file| file.number)
+            .collect();
+        (picked.len() < self.post_files.len()).then_some(picked)
+    }
+
+    /// How many files a download of this post makes: those picked, or all it holds. `None` for anything but a post.
+    pub fn post_file_count(&self) -> Option<u32> {
+        let post = self.post?;
+        Some(match self.picked_post_files() {
+            Some(picked) => u32::try_from(picked.len()).unwrap_or(u32::MAX),
+            None => post.images + post.videos,
+        })
+    }
 }
 
 /// The files of a post, such as an Instagram carousel.
@@ -53,6 +80,27 @@ pub struct VideoInfo {
 pub struct PostContents {
     pub images: u32,
     pub videos: u32,
+}
+
+/// One file of a post, as the strip of the preview card and of a pending link shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PostFile {
+    /// Its place in the post, from 1, in the order the site gives the files: what gallery-dl's `--range` picks it by.
+    pub number: u32,
+    /// A video rather than an image.
+    pub video: bool,
+    /// A small picture of it: the image itself, or a video's cover when the site gives one (Instagram does, X
+    /// doesn't).
+    pub thumbnail_url: Option<String>,
+    /// Whether the download takes it. Every file does to start with; a strip unticks the ones not wanted.
+    #[serde(default = "picked_by_default")]
+    pub picked: bool,
+}
+
+fn picked_by_default() -> bool {
+    true
 }
 
 /// The files behind a file host's link, such as a MEGA folder.
@@ -422,6 +470,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         best_height,
         post: None,
         files: None,
+        post_files: Vec::new(),
     })
 }
 

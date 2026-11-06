@@ -68,6 +68,7 @@ export const queryKeys = {
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
   downloadFiles: ["download-files"],
+  leftOutFiles: ["left-out-files"],
   downloadOptions: ["download-options"],
   addingOptions: ["adding-options"],
   backgroundOptions: ["background-options"],
@@ -330,10 +331,17 @@ export function addToQueue(video: VideoInfo, presetId: string, overwrite: boolea
   return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite })
 }
 
-/** Adds a post of images, whose files all go into the site's folder in the posts folder. */
+/** Adds a post of images, with the files its `postFiles` tick (all of them when it lists none), into the folder the
+ * rules give it. Rejects with a DownloadError, `nothingPicked` when every file is unticked. */
 export function addPostToQueue(video: VideoInfo): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
   return invoke<QueueItem>("add_post_to_queue", { video })
+}
+
+/** The files of a post its downloads left out, by number, or null when they left none out (or there were none). */
+export function getLeftOutFiles(video: VideoInfo): Promise<number[] | null> {
+  if (!isTauri()) return Promise.resolve(standIns.leftOutFiles(video))
+  return invoke<number[] | null>("left_out_files", { video })
 }
 
 /** The folder rules, in the order they're tried. */
@@ -484,6 +492,12 @@ export async function restoreRemovedPendingLinks(): Promise<void> {
 export async function readPendingLinkAgain(id: number): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("read_pending_link_again", { id })
+}
+
+/** Picks which files of a read post one link downloads, by their number in the post. Rejects with a DownloadError. */
+export async function setPendingPostFiles(id: number, picked: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("set_pending_post_files", { id, picked })
 }
 
 /** Picks one link's preset, or null for the one picked for them all. */

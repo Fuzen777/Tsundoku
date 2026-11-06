@@ -24,6 +24,23 @@ export const strings = {
   placeholders: {
     insert: "Insert",
   },
+  /** A post's files, picked in a strip (PostFilesStrip.tsx) on the preview card and in Pending. */
+  postFiles: {
+    count: (picked: number, total: number) => `${picked} of ${total} Files`,
+    summary: (picked: number, total: number) => `${picked} of ${total} files`,
+    selectAll: "Select All Files",
+    file: (number: number, video: boolean) => `${video ? "Video" : "Image"} ${number}`,
+    downloaded: "Downloaded",
+    downloadedHint: "Downloaded before",
+    notPicked: "Not Picked",
+    notPickedHint: "Not picked last time",
+    leftOut: (count: number) =>
+      count === 1
+        ? "1 file wasn't picked last time. It's the one ticked, so downloading again gets just that one."
+        : `${count} files weren't picked last time. They're the ones ticked, so downloading again gets just those.`,
+    pickFiles: "Pick Files",
+    hideFiles: "Hide Files",
+  },
   /** The toast that offers to undo a removal (UndoToast.tsx). */
   undoToast: {
     undo: "Undo",
@@ -125,6 +142,7 @@ export const strings = {
       storage: "Couldn't save the queue or the history.",
       logMissing: "This download has no log yet.",
       invalidRateLimit: "Use a number of bytes per second, with K, M or G after it if you like, such as 500K or 2M.",
+      nothingPicked: "Tick at least one file of the post to download it.",
       shortcutTaken: (keys: string) => `Another app already uses ${keys}. Pick another shortcut.`,
     },
     fixes: {

@@ -265,6 +265,7 @@ mod tests {
                 videos: 1,
             }),
             files: None,
+            post_files: Vec::new(),
         }
     }
 

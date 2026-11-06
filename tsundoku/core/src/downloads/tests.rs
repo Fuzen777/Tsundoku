@@ -211,6 +211,7 @@ fn video(video_id: &str) -> VideoInfo {
         best_height: Some(1080),
         post: None,
         files: None,
+        post_files: Vec::new(),
     }
 }
 
@@ -756,6 +757,7 @@ fn post(post_id: &str) -> VideoInfo {
             videos: 1,
         }),
         files: None,
+        post_files: Vec::new(),
     }
 }
 
@@ -1143,6 +1145,46 @@ fn try_now_ends_a_sites_wait() {
         "the site's reads go on too"
     );
     test.cancel_all();
+}
+
+#[test]
+fn downloads_only_the_files_of_a_post_picked() {
+    let test = Test::new();
+    let files = |picked: &[u32]| -> Vec<crate::metadata::PostFile> {
+        (1..=3)
+            .map(|number| crate::metadata::PostFile {
+                number,
+                video: number == 2,
+                thumbnail_url: None,
+                picked: picked.contains(&number),
+            })
+            .collect()
+    };
+    let picked = VideoInfo {
+        post_files: files(&[1, 3]),
+        ..post("Picked")
+    };
+    let id = test.queue.add_post(picked).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    let post_job = test.runner.job(id).post.unwrap();
+    assert_eq!(post_job.range, Some(vec![1, 3]));
+    assert_eq!(post_job.files, 2, "progress counts the files picked");
+    test.queue.cancel(id).unwrap();
+
+    let none = VideoInfo {
+        post_files: files(&[]),
+        ..post("None")
+    };
+    assert_eq!(test.queue.add_post(none), Err(DownloadError::NothingPicked));
+
+    let all = VideoInfo {
+        post_files: files(&[1, 2, 3]),
+        ..post("All")
+    };
+    let id = test.queue.add_post(all).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    assert_eq!(test.runner.job(id).post.unwrap().range, None, "every file");
+    test.queue.cancel(id).unwrap();
 }
 
 #[test]

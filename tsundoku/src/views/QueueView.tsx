@@ -35,6 +35,7 @@ import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
+import { pickSummary } from "../postFiles"
 import { describeHold, useTimeLeft } from "../holds"
 import { useListArrangement, useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
@@ -165,7 +166,7 @@ function QueueRow({ item }: { item: QueueItem }) {
         </p>
         <p className="truncate text-xs text-fg-secondary tabular-nums">
           {joinDetails([
-            item.preset?.name ?? formatContents(item.video),
+            item.preset?.name ?? pickSummary(item.video) ?? formatContents(item.video),
             stage,
             ...sizeDetails(item, progress),
           ])}

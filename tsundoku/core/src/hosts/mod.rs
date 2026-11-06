@@ -178,6 +178,7 @@ impl Share {
                 count: u32::try_from(self.files.len()).unwrap_or(u32::MAX),
                 bytes: self.total_bytes(),
             }),
+            post_files: Vec::new(),
         }
     }
 }
