@@ -1,23 +1,55 @@
 # Tsundoku
 
-Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows app that downloads videos with [yt-dlp](https://github.com/yt-dlp/yt-dlp) and remembers everything it has downloaded. Paste a link and it tells you whether you already have that video, when you got it and where the file is, before downloading it again.
+Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows app that downloads videos, posts of images and shared files, and remembers everything it has downloaded. Paste a link and it tells you whether you already have it, when you got it and where the file is, before downloading it again.
 
 ## Features
 
-- **Paste a link** (or drop one on the window) to see the video's title, uploader, length, upload date and best quality.
-- **A warning when you already have it**, whatever the link: `youtu.be`, Shorts, a timestamp or a playlist it's in all count as the same video.
-- **Presets**: Best Video, 1080p MP4, Best Audio and MP3 to start with, each with its own format, file name, folder, what to embed and SponsorBlock, and editable.
-- **A queue** with progress, Stop and Resume, Cancel and Retry, two downloads at a time.
-- **A searchable history** of every download, with Open File, Show in Folder and Download Again. yt-dlp's own `archive.txt` is kept in sync.
-- **The tools taken care of**: yt-dlp, ffmpeg and Deno are found on your PC or downloaded, and kept up to date.
-- **Cookies from your browser** for videos that need you signed in, and a speed limit.
-- **Updates itself** from this repository's releases.
+### Adding Links
 
-Single videos only for now: playlists, channels and live streams are planned. See [TODO](TODO.md).
+- **Paste a link** (or drop one on the window) to see what it is before downloading: a video's thumbnail, title, uploader, length, upload date and best quality; a post's caption, author and what it holds ("2 images, 4 videos"); a shared file or folder's name and size ("14 files, 1.2 GB").
+- **Many sites, one add bar**: videos and audio from YouTube and well over a thousand other sites, posts of images from Instagram, X, Bluesky and other image sites, and files and shared folders from MEGA and MediaFire. Each link is read by whatever suits it, so there's nothing to choose. Settings → Supported Sites lists every site in one searchable list.
+- **Several links at once**: paste or drop text holding several links and they go to the **Pending** tab, where each is read in the background and shows what it is, whether you already have it and whether it's in the queue. **Start All** queues every one you don't have yet, or tick some and start those. Pending links are kept through a restart.
+- **A warning when you already have it**, whatever the link: `youtu.be`, Shorts, a timestamp or a playlist it's in all count as the same video.
+
+### Downloading
+
+- **Presets** for videos and audio: Best Video, 1080p MP4, Best Audio and Audio MP3 to start with, each with its own quality, format, file name, folder, what to embed and SponsorBlock, and all editable.
+- **Posts of images**: every file of a post is saved as the site gives it, in a folder per site. Files already there are skipped, so downloading a post again only fetches what's missing. Instagram posts download one at a time, with a pause before each file so your account isn't blocked.
+- **MEGA and MediaFire**: files and shared folders download with their own folder layout, nothing to set up. Each file is checked once it arrives, and a damaged one is downloaded again on Retry.
+- **A queue** with progress, Stop and Resume, Cancel and Retry, two downloads at a time (up to five), and an optional speed limit. It comes back after a restart, and closing while downloading asks first.
+
+### Where Downloads Go
+
+- **One download folder**: everything goes to a Tsundoku folder in your Downloads by default, and Settings can point it elsewhere.
+- **Folder rules**: the **Rules** tab decides where downloads go: "when all of these match, save in this folder", checking the site, uploader, title, link, kind (video, audio, post or shared file) or preset. A folder can use `{site}` and `{uploader}`, such as `D:\Archive\{site}\{uploader}`. Every install starts with a rule that gives each site's posts a folder of its own.
+- **Shown before you download**: the preview shows the folder a download will be saved in and what picked it: a rule, the preset or the download folder.
+
+### History
+
+- **Every download in a searchable list**, with site and preset filters and sorting. A post lists every file it saved.
+- **Open File, Show in Folder, Download Again** and **Forget**, which lets a video be downloaded again without the warning. A file that was moved or deleted is marked as missing.
+- **A standard archive file**: `archive.txt` lists every downloaded video in yt-dlp's archive format, so command-line downloads with `--download-archive` skip them too.
+
+### Signed-In Sites
+
+- **Cookies from your browser**, for videos and posts that need you signed in or an age check. Set to Automatic, Tsundoku finds the browser profiles on your PC and uses, for each link, the one signed in to its site. It only checks which cookies exist, never what they hold.
+- **Plain advice when a site needs you signed in**: the preview says which site and whether a browser is signed in to it, with Try Again once you've signed in.
+
+### Taken Care Of
+
+- **The tools**: Tsundoku relies on free tools to download, which it finds on your PC or downloads from their official releases, checks against their published checksums and keeps up to date. Image downloads are optional and can be set up from Settings or straight from a post's preview.
+- **Fixes on failures**: when a site changes and its links stop working, the error offers an update right there.
+- **Updates itself** from this repository's releases.
+- **Your data in one place**: the history, settings and tools live in one folder, which Settings → About opens.
+- **Fits Windows**: Windows 11's Mica backdrop, light and dark themes following Windows, and the window's size and position remembered.
+
+One video or post at a time for now: playlists, channels, profiles and live streams are refused with a plain message. Picking videos from a playlist is planned, along with a clipboard watcher. See [TODO](TODO.md) for what's next and the [changelog](CHANGELOG.md) for what each version added.
 
 ## Install
 
 Download the `-setup.exe` from the [latest release](https://github.com/Fuzen777/Tsundoku/releases/latest) and run it. It installs for your account only, without administrator rights. The installer isn't code-signed yet, so Windows warns about it: choose **More info**, then **Run anyway**.
+
+New features land in this repository before they reach a release, so the latest release may not have everything listed above yet.
 
 Requirements: Windows 11, 64-bit. Windows 10 should work, but hasn't been tested.
 
@@ -31,7 +63,11 @@ npm install
 npm run tauri dev
 ```
 
-`npm run tauri build` makes the installer. Pushing a version tag builds and publishes a signed release through GitHub Actions (`.github/workflows/release.yml`).
+`Scripts\Check.cmd` runs every check: Rust formatting, Clippy, the Rust tests, then TypeScript, ESLint and the UI tests. `npm run tauri build` makes the installer. Pushing a version tag builds and publishes a signed release through GitHub Actions (`.github/workflows/release.yml`).
+
+## Thanks
+
+Tsundoku is built with [Tauri](https://tauri.app/) and downloads with [yt-dlp](https://github.com/yt-dlp/yt-dlp), [gallery-dl](https://codeberg.org/mikf/gallery-dl), [FFmpeg](https://ffmpeg.org/) (through [yt-dlp's builds](https://github.com/yt-dlp/FFmpeg-Builds)) and [Deno](https://deno.com/).
 
 ## License
 
