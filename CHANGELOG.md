@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.62 · 2026-11-06
+
+### Changed
+
+- **Tidier code behind the Not Picked marks**: the line that refreshes which files of a post were left out, once a download finishes, is indented like the code around it. Nothing changes in the app.
+
 ## 0.1.61 · 2026-11-06
 
 ### Fixed
