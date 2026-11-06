@@ -11,6 +11,7 @@ import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
+import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
@@ -19,6 +20,7 @@ import type { QueueItem } from "./bindings/QueueItem"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
+import type { VideoInfo } from "./bindings/VideoInfo"
 import type { VideoPreview } from "./bindings/VideoPreview"
 
 const previewStandIn: VideoPreview = {
@@ -79,10 +81,10 @@ function queueStandIn(id: number, state: QueueItem["state"], title: string, extr
     id,
     video: { ...previewStandIn.video, videoId: `video${id}`, title },
     preset: presetStandIns[id % presetStandIns.length],
-    folder: String.raw`C:\Users\You\Videos`,
+    folder: id % 2 ? String.raw`C:\Users\You\Videos` : String.raw`C:\Users\You\Downloads\Tsundoku\youtube.com`,
     state,
     overwrite: false,
-    addedAt: 1_793_876_473,
+    addedAt: 1_793_876_473 + id * 60,
     result: null,
     error: null,
     progress: null,
@@ -201,7 +203,7 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
     error: null,
     presetId: null,
     startWhenRead: false,
-    addedAt: 1_793_876_473,
+    addedAt: 1_793_876_473 + id * 60,
     caught: false,
     ...fields,
   }
@@ -342,10 +344,13 @@ export const standIns = {
       folder: "{site}",
     },
   ] satisfies FolderRule[],
-  destination: {
-    folder: String.raw`C:\Users\You\Downloads\Tsundoku\Instagram`,
-    source: { kind: "rule", number: 3 },
-  } satisfies Destination,
+  /** The last rule's folder for the video's site, as a new install has it. */
+  destination(video: VideoInfo): Destination {
+    return {
+      folder: ["C:", "Users", "You", "Downloads", "Tsundoku", video.siteName].join("\\"),
+      source: { kind: "rule", number: 3 },
+    }
+  },
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {
       progress: {
@@ -395,6 +400,10 @@ export const standIns = {
     pendingStandIn(8, "https://www.instagram.com/p/Copied1/", { state: "reading", caught: true }),
     pendingStandIn(9, "https://github.com/Fuzen777/Tsundoku", { state: "waiting", caught: true }),
   ] satisfies PendingLink[],
+  listArrangements: {
+    pending: { group: "none", sort: "added", descending: false },
+    queue: { group: "none", sort: "added", descending: false },
+  } satisfies ListArrangements,
   /** Words that start with http:// or https://, each once: the core also takes links without them. */
   linksInText(text: string): string[] {
     const links = text.split(/\s+/).filter((word) => /^https?:\/\//i.test(word))

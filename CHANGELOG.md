@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.33 · 2026-11-06
+
+### Added
+
+- **Group and sort Pending and the queue**: a toolbar above each list groups it by the folder each download will be saved in, its site or where it stands (ready to start, downloaded before, not read yet… in Pending; downloading, waiting, stopped, failed or done in the queue), under a heading per group with how many it holds, and sorts it by date added, title, uploader or site, either way. Pending and the queue each keep their own choice through a restart. To start with, nothing changes: no groups, oldest first.
+
 ## 0.1.32 · 2026-11-06
 
 ### Added

@@ -24,6 +24,9 @@ pub struct Settings {
     pub presets: PresetsSettings,
     pub downloads: DownloadSettings,
     pub rules: RulesSettings,
+    /// A choice from a newer version, which this one can't read, only resets the lists' arrangements.
+    #[serde(deserialize_with = "default_if_unreadable")]
+    pub lists: ListArrangements,
     pub adding: AddingSettings,
     pub background: BackgroundSettings,
     pub appearance: AppearanceSettings,
@@ -398,6 +401,63 @@ impl UpdateChannel {
     }
 }
 
+/// Reads a part of the settings, or takes its defaults when it can't be read, rather than setting the whole file aside.
+fn default_if_unreadable<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned + Default,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(T::deserialize(value).unwrap_or_default())
+}
+
+/// How the Pending and Queue views group and sort their lists, each chosen in its own toolbar.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct ListArrangements {
+    pub pending: ListArrangement,
+    pub queue: ListArrangement,
+}
+
+/// How one list is grouped and sorted. By default, ungrouped and oldest first, as the list is stored.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct ListArrangement {
+    pub group: ListGroup,
+    pub sort: ListSort,
+    /// Newest or Z first.
+    pub descending: bool,
+}
+
+/// What a list's items are grouped by.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ListGroup {
+    #[default]
+    None,
+    /// The folder the download goes to.
+    Destination,
+    Site,
+    /// Where it stands: waiting, running, done… in the queue; read, downloaded before, failed… in Pending.
+    Status,
+}
+
+/// What a list's items are sorted by, within their groups.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ListSort {
+    /// When it was added.
+    #[default]
+    Added,
+    Title,
+    Uploader,
+    Site,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
     #[error("couldn't read {path}: {source}")]
@@ -510,6 +570,45 @@ mod tests {
             Some(&ToolSetup::Managed { checksum: None })
         );
         assert_eq!(settings.tools.yt_dlp_channel, UpdateChannel::Stable);
+    }
+
+    #[test]
+    fn reads_list_arrangements() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "lists": { "pending": { "group": "destination", "sort": "title", "descending": true } } }"#,
+        )
+        .unwrap();
+
+        let lists = store_in(&folder).get().lists;
+        assert_eq!(
+            lists.pending,
+            ListArrangement {
+                group: ListGroup::Destination,
+                sort: ListSort::Title,
+                descending: true,
+            }
+        );
+        assert_eq!(lists.queue, ListArrangement::default());
+    }
+
+    #[test]
+    fn a_list_arrangement_from_a_newer_version_resets_only_the_arrangements() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{
+                "lists": { "queue": { "group": "fromTheFuture" } },
+                "adding": { "watchClipboard": true }
+            }"#,
+        )
+        .unwrap();
+
+        let settings = store_in(&folder).get();
+        assert_eq!(settings.lists, ListArrangements::default());
+        assert!(settings.adding.watch_clipboard);
+        assert!(!folder.path().join("settings.invalid.json").exists());
     }
 
     #[test]

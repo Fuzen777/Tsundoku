@@ -18,7 +18,7 @@ rules:
 
 ## Priority
 
-- [ ] Pending and Queue ⇒ Group + Sort so we can group by destination and sort by recency for instance.
+- [x] Pending and Queue ⇒ Group + Sort so we can group by destination and sort by recency for instance.
 - [x] Manual select of Dark/Light/Auto
 
 ### Aesthetics

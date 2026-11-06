@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react"
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useQueries, useQuery, useQueryClient, type QueryObserverResult } from "@tanstack/react-query"
 import {
   checkForAppUpdate,
   detectTools,
@@ -13,6 +13,7 @@ import {
   getDownloadOptions,
   getFirstRunOptions,
   getFolderRules,
+  getListArrangements,
   getSupportedSites,
   getHistoryFilters,
   getVideoDownloads,
@@ -28,11 +29,16 @@ import {
   saveAddingOptions,
   saveAppearanceOptions,
   saveBackgroundOptions,
+  saveListArrangements,
 } from "./api"
+import { STORED_ORDER } from "./arrange"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
+import type { Destination } from "./bindings/Destination"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
+import type { ListArrangement } from "./bindings/ListArrangement"
+import type { ListArrangements } from "./bindings/ListArrangements"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { ToolCaches } from "./bindings/ToolCaches"
@@ -144,12 +150,34 @@ export function useFolderRules() {
 
 /** Where a download would go, kept while the next answer loads so the preview card doesn't flicker. */
 export function useDownloadDestination(video: VideoInfo, presetId: string | null, enabled = true) {
-  return useQuery({
+  return useQuery(destinationQuery({ video, presetId, enabled }))
+}
+
+/** A download whose folder is asked: the video, and the preset it would start with (none for a post or a file host's
+ * files). */
+export interface DestinationRequest {
+  video: VideoInfo
+  presetId: string | null
+  enabled: boolean
+}
+
+/** Where several downloads would go, in the order asked, each undefined until it's known. They share their answers
+ * with `useDownloadDestination`. */
+export function useDownloadDestinations(requests: readonly DestinationRequest[]): (Destination | undefined)[] {
+  return useQueries({ queries: requests.map(destinationQuery), combine: destinationsOf })
+}
+
+function destinationQuery({ video, presetId, enabled }: DestinationRequest) {
+  return {
     queryKey: [...queryKeys.downloadDestination, video.site, video.videoId, presetId],
     queryFn: () => getDownloadDestination(video, presetId),
     placeholderData: keepPreviousData,
     enabled,
-  })
+  }
+}
+
+function destinationsOf(results: QueryObserverResult<Destination>[]): (Destination | undefined)[] {
+  return results.map((result) => result.data)
 }
 
 /** The yt-dlp arguments a preset gives, kept while the next ones load so the editor doesn't flicker. */
@@ -170,6 +198,31 @@ export function useQueue() {
 /** Links waiting to be started. The core's pending-changed events keep them current (queueEvents.ts). */
 export function usePendingLinks() {
   return useQuery({ queryKey: queryKeys.pending, queryFn: getPendingLinks, staleTime: Infinity })
+}
+
+/** How the Pending or Queue view groups and sorts its list (the stored order until it's read), and a change to it,
+ * which takes effect at once and is saved, or undone with the error if saving failed. */
+export function useListArrangement(list: keyof ListArrangements) {
+  const queryClient = useQueryClient()
+  const { data: arrangements } = useQuery({
+    queryKey: queryKeys.listArrangements,
+    queryFn: getListArrangements,
+    staleTime: Infinity,
+  })
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const change = async (changes: Partial<ListArrangement>) => {
+    if (!arrangements) return
+    const changed = { ...arrangements, [list]: { ...arrangements[list], ...changes } }
+    setError(null)
+    queryClient.setQueryData(queryKeys.listArrangements, changed)
+    try {
+      await saveListArrangements(changed)
+    } catch (caught) {
+      queryClient.setQueryData(queryKeys.listArrangements, arrangements)
+      setError(describeDownloadError(caught))
+    }
+  }
+  return { arrangement: arrangements?.[list] ?? STORED_ORDER, ready: arrangements !== undefined, change, error }
 }
 
 /** The history view's results. Refetched when a download finishes or a video is forgotten (queueEvents.ts). */

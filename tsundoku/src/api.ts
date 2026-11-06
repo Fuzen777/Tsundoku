@@ -21,6 +21,7 @@ import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
+import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
@@ -58,6 +59,7 @@ export const queryKeys = {
   downloadDestination: ["download-destination"],
   queue: ["queue"],
   pending: ["pending"],
+  listArrangements: ["list-arrangements"],
   history: ["history"],
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
@@ -300,7 +302,7 @@ export function saveFolderRules(rules: FolderRule[]): Promise<FolderRule[]> {
 
 /** Where a download would go and what decided it: with a preset for a video, none for a post. */
 export function getDownloadDestination(video: VideoInfo, presetId: string | null): Promise<Destination> {
-  if (!isTauri()) return Promise.resolve(standIns.destination)
+  if (!isTauri()) return Promise.resolve(standIns.destination(video))
   return invoke<Destination>("download_destination", { video, presetId })
 }
 
@@ -558,6 +560,19 @@ export function getDownloadOptions(): Promise<DownloadSettings> {
 export function saveDownloadOptions(options: DownloadSettings): Promise<DownloadSettings> {
   if (!isTauri()) return outsideTauri()
   return invoke<DownloadSettings>("save_download_options", { options })
+}
+
+/** How the Pending and Queue views group and sort their lists. */
+export function getListArrangements(): Promise<ListArrangements> {
+  if (!isTauri()) return Promise.resolve(standIns.listArrangements)
+  return invoke<ListArrangements>("list_arrangements")
+}
+
+/** Saves how the Pending and Queue views arrange their lists, and resolves to them as saved. Rejects with a
+ * DownloadError. In a browser, the choice lasts until the page reloads, to check each arrangement's layout. */
+export function saveListArrangements(arrangements: ListArrangements): Promise<ListArrangements> {
+  if (!isTauri()) return Promise.resolve(arrangements)
+  return invoke<ListArrangements>("save_list_arrangements", { arrangements })
 }
 
 /** A newer release of Tsundoku, found on GitHub. */

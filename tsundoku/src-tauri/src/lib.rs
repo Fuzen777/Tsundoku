@@ -290,6 +290,8 @@ pub fn run() {
             downloads::cancel_download,
             downloads::clear_finished_downloads,
             downloads::open_download_log,
+            downloads::list_arrangements,
+            downloads::save_list_arrangements,
             pending::pending_links,
             pending::links_in_text,
             pending::add_pending_links,

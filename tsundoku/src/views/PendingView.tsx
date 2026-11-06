@@ -7,9 +7,13 @@ import {
   setPendingPreset,
   startPendingLinks,
 } from "../api"
+import { arrange, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
+import type { Destination } from "../bindings/Destination"
+import type { ListGroup } from "../bindings/ListGroup"
 import type { PendingLink } from "../bindings/PendingLink"
 import type { PresetsOverview } from "../bindings/PresetsOverview"
 import type { VideoInfo } from "../bindings/VideoInfo"
+import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { DestinationLine } from "../components/DestinationLine"
@@ -23,14 +27,23 @@ import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { shownPendingLinks } from "../pendingLinks"
-import { useDownloadDestination, usePendingLinks, usePresets, useSaveAddingOptions } from "../queries"
+import {
+  useDownloadDestination,
+  useDownloadDestinations,
+  useListArrangement,
+  usePendingLinks,
+  usePresets,
+  useSaveAddingOptions,
+  type DestinationRequest,
+} from "../queries"
 import { strings } from "../strings"
 
 /**
  * Links waiting to be started: pasted or dropped several at once, or copied while Watch Clipboard is on, each read in
  * the background to show what it is. Copied links still being read are only counted, since they may turn out to be
  * nothing to download. Start All sends every link not downloaded before to the queue (those still being read go once
- * they're read); with links selected, Start Selected and Remove Selected act on those instead.
+ * they're read); with links selected, Start Selected and Remove Selected act on those instead. The list is grouped and
+ * sorted as its toolbar says.
  */
 export function PendingView() {
   const { data: allLinks = [] } = usePendingLinks()
@@ -49,6 +62,21 @@ export function PendingView() {
   const selected = links.filter((link) => selection.has(link.id))
   const startable = links.filter(startsWithAll)
   const allSelected = links.length > 0 && selected.length === links.length
+
+  const { arrangement, ready, change: changeArrangement, error: arrangeError } = useListArrangement("pending")
+  const { group } = arrangement
+  // Where each read link will be saved, to group them by folder. The rows ask the same, so they share the answers.
+  const readLinks = links.flatMap((link) => (link.preview ? [{ link, video: link.preview.video }] : []))
+  const destinations = useDownloadDestinations(
+    readLinks.map(({ link, video }) => destinationRequest(video, link.presetId ?? presetId, group === "destination")),
+  )
+  const destinationOf = new Map(readLinks.map(({ link }, index) => [link.id, destinations[index]]))
+  const groups = arrange(
+    links,
+    arrangement,
+    pendingFacts,
+    group === "none" ? null : (link) => pendingGroup(link, group, destinationOf.get(link.id)),
+  )
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -161,7 +189,7 @@ export function PendingView() {
         <EmptyState icon={Inbox} title={strings.pending.emptyTitle} body={emptyBody} />
       ) : (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <label className="flex items-center gap-2 text-fg-secondary">
               <input
                 type="checkbox"
@@ -173,7 +201,12 @@ export function PendingView() {
               />
               {strings.pending.count(links.length)}
             </label>
-            <label className="flex items-center gap-2 text-fg-secondary">
+            <ArrangeControls
+              arrangement={arrangement}
+              disabled={!ready}
+              onChange={(changes) => void changeArrangement(changes)}
+            />
+            <label className="ml-auto flex items-center gap-2 text-fg-secondary">
               {strings.pending.videosStartAs}
               <SelectInput
                 value={presetId ?? ""}
@@ -188,11 +221,14 @@ export function PendingView() {
               </SelectInput>
             </label>
           </div>
+          {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           {error && <StatusMessage tone="danger" {...error} />}
-          <div className="flex flex-col gap-2">
-            {links.map((link) => (
+          <GroupedList
+            groups={groups}
+            grouped={group !== "none"}
+            keyOf={(link) => link.id}
+            renderItem={(link) => (
               <PendingRow
-                key={link.id}
                 link={link}
                 presets={presets}
                 allPresetId={presetId}
@@ -201,8 +237,8 @@ export function PendingView() {
                 onStart={() => void start([link])}
                 busy={busy}
               />
-            ))}
-          </div>
+            )}
+          />
         </div>
       )}
     </Page>
@@ -333,13 +369,16 @@ function PendingRow({ link, presets, allPresetId, selected, onSelect, onStart, b
 /** Where a read link will be saved, and what picked the folder, as the preview card shows it: with the preset it would
  * start with, or none for a post or a file host's files. Nothing until it's known. */
 function PendingDestination({ video, presetId }: { video: VideoInfo; presetId: string | null }) {
-  const usesPreset = !video.post && !video.files
-  const { data: destination } = useDownloadDestination(
-    video,
-    usesPreset ? presetId : null,
-    !usesPreset || presetId !== null,
-  )
+  const request = destinationRequest(video, presetId)
+  const { data: destination } = useDownloadDestination(request.video, request.presetId, request.enabled)
   return destination ? <DestinationLine destination={destination} /> : null
+}
+
+/** Asks where a read link will be saved: with the preset it would start with, or none for a post or a file host's
+ * files, which don't use one. A video waits for a preset. */
+function destinationRequest(video: VideoInfo, presetId: string | null, enabled = true): DestinationRequest {
+  const usesPreset = !video.post && !video.files
+  return { video, presetId: usesPreset ? presetId : null, enabled: enabled && (!usesPreset || presetId !== null) }
 }
 
 /** For a link not read yet: whether it waits its turn or is being read, and whether it starts once read. */
@@ -354,6 +393,45 @@ function ReadingStatus({ link }: { link: PendingLink }) {
       ])}
     </p>
   )
+}
+
+type PendingStatus = keyof typeof strings.pending.groups
+
+/** Where links stand, in the order their groups come: those Start All takes first. */
+const PENDING_STATUSES: readonly PendingStatus[] = ["ready", "downloadedBefore", "notRead", "failed", "inQueue"]
+
+function pendingStatus(link: PendingLink): PendingStatus {
+  if (link.state === "failed") return "failed"
+  if (!link.preview) return "notRead"
+  if (link.preview.inQueue) return "inQueue"
+  return link.preview.lastDownload ? "downloadedBefore" : "ready"
+}
+
+/** Until it's read, a link is sorted by its address, with no uploader or site. */
+function pendingFacts(link: PendingLink): SortFacts {
+  const video = link.preview?.video
+  return {
+    id: link.id,
+    addedAt: link.addedAt,
+    title: video?.title ?? link.link,
+    uploader: video?.uploader ?? null,
+    site: video?.siteName ?? null,
+  }
+}
+
+/** The group a link falls in: its folder, its site, or where it stands. Without a folder or site known yet (not read,
+ * or couldn't be read), it goes by where it stands, after the folders or sites. */
+function pendingGroup(
+  link: PendingLink,
+  group: Exclude<ListGroup, "none">,
+  destination: Destination | undefined,
+): GroupPlace {
+  const video = link.preview?.video
+  if (group === "destination" && destination) return folderGroup(destination.folder)
+  if (group === "site" && video) return { key: `site:${video.site}`, label: video.siteName, rank: 0 }
+  const status = pendingStatus(link)
+  const rank = PENDING_STATUSES.indexOf(status)
+  return { key: status, label: strings.pending.groups[status], rank: group === "status" ? rank : rank + 1 }
 }
 
 /** Whether Start All takes the link: not one that couldn't be read, is in the queue, or was downloaded before. */

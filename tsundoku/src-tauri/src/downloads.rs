@@ -1,5 +1,5 @@
 //! The preset, folder rule and queue commands: `tsundoku_core`'s presets, rules and download queue exposed to the
-//! UI, with the queue's changes and progress sent as events.
+//! UI, with the queue's changes and progress sent as events. Also how the Pending and Queue views arrange their lists.
 
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ use tsundoku_core::downloads::{
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
 use tsundoku_core::rules::{Destination, FolderRule, RuleError, RuleManager};
-use tsundoku_core::settings::DownloadSettings;
+use tsundoku_core::settings::{DownloadSettings, ListArrangements, SettingsStore};
 
 /// Sent with every item when the queue changes.
 const QUEUE_CHANGED_EVENT: &str = "queue-changed";
@@ -179,6 +179,25 @@ pub fn save_download_options(
     options: DownloadSettings,
 ) -> Result<DownloadSettings, DownloadError> {
     queue.set_options(options)
+}
+
+/// How the Pending and Queue views group and sort their lists.
+#[tauri::command]
+pub fn list_arrangements(settings: State<'_, Arc<SettingsStore>>) -> ListArrangements {
+    settings.get().lists
+}
+
+#[tauri::command]
+pub fn save_list_arrangements(
+    settings: State<'_, Arc<SettingsStore>>,
+    arrangements: ListArrangements,
+) -> Result<ListArrangements, DownloadError> {
+    settings
+        .update(|settings| settings.lists = arrangements)
+        .map_err(|error| DownloadError::Storage {
+            detail: error.to_string(),
+        })?;
+    Ok(arrangements)
 }
 
 /// Opens the download's log in the default text editor.

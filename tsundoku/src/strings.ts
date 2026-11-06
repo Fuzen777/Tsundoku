@@ -63,6 +63,14 @@ export const strings = {
     showInFolder: "Show in Folder",
     progress: (downloaded: string, total: string) => `${downloaded} of ${total}`,
     timeLeft: (time: string) => `${time} left`,
+    count: (count: number) => `${count} ${count === 1 ? "download" : "downloads"}`,
+    groups: {
+      running: "Downloading",
+      waiting: "Waiting",
+      stopped: "Stopped",
+      failed: "Failed",
+      done: "Done",
+    },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>
       `${count === 1 ? "A download is" : `${count} downloads are`} still running. Close Tsundoku anyway? Next time, ${
@@ -136,6 +144,25 @@ export const strings = {
       openFailed: "Windows couldn't open it.",
     },
   },
+  /** The Pending and Queue views' grouping and sorting. */
+  lists: {
+    groupBy: "Group By",
+    groups: {
+      none: "No Groups",
+      destination: "Group by Folder",
+      site: "Group by Site",
+      status: "Group by Status",
+    },
+    sortBy: "Sort By",
+    sorts: {
+      added: "Date Added",
+      title: "Title",
+      uploader: "Uploader",
+      site: "Site",
+    },
+    ascending: "Ascending",
+    descending: "Descending",
+  },
   appUpdate: {
     available: (version: string) => `Tsundoku ${version} is available.`,
     install: "Install and Restart",
@@ -178,6 +205,13 @@ export const strings = {
         ? "One of these was already downloaded with the same preset, so its new file will replace the one made before."
         : `${count} of these were already downloaded with the same preset, so their new files will replace the ones made before.`,
     overwriteConfirm: "Replace",
+    groups: {
+      ready: "Ready to Start",
+      downloadedBefore: "Downloaded Before",
+      notRead: "Not Read Yet",
+      failed: "Couldn't Be Read",
+      inQueue: "In the Queue",
+    },
   },
   preview: {
     fetching: "Fetching the details…",

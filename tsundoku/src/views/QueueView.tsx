@@ -10,8 +10,12 @@ import {
   showDownloadInFolder,
   stopDownload,
 } from "../api"
+import { arrange, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
 import type { DownloadProgress } from "../bindings/DownloadProgress"
+import type { ListGroup } from "../bindings/ListGroup"
 import type { QueueItem } from "../bindings/QueueItem"
+import type { QueueState } from "../bindings/QueueState"
+import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
@@ -23,14 +27,18 @@ import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
-import { useQueue } from "../queries"
+import { useListArrangement, useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
 import { strings } from "../strings"
 
+/** Every download added and not cleared yet, grouped and sorted as its toolbar says. */
 export function QueueView() {
   const { data: items = [] } = useQueue()
   const [clearError, setClearError] = useState<ErrorDescription | null>(null)
   const hasFinished = items.some((item) => item.state === "done")
+  const { arrangement, ready, change: changeArrangement, error: arrangeError } = useListArrangement("queue")
+  const { group } = arrangement
+  const groups = arrange(items, arrangement, queueFacts, group === "none" ? null : (item) => queueGroup(item, group))
 
   const clearFinished = () => {
     setClearError(null)
@@ -52,14 +60,46 @@ export function QueueView() {
       {items.length === 0 ? (
         <EmptyState icon={ListVideo} title={strings.queue.emptyTitle} body={strings.queue.emptyBody} />
       ) : (
-        <div className="flex flex-col gap-2">
-          {items.map((item) => (
-            <QueueRow key={item.id} item={item} />
-          ))}
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="text-fg-secondary">{strings.queue.count(items.length)}</p>
+            <ArrangeControls
+              arrangement={arrangement}
+              disabled={!ready}
+              onChange={(changes) => void changeArrangement(changes)}
+            />
+          </div>
+          {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
+          <GroupedList
+            groups={groups}
+            grouped={group !== "none"}
+            keyOf={(item) => item.id}
+            renderItem={(item) => <QueueRow item={item} />}
+          />
         </div>
       )}
     </Page>
   )
+}
+
+/** Where downloads stand, in the order their groups come: running first, done last. */
+const QUEUE_STATUSES: readonly QueueState[] = ["running", "waiting", "stopped", "failed", "done"]
+
+function queueFacts(item: QueueItem): SortFacts {
+  const { video } = item
+  return { id: item.id, addedAt: item.addedAt, title: video.title, uploader: video.uploader, site: video.siteName }
+}
+
+/** The group a download falls in: its folder, its site, or where it stands. */
+function queueGroup(item: QueueItem, group: Exclude<ListGroup, "none">): GroupPlace {
+  switch (group) {
+    case "destination":
+      return folderGroup(item.folder)
+    case "site":
+      return { key: item.video.site, label: item.video.siteName, rank: 0 }
+    case "status":
+      return { key: item.state, label: strings.queue.groups[item.state], rank: QUEUE_STATUSES.indexOf(item.state) }
+  }
 }
 
 function QueueRow({ item }: { item: QueueItem }) {
