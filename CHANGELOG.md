@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.38 · 2026-11-06
+
+### Added
+
+- **Keyboard shortcuts**: Ctrl+V anywhere in the window but a text field adds the links you copied, as if pasted in the add bar and added: one link shows its preview, several go to Pending. Ctrl+L goes to the add bar, Ctrl+1 to Ctrl+6 open Queue, Pending, History, Presets, Rules and Settings in the sidebar's order, and Delete removes the links ticked in Pending. Hovering the sidebar, the add bar or Remove Selected shows their keys, and Settings → Keyboard Shortcuts lists them all.
+
 ## 0.1.37 · 2026-11-06
 
 ### Added

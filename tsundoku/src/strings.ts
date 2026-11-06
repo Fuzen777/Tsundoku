@@ -28,6 +28,17 @@ export const strings = {
     rules: "Rules",
     settings: "Settings",
   },
+  /** The window's keyboard shortcuts (shortcuts.ts), as hover texts and Settings → Keyboard Shortcuts show them. */
+  shortcuts: {
+    /** A control's hover text with its shortcut: "Queue (Ctrl+1)". */
+    withKeys: (label: string, keys: string) => `${label} (${keys})`,
+    paste: "Ctrl+V",
+    pasteAnywhere: "Ctrl+V Anywhere",
+    focusAddBar: "Ctrl+L",
+    view: (number: number) => `Ctrl+${number}`,
+    views: (last: number) => `Ctrl+1 to Ctrl+${last}`,
+    delete: "Delete",
+  },
   addBar: {
     placeholder: "Paste One Link or Several",
     add: "Add",
@@ -632,6 +643,14 @@ export const strings = {
       dark: "Dark",
     },
     themeHint: "Auto follows Windows' light or dark mode.",
+    keyboardShortcuts: "Keyboard Shortcuts",
+    shortcutActions: {
+      paste: "Adds the links you copied, from anywhere but a text field: one shows its preview, several go to Pending.",
+      focusAddBar: "Goes to the add bar, with its text selected.",
+      views: (names: string[]) => `Open ${names.slice(0, -1).join(", ")} or ${names.at(-1)}, in the sidebar's order.`,
+      delete: "Removes the ticked links in Pending.",
+      clipboardShortcut: "Adds the links you copied to Pending from any app (Adding Links).",
+    },
     folder: "Download Folder",
     folderHint: "Where downloads go, unless a rule or their preset picks another folder.",
     folderTitle: "Choose Where Downloads Go",

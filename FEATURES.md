@@ -28,6 +28,12 @@ type: Features
 ## Navigation
 
 - **Sidebar**: Queue, Pending, History, Presets and Rules at the top, Settings at the bottom.
+- **Keyboard shortcuts**, listed in Settings → Keyboard Shortcuts and shown in each control's hover text ("Queue (Ctrl+1)"):
+  - **Ctrl+V** anywhere in the window but a text field adds the links you copied, as if pasted in the add bar and added: one link shows its preview, several go to Pending.
+  - **Ctrl+L** goes to the add bar, with its text selected.
+  - **Ctrl+1 to Ctrl+6** open Queue, Pending, History, Presets, Rules and Settings, in the sidebar's order. Digits go by the key's place, so they work on an AZERTY keyboard too.
+  - **Delete** in Pending removes the ticked links, as Remove Selected does, unless you're typing in a field.
+  - None of them is one of the Clipboard Shortcut's choices, which work from any app.
 - **About**: Settings shows the app's version, and "Portable" for a portable copy.
 - **Data folder**: Settings → About shows the data folder's path, with Open Folder to open it in File Explorer.
 - **Back up and restore**: Settings → About's Back Up… saves the settings, presets, folder rules and history, with what was downloaded before so the duplicate warnings keep working, in one zip file named with the day's date ("Tsundoku Backup 2026-11-06.zip"). Restore… loads one on another PC or after a reinstall: after you confirm, it saves the current ones as an automatic backup in the data folder's `backups` folder, so a wrong restore can be undone by restoring that, replaces them with the backup's and restarts Tsundoku. The tools, their caches, the logs, the queue and Pending are never in a backup, and a restore keeps which tools this PC uses and whether Tsundoku starts with Windows; finished downloads leave the queue. A backup from a newer Tsundoku is refused, and a portable copy's download folder beside it goes back to the default in an installed copy. Folders that don't exist on this PC are kept: a download to one fails with "Couldn't create the download folder" until it's changed.
@@ -35,6 +41,7 @@ type: Features
 ## Adding a Video or Post
 
 - **Add bar**: paste a link and press Enter or Add. A link without `https://` ("youtu.be/…") works too.
+- **Ctrl+V anywhere**: with nothing typed into, Ctrl+V adds what you copied straight away, as if pasted in the add bar and added.
 - **Several links at once**: pasting text with several links in it (one per line, or a paragraph holding them) sends them all to Pending instead of the preview card. Words that aren't links are left out, and each link is taken once.
 - **Drop a link**: dropping a link anywhere on the window, such as one dragged from a browser's address bar, puts it in the add bar and fetches it right away. Dropping several links sends them to Pending.
 - **Preview card**: under the add bar, the video's thumbnail, title, uploader, site, length, upload date and best quality ("1080p", or Audio Only). A spinner shows while yt-dlp fetches it, with Cancel; a new link replaces the one being fetched.
@@ -122,6 +129,7 @@ type: Features
 - **Adding Links**: Watch Clipboard, the Clipboard Shortcut, Send from Your Browser, Download Right Away for the links they add (see Pending), and Show Notifications (see Window).
 - **Running in the Background**: Keep Running in the Tray and Start with Windows (see Window).
 - **Appearance**: Theme, Auto (the default, following Windows' light or dark mode), Light or Dark, taken at once and from the first frame at the next start.
+- **Keyboard Shortcuts**: the window's shortcuts (see Navigation), and the Clipboard Shortcut once one is picked.
 - **Instagram**: the pause before each Instagram file, and between Instagram links in Pending: a random time in a range, 5 to 10 seconds to start with, up to 600.
 - **Cookies**: where to read cookies from, for links that need a signed-in account or an age check. It applies to previews and downloads. Automatic (the default) finds every browser profile on the PC and picks, for each link, the one signed in to its site (by which cookies exist, never their values), or for an unknown site the one that visited it last. A single browser (Firefox, Zen, LibreWolf, Floorp, Waterfox, Chrome, Edge, Brave, Opera, Vivaldi or Chromium) uses its profile signed in to the site, else its default one. Choosing a Chromium browser warns that they lock and encrypt their cookies on Windows; Firefox and its forks work.
 - **Supported Sites**: every site yt-dlp and gallery-dl can read, merged into one searchable list without saying which tool reads which, each site once (its playlists, channels and other parts that the tools list on their own are left out). Sites that need an account (Instagram, X, YouTube, TikTok, Reddit, Facebook, Twitch, Niconico, Bilibili) come first, under Signed In with the browser profiles signed in to them, most recent first, or under Not Signed In. The list is read again when Settings opens after a minute, since sign-ins change in the browser.

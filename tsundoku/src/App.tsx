@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { addPendingLinks, linksInText, showMainWindow } from "./api"
 import { AddBar } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
@@ -12,6 +12,7 @@ import { describeDownloadError, type ErrorDescription } from "./errors"
 import { AppActionsContext, type ViewId } from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
 import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup } from "./queries"
+import { useAppShortcuts, useWindowPaste } from "./shortcuts"
 import { strings } from "./strings"
 import { useLinkDrop, usePreview } from "./usePreview"
 import { HistoryView } from "./views/HistoryView"
@@ -73,8 +74,20 @@ export function App() {
     },
     [showLink, closePreview],
   )
-  const dropText = useCallback((text: string) => void addText(text), [addText])
-  useLinkDrop(dropText)
+  const takeText = useCallback((text: string) => void addText(text), [addText])
+  useLinkDrop(takeText)
+
+  // Ctrl+V outside a text field adds what was copied as if pasted in the add bar and submitted; Ctrl+L goes to the
+  // add bar, and Ctrl+1 to Ctrl+6 to the sidebar's views. Not during the first-run setup.
+  const addBarInput = useRef<HTMLInputElement>(null)
+  const shortcutsOn = needsSetup === false
+  useWindowPaste(takeText, shortcutsOn)
+  const focusAddBar = useCallback(() => {
+    addBarInput.current?.focus()
+    addBarInput.current?.select()
+  }, [])
+  useAppShortcuts({ focusAddBar, navigate: setView }, shortcutsOn)
+
   const actions = useMemo(() => ({ navigate: setView, showLink }), [showLink])
 
   if (needsSetup) return <SetupView />
@@ -84,7 +97,12 @@ export function App() {
       <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)]">
         <AppTitle />
         <div className="flex items-center py-3 pr-4">
-          <AddBar link={link} onLinkChange={setLink} onSubmit={() => void addText(link)} />
+          <AddBar
+            link={link}
+            onLinkChange={setLink}
+            onSubmit={() => void addText(link)}
+            inputRef={addBarInput}
+          />
         </div>
         <Sidebar
           className="col-start-1 row-span-2 row-start-2"

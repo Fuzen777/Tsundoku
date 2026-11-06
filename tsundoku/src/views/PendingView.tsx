@@ -36,6 +36,7 @@ import {
   useSaveAddingOptions,
   type DestinationRequest,
 } from "../queries"
+import { useDeleteKey } from "../shortcuts"
 import { strings } from "../strings"
 
 /**
@@ -133,6 +134,10 @@ export function PendingView() {
     </span>
   )
 
+  const removeSelected = () => void run(() => removePendingLinks(selected.map((link) => link.id)))
+  // Delete outside a text field does what Remove Selected does.
+  useDeleteKey(selected.length > 0 && !busy ? removeSelected : null)
+
   const buttons =
     selected.length > 0 ? (
       <>
@@ -140,7 +145,8 @@ export function PendingView() {
           size="sm"
           variant="ghost"
           disabled={busy}
-          onClick={() => void run(() => removePendingLinks(selected.map((link) => link.id)))}
+          title={strings.shortcuts.withKeys(strings.pending.removeSelected, strings.shortcuts.delete)}
+          onClick={removeSelected}
         >
           {strings.pending.removeSelected}
         </Button>

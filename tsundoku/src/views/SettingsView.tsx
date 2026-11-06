@@ -12,6 +12,7 @@ import { AppearanceSection } from "./settings/AppearanceSection"
 import { BackgroundSection } from "./settings/BackgroundSection"
 import { BackupRow } from "./settings/BackupRow"
 import { CookiesSection, DownloadsSection, InstagramSection } from "./settings/DownloadsSection"
+import { ShortcutsSection } from "./settings/ShortcutsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { ToolsSection } from "./settings/ToolsSection"
 
@@ -23,6 +24,7 @@ export function SettingsView() {
         <AddingSection />
         <BackgroundSection />
         <AppearanceSection />
+        <ShortcutsSection />
         <InstagramSection />
         <CookiesSection />
         <SupportedSitesSection />

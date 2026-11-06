@@ -1,4 +1,6 @@
 import { mainNavItems, settingsNavItem, type NavItem, type ViewId } from "../navigation"
+import { viewKeys } from "../shortcuts"
+import { strings } from "../strings"
 import { classes } from "./styles"
 
 interface SidebarProps {
@@ -42,6 +44,7 @@ function NavButton({ item, selected, count, onSelect }: NavButtonProps) {
     <button
       type="button"
       aria-current={selected ? "page" : undefined}
+      title={strings.shortcuts.withKeys(item.label, viewKeys(item.id))}
       onClick={() => onSelect(item.id)}
       className={classes(
         "relative flex h-9 items-center gap-3 rounded-md px-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-accent",
