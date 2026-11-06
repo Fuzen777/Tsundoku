@@ -181,12 +181,14 @@ fn settings_to_back_up(settings: &Settings) -> Vec<u8> {
     serde_json::to_vec_pretty(&value).expect("settings always serialize to JSON")
 }
 
-/// A backup's settings, with what's about this PC kept from `current`: the tools' setup and Start with Windows,
-/// whose entry among Windows' startup apps is only changed when the setting is saved. A portable copy's download
+/// A backup's settings, with what's about this PC kept from `current`: the tools' setup, Start with Windows,
+/// whose entry among Windows' startup apps is only changed when the setting is saved, and the version that ran last. A portable copy's download
 /// folder beside it ("Downloads") goes back to the default in a copy that isn't portable.
 fn settings_to_restore(mut restored: Settings, current: &Settings, portable: bool) -> Settings {
     restored.tools = current.tools.clone();
     restored.background.start_with_windows = current.background.start_with_windows;
+    // What's New follows the version that ran here, not the one the backup was made with.
+    restored.last_run_version = current.last_run_version.clone();
     let folder_beside_app = restored
         .downloads
         .folder

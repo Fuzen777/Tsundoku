@@ -2,6 +2,7 @@ import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
+import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
@@ -226,6 +227,33 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
 
 /** What api.ts returns when the UI runs in a plain browser, to check layouts without the app. */
 export const standIns = {
+  /** A newer release, with `?update` in the address. */
+  appUpdate: {
+    version: "0.2.0",
+    notes: [
+      "### Added",
+      "",
+      "- **Group and sort the queue**: a toolbar above the list groups downloads by folder, site or status.",
+      "- **Back up and restore**: Settings → About's `Back Up…` saves your settings and history in one file.",
+      "",
+      "### Fixed",
+      "",
+      "- **Long titles** no longer push the row's buttons out of the card. See the [README](https://github.com/Fuzen777/Tsundoku#readme).",
+    ].join("\n"),
+  },
+  /** What changed since the last run, with `?whatsnew` in the address. */
+  whatsNew: [
+    {
+      version: "0.1.47",
+      date: "2026-11-06",
+      body: "### Added\n\n- **What's New after an update**: the first start on a newer version says what changed, once.",
+    },
+    {
+      version: "0.1.46",
+      date: "2026-11-06",
+      body: "### Fixed\n\n- **Copy Details' labels**: the button says its name when you hover it, and `Copied` once it has copied.",
+    },
+  ] satisfies ChangelogSection[],
   appInfo: {
     version: "browser",
     hasMicaBackdrop: false,

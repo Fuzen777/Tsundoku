@@ -3,8 +3,6 @@ import { useQueryClient } from "@tanstack/react-query"
 import {
   ArrowDownWideNarrow,
   ArrowUpNarrowWide,
-  ChevronDown,
-  ChevronRight,
   ExternalLink,
   FolderOpen,
   History,
@@ -26,6 +24,7 @@ import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { PastDownload } from "../bindings/PastDownload"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
+import { ExpandToggle } from "../components/LinkButton"
 import { SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Menu } from "../components/Menu"
@@ -334,21 +333,6 @@ const HistoryRow = memo(function HistoryRow({
     </Card>
   )
 })
-
-/** The link that shows or hides a list under a row. */
-function ExpandToggle({ expanded, onToggle, label }: { expanded: boolean; onToggle: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      aria-expanded={expanded}
-      onClick={onToggle}
-      className="flex w-fit items-center gap-1 rounded text-xs font-medium text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-accent"
-    >
-      {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-      {label}
-    </button>
-  )
-}
 
 /** Every file of a post's download, each with Open File and Show in Folder while it's still there. */
 function FileList({ downloadId, onError }: { downloadId: number; onError: (error: ErrorDescription) => void }) {

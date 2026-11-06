@@ -9,6 +9,7 @@ mod pending;
 mod queue_status;
 mod report;
 mod tools;
+mod whats_new;
 
 use std::error::Error;
 use std::fs;
@@ -239,6 +240,11 @@ pub fn run() {
             app.manage(Backdrop { has_mica });
 
             let tool_manager = open_data(app)?;
+            whats_new::note_start(
+                app.handle(),
+                &app.state::<Arc<SettingsStore>>(),
+                tool_manager.needs_setup(),
+            );
             tools::start_daily_updates(app.handle().clone(), tool_manager);
             // The saved theme, while the window is still hidden, so its title bar, Mica and the WebView match from the
             // first frame. A window left in Windows' theme is still usable, so a failure doesn't stop the app.
@@ -309,6 +315,8 @@ pub fn run() {
             downloads::restore_cleared_downloads,
             downloads::open_download_log,
             report::download_details,
+            whats_new::whats_new,
+            whats_new::dismiss_whats_new,
             downloads::list_arrangements,
             downloads::save_list_arrangements,
             pending::pending_links,

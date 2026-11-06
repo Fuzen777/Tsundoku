@@ -10,6 +10,7 @@ import {
 import {
   checkForAppUpdate,
   detectTools,
+  dismissWhatsNew,
   getAddingOptions,
   getAppInfo,
   getAppearanceOptions,
@@ -33,6 +34,7 @@ import {
   getToolDownloads,
   getToolsNeedSetup,
   getToolsOverview,
+  getWhatsNew,
   queryKeys,
   saveAddingOptions,
   saveAppearanceOptions,
@@ -394,5 +396,26 @@ export function useAppUpdate() {
     retry: false,
     enabled: appInfo !== undefined && !appInfo.portable,
   })
+}
+
+/** What changed since the version that ran last, read once at startup, for the What's New card. */
+export function useWhatsNew() {
+  return useQuery({ queryKey: queryKeys.whatsNew, queryFn: getWhatsNew, staleTime: Infinity })
+}
+
+/** Closes the What's New card until a newer version runs, with the error if that couldn't be saved. */
+export function useDismissWhatsNew() {
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const dismiss = async () => {
+    setError(null)
+    try {
+      await dismissWhatsNew()
+      queryClient.setQueryData(queryKeys.whatsNew, [])
+    } catch (caught) {
+      setError(describeDownloadError(caught))
+    }
+  }
+  return { dismiss, error }
 }
 

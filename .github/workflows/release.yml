@@ -64,6 +64,30 @@ jobs:
           $untracked = git ls-files --others --exclude-standard -- tsundoku/src/bindings
           if ($changed -or $untracked) { throw "The bindings differ from what's committed: commit the regenerated ones. $untracked" }
 
+      # The updater's latest.json takes its notes from tauri-action's releaseBody: this version's CHANGELOG section, which
+      # the app's update banner shows under What's New. Without one, the notes are empty and the banner links to the
+      # release's page instead. The release page's own text is .github/release-notes.md, set after the build.
+      - name: Read this version's changes
+        if: github.event_name == 'push'
+        id: changes
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $lines = Get-Content CHANGELOG.md -Encoding utf8
+          $start = [Array]::FindIndex([string[]] $lines, [Predicate[string]] { param($line) $line -match "^## $([regex]::Escape($version))(\s|$)" })
+          $notes = ''
+          if ($start -lt 0) {
+            "::warning::CHANGELOG.md has no section for $version, so the update banner will only link to the release."
+          } else {
+            $section = foreach ($line in $lines[($start + 1)..($lines.Count - 1)]) {
+              if ($line -match '^## ') { break }
+              $line
+            }
+            $notes = ($section -join "`n").Trim()
+          }
+          $delimiter = "CHANGES_$([guid]::NewGuid().ToString('N'))"
+          Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8 -Value "notes<<$delimiter", $notes, $delimiter
+
       # Not pre-releases, even for 0.x: the updater reads releases/latest, which skips pre-releases.
       - name: Build and publish the release
         if: github.event_name == 'push'
@@ -76,12 +100,14 @@ jobs:
           projectPath: tsundoku
           tagName: ${{ github.ref_name }}
           releaseName: Tsundoku ${{ steps.version.outputs.version }}
+          releaseBody: ${{ steps.changes.outputs.notes }}
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: --config src-tauri/tauri.release.conf.json
 
-      # tauri-action takes the release's text only as a string, so it's set from the file once the release exists.
+      # tauri-action takes the release's text only as a string, so it's set from the file once the release exists. This
+      # replaces the release page's text only: latest.json keeps the CHANGELOG section it was written with.
       - name: Add the release notes
         if: github.event_name == 'push'
         shell: pwsh

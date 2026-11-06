@@ -208,6 +208,13 @@ export const strings = {
     upToDate: "Tsundoku is up to date.",
     checkFailed: "Couldn't check for updates.",
     portable: "This portable copy doesn't update itself yet: replace it with a newer one to update.",
+    whatsNew: "What's New",
+    releaseNotes: "Release Notes",
+  },
+  /** The card that says what changed after an update. */
+  whatsNew: {
+    title: (version: string) => `What's New in Tsundoku ${version}`,
+    close: "Close",
   },
   pending: {
     emptyTitle: "Nothing Pending",

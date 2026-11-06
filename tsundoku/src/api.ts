@@ -10,6 +10,7 @@ import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
+import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
@@ -74,6 +75,7 @@ export const queryKeys = {
   defaultDownloadFolder: ["default-download-folder"],
   supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
+  whatsNew: ["whats-new"],
 } as const
 
 /** Sent by the core while a tool is installed or updated. */
@@ -678,20 +680,39 @@ export function saveListArrangements(arrangements: ListArrangements): Promise<Li
 /** A newer release of Tsundoku, found on GitHub. */
 export interface AppUpdate {
   version: string
+  /** What changed: the release's CHANGELOG section, in Markdown, or null when it came without one. */
+  notes: string | null
+  /** The release's page on GitHub. */
+  releasePage: string
   /** Downloads the update, reporting bytes received, then installs it and restarts the app. */
   install: (onProgress: (received: number, total: number | null) => void) => Promise<void>
 }
 
+/** Where a release of Tsundoku is on GitHub. */
+function releasePageOf(version: string): string {
+  return `https://github.com/Fuzen777/Tsundoku/releases/tag/v${version}`
+}
+
 /**
- * Asks GitHub for a newer release, through the updater's latest.json. Resolves to null when there's none, and always
- * in development or a browser. Rejects when GitHub can't be asked, as while the repository is private.
+ * Asks GitHub for a newer release, through the updater's latest.json, whose notes the release run takes from that
+ * version's CHANGELOG section. Resolves to null when there's none, and always in development. Rejects when GitHub
+ * can't be asked, as while the repository is private. In a browser, `?update` shows one with notes and
+ * `?update=bare` one without, which can't be installed.
  */
 export async function checkForAppUpdate(): Promise<AppUpdate | null> {
-  if (!isTauri() || import.meta.env.DEV) return null
+  if (!isTauri()) {
+    if (!addressHas("update")) return null
+    const bare = new URLSearchParams(window.location.search).get("update") === "bare"
+    const { version, notes } = standIns.appUpdate
+    return { version, notes: bare ? null : notes, releasePage: releasePageOf(version), install: outsideTauri }
+  }
+  if (import.meta.env.DEV) return null
   const update = await check()
   if (!update) return null
   return {
     version: update.version,
+    notes: update.body?.trim() || null,
+    releasePage: releasePageOf(update.version),
     install: async (onProgress) => {
       let received = 0
       let total: number | null = null
@@ -707,4 +728,17 @@ export async function checkForAppUpdate(): Promise<AppUpdate | null> {
       await relaunch()
     },
   }
+}
+
+/** What changed since the version that ran last, newest first, for the What's New card; none on a first install or
+ * once it's closed. In a browser, `?whatsnew` shows stand-ins. */
+export function getWhatsNew(): Promise<ChangelogSection[]> {
+  if (!isTauri()) return Promise.resolve(addressHas("whatsnew") ? standIns.whatsNew : [])
+  return invoke<ChangelogSection[]>("whats_new")
+}
+
+/** Closes the What's New card until a newer version runs. Rejects with a DownloadError. */
+export async function dismissWhatsNew(): Promise<void> {
+  if (!isTauri()) return
+  await invoke("dismiss_whats_new")
 }

@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.51 · 2026-11-06
+
+### Added
+
+- **What's New after an update**: the first start on a newer version shows a card under the add bar with what changed since the version you last ran, as this changelog says it, until you close it. A new install shows nothing.
+- **What's New before updating**: when a newer Tsundoku is out, its banner has a What's New link that shows the new version's changes before you install it, or Release Notes, which opens its page, when the release came without them.
+
 ## 0.1.50 · 2026-11-06
 
 ### Changed

@@ -9,6 +9,7 @@ import { Sidebar } from "./components/Sidebar"
 import { StatusMessage } from "./components/StatusMessage"
 import { UndoToastProvider } from "./components/UndoToast"
 import { UpdateBanner } from "./components/UpdateBanner"
+import { WhatsNewCard } from "./components/WhatsNewCard"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { AppActionsContext, type ViewId } from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
@@ -114,6 +115,7 @@ export function App() {
         {/* Hidden while it has nothing to show, so the row takes no room. */}
         <div className="col-start-2 row-start-2 flex flex-col gap-3 pr-4 pb-3 empty:hidden">
           <UpdateBanner />
+          <WhatsNewCard />
           {addError && (
             <Card className="flex items-start gap-3 p-4">
               <div className="min-w-0 flex-1">

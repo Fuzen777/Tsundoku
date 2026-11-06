@@ -31,6 +31,8 @@ pub struct Settings {
     pub adding: AddingSettings,
     pub background: BackgroundSettings,
     pub appearance: AppearanceSettings,
+    /// The version that ran last, so the first start on a newer one can say what changed (`changelog::whats_new`).
+    pub last_run_version: Option<String>,
 }
 
 impl Settings {
