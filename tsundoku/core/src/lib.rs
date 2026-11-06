@@ -14,6 +14,7 @@ pub mod gallery;
 pub mod history;
 pub mod hosts;
 pub mod metadata;
+pub mod pending;
 pub mod presets;
 pub mod preview;
 pub mod process;

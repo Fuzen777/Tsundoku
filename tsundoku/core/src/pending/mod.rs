@@ -1,0 +1,538 @@
+//! Links waiting to be started: pasted or dropped several at once, read one at a time in the background so each shows
+//! what it is, then started into the download queue one by one or all at once. Kept in `tsundoku.db`
+//! (`pending_links`), so they come back after a restart.
+
+mod store;
+
+use std::collections::hash_map::RandomState;
+use std::hash::{BuildHasher, Hasher};
+use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+use self::store::PendingStore;
+use crate::cancel::CancelToken;
+use crate::database::Database;
+use crate::downloads::{DownloadError, DownloadQueue};
+use crate::history::History;
+use crate::metadata::{self, Fetched, PreviewError, VideoInfo};
+use crate::presets::{PresetError, PresetManager};
+use crate::preview::VideoPreview;
+use crate::settings::{PauseRange, SettingsStore};
+use crate::sites;
+use crate::sync::lock;
+
+/// How long the reading thread waits when there's nothing to read before looking again. Adding a link wakes it at
+/// once.
+const IDLE_WAIT: Duration = Duration::from_secs(1);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PendingState {
+    /// Waiting its turn to be read.
+    Waiting,
+    /// Being read now.
+    Reading,
+    /// Read: `preview` says what it is.
+    Ready,
+    /// Couldn't be read: `error` says why.
+    Failed,
+}
+
+/// A link waiting to be started, as the Pending view shows it.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PendingLink {
+    #[ts(type = "number")]
+    pub id: i64,
+    pub link: String,
+    pub state: PendingState,
+    /// Once read: what the link is, whether it was downloaded before and whether it's in the queue, as the preview
+    /// card shows them.
+    pub preview: Option<VideoPreview>,
+    pub error: Option<PreviewError>,
+    /// The preset picked for this link, or `None` for the one picked for them all. A post has none.
+    pub preset_id: Option<String>,
+    /// Started before it was read: it joins the queue once it's read, unless it was downloaded before.
+    pub start_when_read: bool,
+    /// In seconds since 1970.
+    #[ts(type = "number")]
+    pub added_at: i64,
+}
+
+/// What adding links did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AddedLinks {
+    pub added: u32,
+    /// Links that were already waiting, left as they were.
+    pub already_pending: u32,
+}
+
+/// Every link in `text`, in order and each once: words that are http or https links, or look like one without
+/// "https://" ("youtu.be/…"), with brackets, quotes and a sentence's trailing punctuation around them left out. Other
+/// words are skipped, so a pasted paragraph gives only its links.
+pub fn links_in(text: &str) -> Vec<String> {
+    let mut links: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        let word = word
+            .trim_start_matches(['<', '(', '[', '{', '"', '\''])
+            .trim_end_matches(['>', ')', ']', '}', '"', '\'', ',', ';', '!', '?']);
+        if let Some(link) = metadata::normalize_link(word)
+            && !links.contains(&link)
+        {
+            links.push(link);
+        }
+    }
+    links
+}
+
+/// Reads what a link is, as the preview card does (`preview::ToolReader`). Tests use a fake.
+pub trait LinkReader: Send + Sync {
+    fn read(&self, link: &str, cancel: &CancelToken) -> Result<Fetched, PreviewError>;
+}
+
+/// Told when the pending links change, to pass them on to the UI.
+pub trait PendingListener: Send + Sync {
+    fn changed(&self, links: &[PendingLink]);
+}
+
+/// What the pending links use.
+pub struct PendingServices {
+    pub database: Arc<Database>,
+    pub history: Arc<History>,
+    pub queue: Arc<DownloadQueue>,
+    pub presets: Arc<PresetManager>,
+    pub settings: Arc<SettingsStore>,
+    pub reader: Arc<dyn LinkReader>,
+    pub listener: Arc<dyn PendingListener>,
+}
+
+/// A link as it's kept: what was read rather than the preview, whose duplicate warning changes as downloads finish.
+#[derive(Debug, Clone, PartialEq)]
+struct Entry {
+    id: i64,
+    link: String,
+    state: PendingState,
+    fetched: Option<Fetched>,
+    error: Option<PreviewError>,
+    preset_id: Option<String>,
+    start_when_read: bool,
+    added_at: i64,
+}
+
+#[derive(Default)]
+struct Contents {
+    entries: Vec<Entry>,
+    /// The link being read, and what stops it.
+    reading: Option<(i64, CancelToken)>,
+    /// When the next link on a site that limits how fast it's read (Instagram) may be read.
+    paced_until: Option<Instant>,
+}
+
+pub struct PendingLinks {
+    state: Mutex<Contents>,
+    /// Wakes the reading thread when there's a link to read.
+    wake: Condvar,
+    store: PendingStore,
+    history: Arc<History>,
+    queue: Arc<DownloadQueue>,
+    presets: Arc<PresetManager>,
+    settings: Arc<SettingsStore>,
+    reader: Arc<dyn LinkReader>,
+    listener: Arc<dyn PendingListener>,
+}
+
+impl PendingLinks {
+    /// Loads the saved links and starts reading those not read yet, one at a time. A link that was being read when
+    /// the app closed is read again.
+    pub fn open(services: PendingServices) -> Result<Arc<Self>, DownloadError> {
+        let store = PendingStore::new(services.database);
+        let entries = store.load()?;
+        let links = Arc::new(Self {
+            state: Mutex::new(Contents {
+                entries,
+                ..Contents::default()
+            }),
+            wake: Condvar::new(),
+            store,
+            history: services.history,
+            queue: services.queue,
+            presets: services.presets,
+            settings: services.settings,
+            reader: services.reader,
+            listener: services.listener,
+        });
+        let reading = Arc::downgrade(&links);
+        thread::spawn(move || read_links(&reading));
+        Ok(links)
+    }
+
+    /// Every link, oldest first, with what the history and the queue say about it now.
+    pub fn list(&self) -> Vec<PendingLink> {
+        let entries = lock(&self.state).entries.clone();
+        entries
+            .into_iter()
+            .map(|entry| self.present(entry))
+            .collect()
+    }
+
+    /// Adds links to read, skipping those already here and anything that isn't a link.
+    pub fn add(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
+        let mut outcome = AddedLinks {
+            added: 0,
+            already_pending: 0,
+        };
+        {
+            let mut state = lock(&self.state);
+            for text in links {
+                let Some(link) = metadata::normalize_link(text) else {
+                    continue;
+                };
+                if state.entries.iter().any(|entry| entry.link == link) {
+                    outcome.already_pending += 1;
+                    continue;
+                }
+                let mut entry = Entry {
+                    id: 0,
+                    link,
+                    state: PendingState::Waiting,
+                    fetched: None,
+                    error: None,
+                    preset_id: None,
+                    start_when_read: false,
+                    added_at: seconds_since_epoch(),
+                };
+                entry.id = self.store.insert(&entry)?;
+                state.entries.push(entry);
+                outcome.added += 1;
+            }
+        }
+        self.wake.notify_all();
+        self.notify();
+        Ok(outcome)
+    }
+
+    /// Removes links, stopping the one being read if it's among them.
+    pub fn remove(&self, ids: &[i64]) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            if let Some((id, cancel)) = &state.reading
+                && ids.contains(id)
+            {
+                cancel.cancel();
+            }
+            for id in ids {
+                self.store.delete(*id)?;
+            }
+            state.entries.retain(|entry| !ids.contains(&entry.id));
+        }
+        self.notify();
+        Ok(())
+    }
+
+    /// Reads a link that couldn't be read again, after a fix such as signing in.
+    pub fn read_again(&self, id: i64) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let entry = find(&mut state.entries, id)?;
+            if entry.state != PendingState::Failed {
+                return Err(DownloadError::WrongState);
+            }
+            entry.state = PendingState::Waiting;
+            entry.error = None;
+            self.store.update(entry)?;
+        }
+        self.wake.notify_all();
+        self.notify();
+        Ok(())
+    }
+
+    /// Picks the preset for one link, or `None` for the one picked for them all.
+    pub fn set_preset(&self, id: i64, preset_id: Option<String>) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let entry = find(&mut state.entries, id)?;
+            entry.preset_id = preset_id;
+            self.store.update(entry)?;
+        }
+        self.notify();
+        Ok(())
+    }
+
+    /// Starts links. One that was read joins the download queue now, with its own preset or else `preset_id`, and
+    /// leaves the pending links; one not read yet joins once it's read, unless it turns out to be downloaded already.
+    /// One that couldn't be read stays. A video downloaded before with the same preset replaces its file, as Download
+    /// Again does once the user confirms it (the UI asks first). The first error is returned once every other link
+    /// has been started.
+    pub fn start(&self, ids: &[i64], preset_id: &str) -> Result<(), DownloadError> {
+        let mut first_error = None;
+        {
+            let mut state = lock(&self.state);
+            let mut started = Vec::new();
+            for entry in state
+                .entries
+                .iter_mut()
+                .filter(|entry| ids.contains(&entry.id))
+            {
+                match entry.state {
+                    PendingState::Ready => match self.enqueue(entry, preset_id) {
+                        Ok(()) => started.push(entry.id),
+                        Err(error) => {
+                            first_error.get_or_insert(error);
+                        }
+                    },
+                    PendingState::Waiting | PendingState::Reading => {
+                        entry.start_when_read = true;
+                        entry.preset_id.get_or_insert_with(|| preset_id.to_owned());
+                        if let Err(error) = self.store.update(entry) {
+                            first_error.get_or_insert(error);
+                        }
+                    }
+                    PendingState::Failed => {}
+                }
+            }
+            for id in &started {
+                if let Err(error) = self.store.delete(*id) {
+                    first_error.get_or_insert(error);
+                }
+            }
+            state.entries.retain(|entry| !started.contains(&entry.id));
+        }
+        self.notify();
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// Adds a link that was read to the download queue: a post or a file host's link as it is, a video with its preset,
+    /// or the default one if that preset was deleted meanwhile. A video already in the queue counts as started.
+    fn enqueue(&self, entry: &Entry, preset_id: &str) -> Result<(), DownloadError> {
+        let video = entry
+            .fetched
+            .as_ref()
+            .map(|fetched| fetched.video.clone())
+            .ok_or(DownloadError::WrongState)?;
+        let added = if video.post.is_some() || video.files.is_some() {
+            self.queue.add_post(video)
+        } else {
+            let preset = self
+                .presets
+                .get(entry.preset_id.as_deref().unwrap_or(preset_id))
+                .or_else(|| self.presets.get(&self.presets.overview().default_id))
+                .ok_or(DownloadError::Preset {
+                    error: PresetError::NotFound,
+                })?;
+            let overwrite = self
+                .history
+                .last_download(&video.site, &video.video_id)
+                .ok()
+                .flatten()
+                .is_some_and(|last| last.preset == preset.name);
+            self.queue.add(video, &preset.id, overwrite)
+        };
+        match added {
+            Ok(_) | Err(DownloadError::AlreadyQueued) => Ok(()),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// The first link to read: the oldest waiting one, skipping those on a paced site while its pause runs. It's
+    /// marked as being read.
+    fn next_to_read(&self) -> Option<(i64, String, CancelToken)> {
+        let mut state = lock(&self.state);
+        let index = readable(&state, Instant::now())?;
+        let entry = &mut state.entries[index];
+        entry.state = PendingState::Reading;
+        let (id, link) = (entry.id, entry.link.clone());
+        let cancel = CancelToken::new();
+        state.reading = Some((id, cancel.clone()));
+        drop(state);
+        self.notify();
+        Some((id, link, cancel))
+    }
+
+    /// Waits until there may be a link to read: one is added, a paced site's pause ends, or a second goes by.
+    fn wait_for_work(&self) {
+        let state = lock(&self.state);
+        let now = Instant::now();
+        if readable(&state, now).is_some() {
+            return;
+        }
+        let wait = match state.paced_until {
+            Some(until) if until > now => (until - now).min(IDLE_WAIT),
+            _ => IDLE_WAIT,
+        };
+        drop(
+            self.wake
+                .wait_timeout(state, wait)
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+    }
+
+    /// Reads a link and keeps what was found. A link on a paced site makes the next one wait. A link to a video
+    /// that another link here already found is dropped, and one started before it was read goes to the queue.
+    fn read(&self, id: i64, link: &str, cancel: &CancelToken) {
+        let outcome = self.reader.read(link, cancel);
+        {
+            let mut state = lock(&self.state);
+            state.reading = None;
+            if sites::paces_downloads(link) {
+                let pause = random_pause(self.settings.get().downloads.post_pause);
+                state.paced_until = Some(Instant::now() + pause);
+            }
+            // Removed while it was read.
+            if cancel.is_cancelled() {
+                return;
+            }
+            let Some(index) = state.entries.iter().position(|entry| entry.id == id) else {
+                return;
+            };
+            match outcome {
+                Ok(fetched) => {
+                    let duplicate = state.entries.iter().any(|other| {
+                        other.id != id
+                            && other
+                                .fetched
+                                .as_ref()
+                                .is_some_and(|known| same_video(&known.video, &fetched.video))
+                    });
+                    if duplicate {
+                        state.entries.remove(index);
+                        let _ = self.store.delete(id);
+                    } else {
+                        let entry = &mut state.entries[index];
+                        entry.state = PendingState::Ready;
+                        entry.fetched = Some(fetched);
+                        entry.error = None;
+                        if entry.start_when_read && self.start_once_read(entry) {
+                            state.entries.remove(index);
+                            let _ = self.store.delete(id);
+                        } else {
+                            let _ = self.store.update(&state.entries[index]);
+                        }
+                    }
+                }
+                Err(error) => {
+                    let entry = &mut state.entries[index];
+                    // Only removing a link cancels its read, so this is the app closing: read it next time.
+                    if error == PreviewError::Cancelled {
+                        entry.state = PendingState::Waiting;
+                    } else {
+                        entry.state = PendingState::Failed;
+                        entry.error = Some(error);
+                        entry.start_when_read = false;
+                    }
+                    let _ = self.store.update(entry);
+                }
+            }
+        }
+        self.notify();
+    }
+
+    /// Adds a link started before it was read to the queue, unless the history has it: then it stays, marked, for the
+    /// user to decide. Whether it went to the queue.
+    fn start_once_read(&self, entry: &mut Entry) -> bool {
+        entry.start_when_read = false;
+        let Some(fetched) = &entry.fetched else {
+            return false;
+        };
+        let downloaded_before = self
+            .history
+            .last_download(&fetched.video.site, &fetched.video.video_id)
+            .ok()
+            .flatten()
+            .is_some();
+        if downloaded_before {
+            return false;
+        }
+        let default_id = self.presets.overview().default_id;
+        self.enqueue(entry, &default_id).is_ok()
+    }
+
+    fn present(&self, entry: Entry) -> PendingLink {
+        let preview = entry.fetched.map(|fetched| VideoPreview {
+            last_download: self
+                .history
+                .last_download(&fetched.video.site, &fetched.video.video_id)
+                .ok()
+                .flatten(),
+            in_queue: self
+                .queue
+                .contains(&fetched.video.site, &fetched.video.video_id),
+            missing_js_runtime: fetched.missing_js_runtime,
+            video: fetched.video,
+        });
+        PendingLink {
+            id: entry.id,
+            link: entry.link,
+            state: entry.state,
+            preview,
+            error: entry.error,
+            preset_id: entry.preset_id,
+            start_when_read: entry.start_when_read,
+            added_at: entry.added_at,
+        }
+    }
+
+    fn notify(&self) {
+        let links = self.list();
+        self.listener.changed(&links);
+    }
+}
+
+/// Reads waiting links one at a time while the pending links exist.
+fn read_links(links: &Weak<PendingLinks>) {
+    while let Some(links) = links.upgrade() {
+        match links.next_to_read() {
+            Some((id, link, cancel)) => links.read(id, &link, &cancel),
+            None => links.wait_for_work(),
+        }
+    }
+}
+
+/// Where the next link to read is: the oldest waiting one, leaving paced sites for later while their pause runs.
+fn readable(state: &Contents, now: Instant) -> Option<usize> {
+    let paced_ready = state.paced_until.is_none_or(|until| until <= now);
+    state.entries.iter().position(|entry| {
+        entry.state == PendingState::Waiting
+            && (paced_ready || !sites::paces_downloads(&entry.link))
+    })
+}
+
+fn same_video(first: &VideoInfo, second: &VideoInfo) -> bool {
+    first.site == second.site && first.video_id == second.video_id
+}
+
+/// A random time within the range, as gallery-dl's `--sleep` picks one before each file.
+fn random_pause(range: PauseRange) -> Duration {
+    let range = range.normalized();
+    let spread = u64::from(range.max - range.min) + 1;
+    let mut hasher = RandomState::new().build_hasher();
+    hasher.write_u128(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos()),
+    );
+    Duration::from_secs(u64::from(range.min) + hasher.finish() % spread)
+}
+
+fn find(entries: &mut [Entry], id: i64) -> Result<&mut Entry, DownloadError> {
+    entries
+        .iter_mut()
+        .find(|entry| entry.id == id)
+        .ok_or(DownloadError::NotFound)
+}
+
+fn seconds_since_epoch() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64)
+}
+
+#[cfg(test)]
+mod tests;

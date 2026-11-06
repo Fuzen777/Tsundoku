@@ -1,7 +1,7 @@
 //! The preview card's content: what a link is (metadata.rs for yt-dlp, gallery.rs for gallery-dl, hosts for the file
 //! hosts Tsundoku reads itself) and when it was last downloaded (history.rs).
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use ts_rs::TS;
@@ -13,6 +13,8 @@ use crate::gallery::{self, GalleryTools};
 use crate::history::{History, PastDownload};
 use crate::hosts::{self, Host};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
+use crate::pending::LinkReader;
+use crate::settings::{CookiesBrowser, SettingsStore};
 use crate::sites;
 use crate::sync::lock;
 use crate::tools::{ToolId, ToolManager};
@@ -41,8 +43,8 @@ impl PreviewService {
         Self::default()
     }
 
-    /// Asks yt-dlp or gallery-dl what `text` links to (see `read_link`), the history whether it was downloaded
-    /// before, and the queue whether it's in it.
+    /// Reads what `text` links to (see `read_with_tools`), asks the history whether it was downloaded before, and the
+    /// queue whether it's in it.
     pub fn fetch(
         &self,
         tools: &ToolManager,
@@ -55,55 +57,14 @@ impl PreviewService {
         if let Some(previous) = lock(&self.current).replace(cancel.clone()) {
             previous.cancel();
         }
-
-        let yt_dlp = tools.executable(ToolId::YtDlp);
-        let deno = tools.executable(ToolId::Deno);
-        let ffmpeg = tools.executable(ToolId::Ffmpeg);
-        let gallery_dl = tools.executable(ToolId::GalleryDl);
-        let cookies_choice = queue.options().cookies_browser;
-        let cookies = browsers::cookies_for(cookies_choice, &link);
-        let fetch_tools = FetchTools {
-            yt_dlp: yt_dlp.as_deref(),
-            deno: deno.as_deref(),
-            ffmpeg: ffmpeg.as_deref(),
-            cookies: cookies.clone(),
-        };
-        let gallery_tools = GalleryTools {
-            gallery_dl: gallery_dl.as_deref(),
-            cookies,
-        };
-        // A file host Tsundoku reads itself goes there first, since its domains are exact.
-        let fetched = match Host::of(&link) {
-            Some(_) => hosts::read(&link, &cancel).map(|share| Fetched {
-                video: share.video_info(),
-                missing_js_runtime: false,
-            }),
-            None => read_link(
-                &link,
-                &cancel,
-                |link, cancel| metadata::fetch(&fetch_tools, link, cancel),
-                |link, cancel| gallery::fetch(&gallery_tools, link, cancel),
-                gallery_dl.is_some(),
-            ),
-        };
+        let fetched = read_with_tools(tools, queue.options().cookies_browser, &link, &cancel);
         {
             let mut current = lock(&self.current);
             if current.as_ref().is_some_and(|token| token.is_same(&cancel)) {
                 *current = None;
             }
         }
-
-        let fetched = fetched.map_err(|error| match error {
-            PreviewError::SignInRequired { detail, .. } => {
-                let site = sites::sign_in_site(&link);
-                PreviewError::SignInRequired {
-                    detail,
-                    site: site.map(|site| site.name.to_owned()),
-                    cookies: browsers::sign_in_state(cookies_choice, &link),
-                }
-            }
-            other => other,
-        })?;
+        let fetched = fetched?;
         let last_download = history
             .last_download(&fetched.video.site, &fetched.video.video_id)
             .map_err(|error| PreviewError::Failed {
@@ -123,6 +84,67 @@ impl PreviewService {
             current.cancel();
         }
     }
+}
+
+/// Reads links for the pending links as the preview card does, with the tools set up and the cookies Settings picks.
+pub struct ToolReader {
+    pub tools: Arc<ToolManager>,
+    pub settings: Arc<SettingsStore>,
+}
+
+impl LinkReader for ToolReader {
+    fn read(&self, link: &str, cancel: &CancelToken) -> Result<Fetched, PreviewError> {
+        let cookies_choice = self.settings.get().downloads.cookies_browser;
+        read_with_tools(&self.tools, cookies_choice, link, cancel)
+    }
+}
+
+/// Reads `link` (from `normalize_link`): a file host's itself (`hosts`), any other with the tools that are set up
+/// (`read_link`). When it needs a signed-in account, the error says which site and whether a browser is signed in
+/// to it.
+fn read_with_tools(
+    tools: &ToolManager,
+    cookies_choice: Option<CookiesBrowser>,
+    link: &str,
+    cancel: &CancelToken,
+) -> Result<Fetched, PreviewError> {
+    let yt_dlp = tools.executable(ToolId::YtDlp);
+    let deno = tools.executable(ToolId::Deno);
+    let ffmpeg = tools.executable(ToolId::Ffmpeg);
+    let gallery_dl = tools.executable(ToolId::GalleryDl);
+    let cookies = browsers::cookies_for(cookies_choice, link);
+    let fetch_tools = FetchTools {
+        yt_dlp: yt_dlp.as_deref(),
+        deno: deno.as_deref(),
+        ffmpeg: ffmpeg.as_deref(),
+        cookies: cookies.clone(),
+    };
+    let gallery_tools = GalleryTools {
+        gallery_dl: gallery_dl.as_deref(),
+        cookies,
+    };
+    // A file host Tsundoku reads itself goes there first, since its domains are exact.
+    let fetched = match Host::of(link) {
+        Some(_) => hosts::read(link, cancel).map(|share| Fetched {
+            video: share.video_info(),
+            missing_js_runtime: false,
+        }),
+        None => read_link(
+            link,
+            cancel,
+            |link, cancel| metadata::fetch(&fetch_tools, link, cancel),
+            |link, cancel| gallery::fetch(&gallery_tools, link, cancel),
+            gallery_dl.is_some(),
+        ),
+    };
+    fetched.map_err(|error| match error {
+        PreviewError::SignInRequired { detail, .. } => PreviewError::SignInRequired {
+            detail,
+            site: sites::sign_in_site(link).map(|site| site.name.to_owned()),
+            cookies: browsers::sign_in_state(cookies_choice, link),
+        },
+        other => other,
+    })
 }
 
 /// Reads a link with the tool that suits it, falling back to the other when the first can't handle it, so the user

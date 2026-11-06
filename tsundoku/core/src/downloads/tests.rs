@@ -539,6 +539,29 @@ fn post(post_id: &str) -> VideoInfo {
 }
 
 #[test]
+fn runs_one_instagram_post_at_a_time() {
+    let test = Test::new();
+    let first = test.queue.add_post(post("First")).unwrap().id;
+    let second = test.queue.add_post(post("Second")).unwrap().id;
+    let video = test.add("a");
+    wait_until("two run", || test.runner.started().len() == 2);
+    let mut running = test.runner.started();
+    running.sort_unstable();
+    assert_eq!(
+        running,
+        [first, video],
+        "the video goes ahead of the second post"
+    );
+    assert_eq!(test.state(second), Some(QueueState::Waiting));
+
+    test.runner
+        .complete(first, JobOutcome::Failed(DownloadError::NoFile));
+    wait_until("the second post starts", || {
+        test.runner.started().contains(&second)
+    });
+}
+
+#[test]
 fn downloads_a_post_into_its_sites_folder_at_a_safe_pace() {
     let test = Test::new();
     let id = test.queue.add_post(post("Abc123")).unwrap().id;

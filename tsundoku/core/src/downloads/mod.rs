@@ -484,7 +484,9 @@ impl DownloadQueue {
         self.logs_folder.join(format!("{id}.log"))
     }
 
-    /// Starts waiting items while there's room.
+    /// Starts waiting items while there's room, in the order they were added. A post on a site that limits how fast
+    /// it's read (Instagram) waits while another of that site's posts runs, since each pauses between its files on
+    /// its own and two at once would read twice as fast; downloads from other sites go ahead of it meanwhile.
     fn schedule(&self) {
         let at_once = self.settings.get().downloads.at_once.max(1) as usize;
         let mut started = Vec::new();
@@ -493,10 +495,14 @@ impl DownloadQueue {
             // Through a plain reference, so the items and the running map can be borrowed at once.
             let contents = &mut *state;
             while contents.running.len() < at_once {
+                let pacing = contents
+                    .items
+                    .iter()
+                    .any(|item| item.state == QueueState::Running && is_paced(item));
                 let Some(item) = contents
                     .items
                     .iter_mut()
-                    .find(|item| item.state == QueueState::Waiting)
+                    .find(|item| item.state == QueueState::Waiting && !(pacing && is_paced(item)))
                 else {
                     break;
                 };
@@ -699,6 +705,11 @@ fn normalize_rate_limit(text: Option<&str>) -> Result<Option<String>, DownloadEr
             value: text.to_owned(),
         }),
     }
+}
+
+/// A post on a site that limits how fast it's read, whose files are downloaded with a pause between them.
+fn is_paced(item: &QueueItem) -> bool {
+    item.video.post.is_some() && sites::paces_downloads(&item.video.url)
 }
 
 fn find(items: &mut [QueueItem], id: i64) -> Result<&mut QueueItem, DownloadError> {

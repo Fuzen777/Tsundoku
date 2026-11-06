@@ -1,13 +1,14 @@
 import type { QueryClient } from "@tanstack/react-query"
-import { confirmWithUser, onCloseRequested, onDownloadProgress, onQueueChanged, queryKeys } from "./api"
+import { confirmWithUser, onCloseRequested, onDownloadProgress, onPendingChanged, onQueueChanged, queryKeys } from "./api"
 import type { DownloadProgress } from "./bindings/DownloadProgress"
 import type { QueueItem } from "./bindings/QueueItem"
 import { createLiveStore } from "./liveStore"
 import { strings } from "./strings"
 
 /*
-  Keeps the UI's copy of the download queue current from the core's events: queue-changed replaces the items in
-  React Query, and download-progress updates each running item's progress several times a second, outside it.
+  Keeps the UI's copy of the download queue and the pending links current from the core's events: queue-changed and
+  pending-changed replace them in React Query, and download-progress updates each running item's progress several
+  times a second, outside it.
 */
 
 const progress = createLiveStore<number, DownloadProgress>()
@@ -17,8 +18,9 @@ const progress = createLiveStore<number, DownloadProgress>()
 export function trackQueue(queryClient: QueryClient): void {
   void onQueueChanged((items) => {
     queryClient.setQueryData(queryKeys.queue, items)
-    // A download that finished is in the history now.
+    // A download that finished is in the history now, and a pending link may now be downloaded already or queued.
     void queryClient.invalidateQueries({ queryKey: queryKeys.history })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.pending })
     void queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
     void queryClient.invalidateQueries({ queryKey: queryKeys.videoDownloads })
     for (const item of items) {
@@ -29,6 +31,7 @@ export function trackQueue(queryClient: QueryClient): void {
       }
     }
   })
+  void onPendingChanged((links) => queryClient.setQueryData(queryKeys.pending, links))
   void onDownloadProgress(({ id, progress: value }) => progress.set(id, value))
   void onCloseRequested(async () => {
     const items = queryClient.getQueryData<QueueItem[]>(queryKeys.queue) ?? []

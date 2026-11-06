@@ -21,14 +21,18 @@ export const strings = {
   },
   nav: {
     queue: "Queue",
+    pending: "Pending",
     history: "History",
     presets: "Presets",
     rules: "Rules",
     settings: "Settings",
   },
   addBar: {
-    placeholder: "Paste a Video Link",
+    placeholder: "Paste One Link or Several",
     add: "Add",
+    errors: {
+      dismiss: "Dismiss",
+    },
   },
   queue: {
     emptyTitle: "Nothing in the Queue",
@@ -140,6 +144,32 @@ export const strings = {
     check: "Check for Updates",
     upToDate: "Tsundoku is up to date.",
     checkFailed: "Couldn't check for updates.",
+  },
+  pending: {
+    emptyTitle: "Nothing Pending",
+    emptyBody: "Paste or drop several links at once, and they wait here until you start them.",
+    count: (count: number) => `${count} ${count === 1 ? "link" : "links"}`,
+    selectAll: "Select All",
+    select: "Select",
+    videosStartAs: "Videos Start As",
+    startAll: "Start All",
+    startSelected: "Start Selected",
+    removeSelected: "Remove Selected",
+    start: "Start",
+    downloadAgain: "Download Again",
+    remove: "Remove",
+    tryAgain: "Try Again",
+    preset: "Preset",
+    waiting: "Waiting to be read",
+    reading: "Reading…",
+    startsWhenRead: "Starts once it's read",
+    inQueue: "Already in the queue.",
+    overwriteTitle: "Download Again?",
+    overwriteMessage: (count: number) =>
+      count === 1
+        ? "One of these was already downloaded with the same preset, so its new file will replace the one made before."
+        : `${count} of these were already downloaded with the same preset, so their new files will replace the ones made before.`,
+    overwriteConfirm: "Replace",
   },
   preview: {
     fetching: "Fetching the details…",
@@ -476,7 +506,7 @@ export const strings = {
     defaultFolder: (path: string) => `The default: ${path}`,
     postPause: "Pause Between Instagram Files",
     postPauseHint: (longest: number) =>
-      `Instagram blocks accounts that read too fast, so Tsundoku waits a random time in this range before each file, up to ${longest} seconds.`,
+      `Instagram blocks accounts that read too fast, so Tsundoku waits a random time in this range before each file, and between Instagram links in Pending, up to ${longest} seconds.`,
     pauseFrom: "From",
     pauseTo: "to",
     seconds: "seconds",

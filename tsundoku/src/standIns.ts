@@ -8,6 +8,7 @@ import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
 import type { PastDownload } from "./bindings/PastDownload"
+import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
@@ -187,6 +188,20 @@ const sharedFolderStandIn: VideoPreview = {
   missingJsRuntime: false,
 }
 
+function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> = {}): PendingLink {
+  return {
+    id,
+    link,
+    state: "ready",
+    preview: null,
+    error: null,
+    presetId: null,
+    startWhenRead: false,
+    addedAt: 1_793_876_473,
+    ...fields,
+  }
+}
+
 /** What api.ts returns when the UI runs in a plain browser, to check layouts without the app. */
 export const standIns = {
   appInfo: {
@@ -326,6 +341,31 @@ export const standIns = {
       },
     }),
   ] satisfies QueueItem[],
+  pendingLinks: [
+    pendingStandIn(1, "https://www.instagram.com/p/DfPQchkG1tg/", { preview: postStandIn }),
+    pendingStandIn(2, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", {
+      preview: {
+        ...previewStandIn,
+        video: { ...previewStandIn.video, videoId: "dQw4w9WgXcQ", title: "A Video Not Downloaded Yet" },
+        lastDownload: null,
+        missingJsRuntime: false,
+      },
+      presetId: "audio-mp3",
+    }),
+    pendingStandIn(3, "https://www.youtube.com/watch?v=jNQXAC9IVRw", { preview: previewStandIn }),
+    pendingStandIn(7, "https://mega.nz/folder/AbCdEfGh#key", { preview: sharedFolderStandIn }),
+    pendingStandIn(4, "https://www.instagram.com/p/Another1/", { state: "reading" }),
+    pendingStandIn(5, "https://www.instagram.com/p/Another2/", { state: "waiting", startWhenRead: true }),
+    pendingStandIn(6, "https://www.instagram.com/p/Private1/", {
+      state: "failed",
+      error: { kind: "signInRequired", detail: "login required", site: "Instagram", cookies: "notSignedIn" },
+    }),
+  ] satisfies PendingLink[],
+  /** Words that start with http:// or https://, each once: the core also takes links without them. */
+  linksInText(text: string): string[] {
+    const links = text.split(/\s+/).filter((word) => /^https?:\/\//i.test(word))
+    return [...new Set(links)]
+  },
   /**
    * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link;
    * or a failure for a link containing "fail", or "images" (gallery-dl not set up).

@@ -64,6 +64,19 @@ const MIGRATIONS: &[&str] = &[
     // 4: what a file host's link held (a MEGA folder, say): how many files, and their size together.
     "ALTER TABLE videos ADD COLUMN file_count INTEGER;
     ALTER TABLE videos ADD COLUMN file_bytes INTEGER;",
+    // 5: links waiting to be started (pending/store.rs). The video and error are JSON, set once the link is read.
+    // AUTOINCREMENT, so a removed link's ID is never given to another while the UI may still name it.
+    "CREATE TABLE pending_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        link TEXT NOT NULL,
+        state TEXT NOT NULL,
+        video TEXT,
+        missing_js_runtime INTEGER NOT NULL DEFAULT 0,
+        error TEXT,
+        preset TEXT,
+        start_when_read INTEGER NOT NULL DEFAULT 0,
+        added_at INTEGER NOT NULL
+    );",
 ];
 
 pub struct Database {

@@ -21,14 +21,15 @@ type: Features
 
 ## Navigation
 
-- **Sidebar**: Queue, History, Presets and Rules at the top, Settings at the bottom.
+- **Sidebar**: Queue, Pending, History, Presets and Rules at the top, Settings at the bottom.
 - **About**: Settings shows the app's version.
 - **Data folder**: Settings → About shows the data folder's path, with Open Folder to open it in File Explorer.
 
 ## Adding a Video or Post
 
 - **Add bar**: paste a link and press Enter or Add. A link without `https://` ("youtu.be/…") works too.
-- **Drop a link**: dropping a link anywhere on the window, such as one dragged from a browser's address bar, puts it in the add bar and fetches it right away.
+- **Several links at once**: pasting text with several links in it (one per line, or a paragraph holding them) sends them all to Pending instead of the preview card. Words that aren't links are left out, and each link is taken once.
+- **Drop a link**: dropping a link anywhere on the window, such as one dragged from a browser's address bar, puts it in the add bar and fetches it right away. Dropping several links sends them to Pending.
 - **Preview card**: under the add bar, the video's thumbnail, title, uploader, site, length, upload date and best quality ("1080p", or Audio Only). A spinner shows while yt-dlp fetches it, with Cancel; a new link replaces the one being fetched.
 - **Already downloaded**: when the history has the video, the card says when and with which preset, shows the file's path with Open File and Show in Folder, and Download becomes Download Again. If the file was moved or deleted, it says so. The check uses the site and the video's ID, so every link to a video is caught: `youtu.be`, Shorts, a timestamp, a playlist it's in.
 - **Refused links**: playlists and channels, live streams, and premieres that haven't started each get a plain message. So do unsupported sites, unavailable videos, videos needing a sign-in or an age check, and network errors, with yt-dlp's own error underneath.
@@ -40,11 +41,22 @@ type: Features
 - **Where it goes**: beside Download, the folder the download will be saved in and what picked it: a rule ("Rule 2"), the preset's folder or the download folder. Clicking it opens the rules, the presets or Settings.
 - **Already in the queue**: the card says so, without Download.
 
+## Pending
+
+- **Links waiting to start**: the Pending tab holds links pasted or dropped several at once, oldest first, until they're started. They're kept through a restart.
+- **Read in the background**: each link is read one at a time, so its row fills in with the thumbnail, title, uploader, site and what it holds, as the preview card shows them. Instagram links wait the same random 10 to 20 seconds between reads as between files, and links from other sites are read meanwhile.
+- **Already downloaded**: a link the history has says when and with which preset, and its Start becomes Download Again. Two links to the same video are kept once. A link already in the queue says so.
+- **Start All**: sends every link to the queue except those downloaded before, already in the queue or that couldn't be read. Videos start with the preset picked in Videos Start As (the default one to start with); a link's own preset picker overrides it. Links still being read start once they're read, unless they turn out to be downloaded already.
+- **Select**: with links ticked (or all of them, with the box at the top), Start Selected and Remove Selected act on those instead. Starting a video again with the preset it was downloaded with asks first, since the new file replaces the old one.
+- **Each row**: Start (or Download Again), Remove, and the preset picker for a video. A link that couldn't be read shows why, the same fixes as the preview card, and Try Again.
+- **Sidebar count**: the number of links waiting, beside Pending.
+
 ## Queue
 
 - **Two at a time**: downloads start in the order they were added, two at once.
-- **Posts**: a post's row shows what it holds ("3 images, 1 video") instead of a preset, and its progress counts files.
-- **MEGA and MediaFire**: a file host's row shows what it holds instead of a preset. Its progress covers every file together, with the speed limit applied; Stop and Retry continue the file they stopped in. On Instagram, each file waits a random 10 to 20 seconds first (Settings → Posts of Images), so the account isn't blocked.
+- **Posts**: a post's row shows what it holds ("3 images, 1 video") instead of a preset, and its progress counts files. On Instagram, each file waits a random 10 to 20 seconds first (Settings → Posts of Images), so the account isn't blocked.
+- **MEGA and MediaFire**: a file host's row shows what it holds instead of a preset. Its progress covers every file together, with the speed limit applied; Stop and Retry continue the file they stopped in.
+- **One Instagram post at a time**: while an Instagram post downloads, the next one waits, since two at once would read twice as fast. Downloads from other sites go ahead of it meanwhile.
 - **Each row**: thumbnail, title, preset, what it's doing (Downloading Video, Downloading Audio, Merging, Converting, Embedding…), size, speed and time left, with a progress bar.
 - **Stop and Resume**: Stop ends the download and keeps what it got; Resume continues from there. Stopping one that's waiting holds it.
 - **Cancel**: removes the download and its partial files.

@@ -4710,7 +4710,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "serde_json",
  "tauri",
@@ -4727,7 +4727,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku-core"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "aes",
  "base64 0.23.1",

@@ -5,6 +5,7 @@ import { ask, open } from "@tauri-apps/plugin-dialog"
 import { openUrl } from "@tauri-apps/plugin-opener"
 import { relaunch } from "@tauri-apps/plugin-process"
 import { check } from "@tauri-apps/plugin-updater"
+import type { AddedLinks } from "./bindings/AddedLinks"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
@@ -16,6 +17,7 @@ import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
 import type { PastDownload } from "./bindings/PastDownload"
+import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
@@ -48,6 +50,7 @@ export const queryKeys = {
   folderRules: ["folder-rules"],
   downloadDestination: ["download-destination"],
   queue: ["queue"],
+  pending: ["pending"],
   history: ["history"],
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
@@ -66,6 +69,8 @@ const TOOLS_CHANGED_EVENT = "tools-changed"
 const QUEUE_CHANGED_EVENT = "queue-changed"
 /** Sent by the core while a download runs. */
 const DOWNLOAD_PROGRESS_EVENT = "download-progress"
+/** Sent by the core with every pending link when they change. */
+const PENDING_CHANGED_EVENT = "pending-changed"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -304,6 +309,55 @@ export async function openDownloadLog(id: number): Promise<void> {
 export function onQueueChanged(handler: (items: QueueItem[]) => void): Promise<UnlistenFn> {
   if (!isTauri()) return Promise.resolve(() => {})
   return listen<QueueItem[]>(QUEUE_CHANGED_EVENT, (event) => handler(event.payload))
+}
+
+/** Links waiting to be started, oldest first. */
+export function getPendingLinks(): Promise<PendingLink[]> {
+  if (!isTauri()) return Promise.resolve(standIns.pendingLinks)
+  return invoke<PendingLink[]>("pending_links")
+}
+
+/** The links in pasted or dropped text, each once, so one link can be told from several. */
+export function linksInText(text: string): Promise<string[]> {
+  if (!isTauri()) return Promise.resolve(standIns.linksInText(text))
+  return invoke<string[]>("links_in_text", { text })
+}
+
+/** Adds links to the pending ones, which are then read one at a time. Rejects with a DownloadError. */
+export function addPendingLinks(links: string[]): Promise<AddedLinks> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<AddedLinks>("add_pending_links", { links })
+}
+
+export async function removePendingLinks(ids: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("remove_pending_links", { ids })
+}
+
+/** Reads a link that couldn't be read again, after a fix such as signing in. */
+export async function readPendingLinkAgain(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("read_pending_link_again", { id })
+}
+
+/** Picks one link's preset, or null for the one picked for them all. */
+export async function setPendingPreset(id: number, presetId: string | null): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("set_pending_preset", { id, presetId })
+}
+
+/**
+ * Starts links: those read join the queue with their own preset or `presetId`, the others once they're read. A video
+ * downloaded before with the same preset replaces its file, so ask first. Rejects with a DownloadError.
+ */
+export async function startPendingLinks(ids: number[], presetId: string): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("start_pending_links", { ids, presetId })
+}
+
+export function onPendingChanged(handler: (links: PendingLink[]) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<PendingLink[]>(PENDING_CHANGED_EVENT, (event) => handler(event.payload))
 }
 
 export function onDownloadProgress(handler: (event: DownloadProgressEvent) => void): Promise<UnlistenFn> {

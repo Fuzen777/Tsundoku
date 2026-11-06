@@ -14,6 +14,7 @@ import {
   getVideoDownloads,
   searchHistory,
   getPresetArguments,
+  getPendingLinks,
   getPresetsOverview,
   getQueueItems,
   getToolDownloads,
@@ -136,6 +137,11 @@ export function usePresetArguments(preset: Preset) {
 /** The download queue. The core's queue-changed events keep it current (queueEvents.ts). */
 export function useQueue() {
   return useQuery({ queryKey: queryKeys.queue, queryFn: getQueueItems, staleTime: Infinity })
+}
+
+/** Links waiting to be started. The core's pending-changed events keep them current (queueEvents.ts). */
+export function usePendingLinks() {
+  return useQuery({ queryKey: queryKeys.pending, queryFn: getPendingLinks, staleTime: Infinity })
 }
 
 /** The history view's results. Refetched when a download finishes or a video is forgotten (queueEvents.ts). */

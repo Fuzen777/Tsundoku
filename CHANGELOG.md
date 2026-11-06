@@ -2,6 +2,18 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.14 · 2026-11-06
+
+### New
+
+- **Pending**: a new Pending tab in the sidebar holds links waiting to be started. Pasting or dropping several links at once sends them there instead of the preview card. Each one is read in the background, one at a time, so its row shows what it is, whether it was downloaded before and whether it's in the queue, and they're kept through a restart.
+- **Start All**: starts every pending link not downloaded before, with the preset picked in Videos Start As (each video can have its own instead). Links still being read start once they're read. Ticking links gives Start Selected and Remove Selected.
+
+### Changed
+
+- **One Instagram post at a time**: an Instagram post now waits while another one downloads, even with two downloads at once, since each pauses between its files on its own and two together read twice as fast. Downloads from other sites go ahead of it. Reading Instagram links in Pending waits the same pause between links.
+- The add bar says "Paste One Link or Several".
+
 ## 0.1.13 · 2026-11-06
 
 ### New

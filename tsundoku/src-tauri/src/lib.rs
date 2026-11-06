@@ -2,6 +2,7 @@
 
 mod downloads;
 mod history;
+mod pending;
 mod tools;
 
 use std::error::Error;
@@ -19,8 +20,9 @@ use tsundoku_core::data_folder::{self, BuildKind, DataPaths};
 use tsundoku_core::database::Database;
 use tsundoku_core::downloads::{DownloadQueue, QueueServices, ToolRunner};
 use tsundoku_core::history::History;
+use tsundoku_core::pending::{PendingLinks, PendingServices};
 use tsundoku_core::presets::PresetManager;
-use tsundoku_core::preview::PreviewService;
+use tsundoku_core::preview::{PreviewService, ToolReader};
 use tsundoku_core::rules::RuleManager;
 use tsundoku_core::settings::SettingsStore;
 use tsundoku_core::tools::ToolManager;
@@ -81,9 +83,9 @@ fn show_main_window_if_still_hidden(window: WebviewWindow) {
     });
 }
 
-/// Opens what lives in the data folder (the settings with the presets and rules, the tools they set up, the history
-/// and the download queue) and gives each to Tauri's state for the commands. Development builds keep their own data
-/// folder (AGENTS.md → Data and Testing).
+/// Opens what lives in the data folder (the settings with the presets and rules, the tools they set up, the history,
+/// the download queue and the pending links) and gives each to Tauri's state for the commands. Development builds
+/// keep their own data folder (AGENTS.md → Data and Testing).
 fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let build = if cfg!(debug_assertions) {
         BuildKind::Development
@@ -108,14 +110,28 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         app.package_info().version.to_string(),
     ));
     let queue = DownloadQueue::open(QueueServices {
-        database,
+        database: Arc::clone(&database),
         history: Arc::clone(&history),
         tools: Arc::clone(&tools),
         presets: Arc::clone(&presets),
-        settings,
+        settings: Arc::clone(&settings),
         logs_folder,
         runner: Arc::new(ToolRunner),
         listener: Arc::new(downloads::EventListener {
+            app: app.handle().clone(),
+        }),
+    })?;
+    let pending = PendingLinks::open(PendingServices {
+        database,
+        history: Arc::clone(&history),
+        queue: Arc::clone(&queue),
+        presets: Arc::clone(&presets),
+        settings: Arc::clone(&settings),
+        reader: Arc::new(ToolReader {
+            tools: Arc::clone(&tools),
+            settings,
+        }),
+        listener: Arc::new(pending::EventListener {
             app: app.handle().clone(),
         }),
     })?;
@@ -125,6 +141,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(presets);
     app.manage(rules);
     app.manage(queue);
+    app.manage(pending);
     app.manage(Arc::new(PreviewService::new()));
     Ok(tools)
 }
@@ -208,6 +225,13 @@ pub fn run() {
             downloads::cancel_download,
             downloads::clear_finished_downloads,
             downloads::open_download_log,
+            pending::pending_links,
+            pending::links_in_text,
+            pending::add_pending_links,
+            pending::remove_pending_links,
+            pending::read_pending_link_again,
+            pending::set_pending_preset,
+            pending::start_pending_links,
             downloads::download_options,
             downloads::save_download_options,
         ])

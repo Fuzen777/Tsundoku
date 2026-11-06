@@ -1,0 +1,180 @@
+//! The pending links in `tsundoku.db` (`pending_links`), so they come back after a restart.
+
+use std::sync::Arc;
+
+use rusqlite::params;
+
+use super::{Entry, PendingState};
+use crate::database::Database;
+use crate::downloads::DownloadError;
+use crate::metadata::Fetched;
+
+pub(crate) struct PendingStore {
+    database: Arc<Database>,
+}
+
+impl PendingStore {
+    pub fn new(database: Arc<Database>) -> Self {
+        Self { database }
+    }
+
+    /// Every link, oldest first. One that was being read comes back waiting.
+    pub fn load(&self) -> Result<Vec<Entry>, DownloadError> {
+        let connection = self.database.lock();
+        let mut statement = connection
+            .prepare(
+                "SELECT id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at
+                FROM pending_links ORDER BY id",
+            )
+            .map_err(storage_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, bool>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, bool>(7)?,
+                    row.get::<_, i64>(8)?,
+                ))
+            })
+            .map_err(storage_error)?;
+
+        let mut entries = Vec::new();
+        for row in rows {
+            let (
+                id,
+                link,
+                state,
+                video,
+                missing_js_runtime,
+                error,
+                preset_id,
+                start_when_read,
+                added_at,
+            ) = row.map_err(storage_error)?;
+            let fetched = video
+                .and_then(|json| serde_json::from_str(&json).ok())
+                .map(|video| Fetched {
+                    video,
+                    missing_js_runtime,
+                });
+            let error = error.and_then(|json| serde_json::from_str(&json).ok());
+            // A link whose details can't be read back (from a newer version, say) is read again.
+            let state = match state_from_name(&state) {
+                Some(PendingState::Ready) if fetched.is_some() => PendingState::Ready,
+                Some(PendingState::Failed) if error.is_some() => PendingState::Failed,
+                _ => PendingState::Waiting,
+            };
+            entries.push(Entry {
+                id,
+                link,
+                state,
+                fetched,
+                error,
+                preset_id,
+                start_when_read,
+                added_at,
+            });
+        }
+        Ok(entries)
+    }
+
+    /// Adds a link and returns its ID. The `id` given is ignored.
+    pub fn insert(&self, entry: &Entry) -> Result<i64, DownloadError> {
+        let connection = self.database.lock();
+        connection
+            .query_row(
+                "INSERT INTO pending_links
+                    (link, state, video, missing_js_runtime, error, preset, start_when_read, added_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING id",
+                params![
+                    entry.link,
+                    state_name(entry.state),
+                    video_json(entry),
+                    missing_js_runtime(entry),
+                    entry.error.as_ref().map(to_json),
+                    entry.preset_id,
+                    entry.start_when_read,
+                    entry.added_at,
+                ],
+                |row| row.get(0),
+            )
+            .map_err(storage_error)
+    }
+
+    /// Saves everything about a link but its address and when it was added.
+    pub fn update(&self, entry: &Entry) -> Result<(), DownloadError> {
+        let connection = self.database.lock();
+        connection
+            .execute(
+                "UPDATE pending_links SET state = ?2, video = ?3, missing_js_runtime = ?4, error = ?5, preset = ?6,
+                    start_when_read = ?7
+                WHERE id = ?1",
+                params![
+                    entry.id,
+                    state_name(entry.state),
+                    video_json(entry),
+                    missing_js_runtime(entry),
+                    entry.error.as_ref().map(to_json),
+                    entry.preset_id,
+                    entry.start_when_read,
+                ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    pub fn delete(&self, id: i64) -> Result<(), DownloadError> {
+        self.database
+            .lock()
+            .execute("DELETE FROM pending_links WHERE id = ?1", [id])
+            .map_err(storage_error)?;
+        Ok(())
+    }
+}
+
+/// A link being read is saved as waiting, so it's read again after a restart.
+fn state_name(state: PendingState) -> &'static str {
+    match state {
+        PendingState::Waiting | PendingState::Reading => "waiting",
+        PendingState::Ready => "ready",
+        PendingState::Failed => "failed",
+    }
+}
+
+fn state_from_name(name: &str) -> Option<PendingState> {
+    Some(match name {
+        "waiting" => PendingState::Waiting,
+        "ready" => PendingState::Ready,
+        "failed" => PendingState::Failed,
+        _ => return None,
+    })
+}
+
+fn video_json(entry: &Entry) -> Option<String> {
+    entry
+        .fetched
+        .as_ref()
+        .map(|fetched| to_json(&fetched.video))
+}
+
+fn missing_js_runtime(entry: &Entry) -> bool {
+    entry
+        .fetched
+        .as_ref()
+        .is_some_and(|fetched| fetched.missing_js_runtime)
+}
+
+fn to_json(value: &impl serde::Serialize) -> String {
+    serde_json::to_string(value).expect("pending values always serialize to JSON")
+}
+
+fn storage_error(error: rusqlite::Error) -> DownloadError {
+    DownloadError::Storage {
+        detail: error.to_string(),
+    }
+}

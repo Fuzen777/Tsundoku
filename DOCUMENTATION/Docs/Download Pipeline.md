@@ -20,7 +20,7 @@ flowchart LR
 ```
 
 1. Download on the preview card adds the video to the queue with a copy of the preset, so editing the preset later doesn't change it. A video can't be in the queue twice until it's done.
-2. The queue starts waiting items while fewer than `downloads.atOnce` (2) run, in the order they were added.
+2. The queue starts waiting items while fewer than `downloads.atOnce` (2) run, in the order they were added. A post on a paced site (Instagram, `sites::paces_downloads`) waits while another of those runs, since each pauses between its files on its own; items behind it from other sites start meanwhile.
 3. Each run is a thread running yt-dlp to its end. Its progress reaches the UI as events; its output goes to the item's log.
 4. When yt-dlp finishes, the file is recorded in the history (a `videos` row if it's new, and a `downloads` row) and `archive.txt` is rewritten. The item is Done.
 

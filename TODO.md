@@ -34,7 +34,10 @@ rules:
 
 ### Getting Links In
 
-- [ ] **Tray icon and clipboard watcher.** Closing the window keeps Tsundoku running in the tray, and copying a video link offers to queue it.
+- [ ] **Clipboard watcher.** Off by default. Every copied link goes to the tools to ask whether they can read it, with yt-dlp's generic extractor off, so an unsupported link (a Google Doc, a shop) is turned down in under a second without being visited; direct image links (…/photo.jpg) are ignored. Supported links go to Pending, or straight to the queue with Download Right Away on; ones the history already has are dropped silently (Fuzen's choice: downloading again is the exception, done by hand). A switch in the Pending view pauses it. Builds on the Pending tab.
+- [ ] **Download Right Away.** Off by default: links the watcher catches start with the default preset once read, as Start does for a link not read yet (`PendingLinks::start`). Not "auto-start", which reads like starting with Windows.
+- [ ] **Tray icon.** Closing the window keeps Tsundoku running in the tray, with Watch Clipboard, Start Pending, Open and Quit in its menu, and Start with Windows. Wanted by Fuzen; without it the watcher only works while the window is open.
+- [ ] **Clipboard shortcut.** A global shortcut (such as Ctrl+Alt+D) that adds the link on the clipboard, for when the watcher is off.
 - [ ] **Browser send to app.** A browser button or right-click entry that queues the current page, through a `tsundoku://` link (Tauri's deep-link plugin) or a local endpoint.
 
 ---

@@ -41,10 +41,11 @@ export function usePreview() {
 }
 
 /**
- * Calls `onLink` with a link dropped anywhere on the window, such as one dragged from a browser's address bar.
- * Needs `dragDropEnabled: false` in tauri.conf.json, or Tauri takes the drop before the page sees it.
+ * Calls `onDrop` with what was dropped anywhere on the window: a link dragged from a browser's address bar, several
+ * links, or text holding them. Needs `dragDropEnabled: false` in tauri.conf.json, or Tauri takes the drop before the
+ * page sees it.
  */
-export function useLinkDrop(onLink: (link: string) => void) {
+export function useLinkDrop(onDrop: (text: string) => void) {
   useEffect(() => {
     function onDragOver(event: DragEvent) {
       const types = event.dataTransfer?.types ?? []
@@ -53,28 +54,28 @@ export function useLinkDrop(onLink: (link: string) => void) {
         if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"
       }
     }
-    function onDrop(event: DragEvent) {
-      const link = droppedLink(event.dataTransfer)
-      if (!link) return
+    function onDropped(event: DragEvent) {
+      const text = droppedText(event.dataTransfer)
+      if (!text) return
       event.preventDefault()
-      onLink(link)
+      onDrop(text)
     }
     window.addEventListener("dragover", onDragOver)
-    window.addEventListener("drop", onDrop)
+    window.addEventListener("drop", onDropped)
     return () => {
       window.removeEventListener("dragover", onDragOver)
-      window.removeEventListener("drop", onDrop)
+      window.removeEventListener("drop", onDropped)
     }
-  }, [onLink])
+  }, [onDrop])
 }
 
-/** The first link of a uri-list (lines starting with # are comments), or else the dropped text. */
-function droppedLink(data: DataTransfer | null): string | null {
+/** The links of a uri-list, one per line (lines starting with # are comments), or else the dropped text. */
+function droppedText(data: DataTransfer | null): string | null {
   if (!data) return null
   const fromList = data
     .getData("text/uri-list")
     .split(/\r?\n/)
-    .find((line) => line.trim() && !line.startsWith("#"))
-  const link = (fromList ?? data.getData("text/plain")).trim()
-  return link || null
+    .filter((line) => line.trim() && !line.startsWith("#"))
+  const text = (fromList.length > 0 ? fromList.join("\n") : data.getData("text/plain")).trim()
+  return text || null
 }
