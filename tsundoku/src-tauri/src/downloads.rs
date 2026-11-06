@@ -201,9 +201,16 @@ pub fn download_next(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
     queue.download_next(id)
 }
 
+/// Removes the finished downloads, and answers how many: Undo puts them back (`restore_cleared_downloads`).
 #[tauri::command]
-pub fn clear_finished_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
+pub fn clear_finished_downloads(queue: Queue<'_>) -> Result<usize, DownloadError> {
     queue.clear_finished()
+}
+
+/// Undo for the last Clear Finished.
+#[tauri::command]
+pub fn restore_cleared_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
+    queue.restore_cleared().map(|_| ())
 }
 
 /// How downloads run: how many at once, the speed limit, the cookies browser, and where posts go and how fast.

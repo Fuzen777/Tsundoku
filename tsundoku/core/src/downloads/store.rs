@@ -71,11 +71,21 @@ impl QueueStore {
 
     /// Adds an item and returns its ID. The `id` given is ignored.
     pub fn insert(&self, item: &QueueItem) -> Result<i64, DownloadError> {
+        self.insert_row(item, None)
+    }
+
+    /// Undo for Clear Finished: puts back an item `take` deleted, with its ID and at the position `take` gave.
+    pub fn restore(&self, item: &QueueItem, position: i64) -> Result<(), DownloadError> {
+        self.insert_row(item, Some(position)).map(|_| ())
+    }
+
+    /// A new item gets a new ID at position 0; one put back keeps its ID and its position.
+    fn insert_row(&self, item: &QueueItem, put_back_at: Option<i64>) -> Result<i64, DownloadError> {
         let connection = self.database.lock();
         connection
             .query_row(
-                "INSERT INTO queue_items (video, preset, folder, state, overwrite, added_at, result, error)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING id",
+                "INSERT INTO queue_items (id, video, preset, folder, state, overwrite, added_at, result, error, position)
+                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10) RETURNING id",
                 params![
                     to_json(&item.video),
                     to_json(&item.preset),
@@ -85,6 +95,8 @@ impl QueueStore {
                     item.added_at,
                     item.result.as_ref().map(to_json),
                     item.error.as_ref().map(to_json),
+                    put_back_at.map(|_| item.id),
+                    put_back_at.unwrap_or(0),
                 ],
                 |row| row.get(0),
             )
@@ -127,6 +139,23 @@ impl QueueStore {
             .execute("DELETE FROM queue_items WHERE id = ?1", [id])
             .map_err(storage_error)?;
         Ok(())
+    }
+
+    /// Deletes an item for Clear Finished, and returns its position in the queue's order for Undo (`restore`): 0
+    /// when it was already gone.
+    pub fn take(&self, id: i64) -> Result<i64, DownloadError> {
+        use rusqlite::OptionalExtension;
+        let position: Option<i64> = self
+            .database
+            .lock()
+            .query_row(
+                "DELETE FROM queue_items WHERE id = ?1 RETURNING position",
+                [id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage_error)?;
+        Ok(position.unwrap_or(0))
     }
 
     #[cfg(test)]

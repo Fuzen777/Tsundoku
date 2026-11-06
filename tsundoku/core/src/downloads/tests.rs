@@ -577,6 +577,55 @@ fn clearing_removes_only_finished_downloads() {
 }
 
 #[test]
+fn undo_puts_cleared_downloads_back_where_they_were() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let [first, failed, moved] = ["a", "b", "c"].map(|id| test.add(id));
+    // Its place in the line no longer follows its ID.
+    test.queue.download_next(moved).unwrap();
+    test.runner.complete(first, test.finished_file("a.mkv"));
+    test.runner.complete(moved, test.finished_file("c.mkv"));
+    test.runner
+        .complete(failed, JobOutcome::Failed(DownloadError::NoFile));
+    wait_until("all end", || {
+        test.state(first) == Some(QueueState::Done)
+            && test.state(moved) == Some(QueueState::Done)
+            && test.state(failed) == Some(QueueState::Failed)
+    });
+    let before = test.queue.items();
+    let order: Vec<_> = before.iter().map(|item| item.id).collect();
+    assert_eq!(order, [moved, first, failed]);
+
+    assert_eq!(test.queue.clear_finished().unwrap(), 2);
+    assert_eq!(test.queue.restore_cleared().unwrap(), 2);
+    assert_eq!(
+        test.queue.items(),
+        before,
+        "the same IDs, places and results"
+    );
+    assert_eq!(test.reopen().items(), before, "saved as before");
+    assert_eq!(test.queue.restore_cleared().unwrap(), 0, "only once");
+}
+
+#[test]
+fn undo_leaves_out_a_download_queued_again() {
+    let test = Test::new();
+    let done = test.add("a");
+    wait_until("it runs", || test.runner.started().len() == 1);
+    test.runner.complete(done, test.finished_file("a.mkv"));
+    wait_until("it's done", || test.state(done) == Some(QueueState::Done));
+    test.queue.clear_finished().unwrap();
+    let again = test.add("a");
+
+    assert_eq!(test.queue.restore_cleared().unwrap(), 0);
+    let ids: Vec<_> = test.queue.items().iter().map(|item| item.id).collect();
+    assert_eq!(ids, [again]);
+    test.queue.cancel(again).unwrap();
+}
+
+#[test]
 fn checks_and_saves_the_options() {
     let test = Test::new();
     let saved = test

@@ -4,6 +4,7 @@ import {
   confirmWithUser,
   readPendingLinkAgain,
   removePendingLinks,
+  restoreRemovedPendingLinks,
   setPendingPreset,
   startPendingLinks,
 } from "../api"
@@ -41,6 +42,7 @@ import {
 } from "../queries"
 import { useDeleteKey } from "../shortcuts"
 import { strings } from "../strings"
+import { useOfferUndo } from "../undo"
 
 /**
  * Links waiting to be started: pasted or dropped several at once, or copied while Watch Clipboard is on, each read in
@@ -59,6 +61,7 @@ export function PendingView() {
   const [chosenPresetId, setChosenPresetId] = useState<string | null>(null)
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set())
   const [busy, setBusy] = useState(false)
+  const removeLinks = useRemoveLinks()
   const [error, setError] = useState<ErrorDescription | null>(null)
 
   const presetId = chosenPresetId ?? presets?.defaultId ?? null
@@ -94,7 +97,6 @@ export function PendingView() {
     setError(null)
     try {
       await action()
-      setSelection(new Set())
     } catch (caught) {
       setError(describeDownloadError(caught))
     } finally {
@@ -116,12 +118,14 @@ export function PendingView() {
     ) {
       return
     }
-    await run(() =>
-      startPendingLinks(
+    await run(async () => {
+      await startPendingLinks(
         toStart.map((link) => link.id),
         presetId,
-      ),
-    )
+      )
+      // Links that start once they're read stay, unticked.
+      setSelection(new Set())
+    })
   }
 
   function toggle(id: number, on: boolean) {
@@ -144,7 +148,8 @@ export function PendingView() {
     </span>
   )
 
-  const removeSelected = () => void run(() => removePendingLinks(selected.map((link) => link.id)))
+  // The removed links stay in the selection, out of sight, so Undo brings them back ticked.
+  const removeSelected = () => void run(() => removeLinks(selected.map((link) => link.id)))
   // Delete outside a text field does what Remove Selected does.
   useDeleteKey(selected.length > 0 && !busy ? removeSelected : null)
 
@@ -277,6 +282,7 @@ interface PendingRowProps {
 
 function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect, onStart, busy }: PendingRowProps) {
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
+  const removeLinks = useRemoveLinks()
   const preview = link.preview
   const video = preview?.video ?? null
   const presetId = link.presetId ?? allPresetId
@@ -382,7 +388,7 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
             />
           )
         )}
-        <IconButton label={strings.pending.remove} icon={X} onClick={() => act(() => removePendingLinks([link.id]))} />
+        <IconButton label={strings.pending.remove} icon={X} onClick={() => act(() => removeLinks([link.id]))} />
       </div>
     </Card>
   )
@@ -394,6 +400,21 @@ function PendingDestination({ video, presetId }: { video: VideoInfo; presetId: s
   const request = destinationRequest(video, presetId)
   const { data: destination } = useDownloadDestination(request.video, request.presetId, request.enabled)
   return destination ? <DestinationLine destination={destination} /> : null
+}
+
+/** Removes links, then offers for a few seconds to put them back as they were. */
+function useRemoveLinks(): (ids: number[]) => Promise<void> {
+  const offerUndo = useOfferUndo()
+  return async (ids) => {
+    const removed = await removePendingLinks(ids)
+    if (removed > 0) {
+      offerUndo({
+        message: strings.pending.removed(removed),
+        undo: restoreRemovedPendingLinks,
+        describeError: describeDownloadError,
+      })
+    }
+  }
 }
 
 /** Asks where a read link will be saved: with the preset it would start with, or none for a post or a file host's

@@ -87,14 +87,14 @@ impl PendingStore {
         Ok(entries)
     }
 
-    /// Adds a link and returns its ID. The `id` given is ignored.
+    /// Adds a link and returns its ID: a new one when `id` is 0, else `id`, for Undo putting back a removed link.
     pub fn insert(&self, entry: &Entry) -> Result<i64, DownloadError> {
         let connection = self.database.lock();
         connection
             .query_row(
                 "INSERT INTO pending_links
-                    (link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) RETURNING id",
+                    (id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught)
+                VALUES (?10, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) RETURNING id",
                 params![
                     entry.link,
                     state_name(entry.state),
@@ -105,6 +105,7 @@ impl PendingStore {
                     entry.start_when_read,
                     entry.added_at,
                     entry.caught,
+                    (entry.id != 0).then_some(entry.id),
                 ],
                 |row| row.get(0),
             )

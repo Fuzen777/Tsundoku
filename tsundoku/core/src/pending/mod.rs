@@ -193,6 +193,8 @@ struct Contents {
     reading: Option<(i64, CancelToken)>,
     /// When the next link on a site that limits how fast it's read (Instagram) may be read.
     paced_until: Option<Instant>,
+    /// What the last Remove took, oldest first, for Undo to put back.
+    removed: Vec<Entry>,
 }
 
 pub struct PendingLinks {
@@ -341,8 +343,10 @@ impl PendingLinks {
         Ok(outcome)
     }
 
-    /// Removes links, stopping the one being read if it's among them.
-    pub fn remove(&self, ids: &[i64]) -> Result<(), DownloadError> {
+    /// Removes links, stopping the one being read if it's among them, and keeps them until the next removal so Undo
+    /// can put them back (`restore_removed`). How many were removed.
+    pub fn remove(&self, ids: &[i64]) -> Result<usize, DownloadError> {
+        let count;
         {
             let mut state = lock(&self.state);
             if let Some((id, cancel)) = &state.reading
@@ -353,10 +357,57 @@ impl PendingLinks {
             for id in ids {
                 self.store.delete(*id)?;
             }
-            state.entries.retain(|entry| !ids.contains(&entry.id));
+            let (removed, kept) = std::mem::take(&mut state.entries)
+                .into_iter()
+                .partition(|entry| ids.contains(&entry.id));
+            state.entries = kept;
+            state.removed = removed;
+            count = state.removed.len();
         }
         self.notify();
-        Ok(())
+        Ok(count)
+    }
+
+    /// Undo for the last removal: puts its links back as they were, with their IDs, so they take their places again
+    /// (the list is in the order of IDs), saved as before. A link being read when it was removed is read again. One
+    /// whose address, or whose video once read, is here again by now stays out. How many came back; the first error
+    /// is returned once every other link is back.
+    pub fn restore_removed(&self) -> Result<usize, DownloadError> {
+        let mut restored = 0;
+        let mut first_error = None;
+        {
+            let mut state = lock(&self.state);
+            for mut entry in std::mem::take(&mut state.removed) {
+                let here_again = state.entries.iter().any(|other| {
+                    other.link == entry.link
+                        || other
+                            .fetched
+                            .as_ref()
+                            .zip(entry.fetched.as_ref())
+                            .is_some_and(|(known, restoring)| {
+                                same_video(&known.video, &restoring.video)
+                            })
+                });
+                if here_again {
+                    continue;
+                }
+                if entry.state == PendingState::Reading {
+                    entry.state = PendingState::Waiting;
+                }
+                if let Err(error) = self.store.insert(&entry) {
+                    first_error.get_or_insert(error);
+                    continue;
+                }
+                let index = state.entries.partition_point(|other| other.id < entry.id);
+                state.entries.insert(index, entry);
+                restored += 1;
+            }
+        }
+        if restored > 0 {
+            self.wake.notify_all();
+            self.notify();
+        }
+        first_error.map_or(Ok(restored), Err)
     }
 
     /// Reads a link that couldn't be read again, after a fix such as signing in.

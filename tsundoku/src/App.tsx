@@ -7,6 +7,7 @@ import { Card } from "./components/Card"
 import { PreviewCard } from "./components/PreviewCard"
 import { Sidebar } from "./components/Sidebar"
 import { StatusMessage } from "./components/StatusMessage"
+import { UndoToastProvider } from "./components/UndoToast"
 import { UpdateBanner } from "./components/UpdateBanner"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { AppActionsContext, type ViewId } from "./navigation"
@@ -135,8 +136,11 @@ export function App() {
             />
           )}
         </div>
-        <main className="col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
-          <CurrentView view={view} />
+        <main className="relative col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
+          {/* Outside the views, so an offer to undo stays when another view is opened. */}
+          <UndoToastProvider>
+            <CurrentView view={view} />
+          </UndoToastProvider>
         </main>
       </div>
     </AppActionsContext>

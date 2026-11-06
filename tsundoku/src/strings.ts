@@ -24,6 +24,11 @@ export const strings = {
   placeholders: {
     insert: "Insert",
   },
+  /** The toast that offers to undo a removal (UndoToast.tsx). */
+  undoToast: {
+    undo: "Undo",
+    dismiss: "Dismiss",
+  },
   nav: {
     queue: "Queue",
     pending: "Pending",
@@ -86,6 +91,7 @@ export const strings = {
     progress: (downloaded: string, total: string) => `${downloaded} of ${total}`,
     timeLeft: (time: string) => `${time} left`,
     count: (count: number) => `${count} ${count === 1 ? "download" : "downloads"}`,
+    cleared: (count: number) => `Cleared ${count} finished ${count === 1 ? "download" : "downloads"}`,
     groups: {
       running: "Downloading",
       waiting: "Waiting",
@@ -213,6 +219,7 @@ export const strings = {
     startAll: "Start All",
     startSelected: "Start Selected",
     removeSelected: "Remove Selected",
+    removed: (count: number) => `Removed ${count} ${count === 1 ? "link" : "links"}`,
     start: "Start",
     downloadAgain: "Download Again",
     remove: "Remove",

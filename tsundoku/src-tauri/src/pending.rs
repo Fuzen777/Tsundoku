@@ -58,9 +58,16 @@ pub fn add_pending_links(
     pending.add(&links)
 }
 
+/// Removes links, and answers how many: Undo puts them back (`restore_removed_pending_links`).
 #[tauri::command]
-pub fn remove_pending_links(pending: Pending<'_>, ids: Vec<i64>) -> Result<(), DownloadError> {
+pub fn remove_pending_links(pending: Pending<'_>, ids: Vec<i64>) -> Result<usize, DownloadError> {
     pending.remove(&ids)
+}
+
+/// Undo for the last removal.
+#[tauri::command]
+pub fn restore_removed_pending_links(pending: Pending<'_>) -> Result<(), DownloadError> {
+    pending.restore_removed().map(|_| ())
 }
 
 #[tauri::command]

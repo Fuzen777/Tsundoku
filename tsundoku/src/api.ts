@@ -404,9 +404,16 @@ export async function downloadNext(id: number): Promise<void> {
   await invoke("download_next", { id })
 }
 
-export async function clearFinishedDownloads(): Promise<void> {
+/** Removes the finished downloads and answers how many, which restoreClearedDownloads puts back. */
+export function clearFinishedDownloads(): Promise<number> {
   if (!isTauri()) return outsideTauri()
-  await invoke("clear_finished_downloads")
+  return invoke<number>("clear_finished_downloads")
+}
+
+/** Undo for the last Clear Finished: its downloads go back where they were, unless the queue has their video again. */
+export async function restoreClearedDownloads(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("restore_cleared_downloads")
 }
 
 /** Opens a download's log in the default text editor. Rejects with a DownloadError. */
@@ -447,9 +454,16 @@ export function addPendingLinks(links: string[]): Promise<AddedLinks> {
   return invoke<AddedLinks>("add_pending_links", { links })
 }
 
-export async function removePendingLinks(ids: number[]): Promise<void> {
+/** Removes links and answers how many, which restoreRemovedPendingLinks puts back. */
+export function removePendingLinks(ids: number[]): Promise<number> {
   if (!isTauri()) return outsideTauri()
-  await invoke("remove_pending_links", { ids })
+  return invoke<number>("remove_pending_links", { ids })
+}
+
+/** Undo for the last removal: its links go back as they were, unless they're here again by another way. */
+export async function restoreRemovedPendingLinks(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("restore_removed_pending_links")
 }
 
 /** Reads a link that couldn't be read again, after a fix such as signing in. */

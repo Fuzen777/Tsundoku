@@ -6,6 +6,7 @@ import {
   downloadNext,
   openDownload,
   openDownloadLog,
+  restoreClearedDownloads,
   resumeAllDownloads,
   resumeDownload,
   retryDownload,
@@ -36,14 +37,32 @@ import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails }
 import { useListArrangement, useQueue } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
 import { strings } from "../strings"
+import { useOfferUndo, type UndoOffer } from "../undo"
 
-/** The buttons for the whole queue, each shown while a download is in a state it acts on, as the row's own button. */
-const WHOLE_QUEUE_ACTIONS: readonly { label: string; states: readonly QueueState[]; action: () => Promise<void> }[] = [
+/** The buttons for the whole queue, each shown while a download is in a state it acts on, as the row's own button. An
+ * action that removes something offers to undo it. */
+const WHOLE_QUEUE_ACTIONS: readonly {
+  label: string
+  states: readonly QueueState[]
+  action: (offerUndo: (offer: UndoOffer) => void) => Promise<void>
+}[] = [
   { label: strings.queue.pauseAll, states: ["running", "waiting"], action: stopAllDownloads },
   { label: strings.queue.resumeAll, states: ["stopped"], action: resumeAllDownloads },
   { label: strings.queue.retryFailed, states: ["failed"], action: retryFailedDownloads },
-  { label: strings.queue.clearFinished, states: ["done"], action: clearFinishedDownloads },
+  { label: strings.queue.clearFinished, states: ["done"], action: clearFinishedWithUndo },
 ]
+
+/** Clear Finished, then an offer for a few seconds to put the downloads back where they were. */
+async function clearFinishedWithUndo(offerUndo: (offer: UndoOffer) => void): Promise<void> {
+  const cleared = await clearFinishedDownloads()
+  if (cleared > 0) {
+    offerUndo({
+      message: strings.queue.cleared(cleared),
+      undo: restoreClearedDownloads,
+      describeError: describeDownloadError,
+    })
+  }
+}
 
 /** Every download added and not cleared yet, grouped and sorted as its toolbar says. */
 export function QueueView() {
@@ -54,9 +73,10 @@ export function QueueView() {
   const groups = arrange(items, arrangement, queueFacts, group === "none" ? null : (item) => queueGroup(item, group))
   const actions = WHOLE_QUEUE_ACTIONS.filter(({ states }) => items.some((item) => states.includes(item.state)))
 
-  const actOnAll = (action: () => Promise<void>) => {
+  const offerUndo = useOfferUndo()
+  const actOnAll = (action: (offerUndo: (offer: UndoOffer) => void) => Promise<void>) => {
     setQueueError(null)
-    action().catch((error: unknown) => setQueueError(describeDownloadError(error)))
+    action(offerUndo).catch((error: unknown) => setQueueError(describeDownloadError(error)))
   }
 
   return (

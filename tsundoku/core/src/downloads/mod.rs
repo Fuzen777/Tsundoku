@@ -243,6 +243,17 @@ struct Running {
 struct QueueContents {
     items: Vec<QueueItem>,
     running: HashMap<i64, Running>,
+    /// What the last Clear Finished took, in the queue's order, for Undo to put back.
+    cleared: Vec<Cleared>,
+}
+
+/// A download Clear Finished took, kept for Undo.
+struct Cleared {
+    /// Where it was in the queue's items.
+    index: usize,
+    /// Where it was in the saved queue's order (`QueueStore::take`).
+    position: i64,
+    item: QueueItem,
 }
 
 /// The services the queue uses.
@@ -289,6 +300,7 @@ impl DownloadQueue {
             state: Mutex::new(QueueContents {
                 items,
                 running: HashMap::new(),
+                cleared: Vec::new(),
             }),
             store,
             history: services.history,
@@ -541,22 +553,75 @@ impl DownloadQueue {
         Ok(())
     }
 
-    /// Removes the finished downloads from the queue. They stay in the history.
-    pub fn clear_finished(&self) -> Result<(), DownloadError> {
+    /// Removes the finished downloads from the queue. They stay in the history, and in the queue's memory until the
+    /// next Clear Finished, so Undo can put them back (`restore_cleared`). How many were removed.
+    pub fn clear_finished(&self) -> Result<usize, DownloadError> {
         let mut state = lock(&self.state);
-        let finished: Vec<i64> = state
-            .items
-            .iter()
-            .filter(|item| item.state == QueueState::Done)
-            .map(|item| item.id)
-            .collect();
-        for id in &finished {
-            self.store.delete(*id)?;
+        let mut cleared = Vec::new();
+        let mut kept = Vec::new();
+        let mut first_error = None;
+        for (index, item) in std::mem::take(&mut state.items).into_iter().enumerate() {
+            if item.state != QueueState::Done {
+                kept.push(item);
+                continue;
+            }
+            match self.store.take(item.id) {
+                Ok(position) => cleared.push(Cleared {
+                    index,
+                    position,
+                    item,
+                }),
+                // Still saved, so it stays.
+                Err(error) => {
+                    first_error.get_or_insert(error);
+                    kept.push(item);
+                }
+            }
         }
-        state.items.retain(|item| item.state != QueueState::Done);
+        state.items = kept;
+        let count = cleared.len();
+        state.cleared = cleared;
         drop(state);
         self.notify();
-        Ok(())
+        first_error.map_or(Ok(count), Err)
+    }
+
+    /// Undo for the last Clear Finished: puts its downloads back where they were, with their IDs (so their logs
+    /// follow) and their places in the queue's order, saved as before. One whose video is in the queue again by now
+    /// stays out. How many came back; the first error is returned once every other download is back.
+    pub fn restore_cleared(&self) -> Result<usize, DownloadError> {
+        let mut restored = 0;
+        let mut first_error = None;
+        let mut state = lock(&self.state);
+        // Each goes back to where it was, less the ones before it that stayed out.
+        let mut left_out = 0;
+        for Cleared {
+            index,
+            position,
+            item,
+        } in std::mem::take(&mut state.cleared)
+        {
+            let here_again = state.items.iter().any(|other| {
+                other.video.site == item.video.site && other.video.video_id == item.video.video_id
+            });
+            if here_again {
+                left_out += 1;
+                continue;
+            }
+            if let Err(error) = self.store.restore(&item, position) {
+                first_error.get_or_insert(error);
+                left_out += 1;
+                continue;
+            }
+            let place = (index - left_out).min(state.items.len());
+            state.items.insert(place, item);
+            restored += 1;
+        }
+        drop(state);
+        if restored > 0 {
+            self.notify();
+        }
+        first_error.map_or(Ok(restored), Err)
     }
 
     /// Where a download of `video` would go, with `preset` (`None` for a post): the folder of the first rule that

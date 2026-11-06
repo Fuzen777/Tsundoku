@@ -798,6 +798,79 @@ fn removing_a_link_being_read_stops_reading_it() {
 }
 
 #[test]
+fn undo_puts_removed_links_back_as_they_were() {
+    let test = Test::new();
+    test.reader.answer(THIRD, Err(PreviewError::Playlist));
+    test.add(&[FIRST, SECOND, THIRD]);
+    for link in [FIRST, SECOND, THIRD] {
+        test.wait_until_read(link);
+    }
+    let first = test.link(FIRST).unwrap().id;
+    let third = test.link(THIRD).unwrap().id;
+    test.links
+        .set_preset(first, Some("best-audio".to_owned()))
+        .unwrap();
+    let before = test.links.list();
+
+    assert_eq!(test.links.remove(&[first, third]).unwrap(), 2);
+    assert_eq!(test.links.list().len(), 1);
+    assert_eq!(test.links.restore_removed().unwrap(), 2);
+    assert_eq!(
+        test.links.list(),
+        before,
+        "the same IDs, places, preset and what was read"
+    );
+    assert_eq!(test.reader.reads().len(), 3, "nothing is read again");
+    assert_eq!(test.reopen().list(), before, "saved as before");
+    assert_eq!(test.links.restore_removed().unwrap(), 0, "only once");
+}
+
+#[test]
+fn undo_leaves_out_links_added_again_meanwhile() {
+    let test = Test::new();
+    test.add(&[FIRST, SECOND, THIRD]);
+    for link in [FIRST, SECOND, THIRD] {
+        test.wait_until_read(link);
+    }
+    let ids: Vec<i64> = test.links.list().iter().map(|link| link.id).collect();
+    assert_eq!(test.links.remove(&ids).unwrap(), 3);
+    // The first by the same address, the second's video by another.
+    let short = "https://youtu.be/second";
+    test.add(&[FIRST, short]);
+    test.wait_until_read(FIRST);
+    test.wait_until_read(short);
+
+    assert_eq!(test.links.restore_removed().unwrap(), 1);
+    let links: Vec<String> = test
+        .links
+        .list()
+        .into_iter()
+        .map(|link| link.link)
+        .collect();
+    assert_eq!(links, [THIRD, FIRST, short]);
+}
+
+#[test]
+fn undo_reads_again_a_link_removed_while_it_was_read() {
+    let test = Test::new();
+    test.reader.hold(FIRST);
+    test.add(&[FIRST]);
+    wait_until("it's being read", || {
+        test.state(FIRST) == Some(PendingState::Reading)
+    });
+    let id = test.link(FIRST).unwrap().id;
+
+    test.links.remove(&[id]).unwrap();
+    assert_eq!(test.links.restore_removed().unwrap(), 1);
+    assert_eq!(test.link(FIRST).unwrap().id, id);
+    test.reader.release(FIRST);
+    wait_until("it's read again", || {
+        test.state(FIRST) == Some(PendingState::Ready)
+    });
+    assert_eq!(test.reader.reads(), [FIRST, FIRST]);
+}
+
+#[test]
 fn a_copied_link_is_read_only_by_sites_the_tools_know() {
     let test = Test::new();
     test.copy(&[FIRST]);

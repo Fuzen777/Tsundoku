@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.48 · 2026-11-06
+
+### Added
+
+- **Undo after removing**: removing links in Pending (Remove Selected, Delete or a row's Remove) and Clear Finished in the queue show "Removed 12 links" or "Cleared 3 finished downloads" at the bottom of the window for 8 seconds, with Undo. It puts back exactly what went: the same links or downloads, in the same places, with their presets and what was read, and links that were ticked come back ticked. The message waits while the pointer is on it or it has the keyboard's focus, and Escape or its × closes it. Only the latest removal can be undone, and a link or download that's back by another way by then isn't added twice.
+
 ## 0.1.47 · 2026-11-06
 
 ### Added
