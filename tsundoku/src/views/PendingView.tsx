@@ -9,8 +9,10 @@ import {
 } from "../api"
 import type { PendingLink } from "../bindings/PendingLink"
 import type { PresetsOverview } from "../bindings/PresetsOverview"
+import type { VideoInfo } from "../bindings/VideoInfo"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
+import { DestinationLine } from "../components/DestinationLine"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { Checkbox, SelectInput } from "../components/Field"
@@ -20,7 +22,7 @@ import { Thumbnail } from "../components/Thumbnail"
 import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { shownPendingLinks } from "../pendingLinks"
-import { usePendingLinks, usePresets, useSaveAddingOptions } from "../queries"
+import { useDownloadDestination, usePendingLinks, usePresets, useSaveAddingOptions } from "../queries"
 import { strings } from "../strings"
 
 /**
@@ -257,6 +259,7 @@ function PendingRow({ link, presets, allPresetId, selected, onSelect, onStart, b
         ) : (
           <ReadingStatus link={link} />
         )}
+        {video && !preview?.inQueue && <PendingDestination video={video} presetId={presetId} />}
         {preview?.lastDownload && (
           <StatusMessage
             tone="warning"
@@ -319,6 +322,18 @@ function PendingRow({ link, presets, allPresetId, selected, onSelect, onStart, b
       </div>
     </Card>
   )
+}
+
+/** Where a read link will be saved, and what picked the folder, as the preview card shows it: with the preset it would
+ * start with, or none for a post or a file host's files. Nothing until it's known. */
+function PendingDestination({ video, presetId }: { video: VideoInfo; presetId: string | null }) {
+  const usesPreset = !video.post && !video.files
+  const { data: destination } = useDownloadDestination(
+    video,
+    usesPreset ? presetId : null,
+    !usesPreset || presetId !== null,
+  )
+  return destination ? <DestinationLine destination={destination} /> : null
 }
 
 /** For a link not read yet: whether it waits its turn or is being read, and whether it starts once read. */

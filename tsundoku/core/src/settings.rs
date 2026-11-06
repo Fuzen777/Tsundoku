@@ -11,7 +11,7 @@ use ts_rs::TS;
 use crate::atomic_file::write_atomically;
 use crate::data_folder;
 use crate::presets::PresetsSettings;
-use crate::rules::{RulesSettings, posts_rule, with_posts_rule_last};
+use crate::rules::{RulesSettings, catch_all_rule, posts_folder_rule, with_catch_all_last};
 use crate::sync::lock;
 use crate::tools::ToolId;
 
@@ -29,8 +29,9 @@ pub struct Settings {
 }
 
 impl Settings {
-    /// Reads `settings.json`. A file from before folder rules (0.1.10 and older) gets the posts rule in the posts
-    /// folder it chose, if it chose one, and the posts rule is put last, where it has been since 0.1.19.
+    /// Reads `settings.json`. A file from before folder rules (0.1.10 and older) gets a rule for posts in the posts
+    /// folder it chose, if it chose one, above the catch-all. The catch-all is put last, where it has been since 0.1.19,
+    /// and the posts rule before 0.1.30 becomes it.
     fn from_json(contents: &[u8]) -> Option<Self> {
         let mut settings: Self = serde_json::from_slice(contents).ok()?;
         let earlier: BeforeRules = serde_json::from_slice(contents).unwrap_or_default();
@@ -42,14 +43,14 @@ impl Settings {
                 .map(str::trim)
                 .filter(|folder| !folder.is_empty())
         {
-            settings.rules.list = vec![posts_rule(Some(posts_folder))];
+            settings.rules.list = vec![posts_folder_rule(posts_folder), catch_all_rule()];
         }
-        settings.rules.list = with_posts_rule_last(std::mem::take(&mut settings.rules.list));
+        settings.rules.list = with_catch_all_last(std::mem::take(&mut settings.rules.list));
         Some(settings)
     }
 }
 
-/// What `settings.json` held before folder rules, to carry the posts folder over into the posts rule.
+/// What `settings.json` held before folder rules, to carry the posts folder over into a rule.
 #[derive(Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 struct BeforeRules {
@@ -569,7 +570,7 @@ mod tests {
     }
 
     #[test]
-    fn carries_the_posts_folder_into_the_posts_rule() {
+    fn carries_the_posts_folder_into_a_rule() {
         let folder = tempfile::tempdir().unwrap();
         fs::write(
             folder.path().join("settings.json"),
@@ -577,7 +578,10 @@ mod tests {
         )
         .unwrap();
         let settings = store_in(&folder).get();
-        assert_eq!(settings.rules.list, vec![posts_rule(Some(r"D:\Posts"))]);
+        assert_eq!(
+            settings.rules.list,
+            vec![posts_folder_rule(r"D:\Posts"), catch_all_rule()]
+        );
         assert_eq!(settings.downloads.at_once, 3);
 
         fs::write(
@@ -589,9 +593,9 @@ mod tests {
             store_in(&folder).get().rules.list,
             vec![FolderRule {
                 enabled: false,
-                ..posts_rule(None)
+                ..catch_all_rule()
             }],
-            "saved rules stay as they are, with the posts rule back but off"
+            "saved rules stay as they are, with the catch-all back but off"
         );
 
         fs::write(
@@ -609,10 +613,14 @@ mod tests {
             .into_iter()
             .map(|rule| rule.id)
             .collect();
-        assert_eq!(ids, ["rule-1", "posts"], "the posts rule moves last");
+        assert_eq!(
+            ids,
+            ["rule-1", "catch-all"],
+            "the posts rule becomes the catch-all, last"
+        );
 
         fs::write(folder.path().join("settings.json"), "{}").unwrap();
-        assert_eq!(store_in(&folder).get().rules.list, vec![posts_rule(None)]);
+        assert_eq!(store_in(&folder).get().rules.list, vec![catch_all_rule()]);
     }
 
     #[test]

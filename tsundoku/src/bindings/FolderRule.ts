@@ -6,8 +6,8 @@ import type { RuleCondition } from "./RuleCondition";
  */
 export type FolderRule = { 
 /**
- * Stays the same when the rule is edited or moved: "posts" for the rule every install starts with, "rule-<n>"
- * for the others. Empty for a rule not saved yet; saving gives it one.
+ * Stays the same when the rule is edited or moved: "catch-all" for the rule every install starts with,
+ * "rule-<n>" for the others. Empty for a rule not saved yet; saving gives it one.
  */
 id: string, 
 /**

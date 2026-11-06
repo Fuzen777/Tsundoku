@@ -325,12 +325,6 @@ export const standIns = {
       folder: String.raw`D:\Hydrus\Import\{site}\{uploader}`,
     },
     {
-      id: "posts",
-      enabled: true,
-      conditions: [{ field: "kind", operator: "is", value: "post" }],
-      folder: "{site}",
-    },
-    {
       id: "rule-2",
       enabled: false,
       conditions: [
@@ -339,10 +333,16 @@ export const standIns = {
       ],
       folder: "Podcasts",
     },
+    {
+      id: "catch-all",
+      enabled: true,
+      conditions: [],
+      folder: "{site}",
+    },
   ] satisfies FolderRule[],
   destination: {
     folder: String.raw`C:\Users\You\Downloads\Tsundoku\Instagram`,
-    source: { kind: "rule", number: 2 },
+    source: { kind: "rule", number: 3 },
   } satisfies Destination,
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {

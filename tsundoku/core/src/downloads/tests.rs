@@ -100,9 +100,16 @@ impl Test {
                 // No cookies, so the tests never look at this PC's browsers.
                 settings.downloads.cookies_browser = None;
                 settings.downloads.folder = Some(downloads.clone());
-                settings.rules.list = vec![crate::rules::posts_rule(Some(
-                    &folder.path().join("posts").display().to_string(),
-                ))];
+                // Downloads no preset folder takes go in a folder for their site in by-site.
+                settings.rules.list = vec![crate::rules::FolderRule {
+                    folder: folder
+                        .path()
+                        .join("by-site")
+                        .join("{site}")
+                        .display()
+                        .to_string(),
+                    ..crate::rules::catch_all_rule()
+                }];
             })
             .unwrap();
         let runner = Arc::new(FakeRunner::default());
@@ -568,7 +575,7 @@ fn downloads_a_post_into_its_sites_folder_at_a_safe_pace() {
     wait_until("it runs", || test.runner.started().contains(&id));
 
     let job = test.runner.job(id);
-    let site_folder = test.folder.path().join("posts").join("Instagram");
+    let site_folder = test.folder.path().join("by-site").join("Instagram");
     assert_eq!(job.folder, site_folder);
     assert_eq!(job.preset, None);
     let post_job = job.post.unwrap();
@@ -673,7 +680,7 @@ fn downloads_a_file_hosts_link_without_a_preset() {
 }
 
 #[test]
-fn a_preset_without_a_folder_saves_in_the_download_folder() {
+fn a_preset_without_a_folder_saves_where_the_catch_all_says() {
     let test = Test::new();
     let everything = test.folder.path().join("everything");
     test.settings
@@ -685,9 +692,31 @@ fn a_preset_without_a_folder_saves_in_the_download_folder() {
         })
         .unwrap();
     let item = test.queue.add(video("a"), "best-video", false).unwrap();
-    assert_eq!(item.folder, everything.display().to_string());
+    assert_eq!(
+        item.folder,
+        test.folder
+            .path()
+            .join("by-site")
+            .join("YouTube")
+            .display()
+            .to_string()
+    );
     wait_until("it runs", || test.runner.started().contains(&item.id));
     test.queue.cancel(item.id).unwrap();
+
+    test.settings
+        .update(|settings| {
+            for rule in &mut settings.rules.list {
+                rule.enabled = false;
+            }
+        })
+        .unwrap();
+    let preset = test.queue.presets.get("best-video");
+    assert_eq!(
+        test.queue.destination(&video("b"), preset.as_ref()).folder,
+        everything.display().to_string(),
+        "with the catch-all off, the download folder"
+    );
 }
 
 #[test]

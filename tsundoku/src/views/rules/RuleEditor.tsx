@@ -14,6 +14,7 @@ import type { ErrorDescription } from "../../errors"
 import { useSupportedSites } from "../../queries"
 import { strings } from "../../strings"
 import {
+  CATCH_ALL_RULE_ID,
   DOWNLOAD_KINDS,
   FOLDER_PLACEHOLDERS,
   RULE_FIELDS,
@@ -42,7 +43,7 @@ interface RuleEditorProps {
   onDiscard: () => void
 }
 
-/** One rule's conditions and folder, kept as a draft until Save. */
+/** One rule's conditions and folder, kept as a draft until Save. The catch-all has no conditions, only a folder. */
 export function RuleEditor({
   draft,
   number,
@@ -57,6 +58,7 @@ export function RuleEditor({
 }: RuleEditorProps) {
   const { data: supportedSites } = useSupportedSites()
   const folderInput = useRef<HTMLInputElement>(null)
+  const isCatchAll = draft.id === CATCH_ALL_RULE_ID
   const update = (changes: Partial<FolderRule>) => onChange({ ...draft, ...changes })
   const setCondition = (index: number, condition: RuleCondition) =>
     update({ conditions: draft.conditions.map((existing, at) => (at === index ? condition : existing)) })
@@ -83,31 +85,37 @@ export function RuleEditor({
   return (
     <Card className="flex flex-col gap-4 p-4">
       <p className="font-semibold">{text.number(number)}</p>
-      <Field label={text.when} hint={text.whenHint}>
-        <div className="flex flex-col gap-2">
-          {draft.conditions.map((condition, index) => (
-            <ConditionRow
-              // Conditions have no ID of their own, and their inputs are controlled, so their place will do.
-              key={index}
-              condition={condition}
-              presets={presets}
-              defaultPresetId={defaultPresetId}
-              onChange={(changed) => setCondition(index, changed)}
-              onRemove={() => update({ conditions: draft.conditions.filter((_, at) => at !== index) })}
-            />
-          ))}
-          <div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => update({ conditions: [...draft.conditions, newCondition("site", defaultPresetId)] })}
-            >
-              <Plus size={14} />
-              {text.addCondition}
-            </Button>
+      {isCatchAll ? (
+        <Field label={text.when}>
+          <p className="text-fg-secondary">{text.catchAllWhen}</p>
+        </Field>
+      ) : (
+        <Field label={text.when} hint={text.whenHint}>
+          <div className="flex flex-col gap-2">
+            {draft.conditions.map((condition, index) => (
+              <ConditionRow
+                // Conditions have no ID of their own, and their inputs are controlled, so their place will do.
+                key={index}
+                condition={condition}
+                presets={presets}
+                defaultPresetId={defaultPresetId}
+                onChange={(changed) => setCondition(index, changed)}
+                onRemove={() => update({ conditions: draft.conditions.filter((_, at) => at !== index) })}
+              />
+            ))}
+            <div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => update({ conditions: [...draft.conditions, newCondition("site", defaultPresetId)] })}
+              >
+                <Plus size={14} />
+                {text.addCondition}
+              </Button>
+            </div>
           </div>
-        </div>
-      </Field>
+        </Field>
+      )}
       <Field label={text.saveIn} hint={text.saveInHint(downloadFolder)} htmlFor="rule-folder">
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">

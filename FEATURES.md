@@ -38,7 +38,7 @@ type: Features
 - **Already downloaded**: when the history has the video, the card says when and with which preset, shows the file's path with Open File and Show in Folder, and Download becomes Download Again. If the file was moved or deleted, it says so. The check uses the site and the video's ID, so every link to a video is caught: `youtu.be`, Shorts, a timestamp, a playlist it's in.
 - **Refused links**: playlists and channels, live streams, and premieres that haven't started each get a plain message. So do unsupported sites, unavailable videos, videos needing a sign-in or an age check, and network errors, with yt-dlp's own error underneath.
 - **Image posts**: an Instagram, X, Bluesky, Pixiv or other image post shows its caption, author, date and what it holds ("2 images, 4 videos"). Each link is read by whichever tool suits it, yt-dlp or gallery-dl, and by the other when the first can't, so the user never has to choose.
-- **Download a post**: a post has Download without a preset, since its files are kept as the site gives them. They all go into the site's folder (Instagram, X, or the site's name) in the download folder, by a rule that can be changed. Files already there are skipped, so Download Again only fetches what's missing.
+- **Download a post**: a post has Download without a preset, since its files are kept as the site gives them. They all go into the site's folder (Instagram, X, or the site's name) in the download folder, by the last rule, which can be changed. Files already there are skipped, so Download Again only fetches what's missing.
 - **MEGA, MediaFire, Google Drive and Dropbox**: a link to a file or a shared folder shows its name, date and what it holds (the file's size, or "14 files, 1.2 GB") and has Download without a preset. Tsundoku downloads these itself, nothing to set up. A shared folder keeps its own folder and subfolders inside the download folder; files already there are skipped. MEGA and MediaFire files are checked once they arrive, and a damaged one is deleted so Retry downloads it again. Google Docs, Sheets and Slides in a Drive folder are left out. A link missing its key, a password-protected link, a used-up download limit and a link on one of these hosts that isn't to a file or folder Tsundoku recognizes each get a plain message.
 - **Without Deno**: a YouTube preview warns that some formats may be missing.
 - **Download**: pick a preset (the default is preselected) and Download: the video joins the queue, and the card and the add bar clear. With a video already downloaded, it's Download Again; with the same preset as before, it asks first, since the new file replaces the old one.
@@ -58,6 +58,7 @@ type: Features
 - **Start All**: sends every link to the queue except those downloaded before, already in the queue or that couldn't be read. Videos start with the preset picked in Videos Start As (the default one to start with); a link's own preset picker overrides it. Links still being read start once they're read, unless they turn out to be downloaded already.
 - **Select**: with links ticked (or all of them, with the box at the top), Start Selected and Remove Selected act on those instead. Starting a video again with the preset it was downloaded with asks first, since the new file replaces the old one.
 - **Each row**: Start (or Download Again), Remove, and the preset picker for a video. A link that couldn't be read shows why, the same fixes as the preview card, and Try Again.
+- **Where it goes**: under a read link's details, the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder), as the preview card shows it. It follows the preset the link would start with, and clicking it opens the rules, the presets or Settings.
 - **Sidebar count**: the number of links waiting, beside Pending, leaving out copied links still being checked.
 
 ## Queue
@@ -87,10 +88,10 @@ type: Features
 ## Rules
 
 - **Folder rules**: "when all of these match, save in this folder". A condition checks the site (by any of its names, such as X, twitter or x.com, with every supported site suggested), the uploader or account, the title, the link, the kind (video, audio, post of images or shared file) or the preset, with Is, Is Not, Contains or Doesn't Contain, ignoring case. A rule without conditions matches every download.
-- **In order**: rules are tried from the top, and the first one that's on and matches decides. Without one, a preset's own folder is used, then the download folder.
+- **In order**: rules are tried from the top, and the first one that's on and matches decides. Without one, a preset's own folder is used, then the last rule's folder, then (with the last rule off) the download folder.
 - **Folders that follow the download**: `{site}` and `{uploader}` in a folder become the download's site and uploader (Unknown without one), made safe as folder names. Clicking {site} or {uploader} under the folder field puts it where the cursor is. A folder that isn't a full path goes inside the download folder.
 - **Each as a sentence**: "When the site is Instagram and the uploader is “natgeo”", with its number and its folder as it will be used. Move Up, Move Down, Edit, Turn Off or On, and Delete (after asking). An edit is a draft until Save.
-- **Posts**: every install starts with "When it's a post of images → {site}", so each site's posts get a folder of their own. It's always the last rule ("Always Last"), so every other rule comes first and new rules go above it: it can be edited or turned off, not moved or deleted.
+- **Everything else**: every install starts with "Everything else → {site}", so each site's downloads get a folder of their own. It's always the last rule ("Always Last"), so every other rule comes first and new rules go above it, and a preset's own folder comes before it too. It has no conditions: its folder can be changed and it can be turned off, which sends what it took to the download folder, but it can't be moved or deleted. Until 0.1.30 it took only posts of images.
 - **Kept per download**: a download keeps the folder it got when it was added, so changing the rules doesn't move downloads already in the queue.
 
 ## History
@@ -107,7 +108,7 @@ type: Features
 
 ## Settings
 
-- **Download Folder**: where everything goes unless a rule or its preset picks another folder: picked at the first-run setup, a Tsundoku folder in Downloads by default, with Choose Folder… and Use Default. Rules' folders that aren't full paths go inside it. A portable copy's Downloads folder beside it is saved without the copy's own folder, so it follows the copy to another drive.
+- **Download Folder**: the folder downloads go in, each site's in a folder of its own by the last rule, unless another rule or the preset picks another folder: picked at the first-run setup, a Tsundoku folder in Downloads by default, with Choose Folder… and Use Default. Rules' folders that aren't full paths go inside it. A portable copy's Downloads folder beside it is saved without the copy's own folder, so it follows the copy to another drive.
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.

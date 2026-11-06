@@ -1,7 +1,6 @@
 import { useState } from "react"
-import { Folder, Loader2, X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { addPostToQueue, addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
-import type { Destination } from "../bindings/Destination"
 import type { PastDownload } from "../bindings/PastDownload"
 import type { VideoPreview } from "../bindings/VideoPreview"
 import {
@@ -12,12 +11,12 @@ import {
   type ErrorDescription,
 } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
-import { useAppActions } from "../navigation"
 import { useDownloadDestination, usePresets } from "../queries"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
 import { Card } from "./Card"
+import { DestinationLine } from "./DestinationLine"
 import { FailureFixes } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { StatusMessage } from "./StatusMessage"
@@ -149,7 +148,7 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
     <div className="flex flex-col items-end gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex w-full items-center gap-2">
-        <DestinationLine destination={destination} />
+        <DestinationLine destination={destination} className="flex-1" />
         <SelectInput
           aria-label={strings.preview.preset}
           title={strings.preview.preset}
@@ -194,41 +193,11 @@ function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onA
     <div className="flex flex-col items-end gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex w-full items-center gap-2">
-        <DestinationLine destination={destination} />
+        <DestinationLine destination={destination} className="flex-1" />
         <Button variant="primary" loading={adding} onClick={() => void download()}>
           {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
         </Button>
       </div>
-    </div>
-  )
-}
-
-/** Where the download will go, and what picked that folder: a rule, the preset or the download folder, each opening
- * where it's set. */
-function DestinationLine({ destination }: { destination: Destination | undefined }) {
-  const { navigate } = useAppActions()
-  if (!destination) return <div className="flex-1" />
-  const { source } = destination
-  const sources = strings.preview.destinationSources
-  const [label, view] =
-    source.kind === "rule"
-      ? ([sources.rule(source.number), "rules"] as const)
-      : source.kind === "preset"
-        ? ([sources.preset, "presets"] as const)
-        : ([sources.downloadFolder, "settings"] as const)
-  return (
-    <div className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-fg-secondary">
-      <Folder size={14} className="shrink-0" />
-      <span className="truncate" title={strings.preview.savesIn(destination.folder)}>
-        {destination.folder}
-      </span>
-      <button
-        type="button"
-        className="shrink-0 rounded-sm text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
-        onClick={() => navigate(view)}
-      >
-        {strings.preview.destinationFrom(label)}
-      </button>
     </div>
   )
 }

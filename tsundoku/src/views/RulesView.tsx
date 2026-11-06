@@ -16,11 +16,11 @@ import { useAppActions } from "../navigation"
 import { useDefaultDownloadFolder, useDownloadOptions, useFolderRules, usePresets } from "../queries"
 import { strings } from "../strings"
 import { RuleEditor } from "./rules/RuleEditor"
-import { POSTS_RULE_ID, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
+import { CATCH_ALL_RULE_ID, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
 
 const text = strings.rules
 
-/** The rule being edited: its place in the list (for a new one, where it will go: just above the posts rule), the
+/** The rule being edited: its place in the list (for a new one, where it will go: just above the catch-all), the
  * draft, and whether it's new. */
 interface Editing {
   index: number
@@ -29,7 +29,7 @@ interface Editing {
 }
 
 /** The folder rules, in the order they're tried: each as a sentence with its folder. One rule is edited at a time,
- * as a draft until Save; moving, turning off and deleting save at once. The posts rule stays last: it can't be moved
+ * as a draft until Save; moving, turning off and deleting save at once. The catch-all stays last: it can't be moved
  * or deleted, and new rules go above it. */
 export function RulesView() {
   const queryClient = useQueryClient()
@@ -46,9 +46,9 @@ export function RulesView() {
   const presets = presetsOverview?.presets ?? []
   const downloadFolder = options?.folder ?? defaultFolder ?? ""
   const busy = saving || editing !== null
-  // The core keeps the posts rule last, so rules above it are the ones that move.
-  const postsIndex = rules.findIndex((rule) => rule.id === POSTS_RULE_ID)
-  const movableCount = postsIndex === -1 ? rules.length : postsIndex
+  // The core keeps the catch-all last, so rules above it are the ones that move.
+  const catchAllIndex = rules.findIndex((rule) => rule.id === CATCH_ALL_RULE_ID)
+  const movableCount = catchAllIndex === -1 ? rules.length : catchAllIndex
   // A new rule shows where it will go, so the rules after it are numbered one further.
   const numberOf = (index: number) => index + 1 + (editing?.isNew && index >= editing.index ? 1 : 0)
 
@@ -197,7 +197,7 @@ interface RuleRowProps {
   onDelete: () => void
 }
 
-/** A rule as a sentence and its folder, with its number, moving, Edit and a menu. The posts rule says it's always
+/** A rule as a sentence and its folder, with its number, moving, Edit and a menu. The catch-all says it's always
  * last, and can't be deleted. */
 function RuleRow({
   rule,
@@ -212,10 +212,10 @@ function RuleRow({
   onToggle,
   onDelete,
 }: RuleRowProps) {
-  const sentence = describeConditions(rule.conditions, presets)
-  const isPostsRule = rule.id === POSTS_RULE_ID
+  const isCatchAll = rule.id === CATCH_ALL_RULE_ID
+  const sentence = isCatchAll ? text.sentence.everythingElse : describeConditions(rule.conditions, presets)
   const toggleItem: MenuItem = { label: rule.enabled ? text.turnOff : text.turnOn, onSelect: onToggle }
-  const menuItems: MenuItem[] = isPostsRule
+  const menuItems: MenuItem[] = isCatchAll
     ? [toggleItem]
     : [toggleItem, { label: text.delete, onSelect: onDelete, danger: true }]
   return (
@@ -235,7 +235,7 @@ function RuleRow({
           {folder}
         </p>
       </div>
-      {isPostsRule && (
+      {isCatchAll && (
         <span
           className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
           title={text.alwaysLastHint}

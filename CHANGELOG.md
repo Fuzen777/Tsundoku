@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.30 · 2026-11-06
+
+### Added
+
+- **Pending shows where each link will be saved**: under a link's details, once it's read, the folder it will go in and what picked it (a rule, the preset's folder or the download folder), as the preview card shows it. It follows the preset the link would start with, and clicking it opens where that's set.
+
+### Changed
+
+- **The last rule takes everything else**: the rule every install starts with, always last, now takes every download no other rule takes, not only posts of images, so videos, audio and shared files also go in a folder for their site, such as Downloads\Tsundoku\YouTube. It reads "Everything else" and has no conditions. Its folder can still be changed, or it can be turned off to save those downloads in the download folder itself. A preset with a folder of its own still saves there. Your posts rule becomes it, keeping its folder and whether it's on.
+
 ## 0.1.29 · 2026-11-06
 
 ### Changed

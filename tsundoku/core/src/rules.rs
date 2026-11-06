@@ -1,6 +1,7 @@
 //! Folder rules: where a download goes, picked from what it is ("when the site is Instagram and the uploader is
 //! natgeo, save in D:\Hydrus\natgeo"). The first rule that's on and matches decides; with none, the preset's own
-//! folder, then the download folder. Kept in `settings.json`, edited in the Rules view.
+//! folder, then the catch-all (the last rule, which takes everything else), then the download folder. Kept in
+//! `settings.json`, edited in the Rules view.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -14,9 +15,13 @@ use crate::presets::Preset;
 use crate::settings::{SettingsError, SettingsStore};
 use crate::sites;
 
-/// The ID of the rule every install starts with: posts of images go in a folder for their site. It's always the last
-/// rule, so every other rule comes before it, and it can be edited or turned off but not deleted.
-pub const POSTS_RULE_ID: &str = "posts";
+/// The ID of the catch-all, the rule every install starts with: every download the other rules don't take goes in a
+/// folder for its site. It's always the last rule, has no conditions, and comes after a preset's own folder. It can be
+/// edited or turned off but not deleted.
+pub const CATCH_ALL_RULE_ID: &str = "catch-all";
+
+/// The catch-all's ID from 0.1.11 to 0.1.29, when it was the posts rule and took only posts of images.
+const POSTS_RULE_ID: &str = "posts";
 
 /// Replaced in a rule's folder by the download's site, such as "Instagram".
 const SITE_PLACEHOLDER: &str = "site";
@@ -28,8 +33,8 @@ const UPLOADER_PLACEHOLDER: &str = "uploader";
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct FolderRule {
-    /// Stays the same when the rule is edited or moved: "posts" for the rule every install starts with, "rule-<n>"
-    /// for the others. Empty for a rule not saved yet; saving gives it one.
+    /// Stays the same when the rule is edited or moved: "catch-all" for the rule every install starts with,
+    /// "rule-<n>" for the others. Empty for a rule not saved yet; saving gives it one.
     pub id: String,
     /// A rule that's off is kept but skipped.
     pub enabled: bool,
@@ -155,41 +160,59 @@ pub struct RulesSettings {
 impl Default for RulesSettings {
     fn default() -> Self {
         Self {
-            list: vec![posts_rule(None)],
+            list: vec![catch_all_rule()],
         }
     }
 }
 
-/// The rules with the posts rule last, where it always is. A list without it (it could be deleted in 0.1.11 to
-/// 0.1.18) gets it back turned off, so where downloads go doesn't change.
-pub fn with_posts_rule_last(mut rules: Vec<FolderRule>) -> Vec<FolderRule> {
-    let posts = match rules.iter().position(|rule| rule.id == POSTS_RULE_ID) {
-        Some(index) => rules.remove(index),
+/// The rules with the catch-all last, where it always is, and without conditions, since it takes everything. The posts
+/// rule of 0.1.11 to 0.1.29 ("kind is post → {site}") becomes it, keeping its folder and whether it's on. A list
+/// without either (the posts rule could be deleted in 0.1.11 to 0.1.18) gets it back turned off, so where downloads go
+/// doesn't change.
+pub fn with_catch_all_last(rules: Vec<FolderRule>) -> Vec<FolderRule> {
+    let (found, mut rules): (Vec<_>, Vec<_>) = rules
+        .into_iter()
+        .partition(|rule| rule.id == CATCH_ALL_RULE_ID || rule.id == POSTS_RULE_ID);
+    let catch_all = match found.into_iter().next() {
+        Some(rule) => FolderRule {
+            id: CATCH_ALL_RULE_ID.to_owned(),
+            conditions: Vec::new(),
+            ..rule
+        },
         None => FolderRule {
             enabled: false,
-            ..posts_rule(None)
+            ..catch_all_rule()
         },
     };
-    rules.push(posts);
+    rules.push(catch_all);
     rules
 }
 
-/// The rule every install starts with: posts of images go in a folder for their site ("Instagram", "X"), inside
-/// `folder`, or inside the download folder when it's `None`.
-pub fn posts_rule(folder: Option<&str>) -> FolderRule {
-    let site = format!("{{{SITE_PLACEHOLDER}}}");
+/// The rule every install starts with: every download no other rule takes, and whose preset has no folder of its
+/// own, goes in a folder for its site ("Instagram", "YouTube") inside the download folder.
+pub fn catch_all_rule() -> FolderRule {
     FolderRule {
-        id: POSTS_RULE_ID.to_owned(),
+        id: CATCH_ALL_RULE_ID.to_owned(),
+        enabled: true,
+        conditions: Vec::new(),
+        folder: format!("{{{SITE_PLACEHOLDER}}}"),
+    }
+}
+
+/// The posts folder of 0.1.8 to 0.1.10 as a rule: posts of images go in a folder for their site inside `folder`.
+pub fn posts_folder_rule(folder: &str) -> FolderRule {
+    FolderRule {
+        id: "rule-1".to_owned(),
         enabled: true,
         conditions: vec![RuleCondition {
             field: RuleField::Kind,
             operator: RuleOperator::Is,
             value: DownloadKind::Post.as_str().to_owned(),
         }],
-        folder: match folder {
-            Some(folder) => Path::new(folder).join(site).display().to_string(),
-            None => site,
-        },
+        folder: Path::new(folder)
+            .join(format!("{{{SITE_PLACEHOLDER}}}"))
+            .display()
+            .to_string(),
     }
 }
 
@@ -253,6 +276,11 @@ impl RuleSubject<'_> {
 }
 
 impl FolderRule {
+    /// Whether it's the catch-all, which comes after a preset's own folder.
+    pub fn is_catch_all(&self) -> bool {
+        self.id == CATCH_ALL_RULE_ID
+    }
+
     /// Whether every condition matches the download.
     pub fn matches(&self, subject: &RuleSubject<'_>) -> bool {
         self.conditions
@@ -296,29 +324,43 @@ impl RuleCondition {
 }
 
 /// Where a download goes: the folder of the first rule that's on and matches, else the preset's own folder, else the
-/// download folder.
+/// catch-all's when it's on, else the download folder.
 pub fn destination(
     rules: &[FolderRule],
     subject: &RuleSubject<'_>,
     download_folder: &Path,
 ) -> Destination {
-    let matched = rules
-        .iter()
-        .enumerate()
-        .find(|(_, rule)| rule.enabled && rule.matches(subject));
-    let (folder, source) = match (matched, subject.preset.and_then(Preset::own_folder)) {
-        (Some((index, rule)), _) => (
-            rule_folder(&rule.folder, subject, download_folder),
-            DestinationSource::Rule {
-                number: u32::try_from(index + 1).unwrap_or(u32::MAX),
-            },
-        ),
-        (None, Some(folder)) => (PathBuf::from(folder), DestinationSource::Preset),
-        (None, None) => (
-            download_folder.to_path_buf(),
-            DestinationSource::DownloadFolder,
-        ),
+    let rule_folder_of = |catch_all: bool| {
+        rules
+            .iter()
+            .enumerate()
+            .find(|(_, rule)| {
+                rule.enabled && rule.is_catch_all() == catch_all && rule.matches(subject)
+            })
+            .map(|(index, rule)| {
+                (
+                    rule_folder(&rule.folder, subject, download_folder),
+                    DestinationSource::Rule {
+                        number: u32::try_from(index + 1).unwrap_or(u32::MAX),
+                    },
+                )
+            })
     };
+    let preset_folder = || {
+        subject
+            .preset
+            .and_then(Preset::own_folder)
+            .map(|folder| (PathBuf::from(folder), DestinationSource::Preset))
+    };
+    let (folder, source) = rule_folder_of(false)
+        .or_else(preset_folder)
+        .or_else(|| rule_folder_of(true))
+        .unwrap_or_else(|| {
+            (
+                download_folder.to_path_buf(),
+                DestinationSource::DownloadFolder,
+            )
+        });
     Destination {
         folder: folder.display().to_string(),
         source,
@@ -396,10 +438,10 @@ impl RuleManager {
         self.settings.get().rules.list
     }
 
-    /// Replaces every rule, in this order but with the posts rule last, after checking each. Folders and values are
+    /// Replaces every rule, in this order but with the catch-all last, after checking each. Folders and values are
     /// trimmed, and a rule not saved before (an empty ID) gets one.
     pub fn save(&self, rules: Vec<FolderRule>) -> Result<Vec<FolderRule>, RuleError> {
-        let mut rules = with_posts_rule_last(rules);
+        let mut rules = with_catch_all_last(rules);
         for (index, rule) in rules.iter_mut().enumerate() {
             rule.folder = rule.folder.trim().to_owned();
             for condition in &mut rule.conditions {
@@ -717,7 +759,7 @@ mod tests {
         assert_eq!(
             folder_of(&RulesSettings::default().list, &tweet, None).folder,
             r"D:\Tsundoku\X",
-            "the posts rule"
+            "the catch-all"
         );
         let rules = [rule(Vec::new(), r"Saved\{site}")];
         assert_eq!(
@@ -727,9 +769,60 @@ mod tests {
     }
 
     #[test]
-    fn the_posts_rule_can_start_in_a_folder() {
-        assert_eq!(posts_rule(Some(r"D:\Posts")).folder, r"D:\Posts\{site}");
-        assert_eq!(posts_rule(None).folder, "{site}");
+    fn the_catch_all_comes_after_the_other_rules_and_the_presets_folder() {
+        let video = video();
+        let mut mine = preset("best-video");
+        let rules = vec![
+            rule(
+                vec![condition(RuleField::Kind, RuleOperator::Is, "post")],
+                r"D:\Posts",
+            ),
+            catch_all_rule(),
+        ];
+        assert_eq!(
+            folder_of(&rules, &video, Some(&mine)),
+            Destination {
+                folder: r"D:\Tsundoku\YouTube".to_owned(),
+                source: DestinationSource::Rule { number: 2 },
+            },
+            "a video no rule takes"
+        );
+        assert_eq!(folder_of(&rules, &tweet(), None).folder, r"D:\Posts");
+        assert_eq!(
+            folder_of(&rules, &mega_file(), None).folder,
+            r"D:\Tsundoku\MEGA"
+        );
+
+        mine.folder = Some(r"D:\Videos".to_owned());
+        assert_eq!(
+            folder_of(&rules, &video, Some(&mine)).source,
+            DestinationSource::Preset,
+            "a preset's own folder beats the catch-all"
+        );
+
+        mine.folder = None;
+        let off = vec![FolderRule {
+            enabled: false,
+            ..catch_all_rule()
+        }];
+        assert_eq!(
+            folder_of(&off, &video, Some(&mine)).source,
+            DestinationSource::DownloadFolder
+        );
+    }
+
+    #[test]
+    fn the_posts_folder_becomes_a_rule_for_posts() {
+        let posts = posts_folder_rule(r"D:\Posts");
+        assert_eq!(posts.folder, r"D:\Posts\{site}");
+        assert!(posts.matches(&RuleSubject {
+            video: &tweet(),
+            preset: None
+        }));
+        assert!(!posts.matches(&RuleSubject {
+            video: &mega_file(),
+            preset: None
+        }));
     }
 
     fn manager_in(folder: &tempfile::TempDir) -> RuleManager {
@@ -744,8 +837,8 @@ mod tests {
         let manager = manager_in(&folder);
         assert_eq!(
             manager.list(),
-            vec![posts_rule(None)],
-            "every install starts with the posts rule"
+            vec![catch_all_rule()],
+            "every install starts with the catch-all"
         );
 
         let mut rules = manager.list();
@@ -761,8 +854,8 @@ mod tests {
         let ids: Vec<&str> = saved.iter().map(|rule| rule.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["rule-1", "rule-2", "posts"],
-            "the posts rule stays last"
+            ["rule-1", "rule-2", "catch-all"],
+            "the catch-all stays last"
         );
         assert_eq!(saved[0].folder, r"D:\NatGeo");
         assert_eq!(saved[0].conditions[0].value, "natgeo");
@@ -775,25 +868,58 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_posts_rule_last_and_never_loses_it() {
+    fn keeps_the_catch_all_last_and_never_loses_it() {
         let folder = tempfile::tempdir().unwrap();
         let manager = manager_in(&folder);
         let mut first = rule(Vec::new(), r"D:\First");
         first.id = "rule-1".to_owned();
-        let moved = manager.save(vec![posts_rule(None), first.clone()]).unwrap();
-        assert_eq!(moved, vec![first.clone(), posts_rule(None)]);
+        let moved = manager.save(vec![catch_all_rule(), first.clone()]).unwrap();
+        assert_eq!(moved, vec![first.clone(), catch_all_rule()]);
 
         let without = manager.save(vec![first.clone()]).unwrap();
         assert_eq!(
             without,
             vec![
-                first,
+                first.clone(),
                 FolderRule {
                     enabled: false,
-                    ..posts_rule(None)
+                    ..catch_all_rule()
                 }
             ],
             "it comes back, turned off"
+        );
+
+        let mut with_conditions = catch_all_rule();
+        with_conditions.conditions = vec![condition(RuleField::Site, RuleOperator::Is, "X")];
+        assert_eq!(
+            manager.save(vec![with_conditions]).unwrap(),
+            vec![catch_all_rule()],
+            "it takes everything"
+        );
+    }
+
+    #[test]
+    fn the_posts_rule_becomes_the_catch_all() {
+        let posts = FolderRule {
+            id: "posts".to_owned(),
+            enabled: false,
+            conditions: vec![condition(RuleField::Kind, RuleOperator::Is, "post")],
+            folder: r"D:\Hydrus\{site}".to_owned(),
+        };
+        let mut first = rule(Vec::new(), r"D:\First");
+        first.id = "rule-1".to_owned();
+        assert_eq!(
+            with_catch_all_last(vec![posts, first.clone()]),
+            vec![
+                first,
+                FolderRule {
+                    id: CATCH_ALL_RULE_ID.to_owned(),
+                    enabled: false,
+                    conditions: Vec::new(),
+                    folder: r"D:\Hydrus\{site}".to_owned(),
+                }
+            ],
+            "it keeps its folder and whether it's on"
         );
     }
 
@@ -801,17 +927,17 @@ mod tests {
     fn refuses_a_rule_without_a_folder_or_with_an_empty_condition() {
         let folder = tempfile::tempdir().unwrap();
         let manager = manager_in(&folder);
-        let no_folder = vec![posts_rule(None), rule(Vec::new(), "  ")];
+        let no_folder = vec![catch_all_rule(), rule(Vec::new(), "  ")];
         assert_eq!(
             manager.save(no_folder),
             Err(RuleError::EmptyFolder { rule: 1 }),
-            "numbered as saved, with the posts rule last"
+            "numbered as saved, with the catch-all last"
         );
         let empty = vec![rule(
             vec![condition(RuleField::Title, RuleOperator::Contains, " ")],
             r"D:\x",
         )];
         assert_eq!(manager.save(empty), Err(RuleError::EmptyValue { rule: 1 }));
-        assert_eq!(manager.list(), vec![posts_rule(None)], "nothing saved");
+        assert_eq!(manager.list(), vec![catch_all_rule()], "nothing saved");
     }
 }

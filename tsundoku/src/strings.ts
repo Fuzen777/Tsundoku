@@ -323,7 +323,7 @@ export const strings = {
   },
   rules: {
     intro:
-      "The first rule that matches a download picks its folder. A download no rule matches goes to its preset's folder, or else the download folder.",
+      "The first rule that matches a download picks its folder. A preset with a folder of its own comes before the last rule, which takes everything else.",
     addRule: "Add Rule",
     emptyTitle: "No Rules",
     emptyBody: "Add a rule to send downloads to a folder of their own, by site, uploader, title, link, kind or preset.",
@@ -356,7 +356,9 @@ export const strings = {
       uploader: "The download's uploader or account, or Unknown when there's none.",
     },
     alwaysLast: "Always Last",
-    alwaysLastHint: "Every other rule comes before this one, and new rules go above it.",
+    alwaysLastHint:
+      "Takes every download no rule above it takes, unless its preset has a folder of its own. New rules go above it.",
+    catchAllWhen: "Every download no rule above takes, unless its preset has a folder of its own.",
     chooseFolder: "Choose Folder…",
     chooseFolderTitle: "Choose Where Matching Downloads Go",
     fields: {
@@ -387,6 +389,7 @@ export const strings = {
     },
     sentence: {
       every: "Every download",
+      everythingElse: "Everything else",
       when: (conditions: string[]) => `When ${conditions.join(" and ")}`,
       fields: {
         site: "the site",
