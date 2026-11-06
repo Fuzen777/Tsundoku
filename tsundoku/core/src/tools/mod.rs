@@ -25,8 +25,11 @@ use self::github::{GitHub, Release};
 use crate::cancel::CancelToken;
 use crate::data_folder::DataPaths;
 use crate::process::{self, ProgramCommand, RunError};
-use crate::settings::{SettingsError, SettingsStore, ToolSetup, UpdateChannel};
+use crate::settings::{SettingsError, SettingsStore, ToolCaches, ToolSetup, UpdateChannel};
 use crate::sync::lock;
+
+/// The folder of gallery-dl's cache in the data folder's `cache\`. yt-dlp's and Deno's are made by the tools.
+const GALLERY_DL_CACHE: &str = "gallery-dl";
 
 /// The longest a tool may take to print its version. yt-dlp's first start unpacks itself, and an antivirus may scan
 /// it first.
@@ -163,6 +166,49 @@ pub struct ToolsOverview {
     /// yt-dlp, ffmpeg, Deno and gallery-dl, in that order.
     pub tools: Vec<ToolStatus>,
     pub yt_dlp_channel: UpdateChannel,
+    /// Where the tools keep their caches; an install from before the first-run setup asked uses their usual folders.
+    pub caches: ToolCaches,
+    /// The data folder's `cache\`, where they are with `ToolCaches::DataFolder`.
+    pub cache_folder: String,
+}
+
+/// Where the tools keep their caches when the data folder holds them (`ToolCaches::DataFolder`): one folder each.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolCacheFolder {
+    root: PathBuf,
+}
+
+impl ToolCacheFolder {
+    pub fn new(root: PathBuf) -> Self {
+        Self { root }
+    }
+
+    /// yt-dlp's `--cache-dir`: the sites' player code it has worked out, so it isn't worked out again each time.
+    pub fn yt_dlp_args(&self) -> [String; 2] {
+        [
+            "--cache-dir".to_owned(),
+            self.root.join("yt-dlp").display().to_string(),
+        ]
+    }
+
+    /// gallery-dl's cache database (sign-ins and sites' tokens), set with `-o`.
+    pub fn gallery_dl_args(&self) -> [String; 2] {
+        [
+            "-o".to_owned(),
+            format!(
+                "cache.file={}",
+                self.root
+                    .join(GALLERY_DL_CACHE)
+                    .join("cache.sqlite3")
+                    .display()
+            ),
+        ]
+    }
+
+    /// `DENO_DIR` for the Deno yt-dlp starts, which keeps the scripts it downloads there.
+    pub fn deno_variable(&self) -> (&'static str, PathBuf) {
+        ("DENO_DIR", self.root.join("deno"))
+    }
 }
 
 /// A copy of a tool found on this PC, offered at setup.
@@ -290,13 +336,15 @@ impl ToolManager {
                 },
             }),
             yt_dlp_channel: tools.yt_dlp_channel,
+            caches: tools.caches.unwrap_or(ToolCaches::UsualFolders),
+            cache_folder: self.paths.cache_folder().display().to_string(),
         }
     }
 
     /// The copies already on this PC that run, for the first-run setup's tools.
     pub fn detect(&self) -> Vec<DetectedTool> {
         let path_variable = env::var_os("PATH");
-        let tools_folder = self.paths.tools_folder();
+        let tools_folder = self.tools_folder();
         for_each_tool(&ToolId::SETUP, |id| DetectedTool {
             id,
             found: locate::candidates(id, &tools_folder, path_variable.as_deref())
@@ -345,13 +393,13 @@ impl ToolManager {
             id,
             &release,
             &github,
-            &self.paths.tools_folder(),
+            &self.tools_folder(),
             &operation.cancel,
             &|stage| operation.report(stage),
         )?;
 
         operation.report(ToolStage::Checking);
-        let executable = locate::managed_executable(&self.paths.tools_folder(), id);
+        let executable = locate::managed_executable(&self.tools_folder(), id);
         let version = read_version(id, &executable).map_err(missing_means_blocked)?;
         let setup = ToolSetup::Managed {
             checksum: Some(checksum),
@@ -369,7 +417,7 @@ impl ToolManager {
     /// Sets up a copy already on this PC, such as one found at setup or picked in Settings.
     pub fn use_copy(&self, id: ToolId, path: PathBuf) -> Result<ToolStatus, ToolError> {
         let version = read_version(id, &path)?;
-        let managed = locate::managed_executable(&self.paths.tools_folder(), id);
+        let managed = locate::managed_executable(&self.tools_folder(), id);
         let setup = if is_same_file(&path, &managed) {
             match self.settings.get().tools.get(id) {
                 Some(current @ ToolSetup::Managed { .. }) => current.clone(),
@@ -406,7 +454,7 @@ impl ToolManager {
         };
         let operation = self.begin(ToolId::YtDlp, on_progress)?;
         operation.report(ToolStage::Updating);
-        let executable = locate::managed_executable(&self.paths.tools_folder(), ToolId::YtDlp);
+        let executable = locate::managed_executable(&self.tools_folder(), ToolId::YtDlp);
         let command = ProgramCommand::new(&executable).args([
             "--ignore-config",
             "--update-to",
@@ -468,9 +516,36 @@ impl ToolManager {
         Ok(())
     }
 
+    /// Settings → Tools: where the tools keep their caches from their next run on.
+    pub fn set_caches(&self, caches: ToolCaches) -> Result<(), ToolError> {
+        self.settings
+            .update(|settings| settings.tools.caches = Some(caches))?;
+        Ok(())
+    }
+
+    /// Where the tools keep their caches when the data folder holds them, or `None` for their usual folders.
+    pub fn cache_folder(&self) -> Option<ToolCacheFolder> {
+        (self.settings.get().tools.caches == Some(ToolCaches::DataFolder)).then(|| {
+            let root = self.paths.cache_folder();
+            // gallery-dl uses a cache file only if its folder exists; yt-dlp and Deno make their own.
+            let _ = fs::create_dir_all(root.join(GALLERY_DL_CACHE));
+            ToolCacheFolder::new(root)
+        })
+    }
+
+    /// The folder the app's own copies go in: the one picked at the first-run setup, or the data folder's `tools\`.
+    fn tools_folder(&self) -> PathBuf {
+        self.settings
+            .get()
+            .tools
+            .folder
+            .filter(|folder| !folder.as_os_str().is_empty())
+            .unwrap_or_else(|| self.paths.tools_folder())
+    }
+
     fn executable_for(&self, id: ToolId, setup: &ToolSetup) -> PathBuf {
         match setup {
-            ToolSetup::Managed { .. } => locate::managed_executable(&self.paths.tools_folder(), id),
+            ToolSetup::Managed { .. } => locate::managed_executable(&self.tools_folder(), id),
             ToolSetup::External { path } => path.clone(),
         }
     }
@@ -684,6 +759,58 @@ mod tests {
             })
             .unwrap();
         assert!(!manager.needs_setup());
+    }
+
+    #[test]
+    fn puts_its_own_copies_in_the_folder_picked_at_setup() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        assert_eq!(manager.tools_folder(), folder.path().join("tools"));
+
+        manager
+            .settings
+            .update(|settings| {
+                settings.tools.folder = Some(PathBuf::from(r"D:\Tools"));
+                settings
+                    .tools
+                    .set(ToolId::YtDlp, Some(ToolSetup::Managed { checksum: None }));
+            })
+            .unwrap();
+        assert_eq!(manager.tools_folder(), PathBuf::from(r"D:\Tools"));
+        assert_eq!(
+            manager.executable(ToolId::YtDlp),
+            Some(locate::managed_executable(
+                Path::new(r"D:\Tools"),
+                ToolId::YtDlp
+            ))
+        );
+    }
+
+    #[test]
+    fn keeps_the_caches_in_the_data_folder_once_chosen() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        assert_eq!(
+            manager.cache_folder(),
+            None,
+            "their usual folders until chosen"
+        );
+        assert_eq!(manager.overview().caches, ToolCaches::UsualFolders);
+
+        manager.set_caches(ToolCaches::DataFolder).unwrap();
+        let cache_root = folder.path().join("cache");
+        assert_eq!(
+            manager.cache_folder(),
+            Some(ToolCacheFolder::new(cache_root.clone()))
+        );
+        assert!(
+            cache_root.join("gallery-dl").is_dir(),
+            "made for gallery-dl"
+        );
+        assert_eq!(manager.overview().caches, ToolCaches::DataFolder);
+
+        manager.set_caches(ToolCaches::UsualFolders).unwrap();
+        assert_eq!(manager.cache_folder(), None);
     }
 
     #[test]

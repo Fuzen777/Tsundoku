@@ -16,6 +16,7 @@ use tauri_plugin_global_shortcut::{
     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutEvent, ShortcutState,
 };
 use tauri_plugin_notification::NotificationExt;
+use tsundoku_core::data_folder;
 use tsundoku_core::downloads::{DownloadError, DownloadQueue};
 use tsundoku_core::pending::{self, PendingLink, PendingLinks};
 use tsundoku_core::presets::PresetManager;
@@ -26,13 +27,17 @@ use crate::focus_main_window;
 /// The argument Windows starts Tsundoku with at sign-in (Start with Windows), so it starts in the tray.
 pub const IN_TRAY_ARG: &str = "--in-tray";
 
-/// The name Windows lists under its startup apps. Development builds keep their own, so turning Start with Windows
-/// on or off in one leaves the installed app's alone.
-pub const STARTUP_NAME: &str = if cfg!(debug_assertions) {
-    "Tsundoku (Development)"
-} else {
-    "Tsundoku"
-};
+/// The name Windows lists under its startup apps. Development builds and portable copies keep their own, so turning
+/// Start with Windows on or off in one leaves the installed app's alone.
+pub fn startup_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        "Tsundoku (Development)"
+    } else if data_folder::portable_folder().is_some() {
+        "Tsundoku (Portable)"
+    } else {
+        "Tsundoku"
+    }
+}
 
 const TRAY_ID: &str = "main";
 const OPEN_ID: &str = "open";

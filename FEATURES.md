@@ -12,6 +12,7 @@ type: Features
 - **Updates**: Tsundoku checks GitHub for a newer version at startup. When there is one, a banner under the add bar offers Install and Restart, which downloads it with its progress, installs it and restarts; Later hides it until the next start. Updates are signed, and an older version is never installed in place of a newer one.
 - **Check for Updates**: in Settings → About, with "up to date" or the new version as the answer.
 - **Your data stays**: the history, presets, settings and Tsundoku's copies of the tools live in `%LocalAppData%\io.github.fuzen777.tsundoku`, kept through updates and uninstalls unless you tick the uninstaller's **Delete the application data**.
+- **Portable copy**: `Tsundoku.exe` with a `.portable.txt` file beside it keeps everything in a `data` folder there instead: settings, history, tools, logs, the window's place and the WebView's data. It doesn't check for updates yet (Settings → About says so), and Start with Windows lists it as "Tsundoku (Portable)", apart from an installed copy. Only one of the two runs at a time. `Scripts\Build-Portable.cmd` makes one from the repository.
 
 ## Window
 
@@ -25,7 +26,7 @@ type: Features
 ## Navigation
 
 - **Sidebar**: Queue, Pending, History, Presets and Rules at the top, Settings at the bottom.
-- **About**: Settings shows the app's version.
+- **About**: Settings shows the app's version, and "Portable" for a portable copy.
 - **Data folder**: Settings → About shows the data folder's path, with Open Folder to open it in File Explorer.
 
 ## Adding a Video or Post
@@ -106,7 +107,7 @@ type: Features
 
 ## Settings
 
-- **Download Folder**: where everything goes unless a rule or its preset picks another folder: a Tsundoku folder in Downloads by default, with Choose Folder… and Use Default. Rules' folders that aren't full paths go inside it.
+- **Download Folder**: where everything goes unless a rule or its preset picks another folder: picked at the first-run setup, a Tsundoku folder in Downloads by default, with Choose Folder… and Use Default. Rules' folders that aren't full paths go inside it. A portable copy's Downloads folder beside it is saved without the copy's own folder, so it follows the copy to another drive.
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
@@ -128,6 +129,7 @@ Tsundoku downloads with three free tools: yt-dlp, ffmpeg (with ffprobe) and Deno
 
 ### First-Run Setup
 
+- **Where things go, asked first**: before the tools, a first screen asks where the tools go (Tsundoku's data folder, already picked, or a folder you choose), where they keep their caches (Tsundoku's data folder or the tools' usual folders in your user folder) and where downloads go (a portable copy's folder beside it, a Tsundoku folder in Downloads, or a folder you choose). The last two start unpicked, and Continue waits for them, so nothing lands anywhere unasked. Back on the tools screen returns to it until a tool is set up. An install set up before 0.1.20 isn't asked: it keeps the data folder's tools, the tools' usual cache folders and its download folder.
 - **Found copies**: the first start looks for each tool on this PC (on PATH, such as winget's or scoop's, or Tsundoku's own from an earlier setup) and shows its version.
 - **Use This Copy or Download Fresh**: for each tool found, use that copy or download Tsundoku's own; tools not found are downloaded. Each download shows its size and its progress.
 - **Official builds, checked**: downloads come from each tool's official releases, on GitHub (yt-dlp's own FFmpeg builds for ffmpeg) or Codeberg for gallery-dl, and are checked against the release's published SHA-256 before they're installed.
@@ -140,6 +142,7 @@ Tsundoku downloads with three free tools: yt-dlp, ffmpeg (with ffprobe) and Deno
 - **Choose File…**: point a tool at any copy on this PC. Tsundoku checks it's the right program (and that ffprobe is beside ffmpeg).
 - **Use Tsundoku's Copy / Download**: switch from your copy to Tsundoku's own, or set up a tool that isn't.
 - **Cancel**: stops a download or update in progress, leaving the copy already installed as it was.
+- **Caches**: Data Folder keeps yt-dlp's, gallery-dl's and Deno's caches (sign-ins, sites' player code, downloaded scripts) in the data folder's `cache`; Usual Folders leaves them where each tool keeps them in your user folder. It applies from the tools' next run.
 
 ### Updates
 

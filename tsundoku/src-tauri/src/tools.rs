@@ -5,7 +5,10 @@ use std::sync::Arc;
 use std::thread;
 
 use tauri::{AppHandle, Emitter, State};
-use tsundoku_core::settings::UpdateChannel;
+use tsundoku_core::data_folder::{self, DataPaths};
+use tsundoku_core::downloads::DownloadError;
+use tsundoku_core::first_run::{self, FirstRunChoices, FirstRunOptions};
+use tsundoku_core::settings::{SettingsStore, ToolCaches, UpdateChannel};
 use tsundoku_core::supported_sites::{self, SupportedSites};
 use tsundoku_core::tools::{
     DetectedTool, ToolDownload, ToolError, ToolId, ToolManager, ToolProgress, ToolStatus,
@@ -42,6 +45,41 @@ fn progress_reporter(app: AppHandle) -> impl Fn(ToolProgress) {
 #[tauri::command]
 pub fn tools_need_setup(tools: Tools<'_>) -> bool {
     tools.needs_setup()
+}
+
+/// The first-run setup's choices (where the tools go, their caches, the download folder), asked before the tools.
+#[tauri::command]
+pub fn first_run_options(
+    settings: State<'_, Arc<SettingsStore>>,
+    data_folder: State<'_, crate::DataFolder>,
+) -> FirstRunOptions {
+    first_run::options(
+        &settings.get(),
+        &DataPaths::new(data_folder.path.clone()),
+        data_folder::portable_folder(),
+    )
+}
+
+#[tauri::command]
+pub fn save_first_run_choices(
+    settings: State<'_, Arc<SettingsStore>>,
+    choices: FirstRunChoices,
+) -> Result<(), DownloadError> {
+    first_run::save(&settings, choices, data_folder::portable_folder()).map_err(|error| {
+        DownloadError::Storage {
+            detail: error.to_string(),
+        }
+    })
+}
+
+/// Settings → Tools: where the tools keep their caches. Fails only if the settings can't be saved.
+#[tauri::command]
+pub fn set_tool_caches(tools: Tools<'_>, caches: ToolCaches) -> Result<(), DownloadError> {
+    tools
+        .set_caches(caches)
+        .map_err(|error| DownloadError::Storage {
+            detail: error.to_string(),
+        })
 }
 
 #[tauri::command]

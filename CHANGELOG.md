@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.20 · 2026-11-06
+
+### New
+
+- **Portable copy**: put a `.portable.txt` file beside `Tsundoku.exe`, and that copy keeps its settings, history, tools, logs and window position in a `data` folder beside it instead of your user folder. Settings → About shows "Portable"; a portable copy doesn't check for updates yet. Its Start with Windows entry is "Tsundoku (Portable)", so it never changes an installed copy's. `Scripts\Build-Portable.cmd` builds one.
+- **Where things go, asked at the first start**: a new first screen asks where the tools go, where they keep their caches and where downloads go, before setting up the tools. The cache and download choices start unpicked, so nothing appears anywhere unasked. A portable copy can keep its downloads beside it, following it to another drive. Installs already set up aren't asked and keep what they had.
+- **Tool caches** in Settings → Tools: keep yt-dlp's, gallery-dl's and Deno's caches in Tsundoku's data folder, or in their usual folders in your user folder.
+
 ## 0.1.19 · 2026-11-06
 
 ### Changed

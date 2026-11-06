@@ -12,6 +12,7 @@ pub mod clipboard;
 pub mod data_folder;
 pub mod database;
 pub mod downloads;
+pub mod first_run;
 pub mod gallery;
 pub mod history;
 pub mod hosts;

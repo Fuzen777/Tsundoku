@@ -15,4 +15,7 @@ pub struct AppInfo {
     /// Windows started Tsundoku at sign-in and it keeps running in the tray, so the window stays hidden until it's
     /// opened from there.
     pub started_in_tray: bool,
+    /// A portable copy (`data_folder::PORTABLE_MARKER` beside its exe), which keeps its data beside itself and doesn't
+    /// update itself yet.
+    pub portable: bool,
 }

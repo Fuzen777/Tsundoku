@@ -556,6 +556,7 @@ impl DownloadQueue {
             yt_dlp: self.tools.executable(ToolId::YtDlp),
             ffmpeg: self.tools.executable(ToolId::Ffmpeg),
             deno: self.tools.executable(ToolId::Deno),
+            caches: self.tools.cache_folder(),
             rate_limit: options.rate_limit,
             cookies: browsers::cookies_for(options.cookies_browser, &item.video.url),
             post: item.video.post.map(|contents| PostJob {

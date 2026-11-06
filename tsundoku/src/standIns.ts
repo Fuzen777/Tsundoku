@@ -4,6 +4,7 @@ import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { FirstRunOptions } from "./bindings/FirstRunOptions"
 import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
@@ -212,7 +213,18 @@ export const standIns = {
     hasMicaBackdrop: false,
     dataFolder: String.raw`C:\Users\You\AppData\Local\io.github.fuzen777.tsundoku`,
     startedInTray: false,
+    portable: false,
   } satisfies AppInfo,
+  firstRunOptions: (portable: boolean): FirstRunOptions => {
+    const dataFolder = portable ? String.raw`E:\Tsundoku\data` : String.raw`C:\Users\You\AppData\Local\io.github.fuzen777.tsundoku`
+    return {
+      needed: true,
+      toolsFolder: String.raw`${dataFolder}\tools`,
+      cacheFolder: String.raw`${dataFolder}\cache`,
+      defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
+      besideAppFolder: portable ? String.raw`E:\Tsundoku\Downloads` : null,
+    }
+  },
   toolsOverview: {
     tools: [
       {
@@ -233,6 +245,8 @@ export const standIns = {
       { id: "galleryDl", setup: null, path: null, version: null, problem: null },
     ],
     ytDlpChannel: "stable",
+    caches: "dataFolder",
+    cacheFolder: String.raw`C:\Users\You\AppData\Local\io.github.fuzen777.tsundoku\cache`,
   } satisfies ToolsOverview,
   detectedTools: [
     {

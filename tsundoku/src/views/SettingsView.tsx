@@ -32,7 +32,7 @@ export function SettingsView() {
 
 /**
  * The version and Check for Updates, then the data folder and Open Folder. A newer release shows as the banner under
- * the add bar.
+ * the add bar. A portable copy says it doesn't update itself instead.
  */
 function AboutSection() {
   const { data: appInfo } = useAppInfo()
@@ -55,12 +55,19 @@ function AboutSection() {
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="font-medium">{strings.appName}</p>
-            {appInfo && <p className="text-fg-secondary">{strings.version(appInfo.version)}</p>}
+            {appInfo && (
+              <p className="text-fg-secondary">
+                {appInfo.portable ? strings.versionPortable(appInfo.version) : strings.version(appInfo.version)}
+              </p>
+            )}
           </div>
-          <Button size="sm" loading={update.isFetching} onClick={() => void update.refetch()}>
-            {strings.appUpdate.check}
-          </Button>
+          {appInfo && !appInfo.portable && (
+            <Button size="sm" loading={update.isFetching} onClick={() => void update.refetch()}>
+              {strings.appUpdate.check}
+            </Button>
+          )}
         </div>
+        {appInfo?.portable && <StatusMessage tone="neutral" message={strings.appUpdate.portable} />}
         {checked && !update.isFetching && update.isError && (
           <StatusMessage tone="danger" message={strings.appUpdate.checkFailed} detail={String(update.error)} />
         )}

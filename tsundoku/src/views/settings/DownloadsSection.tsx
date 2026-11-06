@@ -72,6 +72,8 @@ export function DownloadsSection() {
   const [rateLimitSaved, setRateLimitSaved] = useState(false)
   const shownRateLimit = rateLimit ?? options?.rateLimit ?? ""
   const folder = options?.folder ?? null
+  // As the core resolves it: a portable copy's folder beside it is saved without the copy's own folder.
+  const shownFolder = presets?.defaultFolder ?? folder ?? defaultFolder ?? ""
 
   async function saveFolder(chosen: string | null) {
     if (!(await save({ folder: chosen }))) return
@@ -110,7 +112,7 @@ export function DownloadsSection() {
           hint={folder || !defaultFolder ? text.folderHint : `${text.folderHint} ${text.defaultFolder(defaultFolder)}`}
         >
           <div className="flex gap-2">
-            <TextInput readOnly className="flex-1" value={folder ?? defaultFolder ?? ""} title={folder ?? defaultFolder ?? ""} />
+            <TextInput readOnly className="flex-1" value={shownFolder} title={shownFolder} />
             <Button disabled={!options} onClick={() => void chooseFolder()}>
               {text.chooseFolder}
             </Button>

@@ -6,11 +6,14 @@ import {
   chooseToolCopy,
   installTool,
   pickProgram,
+  setToolCaches,
   setYtDlpChannel,
   updateYtDlp,
 } from "../../api"
+import type { ToolCaches } from "../../bindings/ToolCaches"
 import type { ToolSetupKind } from "../../bindings/ToolSetupKind"
 import type { ToolStatus } from "../../bindings/ToolStatus"
+import type { ToolsOverview } from "../../bindings/ToolsOverview"
 import type { UpdateChannel } from "../../bindings/UpdateChannel"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
@@ -19,9 +22,9 @@ import { SegmentedControl } from "../../components/SegmentedControl"
 import { StatusMessage, type StatusTone } from "../../components/StatusMessage"
 import { ToolHeading } from "../../components/ToolHeading"
 import { ToolStageProgress } from "../../components/ToolStageProgress"
-import { useStoreToolStatus, useStoreYtDlpChannel, useToolsOverview } from "../../queries"
+import { useStoreToolCaches, useStoreToolStatus, useStoreYtDlpChannel, useToolsOverview } from "../../queries"
 import { strings } from "../../strings"
-import { describeToolError, isCancelled } from "../../errors"
+import { describeDownloadError, describeToolError, isCancelled } from "../../errors"
 import { useToolStage } from "../../toolProgress"
 
 const CHANNEL_OPTIONS = [
@@ -29,15 +32,23 @@ const CHANNEL_OPTIONS = [
   { value: "nightly", label: strings.settings.channels.nightly },
 ] as const satisfies readonly { value: UpdateChannel; label: string }[]
 
-/** Settings → Tools: each tool's copy, version and updates. */
+const CACHE_OPTIONS = [
+  { value: "dataFolder", label: strings.settings.cacheLocations.dataFolder },
+  { value: "usualFolders", label: strings.settings.cacheLocations.usualFolders },
+] as const satisfies readonly { value: ToolCaches; label: string }[]
+
+/** Settings → Tools: each tool's copy, version and updates, then where they keep their caches. */
 export function ToolsSection() {
   const overview = useToolsOverview()
   return (
     <Section title={strings.settings.tools}>
       {overview.data ? (
-        overview.data.tools.map((status) => (
-          <ToolCard key={status.id} status={status} channel={overview.data.ytDlpChannel} />
-        ))
+        <>
+          {overview.data.tools.map((status) => (
+            <ToolCard key={status.id} status={status} channel={overview.data.ytDlpChannel} />
+          ))}
+          <CachesCard overview={overview.data} />
+        </>
       ) : overview.isError ? (
         <StatusMessage tone="danger" message={strings.errors.unexpected} detail={String(overview.error)} />
       ) : (
@@ -211,6 +222,34 @@ function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChan
           <span className="text-xs text-fg-muted">{strings.settings.channelHint}</span>
         </div>
       )}
+    </Card>
+  )
+}
+
+/** Where the tools keep their caches: the data folder's `cache\`, or each tool's own folder. */
+function CachesCard({ overview }: { overview: ToolsOverview }) {
+  const storeToolCaches = useStoreToolCaches()
+  const change = useMutation({
+    mutationFn: setToolCaches,
+    onSuccess: (_result, caches) => storeToolCaches(caches),
+  })
+  return (
+    <Card className="flex flex-col gap-2 p-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="font-medium">{strings.settings.caches}</span>
+        <SegmentedControl
+          label={strings.settings.caches}
+          options={CACHE_OPTIONS}
+          value={overview.caches}
+          disabled={change.isPending}
+          onChange={(caches) => change.mutate(caches)}
+        />
+      </div>
+      <p className="text-xs text-fg-muted">{strings.settings.cachesHint}</p>
+      <p className="truncate text-xs text-fg-muted select-text" title={overview.cacheFolder}>
+        {overview.caches === "dataFolder" ? overview.cacheFolder : strings.settings.usualCacheFolders}
+      </p>
+      {change.isError && <StatusMessage tone="danger" {...describeDownloadError(change.error)} />}
     </Card>
   )
 }

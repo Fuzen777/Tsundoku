@@ -13,6 +13,8 @@ import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { FirstRunChoices } from "./bindings/FirstRunChoices"
+import type { FirstRunOptions } from "./bindings/FirstRunOptions"
 import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
@@ -24,6 +26,7 @@ import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
 import type { SupportedSites } from "./bindings/SupportedSites"
+import type { ToolCaches } from "./bindings/ToolCaches"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolId } from "./bindings/ToolId"
 import type { ToolProgress } from "./bindings/ToolProgress"
@@ -44,6 +47,7 @@ import { standIns } from "./standIns"
 export const queryKeys = {
   appInfo: ["app-info"],
   toolsNeedSetup: ["tools-need-setup"],
+  firstRunOptions: ["first-run-options"],
   toolsOverview: ["tools-overview"],
   detectedTools: ["detected-tools"],
   toolDownloads: ["tool-downloads"],
@@ -82,8 +86,14 @@ function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
 }
 
+/** In a browser, whether the address has `?name` (`?setup`, `&portable`), to see what the stand-ins don't show. */
+function addressHas(name: string): boolean {
+  return new URLSearchParams(window.location.search).has(name)
+}
+
+/** In a browser, adding `?portable` to the address shows a portable copy. */
 export function getAppInfo(): Promise<AppInfo> {
-  if (!isTauri()) return Promise.resolve(standIns.appInfo)
+  if (!isTauri()) return Promise.resolve({ ...standIns.appInfo, portable: addressHas("portable") })
   return invoke<AppInfo>("app_info")
 }
 
@@ -101,8 +111,21 @@ export async function showMainWindow(): Promise<void> {
 
 /** Whether the first-run setup is needed. In a browser, adding `?setup` to the address shows it. */
 export function getToolsNeedSetup(): Promise<boolean> {
-  if (!isTauri()) return Promise.resolve(new URLSearchParams(window.location.search).has("setup"))
+  if (!isTauri()) return Promise.resolve(addressHas("setup"))
   return invoke<boolean>("tools_need_setup")
+}
+
+/** The first-run setup's choices (where the tools go, their caches, the download folder) and whether they're still to
+ * be made. In a browser, they are, with an installed copy's folders; `?setup&portable` shows a portable copy's. */
+export function getFirstRunOptions(): Promise<FirstRunOptions> {
+  if (!isTauri()) return Promise.resolve(standIns.firstRunOptions(addressHas("portable")))
+  return invoke<FirstRunOptions>("first_run_options")
+}
+
+/** Saves the first-run choices, before the tools are set up. Rejects with a DownloadError. */
+export async function saveFirstRunChoices(choices: FirstRunChoices): Promise<void> {
+  if (!isTauri()) return
+  await invoke("save_first_run_choices", { choices })
 }
 
 /** Every tool's status. The core runs each tool to read its version, so this takes a moment. */
@@ -153,6 +176,12 @@ export function checkToolUpdate(id: ToolId): Promise<ToolUpdateCheck> {
 export async function setYtDlpChannel(channel: UpdateChannel): Promise<void> {
   if (!isTauri()) return
   await invoke("set_yt_dlp_channel", { channel })
+}
+
+/** Where the tools keep their caches, from their next run on. Rejects with a DownloadError. */
+export async function setToolCaches(caches: ToolCaches): Promise<void> {
+  if (!isTauri()) return
+  await invoke("set_tool_caches", { caches })
 }
 
 /** Asks for a program file. Resolves to its path, or null if the user cancelled. */

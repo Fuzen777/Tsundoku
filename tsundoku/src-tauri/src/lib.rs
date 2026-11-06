@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use tauri::utils::config::AppDirectoriesOverride;
 use tauri::{App, AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::StateFlags;
@@ -38,8 +39,8 @@ struct Backdrop {
 }
 
 /// Where this build keeps its data, resolved once at startup.
-struct DataFolder {
-    path: PathBuf,
+pub(crate) struct DataFolder {
+    pub(crate) path: PathBuf,
 }
 
 #[tauri::command]
@@ -55,6 +56,7 @@ fn app_info(
         started_in_tray: app
             .try_state::<background::StartedInTray>()
             .is_some_and(|started| started.0),
+        portable: data_folder::portable_folder().is_some(),
     }
 }
 
@@ -158,8 +160,29 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     Ok(tools)
 }
 
+/// A release build with `.portable.txt` beside its exe keeps everything in a `data` folder there: Tauri's app folders
+/// follow, so the settings, tools, history, WebView data and window position all do. Development builds keep their
+/// own data folder (AGENTS.md → Data and Testing).
+fn make_portable_if_marked(context: &mut tauri::Context) {
+    if cfg!(debug_assertions) {
+        return;
+    }
+    let Some(folder) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| data_folder::portable_folder_of(&exe))
+    else {
+        return;
+    };
+    context.config_mut().app.app_directories_override = Some(AppDirectoriesOverride::Root(
+        folder.join(data_folder::PORTABLE_DATA_FOLDER),
+    ));
+    data_folder::set_portable_folder(folder);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    make_portable_if_marked(&mut context);
     tauri::Builder::default()
         // First, as the plugin requires: a second launch focuses the running window instead of opening another copy,
         // so two copies never share the data folder. A launch for a page a browser sent hands it to the deep link
@@ -186,7 +209,7 @@ pub fn run() {
         // Start with Windows: an entry among Windows' startup apps, which starts Tsundoku in the tray.
         .plugin(
             tauri_plugin_autostart::Builder::new()
-                .app_name(background::STARTUP_NAME)
+                .app_name(background::startup_name())
                 .args([background::IN_TRAY_ARG])
                 .build(),
         )
@@ -218,6 +241,9 @@ pub fn run() {
             app_info,
             open_data_folder,
             tools::tools_need_setup,
+            tools::first_run_options,
+            tools::save_first_run_choices,
+            tools::set_tool_caches,
             tools::tools_overview,
             tools::detect_tools,
             tools::tool_downloads,
@@ -273,6 +299,6 @@ pub fn run() {
             downloads::download_options,
             downloads::save_download_options,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }

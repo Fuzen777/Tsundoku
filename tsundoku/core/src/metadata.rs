@@ -9,7 +9,7 @@ use ts_rs::TS;
 
 use crate::cancel::CancelToken;
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
-use crate::tools::{ToolError, ToolId, start_error};
+use crate::tools::{ToolCacheFolder, ToolError, ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
@@ -175,6 +175,8 @@ pub struct FetchTools<'a> {
     /// Whether yt-dlp may look for a video on any web page (its generic extractor). Off for links copied in other
     /// apps, so a link to a site yt-dlp doesn't know is turned down at once, without visiting it.
     pub any_page: bool,
+    /// Where yt-dlp and its Deno keep their caches, or `None` for their usual folders.
+    pub caches: Option<&'a ToolCacheFolder>,
 }
 
 /// What a fetch found.
@@ -291,6 +293,10 @@ fn command(tools: &FetchTools, yt_dlp: &Path, link: &str) -> ProgramCommand {
     }
     if !tools.any_page {
         command = command.args(["--ies", "default,-generic"]);
+    }
+    if let Some(caches) = tools.caches {
+        let (name, folder) = caches.deno_variable();
+        command = command.args(caches.yt_dlp_args()).variable(name, folder);
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
     command.arg("--").arg(link)
@@ -677,6 +683,7 @@ mod tests {
             ffmpeg: Some(Path::new(r"C:\tools\ffmpeg.exe")),
             cookies: Some("firefox".to_owned()),
             any_page: true,
+            caches: None,
         };
         let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
         let args: Vec<_> = command
@@ -705,6 +712,7 @@ mod tests {
             ffmpeg: None,
             cookies: None,
             any_page: false,
+            caches: None,
         };
         let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
         let args: Vec<_> = command
@@ -717,5 +725,33 @@ mod tests {
                 .any(|pair| pair == ["--ies", "default,-generic"])
         );
         assert_eq!(&args[args.len() - 2..], ["--", "https://example.com/v"]);
+    }
+
+    #[test]
+    fn keeps_yt_dlps_and_denos_caches_where_chosen() {
+        let caches = ToolCacheFolder::new(std::path::PathBuf::from(r"C:\data\cache"));
+        let tools = FetchTools {
+            yt_dlp: Some(Path::new("yt-dlp.exe")),
+            caches: Some(&caches),
+            ..FetchTools::default()
+        };
+        let command = command(&tools, Path::new("yt-dlp.exe"), "https://example.com/v");
+        let args: Vec<_> = command
+            .arguments()
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--cache-dir", r"C:\data\cache\yt-dlp"])
+        );
+        assert_eq!(&args[args.len() - 2..], ["--", "https://example.com/v"]);
+        assert_eq!(
+            command.variables(),
+            [(
+                std::ffi::OsString::from("DENO_DIR"),
+                std::ffi::OsString::from(r"C:\data\cache\deno")
+            )]
+        );
     }
 }

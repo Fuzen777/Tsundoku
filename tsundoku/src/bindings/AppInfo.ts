@@ -20,4 +20,9 @@ dataFolder: string,
  * Windows started Tsundoku at sign-in and it keeps running in the tray, so the window stays hidden until it's
  * opened from there.
  */
-startedInTray: boolean, };
+startedInTray: boolean, 
+/**
+ * A portable copy (`data_folder::PORTABLE_MARKER` beside its exe), which keeps its data beside itself and doesn't
+ * update itself yet.
+ */
+portable: boolean, };

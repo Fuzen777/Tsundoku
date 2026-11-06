@@ -2,7 +2,14 @@ import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { App } from "./App"
-import { getAppInfo, getToolsNeedSetup, onAddingOptionsChanged, onToolsChanged, queryKeys } from "./api"
+import {
+  getAppInfo,
+  getFirstRunOptions,
+  getToolsNeedSetup,
+  onAddingOptionsChanged,
+  onToolsChanged,
+  queryKeys,
+} from "./api"
 import { trackQueue } from "./queueEvents"
 import { trackToolProgress } from "./toolProgress"
 import "./index.css"
@@ -14,6 +21,8 @@ const queryClient = new QueryClient()
 const [appInfo, needsSetup] = await Promise.all([getAppInfo(), getToolsNeedSetup()])
 queryClient.setQueryData(queryKeys.appInfo, appInfo)
 queryClient.setQueryData(queryKeys.toolsNeedSetup, needsSetup)
+// The setup opens on its choices when they're still to be made.
+if (needsSetup) queryClient.setQueryData(queryKeys.firstRunOptions, await getFirstRunOptions())
 document.documentElement.dataset.backdrop = appInfo.hasMicaBackdrop ? "mica" : "solid"
 
 trackToolProgress()

@@ -2,9 +2,40 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 /// The environment variable a development build reads its data folder from. See AGENTS.md → Data and Testing.
 pub const DATA_FOLDER_VARIABLE: &str = "TSUNDOKU_DATA_DIR";
+
+/// The file that makes a copy portable: beside `Tsundoku.exe`, it keeps the data in `PORTABLE_DATA_FOLDER` there
+/// instead of the user's app data.
+pub const PORTABLE_MARKER: &str = ".portable.txt";
+
+/// A portable copy's data folder, beside its exe.
+pub const PORTABLE_DATA_FOLDER: &str = "data";
+
+static PORTABLE_FOLDER: OnceLock<PathBuf> = OnceLock::new();
+
+/// The folder of a portable copy, whose exe is `exe`: its own folder when `PORTABLE_MARKER` is in it, `None` for an
+/// installed copy.
+pub fn portable_folder_of(exe: &Path) -> Option<PathBuf> {
+    let folder = exe.parent()?;
+    folder
+        .join(PORTABLE_MARKER)
+        .is_file()
+        .then(|| folder.to_path_buf())
+}
+
+/// Records, once at startup, that this copy is portable and lives in `folder`.
+pub fn set_portable_folder(folder: PathBuf) {
+    let _ = PORTABLE_FOLDER.set(folder);
+}
+
+/// The folder this copy lives in when it's portable (`set_portable_folder`), `None` for an installed copy. A download
+/// folder that isn't a full path is inside it, so it follows the copy to another drive.
+pub fn portable_folder() -> Option<&'static Path> {
+    PORTABLE_FOLDER.get().map(PathBuf::as_path)
+}
 
 /// Which build is running. A development build keeps its data apart from an installed copy's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,9 +92,15 @@ impl DataPaths {
         self.root.join("settings.json")
     }
 
-    /// The app's own copies of yt-dlp, ffmpeg and Deno, one folder each.
+    /// The app's own copies of yt-dlp, ffmpeg, Deno and gallery-dl, one folder each, unless the first-run setup picked
+    /// another folder for them (`ToolsSettings::folder`).
     pub fn tools_folder(&self) -> PathBuf {
         self.root.join("tools")
+    }
+
+    /// The tools' caches, when the first-run setup chose to keep them here (`ToolCaches::DataFolder`).
+    pub fn cache_folder(&self) -> PathBuf {
+        self.root.join("cache")
     }
 
     /// The history's SQLite database.
@@ -126,6 +163,23 @@ mod tests {
             local_app_data(),
         );
         assert_eq!(folder.unwrap().as_os_str(), r"D:\Dev\data");
+    }
+
+    #[test]
+    fn a_copy_is_portable_with_the_marker_beside_its_exe() {
+        let folder = tempfile::tempdir().unwrap();
+        let exe = folder.path().join("Tsundoku.exe");
+        assert_eq!(portable_folder_of(&exe), None);
+
+        std::fs::write(folder.path().join(PORTABLE_MARKER), "").unwrap();
+        assert_eq!(portable_folder_of(&exe), Some(folder.path().to_path_buf()));
+
+        std::fs::create_dir(folder.path().join("inside")).unwrap();
+        assert_eq!(
+            portable_folder_of(&folder.path().join("inside").join("Tsundoku.exe")),
+            None,
+            "only the exe's own folder counts"
+        );
     }
 
     #[test]

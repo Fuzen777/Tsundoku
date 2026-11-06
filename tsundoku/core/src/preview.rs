@@ -119,16 +119,19 @@ fn read_with_tools(
     let ffmpeg = tools.executable(ToolId::Ffmpeg);
     let gallery_dl = tools.executable(ToolId::GalleryDl);
     let cookies = browsers::cookies_for(cookies_choice, link);
+    let caches = tools.cache_folder();
     let fetch_tools = FetchTools {
         yt_dlp: yt_dlp.as_deref(),
         deno: deno.as_deref(),
         ffmpeg: ffmpeg.as_deref(),
         cookies: cookies.clone(),
         any_page,
+        caches: caches.as_ref(),
     };
     let gallery_tools = GalleryTools {
         gallery_dl: gallery_dl.as_deref(),
         cookies,
+        caches: caches.as_ref(),
     };
     // A file host Tsundoku reads itself goes there first, since its domains are exact.
     let fetched = match Host::of(link) {

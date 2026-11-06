@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::cancel::CancelToken;
 use crate::metadata::{PostContents, PreviewError, VideoInfo};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
-use crate::tools::{ToolId, start_error};
+use crate::tools::{ToolCacheFolder, ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(2 * 60);
@@ -30,6 +30,8 @@ pub struct GalleryTools<'a> {
     pub gallery_dl: Option<&'a Path>,
     /// The `--cookies-from-browser` value (`browsers::cookies_for`), or `None` for no cookies.
     pub cookies: Option<String>,
+    /// Where gallery-dl keeps its cache, or `None` for its usual folder.
+    pub caches: Option<&'a ToolCacheFolder>,
 }
 
 /// Runs gallery-dl on the link and reads its answer. `link` must come from `metadata::normalize_link`.
@@ -84,6 +86,9 @@ fn command(tools: &GalleryTools, gallery_dl: &Path, link: &str) -> ProgramComman
     ]);
     if let Some(cookies) = &tools.cookies {
         command = command.arg("--cookies-from-browser").arg(cookies);
+    }
+    if let Some(caches) = tools.caches {
+        command = command.args(caches.gallery_dl_args());
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
     command.arg("--").arg(link)
@@ -613,6 +618,7 @@ mod tests {
         let tools = GalleryTools {
             gallery_dl: Some(Path::new("gallery-dl.exe")),
             cookies: Some("firefox".to_owned()),
+            caches: None,
         };
         let args: Vec<String> = command(&tools, Path::new("gallery-dl.exe"), "-x")
             .arguments()

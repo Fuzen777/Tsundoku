@@ -15,7 +15,7 @@ use crate::metadata::{FileContents, PreviewError, classify_failure};
 use crate::presets::{Preset, PresetError};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::settings::PauseRange;
-use crate::tools::{ToolError, start_error};
+use crate::tools::{ToolCacheFolder, ToolError, start_error};
 
 /// The most recent lines of a tool's error output kept to explain a failure.
 pub(super) const KEPT_ERROR_LINES: usize = 50;
@@ -38,6 +38,8 @@ pub struct JobSpec {
     pub yt_dlp: Option<PathBuf>,
     pub ffmpeg: Option<PathBuf>,
     pub deno: Option<PathBuf>,
+    /// Where yt-dlp, its Deno and gallery-dl keep their caches, or `None` for their usual folders.
+    pub caches: Option<ToolCacheFolder>,
     /// yt-dlp's `--limit-rate`, such as "2M".
     pub rate_limit: Option<String>,
     /// The `--cookies-from-browser` value (`browsers::cookies_for`), or `None` for no cookies.
@@ -133,7 +135,11 @@ fn run_yt_dlp(
         Ok(args) => args,
         Err(error) => return JobOutcome::Failed(DownloadError::Preset { error }),
     };
-    let command = ProgramCommand::new(yt_dlp).args(&args);
+    let mut command = ProgramCommand::new(yt_dlp).args(&args);
+    if let Some(caches) = &job.caches {
+        let (name, folder) = caches.deno_variable();
+        command = command.variable(name, folder);
+    }
 
     // Appended to, so a resumed or retried download keeps the earlier runs' output above.
     let mut log = open_log(&job.log_path);
@@ -211,6 +217,9 @@ pub(crate) fn arguments(job: &JobSpec, result_file: &Path) -> Result<Vec<String>
     ]);
     if let Some(ffmpeg) = &job.ffmpeg {
         args.extend(["--ffmpeg-location".to_owned(), ffmpeg.display().to_string()]);
+    }
+    if let Some(caches) = &job.caches {
+        args.extend(caches.yt_dlp_args());
     }
     match &job.deno {
         Some(deno) => args.extend([
@@ -331,11 +340,24 @@ mod tests {
             yt_dlp: Some(PathBuf::from("yt-dlp.exe")),
             ffmpeg: Some(PathBuf::from(r"C:\tools\ffmpeg\ffmpeg.exe")),
             deno: None,
+            caches: None,
             rate_limit: None,
             cookies: None,
             post: None,
             files: None,
         }
+    }
+
+    #[test]
+    fn keeps_yt_dlps_cache_where_chosen() {
+        let mut job = job("best-video", false);
+        job.caches = Some(ToolCacheFolder::new(PathBuf::from(r"C:\data\cache")));
+        let args = arguments(&job, Path::new(r"D:\Videos\.tsundoku-7\result.json")).unwrap();
+        assert!(
+            args.windows(2)
+                .any(|pair| pair == ["--cache-dir", r"C:\data\cache\yt-dlp"])
+        );
+        assert_eq!(args[args.len() - 1], job.url);
     }
 
     #[test]

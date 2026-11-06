@@ -2,13 +2,14 @@
 
 use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
+use crate::data_folder;
 use crate::presets::PresetsSettings;
 use crate::rules::{RulesSettings, posts_rule, with_posts_rule_last};
 use crate::sync::lock;
@@ -160,13 +161,24 @@ impl Default for DownloadSettings {
 }
 
 impl DownloadSettings {
-    /// The download folder: the chosen one, or a Tsundoku folder in Downloads.
+    /// The download folder: the chosen one, or a Tsundoku folder in Downloads. A portable copy's folder that isn't a
+    /// full path (`BESIDE_APP_DOWNLOADS`) is inside the copy's own folder.
     pub fn resolved_folder(&self) -> PathBuf {
-        self.folder
-            .as_deref()
-            .map(str::trim)
-            .filter(|folder| !folder.is_empty())
-            .map_or_else(default_download_folder, PathBuf::from)
+        resolve_download_folder(self.folder.as_deref(), data_folder::portable_folder())
+    }
+}
+
+/// The download folder a portable copy keeps beside itself, chosen at the first-run setup. Saved without the copy's
+/// own folder, so it follows the copy to another drive.
+pub const BESIDE_APP_DOWNLOADS: &str = "Downloads";
+
+fn resolve_download_folder(folder: Option<&str>, portable_folder: Option<&Path>) -> PathBuf {
+    let Some(folder) = folder.map(str::trim).filter(|folder| !folder.is_empty()) else {
+        return default_download_folder();
+    };
+    match portable_folder {
+        Some(portable_folder) if Path::new(folder).is_relative() => portable_folder.join(folder),
+        _ => PathBuf::from(folder),
     }
 }
 
@@ -286,6 +298,22 @@ pub struct ToolsSettings {
     pub yt_dlp_channel: UpdateChannel,
     /// When yt-dlp was last checked for updates, in seconds since 1970, so the startup check runs at most once a day.
     pub yt_dlp_last_update_check: Option<u64>,
+    /// Where the app's own copies go, picked at the first-run setup, or `None` for the data folder's `tools\`.
+    pub folder: Option<PathBuf>,
+    /// Where yt-dlp, gallery-dl and Deno keep their caches. `None` until the first-run setup asks; an install set up
+    /// before it asked (0.1.19 and older) leaves them in their usual folders, as before.
+    pub caches: Option<ToolCaches>,
+}
+
+/// Where yt-dlp, gallery-dl and Deno keep their caches (sign-ins, sites' player code, downloaded scripts).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ToolCaches {
+    /// In the data folder's `cache\`, so they stay with Tsundoku and go when it's removed.
+    DataFolder,
+    /// Where each tool keeps them on its own, in the user's folder.
+    UsualFolders,
 }
 
 impl ToolsSettings {
@@ -504,6 +532,40 @@ mod tests {
             default_download_folder(),
             "blank is the default"
         );
+    }
+
+    #[test]
+    fn a_portable_copys_downloads_beside_it_follow_it() {
+        let portable = Path::new(r"E:\Tsundoku");
+        assert_eq!(
+            resolve_download_folder(Some(BESIDE_APP_DOWNLOADS), Some(portable)),
+            PathBuf::from(r"E:\Tsundoku\Downloads")
+        );
+        assert_eq!(
+            resolve_download_folder(Some(r"D:\Videos"), Some(portable)),
+            PathBuf::from(r"D:\Videos"),
+            "a full path stays as it is"
+        );
+        assert_eq!(
+            resolve_download_folder(None, Some(portable)),
+            default_download_folder()
+        );
+    }
+
+    #[test]
+    fn reads_tools_settings_saved_before_the_first_run_choices() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "tools": { "ytDlp": { "source": "managed" } } }"#,
+        )
+        .unwrap();
+        let tools = store_in(&folder).get().tools;
+        assert_eq!(tools.folder, None);
+        assert_eq!(tools.caches, None);
+
+        let saved = serde_json::to_string(&Some(ToolCaches::DataFolder)).unwrap();
+        assert_eq!(saved, r#""dataFolder""#);
     }
 
     #[test]

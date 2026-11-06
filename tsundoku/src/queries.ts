@@ -10,6 +10,7 @@ import {
   getDownloadDestination,
   getDownloadFiles,
   getDownloadOptions,
+  getFirstRunOptions,
   getFolderRules,
   getSupportedSites,
   getHistoryFilters,
@@ -31,6 +32,7 @@ import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
+import type { ToolCaches } from "./bindings/ToolCaches"
 import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
@@ -50,6 +52,11 @@ export function useAppInfo() {
 /** Whether to show the first-run setup. main.tsx reads it before the first render. */
 export function useToolsNeedSetup() {
   return useQuery({ queryKey: queryKeys.toolsNeedSetup, queryFn: getToolsNeedSetup, staleTime: Infinity })
+}
+
+/** The first-run choices. Saving them sets `needed` to false here, which moves the setup on to the tools. */
+export function useFirstRunOptions() {
+  return useQuery({ queryKey: queryKeys.firstRunOptions, queryFn: getFirstRunOptions, staleTime: Infinity })
 }
 
 export function useToolsOverview() {
@@ -83,6 +90,16 @@ export function useStoreToolStatus() {
         (overview) =>
           overview && { ...overview, tools: overview.tools.map((tool) => (tool.id === status.id ? status : tool)) },
       )
+    },
+    [queryClient],
+  )
+}
+
+export function useStoreToolCaches() {
+  const queryClient = useQueryClient()
+  return useCallback(
+    (caches: ToolCaches) => {
+      queryClient.setQueryData<ToolsOverview>(queryKeys.toolsOverview, (overview) => overview && { ...overview, caches })
     },
     [queryClient],
   )
@@ -238,9 +255,17 @@ export function useSaveBackgroundOptions() {
 
 /**
  * A newer release of Tsundoku, checked once at startup; Settings → About checks again. Not retried: while the
- * repository is private, GitHub refuses, and that says nothing worth showing.
+ * repository is private, GitHub refuses, and that says nothing worth showing. A portable copy doesn't check: the
+ * update would install Tsundoku instead of replacing the portable copy.
  */
 export function useAppUpdate() {
-  return useQuery({ queryKey: queryKeys.appUpdate, queryFn: checkForAppUpdate, staleTime: Infinity, retry: false })
+  const { data: appInfo } = useAppInfo()
+  return useQuery({
+    queryKey: queryKeys.appUpdate,
+    queryFn: checkForAppUpdate,
+    staleTime: Infinity,
+    retry: false,
+    enabled: appInfo !== undefined && !appInfo.portable,
+  })
 }
 

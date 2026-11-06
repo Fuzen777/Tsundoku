@@ -15,11 +15,12 @@ use crate::cancel::CancelToken;
 /// How often a running program is checked for cancellation, its time limit and its end.
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
-/// A program to run, with its arguments.
+/// A program to run, with its arguments and any environment variables it gets besides the app's own.
 #[derive(Debug, Clone)]
 pub struct ProgramCommand {
     program: PathBuf,
     args: Vec<OsString>,
+    variables: Vec<(OsString, OsString)>,
 }
 
 impl ProgramCommand {
@@ -27,7 +28,18 @@ impl ProgramCommand {
         Self {
             program: program.into(),
             args: Vec::new(),
+            variables: Vec::new(),
         }
+    }
+
+    /// Sets an environment variable for the program and what it starts, such as `DENO_DIR` for the Deno yt-dlp runs.
+    pub fn variable(mut self, name: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.variables.push((name.into(), value.into()));
+        self
+    }
+
+    pub fn variables(&self) -> &[(OsString, OsString)] {
+        &self.variables
     }
 
     pub fn arg(mut self, arg: impl Into<OsString>) -> Self {
@@ -210,6 +222,7 @@ impl SpawnedProcess {
         let mut std_command = Command::new(&command.program);
         std_command
             .args(&command.args)
+            .envs(command.variables.iter().map(|(name, value)| (name, value)))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

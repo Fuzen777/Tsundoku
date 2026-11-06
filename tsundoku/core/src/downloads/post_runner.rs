@@ -118,6 +118,9 @@ pub(crate) fn arguments(job: &JobSpec, post: &PostJob) -> Vec<String> {
     if let Some(cookies) = &job.cookies {
         args.extend(["--cookies-from-browser".to_owned(), cookies.clone()]);
     }
+    if let Some(caches) = &job.caches {
+        args.extend(caches.gallery_dl_args());
+    }
     if let Some(rate_limit) = &job.rate_limit {
         args.extend(["--limit-rate".to_owned(), rate_limit.clone()]);
     }
@@ -165,6 +168,7 @@ mod tests {
             yt_dlp: None,
             ffmpeg: None,
             deno: None,
+            caches: None,
             rate_limit: Some("2M".to_owned()),
             cookies: Some("firefox:C:\\Profiles\\main".to_owned()),
             post: None,
@@ -182,6 +186,22 @@ mod tests {
         args.windows(2)
             .find(|pair| pair[0] == option)
             .map(|pair| pair[1].as_str())
+    }
+
+    #[test]
+    fn keeps_gallery_dls_cache_where_chosen() {
+        let (mut job, post) = job(None, false);
+        assert!(
+            !arguments(&job, &post)
+                .iter()
+                .any(|arg| arg.starts_with("cache.file="))
+        );
+        job.caches = Some(crate::tools::ToolCacheFolder::new(PathBuf::from(
+            r"C:\data\cache",
+        )));
+        let args = arguments(&job, &post);
+        assert!(args.contains(&r"cache.file=C:\data\cache\gallery-dl\cache.sqlite3".to_owned()));
+        assert_eq!(args[args.len() - 1], job.url);
     }
 
     #[test]
