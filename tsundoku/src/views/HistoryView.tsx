@@ -1,6 +1,16 @@
 import { useDeferredValue, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, FolderOpen, History, Play, Search } from "lucide-react"
+import {
+  ArrowDownWideNarrow,
+  ArrowUpNarrowWide,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  FolderOpen,
+  History,
+  Play,
+  Search,
+} from "lucide-react"
 import {
   confirmWithUser,
   forgetVideo,
@@ -14,10 +24,10 @@ import {
 import type { HistorySort } from "../bindings/HistorySort"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { PastDownload } from "../bindings/PastDownload"
-import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
 import { SelectInput, TextInput } from "../components/Field"
+import { IconButton } from "../components/IconButton"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
@@ -97,14 +107,12 @@ export function HistoryView() {
               </option>
             ))}
           </SelectInput>
-          <Button
-            size="icon"
-            aria-label={descending ? text.descending : text.ascending}
-            title={descending ? text.descending : text.ascending}
+          <IconButton
+            label={descending ? text.descending : text.ascending}
+            icon={descending ? ArrowDownWideNarrow : ArrowUpNarrowWide}
+            variant="secondary"
             onClick={() => setDescending((isDescending) => !isDescending)}
-          >
-            {descending ? <ArrowDownWideNarrow size={16} /> : <ArrowUpNarrowWide size={16} />}
-          </Button>
+          />
         </div>
 
         {videos && videos.length > 0 && (
@@ -195,11 +203,17 @@ function HistoryRow({ video }: { video: HistoryVideo }) {
             )}
           </div>
         </div>
-        <FileButtons download={lastDownload} onError={setError} />
+        <div className="flex shrink-0">
+          <FileButtons download={lastDownload} onError={setError} />
+          <IconButton
+            label={text.openSourcePage}
+            icon={ExternalLink}
+            onClick={() => run(() => openWebPage(video.url))}
+          />
+        </div>
         <Menu
           label={text.moreActions}
           items={[
-            { label: text.openSourcePage, onSelect: () => run(() => openWebPage(video.url)) },
             { label: text.downloadAgain, onSelect: () => showLink(video.url) },
             { label: text.forget, onSelect: forget, danger: true },
           ]}
@@ -244,26 +258,18 @@ function FileList({ downloadId, onError }: { downloadId: number; onError: (error
             </p>
           </div>
           <div className="flex shrink-0">
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={text.openFile}
-              title={text.openFile}
+            <IconButton
+              label={text.openFile}
+              icon={Play}
               disabled={!file.exists}
               onClick={() => void run(openDownloadFile, file.position)}
-            >
-              <Play size={16} />
-            </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={text.showInFolder}
-              title={text.showInFolder}
+            />
+            <IconButton
+              label={text.showInFolder}
+              icon={FolderOpen}
               disabled={!file.exists}
               onClick={() => void run(showDownloadFileInFolder, file.position)}
-            >
-              <FolderOpen size={16} />
-            </Button>
+            />
           </div>
         </div>
       ))}
@@ -311,26 +317,18 @@ function FileButtons({ download, onError }: { download: PastDownload; onError: (
     action(download.id).catch((error: unknown) => onError(describeHistoryError(error)))
   return (
     <div className="flex shrink-0">
-      <Button
-        size="icon"
-        variant="ghost"
-        aria-label={text.openFile}
-        title={text.openFile}
+      <IconButton
+        label={text.openFile}
+        icon={Play}
         disabled={!download.fileExists}
         onClick={() => void run(openDownload)}
-      >
-        <Play size={16} />
-      </Button>
-      <Button
-        size="icon"
-        variant="ghost"
-        aria-label={text.showInFolder}
-        title={text.showInFolder}
+      />
+      <IconButton
+        label={text.showInFolder}
+        icon={FolderOpen}
         disabled={!download.fileExists}
         onClick={() => void run(showDownloadInFolder)}
-      >
-        <FolderOpen size={16} />
-      </Button>
+      />
     </div>
   )
 }

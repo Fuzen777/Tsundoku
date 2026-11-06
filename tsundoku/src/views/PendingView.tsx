@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Inbox, Loader2 } from "lucide-react"
+import { Download, Inbox, Loader2, RefreshCw, X } from "lucide-react"
 import {
   confirmWithUser,
   readPendingLinkAgain,
@@ -16,6 +16,7 @@ import { DestinationLine } from "../components/DestinationLine"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { Checkbox, SelectInput } from "../components/Field"
+import { IconButton } from "../components/IconButton"
 import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
@@ -305,20 +306,25 @@ function PendingRow({ link, presets, allPresetId, selected, onSelect, onStart, b
           </SelectInput>
         )}
         {link.state === "failed" ? (
-          <Button size="sm" onClick={() => act(() => readPendingLinkAgain(link.id))}>
-            {strings.pending.tryAgain}
-          </Button>
+          <IconButton
+            label={strings.pending.tryAgain}
+            icon={RefreshCw}
+            variant="secondary"
+            onClick={() => act(() => readPendingLinkAgain(link.id))}
+          />
         ) : (
           !preview?.inQueue &&
           !link.startWhenRead && (
-            <Button size="sm" disabled={busy || !presetId} onClick={onStart}>
-              {preview?.lastDownload ? strings.pending.downloadAgain : strings.pending.start}
-            </Button>
+            <IconButton
+              label={preview?.lastDownload ? strings.pending.downloadAgain : strings.pending.start}
+              icon={Download}
+              variant="secondary"
+              disabled={busy || !presetId}
+              onClick={onStart}
+            />
           )
         )}
-        <Button size="sm" variant="ghost" onClick={() => act(() => removePendingLinks([link.id]))}>
-          {strings.pending.remove}
-        </Button>
+        <IconButton label={strings.pending.remove} icon={X} onClick={() => act(() => removePendingLinks([link.id]))} />
       </div>
     </Card>
   )

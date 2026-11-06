@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.31 · 2026-11-06
+
+### Changed
+
+- **Icons for the actions on each row**: the buttons repeated on every row or card are now icons that show their name when you hover them, even while they're unavailable: Start, Try Again and Remove in Pending; Stop, Resume, Retry, Open File, Show in Folder, Open Log and Cancel in the queue; Edit in Rules; Duplicate, Reset and Delete in Presets; Open File and Show in Folder under the preview card's "already downloaded" warning. The preview card closes with its × at the top right while a link is read or after it fails too, instead of Cancel and Dismiss. In the history, Open Source Page leaves the ⋯ menu for an icon beside Open File and Show in Folder. A view's main actions (Add, Download, Start All, Clear Finished, Add Rule) keep their words.
+
 ## 0.1.30 · 2026-11-06
 
 ### Added

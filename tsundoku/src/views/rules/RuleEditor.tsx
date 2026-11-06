@@ -9,6 +9,7 @@ import type { RuleOperator } from "../../bindings/RuleOperator"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
+import { IconButton } from "../../components/IconButton"
 import { StatusMessage } from "../../components/StatusMessage"
 import type { ErrorDescription } from "../../errors"
 import { useSupportedSites } from "../../queries"
@@ -228,9 +229,7 @@ function ConditionRow({ condition, presets, defaultPresetId, onChange, onRemove 
           onChange={(event) => setValue(event.target.value)}
         />
       )}
-      <Button size="icon" variant="ghost" aria-label={text.removeCondition} title={text.removeCondition} onClick={onRemove}>
-        <X size={16} />
-      </Button>
+      <IconButton label={text.removeCondition} icon={X} onClick={onRemove} />
     </div>
   )
 }

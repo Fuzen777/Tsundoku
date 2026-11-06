@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ListVideo } from "lucide-react"
+import { CircleStop, FileText, FolderOpen, ListVideo, Play, RefreshCw, X } from "lucide-react"
 import {
   cancelDownload,
   clearFinishedDownloads,
@@ -16,6 +16,7 @@ import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
+import { IconButton } from "../components/IconButton"
 import { Page } from "../components/Page"
 import { ProgressBar } from "../components/ProgressBar"
 import { StatusMessage } from "../components/StatusMessage"
@@ -100,39 +101,49 @@ function QueueRow({ item }: { item: QueueItem }) {
       </div>
       <div className="flex shrink-0 flex-wrap items-start justify-end gap-1">
         {(item.state === "running" || item.state === "waiting") && (
-          <Button size="sm" onClick={() => act(stopDownload)}>
-            {strings.queue.stop}
-          </Button>
+          <IconButton
+            label={strings.queue.stop}
+            icon={CircleStop}
+            variant="secondary"
+            onClick={() => act(stopDownload)}
+          />
         )}
         {item.state === "stopped" && (
-          <Button size="sm" onClick={() => act(resumeDownload)}>
-            {strings.queue.resume}
-          </Button>
+          <IconButton
+            label={strings.queue.resume}
+            icon={Play}
+            variant="secondary"
+            onClick={() => act(resumeDownload)}
+          />
         )}
         {item.state === "failed" && (
-          <Button size="sm" onClick={() => act(retryDownload)}>
-            {strings.queue.retry}
-          </Button>
+          <IconButton
+            label={strings.queue.retry}
+            icon={RefreshCw}
+            variant="secondary"
+            onClick={() => act(retryDownload)}
+          />
         )}
         {item.state === "done" && (
           <>
-            <Button size="sm" onClick={() => actOnFile(openDownload)}>
-              {strings.queue.openFile}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => actOnFile(showDownloadInFolder)}>
-              {strings.queue.showInFolder}
-            </Button>
+            <IconButton
+              label={strings.queue.openFile}
+              icon={Play}
+              variant="secondary"
+              onClick={() => actOnFile(openDownload)}
+            />
+            <IconButton
+              label={strings.queue.showInFolder}
+              icon={FolderOpen}
+              onClick={() => actOnFile(showDownloadInFolder)}
+            />
           </>
         )}
         {(item.state === "failed" || item.state === "done") && (
-          <Button size="sm" variant="ghost" onClick={() => act(openDownloadLog)}>
-            {strings.queue.openLog}
-          </Button>
+          <IconButton label={strings.queue.openLog} icon={FileText} onClick={() => act(openDownloadLog)} />
         )}
         {item.state !== "done" && (
-          <Button size="sm" variant="ghost" onClick={() => act(cancelDownload)}>
-            {strings.queue.cancel}
-          </Button>
+          <IconButton label={strings.queue.cancel} icon={X} onClick={() => act(cancelDownload)} />
         )}
       </div>
     </Card>

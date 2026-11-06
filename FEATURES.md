@@ -17,6 +17,7 @@ type: Features
 ## Window
 
 - **Mica**: Windows 11's backdrop shows through the window, which follows Windows' light or dark theme. Windows 10 gets a plain background.
+- **Icons for row actions**: the actions on each row or card (Start, Remove, Stop, Resume, Retry, Cancel, Open File, Show in Folder, Edit, Delete…) are icons, and hovering one shows its name. A view's main actions (Add, Download, Start All, Clear Finished, Add Rule) keep their words.
 - **Remembered placement**: the window reopens at its last size and position, maximized if it was.
 - **One window**: opening Tsundoku while it is already running brings the open window to the front.
 - **Keep running in the tray**: with Settings → Running in the Background → Keep Running in the Tray on, closing the window leaves Tsundoku in the notification area, still downloading and watching the clipboard. Clicking its icon opens the window; its right-click menu has Open Tsundoku, Watch Clipboard (ticked while on), Start All Pending with how many links it would start, and Quit Tsundoku, which asks first while downloads run. Off to start with: closing the window then quits, asking first while downloads run.
@@ -100,7 +101,7 @@ type: Features
 - **Search, filters, sorting**: search titles and uploaders word by word; filter by site and by preset; sort by date downloaded, title, uploader, site, length, size or preset, either way.
 - **Several downloads**: a video downloaded more than once (as video, then as audio) expands to list each download, with its format, path, Open File and Show in Folder.
 - **Posts**: a downloaded post shows what it held ("2 images, 1 video") and expands to list every file it saved, each with its size, Open File and Show in Folder, or File Missing.
-- **Actions**: Open File and Show in Folder, and in its menu Open Source Page, Download Again (the link goes in the add bar and its preview opens) and Forget.
+- **Actions**: Open File, Show in Folder and Open Source Page, and in its menu Download Again (the link goes in the add bar and its preview opens) and Forget.
 - **Forget**: after asking, removes the video from the history and from `archive.txt`, so it can be downloaded again. Its files stay where they are.
 - **File Missing**: a download whose file was moved or deleted says so, and its Open File is off.
 - **Kept for good**: every finished download is recorded, with the video's details, the preset, the file's path, size and format ("1080p · avc1 + mp4a", or "mp3"), and the date. A file yt-dlp found already there is recorded too.

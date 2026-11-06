@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Loader2, X } from "lucide-react"
+import { FolderOpen, Loader2, Play, X } from "lucide-react"
 import { addPostToQueue, addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
 import type { PastDownload } from "../bindings/PastDownload"
 import type { VideoPreview } from "../bindings/VideoPreview"
@@ -19,6 +19,7 @@ import { Card } from "./Card"
 import { DestinationLine } from "./DestinationLine"
 import { FailureFixes } from "./FailureFixes"
 import { SelectInput } from "./Field"
+import { IconButton } from "./IconButton"
 import { StatusMessage } from "./StatusMessage"
 import { Thumbnail } from "./Thumbnail"
 
@@ -43,9 +44,7 @@ export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardPro
             <p>{strings.preview.fetching}</p>
             <p className="truncate text-xs text-fg-muted">{state.link}</p>
           </div>
-          <Button size="sm" onClick={onClose}>
-            {strings.preview.cancel}
-          </Button>
+          <IconButton label={strings.preview.cancel} icon={X} onClick={onClose} />
         </div>
       )}
       {state.stage === "failed" && (
@@ -55,9 +54,7 @@ export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardPro
               {fixFor(state.error) && <FailureFixes error={state.error} onRetry={() => onRetry(state.link)} />}
             </StatusMessage>
           </div>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            {strings.preview.dismiss}
-          </Button>
+          <IconButton label={strings.preview.dismiss} icon={X} onClick={onClose} />
         </div>
       )}
       {state.stage === "ready" && <VideoDetails preview={state.preview} onClose={onClose} onAdded={onAdded} />}
@@ -91,9 +88,7 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
             ])}
           </p>
         </div>
-        <Button size="icon" variant="ghost" aria-label={strings.preview.close} title={strings.preview.close} onClick={onClose}>
-          <X size={16} />
-        </Button>
+        <IconButton label={strings.preview.close} icon={X} onClick={onClose} />
       </div>
       {lastDownload && <AlreadyDownloaded download={lastDownload} />}
       {missingJsRuntime && <StatusMessage tone="warning" message={strings.preview.missingDeno} />}
@@ -218,12 +213,17 @@ function AlreadyDownloaded({ download }: { download: PastDownload }) {
       >
         {download.fileExists ? (
           <>
-            <Button size="sm" onClick={() => run(openDownload)}>
-              {strings.preview.openFile}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => run(showDownloadInFolder)}>
-              {strings.preview.showInFolder}
-            </Button>
+            <IconButton
+              label={strings.preview.openFile}
+              icon={Play}
+              variant="secondary"
+              onClick={() => run(openDownload)}
+            />
+            <IconButton
+              label={strings.preview.showInFolder}
+              icon={FolderOpen}
+              onClick={() => run(showDownloadInFolder)}
+            />
           </>
         ) : (
           <p className="text-xs text-fg-secondary">{strings.history.errors.fileMissing}</p>

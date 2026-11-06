@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
-import { MoreHorizontal } from "lucide-react"
-import { Button } from "./Button"
+import { useEffect, useRef, useState } from "react"
+import { MoreHorizontal, type LucideIcon } from "lucide-react"
+import { IconButton } from "./IconButton"
 import { classes } from "./styles"
 
 export interface MenuItem {
@@ -15,11 +15,11 @@ interface MenuProps {
   label: string
   items: readonly MenuItem[]
   /** The button's icon; three dots by default. */
-  icon?: ReactNode
+  icon?: LucideIcon
 }
 
 /** A ghost icon button that opens a short list of actions under it. Escape or a click elsewhere closes it. */
-export function Menu({ label, items, icon }: MenuProps) {
+export function Menu({ label, items, icon = MoreHorizontal }: MenuProps) {
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
 
@@ -41,17 +41,13 @@ export function Menu({ label, items, icon }: MenuProps) {
 
   return (
     <div ref={container} className="relative">
-      <Button
-        size="icon"
-        variant="ghost"
-        aria-label={label}
-        title={label}
+      <IconButton
+        label={label}
+        icon={icon}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((isOpen) => !isOpen)}
-      >
-        {icon ?? <MoreHorizontal size={16} />}
-      </Button>
+      />
       {open && (
         <div
           role="menu"

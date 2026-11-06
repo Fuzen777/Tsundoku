@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { Copy, RotateCcw, Trash2 } from "lucide-react"
 import {
   confirmWithUser,
   deletePreset,
@@ -16,6 +17,7 @@ import type { VideoContainer } from "../../bindings/VideoContainer"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Checkbox, Field, SelectInput, TextInput } from "../../components/Field"
+import { IconButton } from "../../components/IconButton"
 import { SegmentedControl } from "../../components/SegmentedControl"
 import { StatusMessage } from "../../components/StatusMessage"
 import { describePresetError, type ErrorDescription } from "../../errors"
@@ -125,17 +127,11 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
             {strings.presets.setAsDefault}
           </Button>
         )}
-        <Button size="sm" variant="ghost" disabled={isDirty} onClick={() => void duplicate()}>
-          {strings.presets.duplicate}
-        </Button>
+        <IconButton label={strings.presets.duplicate} icon={Copy} disabled={isDirty} onClick={() => void duplicate()} />
         {isBuiltIn ? (
-          <Button size="sm" variant="ghost" disabled={isDirty} onClick={() => void reset()}>
-            {strings.presets.reset}
-          </Button>
+          <IconButton label={strings.presets.reset} icon={RotateCcw} disabled={isDirty} onClick={() => void reset()} />
         ) : (
-          <Button size="sm" variant="ghost" disabled={isDirty} onClick={() => void remove()}>
-            {strings.presets.delete}
-          </Button>
+          <IconButton label={strings.presets.delete} icon={Trash2} disabled={isDirty} onClick={() => void remove()} />
         )}
       </div>
 

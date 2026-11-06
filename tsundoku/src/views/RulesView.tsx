@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowDown, ArrowUp, FolderTree, Plus } from "lucide-react"
+import { ArrowDown, ArrowUp, FolderTree, Pencil, Plus } from "lucide-react"
 import { confirmWithUser, queryKeys, saveFolderRules } from "../api"
 import type { FolderRule } from "../bindings/FolderRule"
 import type { Preset } from "../bindings/Preset"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
+import { IconButton } from "../components/IconButton"
 import { Menu, type MenuItem } from "../components/Menu"
 import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
@@ -247,29 +248,14 @@ function RuleRow({
         <span className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary">{text.off}</span>
       )}
       <div className="flex shrink-0 items-center gap-1">
-        <Button
-          size="icon"
-          variant="ghost"
-          aria-label={text.moveUp}
-          title={text.moveUp}
-          disabled={disabled || !canMoveUp}
-          onClick={() => onMove(-1)}
-        >
-          <ArrowUp size={16} />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          aria-label={text.moveDown}
-          title={text.moveDown}
+        <IconButton label={text.moveUp} icon={ArrowUp} disabled={disabled || !canMoveUp} onClick={() => onMove(-1)} />
+        <IconButton
+          label={text.moveDown}
+          icon={ArrowDown}
           disabled={disabled || !canMoveDown}
           onClick={() => onMove(1)}
-        >
-          <ArrowDown size={16} />
-        </Button>
-        <Button size="sm" disabled={disabled} onClick={onEdit}>
-          {text.edit}
-        </Button>
+        />
+        <IconButton label={text.edit} icon={Pencil} disabled={disabled} onClick={onEdit} />
         {disabled ? (
           // Keeps the row's layout while the menu is hidden.
           <span className="size-8" />

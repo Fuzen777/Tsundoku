@@ -60,14 +60,14 @@ Every color is a token in the `@theme` block of `tsundoku/src/index.css`, writte
 7. A tool is shown with `ToolHeading`: its icon on a 36 px tile (`--color-input`), its name, and what it does. `IconHeading` is the same for anything else, such as a first-run choice.
 8. A view's page-wide buttons (such as Clear Finished) sit on its title's right, `sm` size.
 9. The sidebar shows a count beside Queue (downloads not done yet) and Pending (links waiting): an accent pill with the number, hidden at zero.
-10. The preview card opens between the add bar and the current view when a link is submitted or dropped, and closes with its × (or Cancel, or Dismiss). It's a `Card`: the thumbnail (176 px wide, 16:9, an empty `--color-input` tile when there's none), then the title (two lines at most), uploader and site, and a line of details (length, upload date, best quality), with × at the top right; then its notices as status messages; then a bottom row: where the download will be saved (a folder icon, the path in 12 px secondary text, truncated, and "· Rule 2", "· Preset's Folder" or "· Download Folder" in muted text, which opens where it's set), then the preset picker and Download on the right.
-11. A queue row is a `Card`: the thumbnail (96 px), then the title, a line of details (preset, stage, size, speed, time left), the progress bar while it runs and its error if it failed; its actions on the right, `sm` size, the main one (Stop, Resume, Retry, Open File) `secondary` and the rest `ghost`.
-12. The pending view puts the Watch Clipboard checkbox and Start All on its title's right (`sm`, `primary`), or Remove Selected (`ghost`) and Start Selected (`primary`) while links are ticked. While copied links are checked, a line with a spinner counts them above the list. Under the title, a toolbar: the select-all checkbox with the number of links, and on the right "Videos Start As" with the preset picker. Then one `Card` per link, like a queue row: its checkbox, the thumbnail (96 px), the title (or the link until it's read), "uploader · site · length · date · quality" (or "Waiting to be read" / a spinner and "Reading…", with "Starts once it's read"), then, once read, where it will be saved, as on the preview card, then its notices (already downloaded, already in the queue, why it couldn't be read with its fixes); its actions on the right: the preset picker for a video, Start (or Download Again, or Try Again) `secondary`, and Remove `ghost`.
-13. The history view is a toolbar (search, the site and preset filters, the sort and its direction), a count, then one `Card` per video: the thumbnail (112 px), the title, "uploader · site · length", "preset · date · size" for the latest download, and a "File Missing" pill when its file is gone; Open File and Show in Folder as icon buttons, then a `Menu` for the rest. A video with several downloads has an accent "N Downloads" toggle that lists them under it, indented to the text. It's a list rather than a table: at the window's minimum width, eight columns leave no room for titles.
+10. The preview card opens between the add bar and the current view when a link is submitted or dropped, and closes with its × at the top right, whose hover text is Cancel while the link is read, Dismiss after a failure and Close otherwise. It's a `Card`: the thumbnail (176 px wide, 16:9, an empty `--color-input` tile when there's none), then the title (two lines at most), uploader and site, and a line of details (length, upload date, best quality), with × at the top right; then its notices as status messages (the duplicate warning with Open File and Show in Folder as icon buttons under it); then a bottom row: where the download will be saved (a folder icon, the path in 12 px secondary text, truncated, and "· Rule 2", "· Preset's Folder" or "· Download Folder" in muted text, which opens where it's set), then the preset picker and Download on the right.
+11. A queue row is a `Card`: the thumbnail (96 px), then the title, a line of details (preset, stage, size, speed, time left), the progress bar while it runs and its error if it failed; its actions on the right as icon buttons, the main one (Stop, Resume, Retry, Open File) `secondary` and the rest (Show in Folder, Open Log, Cancel) `ghost`.
+12. The pending view puts the Watch Clipboard checkbox and Start All on its title's right (`sm`, `primary`), or Remove Selected (`ghost`) and Start Selected (`primary`) while links are ticked. While copied links are checked, a line with a spinner counts them above the list. Under the title, a toolbar: the select-all checkbox with the number of links, and on the right "Videos Start As" with the preset picker. Then one `Card` per link, like a queue row: its checkbox, the thumbnail (96 px), the title (or the link until it's read), "uploader · site · length · date · quality" (or "Waiting to be read" / a spinner and "Reading…", with "Starts once it's read"), then, once read, where it will be saved, as on the preview card, then its notices (already downloaded, already in the queue, why it couldn't be read with its fixes); its actions on the right: the preset picker for a video, then icon buttons: Start (Download Again once downloaded) or Try Again `secondary`, and Remove `ghost`.
+13. The history view is a toolbar (search, the site and preset filters, the sort and its direction), a count, then one `Card` per video: the thumbnail (112 px), the title, "uploader · site · length", "preset · date · size" for the latest download, and a "File Missing" pill when its file is gone; Open File, Show in Folder and Open Source Page as icon buttons, then a `Menu` with Download Again and Forget. A video with several downloads has an accent "N Downloads" toggle that lists them under it, indented to the text. It's a list rather than a table: at the window's minimum width, eight columns leave no room for titles.
 14. When a newer Tsundoku is out, its banner is the first thing under the add bar, above the preview card: a `Card` with an accent arrow icon, "Tsundoku X is available.", Later (`ghost`) and Install and Restart (`primary`), then a progress bar while it downloads.
 15. Settings is a column of sections: Downloads, Adding Links, Running in the Background, Instagram, Cookies, Supported Sites, Tools, About.
-16. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right.
-17. The rules view is a column (`max-w-3xl`): a sentence on how rules work, then one `Card` per rule: its number in a 24 px `--color-input` circle, the rule as a sentence and, under it, its folder in 12 px monospace secondary text; an "Always Last" pill on the last rule, whose sentence is "Everything else", and an "Off" pill when it's off; then Move Up and Move Down (icon buttons), Edit (`sm`) and a `Menu` (Turn Off or On, Delete). The rule being edited becomes a `Card` with its conditions (a row each: what to check, the comparison, the value, and × to remove) and Add Condition, or for the last rule a line on what it takes, Save In with Choose Folder… and, under it, "Insert" and a `sm` button for each placeholder ({site}, {uploader}, in monospace) that puts it at the field's cursor, and Discard and Save at the bottom right; the other rows' actions are off meanwhile. Add Rule sits on the title's right. Under the list, the download folder in muted text with Change Download Folder.
+16. The presets view is a list (14 rem, staying in view) beside the selected preset's editor, a `Card` of labeled fields with Save and Discard at the bottom right and the preset's actions at the top right: Set as Default (`sm`), then Duplicate and Reset (a built-in) or Delete as icon buttons.
+17. The rules view is a column (`max-w-3xl`): a sentence on how rules work, then one `Card` per rule: its number in a 24 px `--color-input` circle, the rule as a sentence and, under it, its folder in 12 px monospace secondary text; an "Always Last" pill on the last rule, whose sentence is "Everything else", and an "Off" pill when it's off; then Move Up, Move Down and Edit (icon buttons) and a `Menu` (Turn Off or On, Delete). The rule being edited becomes a `Card` with its conditions (a row each: what to check, the comparison, the value, and × to remove) and Add Condition, or for the last rule a line on what it takes, Save In with Choose Folder… and, under it, "Insert" and a `sm` button for each placeholder ({site}, {uploader}, in monospace) that puts it at the field's cursor, and Discard and Save at the bottom right; the other rows' actions are off meanwhile. Add Rule sits on the title's right. Under the list, the download folder in muted text with Change Download Folder.
 
 ---
 
@@ -90,7 +90,7 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 | --- | --- | --- |
 | `sm` | 28 px tall, 12 px text | Inside rows and cards |
 | `md` | 32 px tall, 14 px text | The default |
-| `icon` | 32 px square | Icon only; always with an `aria-label` from `strings.ts` |
+| `icon` | 32 px square | Icon only, through `IconButton` (below) |
 
 ### Button Rules
 
@@ -100,6 +100,31 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 - `type` defaults to `button`; a form's submit button passes `type="submit"`.
 - Full-width rows stay plain `<button>`s, such as the sidebar's navigation items (the selected one gets a background and an accent pill on its left edge).
 - Inside a card, actions sit in a row under the content, `sm` size: the main one first (`primary` when it's the obvious next step, such as Download for a tool that isn't set up, otherwise `secondary`), then `ghost` ones.
+
+### Icons or Text
+
+- **An icon** for an action repeated on every row or card of a list, when a common icon says it plainly: starting, removing, stopping, resuming, retrying, cancelling, opening a file or a page, showing a folder, editing, moving, duplicating, deleting.
+- **Text** for a view's main and page-wide actions (Add, Download, Start All, Start Selected, Clear Finished, Add Rule), Save and Discard, the fixes under a message (Update yt-dlp, Set Up Cookies), Settings, the first-run setup, and any action no icon says plainly (Set as Default, Choose Folder, Use Default Folder).
+- An icon-only button is an `IconButton` (`tsundoku/src/components/IconButton.tsx`): `ghost` by default, `secondary` for a row's main action. Its `label`, from `strings.ts`, is both its hover text and its `aria-label`, so the two never differ. The hover text sits on a wrapper, so a disabled one still says what it is.
+- One action keeps one icon everywhere (lucide names):
+
+| Action | Icon |
+| --- | --- |
+| Start, Download Again (a pending link) | `Download` |
+| Open File | `Play` |
+| Resume | `Play` |
+| Stop | `CircleStop` |
+| Retry, Try Again | `RefreshCw` |
+| Cancel, Remove, Dismiss, Close | `X` |
+| Show in Folder | `FolderOpen` |
+| Open Source Page | `ExternalLink` |
+| Open Log | `FileText` |
+| Edit | `Pencil` |
+| Move Up, Move Down | `ArrowUp`, `ArrowDown` |
+| Duplicate | `Copy` |
+| Reset | `RotateCcw` |
+| Delete | `Trash2` |
+| More actions (a `Menu`) | `MoreHorizontal` |
 
 ---
 
@@ -114,7 +139,7 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 ### Menus
 
 - `Menu`: a ghost icon button (three dots by default) opening a list of actions under it, right-aligned to the button, on `--color-bg` with a strong line border and a shadow. Escape or a click elsewhere closes it. A destructive item is in the danger color.
-- Icon buttons always have an `aria-label` and the same text as their tooltip.
+- Its button is an `IconButton`, labeled with what it opens.
 
 ### Status Messages
 
