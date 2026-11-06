@@ -345,7 +345,14 @@ export const strings = {
     value: "Value",
     saveIn: "Save In",
     saveInHint: (downloadFolder: string) =>
-      `{site} and {uploader} become the download's site and uploader. A folder that isn't a full path goes inside the download folder, ${downloadFolder}.`,
+      `{site} and {uploader} become the download's site and uploader: click one to put it where the cursor is. A folder that isn't a full path goes inside the download folder, ${downloadFolder}.`,
+    insert: "Insert",
+    placeholderHints: {
+      site: "The download's site, such as Instagram or YouTube.",
+      uploader: "The download's uploader or account, or Unknown when there's none.",
+    },
+    alwaysLast: "Always Last",
+    alwaysLastHint: "Every other rule comes before this one, and new rules go above it.",
     chooseFolder: "Choose Folder…",
     chooseFolderTitle: "Choose Where Matching Downloads Go",
     fields: {

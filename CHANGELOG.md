@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.19 · 2026-11-06
+
+### Changed
+
+- **The posts rule is always last**, so every rule you add comes before it. New rules go above it, it can't be moved or deleted, and it shows "Always Last". It can still be edited or turned off. If it was higher up, it moves to the bottom; if it was deleted, it comes back turned off.
+
+### New
+
+- **Clickable placeholders**: under a rule's folder, {site} and {uploader} buttons put the placeholder where the cursor is, over any selected text, so they don't have to be typed.
+
 ## 0.1.18 · 2026-11-06
 
 ### New

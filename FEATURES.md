@@ -87,9 +87,9 @@ type: Features
 
 - **Folder rules**: "when all of these match, save in this folder". A condition checks the site (by any of its names, such as X, twitter or x.com, with every supported site suggested), the uploader or account, the title, the link, the kind (video, audio, post of images or shared file) or the preset, with Is, Is Not, Contains or Doesn't Contain, ignoring case. A rule without conditions matches every download.
 - **In order**: rules are tried from the top, and the first one that's on and matches decides. Without one, a preset's own folder is used, then the download folder.
-- **Folders that follow the download**: `{site}` and `{uploader}` in a folder become the download's site and uploader (Unknown without one), made safe as folder names. A folder that isn't a full path goes inside the download folder.
+- **Folders that follow the download**: `{site}` and `{uploader}` in a folder become the download's site and uploader (Unknown without one), made safe as folder names. Clicking {site} or {uploader} under the folder field puts it where the cursor is. A folder that isn't a full path goes inside the download folder.
 - **Each as a sentence**: "When the site is Instagram and the uploader is “natgeo”", with its number and its folder as it will be used. Move Up, Move Down, Edit, Turn Off or On, and Delete (after asking). An edit is a draft until Save.
-- **Posts**: every install starts with "When it's a post of images → {site}", so each site's posts get a folder of their own, and it can be edited, moved or deleted like any other.
+- **Posts**: every install starts with "When it's a post of images → {site}", so each site's posts get a folder of their own. It's always the last rule ("Always Last"), so every other rule comes first and new rules go above it: it can be edited or turned off, not moved or deleted.
 - **Kept per download**: a download keeps the folder it got when it was added, so changing the rules doesn't move downloads already in the queue.
 
 ## History

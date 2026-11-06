@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { ArrowDown, ArrowUp, FolderTree, Plus } from "lucide-react"
 import { confirmWithUser, queryKeys, saveFolderRules } from "../api"
@@ -7,7 +7,7 @@ import type { Preset } from "../bindings/Preset"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
-import { Menu } from "../components/Menu"
+import { Menu, type MenuItem } from "../components/Menu"
 import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
 import { classes } from "../components/styles"
@@ -16,19 +16,21 @@ import { useAppActions } from "../navigation"
 import { useDefaultDownloadFolder, useDownloadOptions, useFolderRules, usePresets } from "../queries"
 import { strings } from "../strings"
 import { RuleEditor } from "./rules/RuleEditor"
-import { describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
+import { POSTS_RULE_ID, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
 
 const text = strings.rules
 
-/** The rule being edited: its place in the list (the end for a new one), the draft, and the rule as it was. */
+/** The rule being edited: its place in the list (for a new one, where it will go: just above the posts rule), the
+ * draft, and whether it's new. */
 interface Editing {
   index: number
   draft: FolderRule
-  original: FolderRule
+  isNew: boolean
 }
 
 /** The folder rules, in the order they're tried: each as a sentence with its folder. One rule is edited at a time,
- * as a draft until Save; moving, turning off and deleting save at once. */
+ * as a draft until Save; moving, turning off and deleting save at once. The posts rule stays last: it can't be moved
+ * or deleted, and new rules go above it. */
 export function RulesView() {
   const queryClient = useQueryClient()
   const { navigate } = useAppActions()
@@ -44,6 +46,11 @@ export function RulesView() {
   const presets = presetsOverview?.presets ?? []
   const downloadFolder = options?.folder ?? defaultFolder ?? ""
   const busy = saving || editing !== null
+  // The core keeps the posts rule last, so rules above it are the ones that move.
+  const postsIndex = rules.findIndex((rule) => rule.id === POSTS_RULE_ID)
+  const movableCount = postsIndex === -1 ? rules.length : postsIndex
+  // A new rule shows where it will go, so the rules after it are numbered one further.
+  const numberOf = (index: number) => index + 1 + (editing?.isNew && index >= editing.index ? 1 : 0)
 
   async function store(list: FolderRule[]): Promise<boolean> {
     setError(null)
@@ -61,9 +68,9 @@ export function RulesView() {
     }
   }
 
-  function startEditing(index: number, rule: FolderRule) {
+  function startEditing(index: number, rule: FolderRule, isNew: boolean) {
     setError(null)
-    setEditing({ index, draft: rule, original: rule })
+    setEditing({ index, draft: rule, isNew })
   }
 
   function move(index: number, by: -1 | 1) {
@@ -91,38 +98,60 @@ export function RulesView() {
 
   async function saveDraft() {
     if (!editing || !rules) return
-    const list =
-      editing.index < rules.length
-        ? rules.map((rule, at) => (at === editing.index ? editing.draft : rule))
-        : [...rules, editing.draft]
+    const list = editing.isNew
+      ? [...rules.slice(0, editing.index), editing.draft, ...rules.slice(editing.index)]
+      : rules.map((rule, at) => (at === editing.index ? editing.draft : rule))
     if (await store(list)) setEditing(null)
   }
 
-  const editor = (index: number) =>
-    editing && (
-      <RuleEditor
-        key={editing.original.id || "new"}
-        draft={editing.draft}
-        number={index + 1}
+  const editor = (current: Editing) => (
+    <RuleEditor
+      key={current.isNew ? "new" : current.draft.id}
+      draft={current.draft}
+      number={current.index + 1}
+      presets={presets}
+      defaultPresetId={presetsOverview?.defaultId ?? ""}
+      downloadFolder={downloadFolder}
+      saving={saving}
+      error={error}
+      onChange={(draft) => setEditing({ ...current, draft })}
+      onSave={() => void saveDraft()}
+      onDiscard={() => {
+        setError(null)
+        setEditing(null)
+      }}
+    />
+  )
+
+  const rows: ReactNode[] = rules.map((rule, index) =>
+    editing && !editing.isNew && editing.index === index ? (
+      editor(editing)
+    ) : (
+      <RuleRow
+        key={rule.id}
+        rule={rule}
+        number={numberOf(index)}
         presets={presets}
-        defaultPresetId={presetsOverview?.defaultId ?? ""}
-        downloadFolder={downloadFolder}
-        saving={saving}
-        error={error}
-        onChange={(draft) => setEditing({ ...editing, draft })}
-        onSave={() => void saveDraft()}
-        onDiscard={() => {
-          setError(null)
-          setEditing(null)
-        }}
+        folder={shownFolder(rule.folder, downloadFolder)}
+        disabled={busy}
+        canMoveUp={index > 0 && index < movableCount}
+        canMoveDown={index < movableCount - 1}
+        onEdit={() => startEditing(index, rule, false)}
+        onMove={(by) => move(index, by)}
+        onToggle={() => toggle(index)}
+        onDelete={() => void remove(index)}
       />
-    )
+    ),
+  )
+  const shownRows = editing?.isNew
+    ? [...rows.slice(0, editing.index), editor(editing), ...rows.slice(editing.index)]
+    : rows
 
   return (
     <Page
       title={strings.nav.rules}
       actions={
-        <Button size="sm" disabled={busy} onClick={() => startEditing(rules.length, newRule())}>
+        <Button size="sm" disabled={busy} onClick={() => startEditing(movableCount, newRule(), true)}>
           <Plus size={14} />
           {text.addRule}
         </Button>
@@ -131,27 +160,7 @@ export function RulesView() {
       <div className="flex max-w-3xl flex-col gap-3">
         <p className="text-fg-secondary">{text.intro}</p>
         {error && !editing && <StatusMessage tone="danger" {...error} />}
-        {rules.map((rule, index) =>
-          editing?.index === index ? (
-            editor(index)
-          ) : (
-            <RuleRow
-              key={rule.id}
-              rule={rule}
-              number={index + 1}
-              presets={presets}
-              folder={shownFolder(rule.folder, downloadFolder)}
-              disabled={busy}
-              isFirst={index === 0}
-              isLast={index === rules.length - 1}
-              onEdit={() => startEditing(index, rule)}
-              onMove={(by) => move(index, by)}
-              onToggle={() => toggle(index)}
-              onDelete={() => void remove(index)}
-            />
-          ),
-        )}
-        {editing?.index === rules.length && editor(rules.length)}
+        {shownRows}
         {rules.length === 0 && !editing && (
           <div className="py-8">
             <EmptyState icon={FolderTree} title={text.emptyTitle} body={text.emptyBody} />
@@ -180,17 +189,35 @@ interface RuleRowProps {
   folder: string
   /** While another rule is edited or the list is saving. */
   disabled: boolean
-  isFirst: boolean
-  isLast: boolean
+  canMoveUp: boolean
+  canMoveDown: boolean
   onEdit: () => void
   onMove: (by: -1 | 1) => void
   onToggle: () => void
   onDelete: () => void
 }
 
-/** A rule as a sentence and its folder, with its number, moving, Edit and a menu. */
-function RuleRow({ rule, number, presets, folder, disabled, isFirst, isLast, onEdit, onMove, onToggle, onDelete }: RuleRowProps) {
+/** A rule as a sentence and its folder, with its number, moving, Edit and a menu. The posts rule says it's always
+ * last, and can't be deleted. */
+function RuleRow({
+  rule,
+  number,
+  presets,
+  folder,
+  disabled,
+  canMoveUp,
+  canMoveDown,
+  onEdit,
+  onMove,
+  onToggle,
+  onDelete,
+}: RuleRowProps) {
   const sentence = describeConditions(rule.conditions, presets)
+  const isPostsRule = rule.id === POSTS_RULE_ID
+  const toggleItem: MenuItem = { label: rule.enabled ? text.turnOff : text.turnOn, onSelect: onToggle }
+  const menuItems: MenuItem[] = isPostsRule
+    ? [toggleItem]
+    : [toggleItem, { label: text.delete, onSelect: onDelete, danger: true }]
   return (
     <Card className="flex items-center gap-3 px-4 py-3">
       <span
@@ -208,6 +235,14 @@ function RuleRow({ rule, number, presets, folder, disabled, isFirst, isLast, onE
           {folder}
         </p>
       </div>
+      {isPostsRule && (
+        <span
+          className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
+          title={text.alwaysLastHint}
+        >
+          {text.alwaysLast}
+        </span>
+      )}
       {!rule.enabled && (
         <span className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary">{text.off}</span>
       )}
@@ -217,7 +252,7 @@ function RuleRow({ rule, number, presets, folder, disabled, isFirst, isLast, onE
           variant="ghost"
           aria-label={text.moveUp}
           title={text.moveUp}
-          disabled={disabled || isFirst}
+          disabled={disabled || !canMoveUp}
           onClick={() => onMove(-1)}
         >
           <ArrowUp size={16} />
@@ -227,7 +262,7 @@ function RuleRow({ rule, number, presets, folder, disabled, isFirst, isLast, onE
           variant="ghost"
           aria-label={text.moveDown}
           title={text.moveDown}
-          disabled={disabled || isLast}
+          disabled={disabled || !canMoveDown}
           onClick={() => onMove(1)}
         >
           <ArrowDown size={16} />
@@ -239,13 +274,7 @@ function RuleRow({ rule, number, presets, folder, disabled, isFirst, isLast, onE
           // Keeps the row's layout while the menu is hidden.
           <span className="size-8" />
         ) : (
-          <Menu
-            label={text.moreActions}
-            items={[
-              { label: rule.enabled ? text.turnOff : text.turnOn, onSelect: onToggle },
-              { label: text.delete, onSelect: onDelete, danger: true },
-            ]}
-          />
+          <Menu label={text.moreActions} items={menuItems} />
         )}
       </div>
     </Card>

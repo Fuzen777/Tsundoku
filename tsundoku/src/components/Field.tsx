@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react"
+import type { ComponentProps, ReactNode, SelectHTMLAttributes } from "react"
 import { classes, INPUT_CLASSES } from "./styles"
 
 interface FieldProps {
@@ -31,7 +31,8 @@ export function Field({ label, hint, error, htmlFor, children }: FieldProps) {
   )
 }
 
-export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+/** Takes a `ref`, like an `<input>`, for a caller that works with the cursor. */
+export function TextInput({ className, ...props }: ComponentProps<"input">) {
   return <input type="text" spellCheck={false} autoComplete="off" className={classes(INPUT_CLASSES, className)} {...props} />
 }
 

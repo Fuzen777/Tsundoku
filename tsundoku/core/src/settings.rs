@@ -10,7 +10,7 @@ use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
 use crate::presets::PresetsSettings;
-use crate::rules::{RulesSettings, posts_rule};
+use crate::rules::{RulesSettings, posts_rule, with_posts_rule_last};
 use crate::sync::lock;
 use crate::tools::ToolId;
 
@@ -29,7 +29,7 @@ pub struct Settings {
 
 impl Settings {
     /// Reads `settings.json`. A file from before folder rules (0.1.10 and older) gets the posts rule in the posts
-    /// folder it chose, if it chose one.
+    /// folder it chose, if it chose one, and the posts rule is put last, where it has been since 0.1.19.
     fn from_json(contents: &[u8]) -> Option<Self> {
         let mut settings: Self = serde_json::from_slice(contents).ok()?;
         let earlier: BeforeRules = serde_json::from_slice(contents).unwrap_or_default();
@@ -43,6 +43,7 @@ impl Settings {
         {
             settings.rules.list = vec![posts_rule(Some(posts_folder))];
         }
+        settings.rules.list = with_posts_rule_last(std::mem::take(&mut settings.rules.list));
         Some(settings)
     }
 }
@@ -402,6 +403,7 @@ impl SettingsStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rules::FolderRule;
 
     fn store_in(folder: &tempfile::TempDir) -> SettingsStore {
         SettingsStore::open(folder.path().join("settings.json")).unwrap()
@@ -521,10 +523,31 @@ mod tests {
             r#"{ "downloads": { "postsFolder": "D:\\Posts" }, "rules": { "list": [] } }"#,
         )
         .unwrap();
-        assert!(
-            store_in(&folder).get().rules.list.is_empty(),
-            "saved rules stay as they are"
+        assert_eq!(
+            store_in(&folder).get().rules.list,
+            vec![FolderRule {
+                enabled: false,
+                ..posts_rule(None)
+            }],
+            "saved rules stay as they are, with the posts rule back but off"
         );
+
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "rules": { "list": [
+                { "id": "posts", "enabled": true, "conditions": [], "folder": "{site}" },
+                { "id": "rule-1", "enabled": true, "conditions": [], "folder": "Mine" }
+            ] } }"#,
+        )
+        .unwrap();
+        let ids: Vec<String> = store_in(&folder)
+            .get()
+            .rules
+            .list
+            .into_iter()
+            .map(|rule| rule.id)
+            .collect();
+        assert_eq!(ids, ["rule-1", "posts"], "the posts rule moves last");
 
         fs::write(folder.path().join("settings.json"), "{}").unwrap();
         assert_eq!(store_in(&folder).get().rules.list, vec![posts_rule(None)]);

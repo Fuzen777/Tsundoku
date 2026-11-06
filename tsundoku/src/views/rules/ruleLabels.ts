@@ -8,6 +8,13 @@ import { strings } from "../../strings"
 
 const text = strings.rules
 
+/** The rule every install starts with, always last (`rules::POSTS_RULE_ID` in the core). */
+export const POSTS_RULE_ID = "posts"
+
+/** What a rule's folder can hold, filled in with the download's own. */
+export const FOLDER_PLACEHOLDERS = ["site", "uploader"] as const
+export type FolderPlaceholder = (typeof FOLDER_PLACEHOLDERS)[number]
+
 export const RULE_FIELDS: readonly RuleField[] = ["site", "uploader", "title", "link", "kind", "preset"]
 export const DOWNLOAD_KINDS: readonly DownloadKind[] = ["video", "audio", "post", "file"]
 
@@ -60,6 +67,18 @@ function describeCondition({ field, operator, value }: RuleCondition, presets: r
 
 function isDownloadKind(value: string): value is DownloadKind {
   return (DOWNLOAD_KINDS as readonly string[]).includes(value)
+}
+
+/** `folder` with `{placeholder}` put in place of the text from `start` to `end` (the selection, or the cursor when
+ * they're equal), and where the cursor goes after it. */
+export function insertPlaceholder(
+  folder: string,
+  placeholder: FolderPlaceholder,
+  start: number,
+  end: number,
+): { folder: string; cursor: number } {
+  const token = `{${placeholder}}`
+  return { folder: folder.slice(0, start) + token + folder.slice(end), cursor: start + token.length }
 }
 
 /** A rule's folder as it will be used: inside the download folder unless it's a full path ("D:\…" or "\\server\…"). */

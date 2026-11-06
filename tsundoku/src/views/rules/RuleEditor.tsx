@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { Plus, X } from "lucide-react"
 import { pickFolder } from "../../api"
 import type { FolderRule } from "../../bindings/FolderRule"
@@ -12,7 +13,15 @@ import { StatusMessage } from "../../components/StatusMessage"
 import type { ErrorDescription } from "../../errors"
 import { useSupportedSites } from "../../queries"
 import { strings } from "../../strings"
-import { DOWNLOAD_KINDS, RULE_FIELDS, newCondition, operatorsFor } from "./ruleLabels"
+import {
+  DOWNLOAD_KINDS,
+  FOLDER_PLACEHOLDERS,
+  RULE_FIELDS,
+  insertPlaceholder,
+  newCondition,
+  operatorsFor,
+  type FolderPlaceholder,
+} from "./ruleLabels"
 
 const text = strings.rules
 
@@ -47,6 +56,7 @@ export function RuleEditor({
   onDiscard,
 }: RuleEditorProps) {
   const { data: supportedSites } = useSupportedSites()
+  const folderInput = useRef<HTMLInputElement>(null)
   const update = (changes: Partial<FolderRule>) => onChange({ ...draft, ...changes })
   const setCondition = (index: number, condition: RuleCondition) =>
     update({ conditions: draft.conditions.map((existing, at) => (at === index ? condition : existing)) })
@@ -54,6 +64,20 @@ export function RuleEditor({
   async function chooseFolder() {
     const folder = await pickFolder(text.chooseFolderTitle)
     if (folder) update({ folder })
+  }
+
+  /** Puts `{site}` or `{uploader}` where the cursor is in the folder field, over any selected text. */
+  function insert(placeholder: FolderPlaceholder) {
+    const input = folderInput.current
+    const start = input?.selectionStart ?? draft.folder.length
+    const end = input?.selectionEnd ?? start
+    const { folder, cursor } = insertPlaceholder(draft.folder, placeholder, start, end)
+    update({ folder })
+    // Once the field shows the new text, since setting it moves the cursor to its end.
+    requestAnimationFrame(() => {
+      input?.focus()
+      input?.setSelectionRange(cursor, cursor)
+    })
   }
 
   return (
@@ -85,14 +109,33 @@ export function RuleEditor({
         </div>
       </Field>
       <Field label={text.saveIn} hint={text.saveInHint(downloadFolder)} htmlFor="rule-folder">
-        <div className="flex gap-2">
-          <TextInput
-            id="rule-folder"
-            className="flex-1 font-mono"
-            value={draft.folder}
-            onChange={(event) => update({ folder: event.target.value })}
-          />
-          <Button onClick={() => void chooseFolder()}>{text.chooseFolder}</Button>
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <TextInput
+              ref={folderInput}
+              id="rule-folder"
+              className="flex-1 font-mono"
+              value={draft.folder}
+              onChange={(event) => update({ folder: event.target.value })}
+            />
+            <Button onClick={() => void chooseFolder()}>{text.chooseFolder}</Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-fg-muted">{text.insert}</span>
+            {FOLDER_PLACEHOLDERS.map((placeholder) => (
+              <Button
+                key={placeholder}
+                size="sm"
+                className="font-mono"
+                title={text.placeholderHints[placeholder]}
+                // Keeps the cursor in the folder field, so the placeholder goes where it is.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => insert(placeholder)}
+              >
+                {`{${placeholder}}`}
+              </Button>
+            ))}
+          </div>
         </div>
       </Field>
       {error && <StatusMessage tone="danger" {...error} />}

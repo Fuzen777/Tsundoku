@@ -14,7 +14,8 @@ use crate::presets::Preset;
 use crate::settings::{SettingsError, SettingsStore};
 use crate::sites;
 
-/// The ID of the rule every install starts with: posts of images go in a folder for their site.
+/// The ID of the rule every install starts with: posts of images go in a folder for their site. It's always the last
+/// rule, so every other rule comes before it, and it can be edited or turned off but not deleted.
 pub const POSTS_RULE_ID: &str = "posts";
 
 /// Replaced in a rule's folder by the download's site, such as "Instagram".
@@ -157,6 +158,20 @@ impl Default for RulesSettings {
             list: vec![posts_rule(None)],
         }
     }
+}
+
+/// The rules with the posts rule last, where it always is. A list without it (it could be deleted in 0.1.11 to
+/// 0.1.18) gets it back turned off, so where downloads go doesn't change.
+pub fn with_posts_rule_last(mut rules: Vec<FolderRule>) -> Vec<FolderRule> {
+    let posts = match rules.iter().position(|rule| rule.id == POSTS_RULE_ID) {
+        Some(index) => rules.remove(index),
+        None => FolderRule {
+            enabled: false,
+            ..posts_rule(None)
+        },
+    };
+    rules.push(posts);
+    rules
 }
 
 /// The rule every install starts with: posts of images go in a folder for their site ("Instagram", "X"), inside
@@ -381,9 +396,10 @@ impl RuleManager {
         self.settings.get().rules.list
     }
 
-    /// Replaces every rule, in this order, after checking each. Folders and values are trimmed, and a rule not saved
-    /// before (an empty ID) gets one.
-    pub fn save(&self, mut rules: Vec<FolderRule>) -> Result<Vec<FolderRule>, RuleError> {
+    /// Replaces every rule, in this order but with the posts rule last, after checking each. Folders and values are
+    /// trimmed, and a rule not saved before (an empty ID) gets one.
+    pub fn save(&self, rules: Vec<FolderRule>) -> Result<Vec<FolderRule>, RuleError> {
+        let mut rules = with_posts_rule_last(rules);
         for (index, rule) in rules.iter_mut().enumerate() {
             rule.folder = rule.folder.trim().to_owned();
             for condition in &mut rule.conditions {
@@ -743,7 +759,11 @@ mod tests {
         rules.push(rule(Vec::new(), r"D:\Rest"));
         let saved = manager.save(rules).unwrap();
         let ids: Vec<&str> = saved.iter().map(|rule| rule.id.as_str()).collect();
-        assert_eq!(ids, ["rule-1", "posts", "rule-2"]);
+        assert_eq!(
+            ids,
+            ["rule-1", "rule-2", "posts"],
+            "the posts rule stays last"
+        );
         assert_eq!(saved[0].folder, r"D:\NatGeo");
         assert_eq!(saved[0].conditions[0].value, "natgeo");
         assert_eq!(manager_in(&folder).list(), saved, "kept in settings.json");
@@ -751,7 +771,30 @@ mod tests {
         let mut next = saved.clone();
         next.remove(0);
         next.push(rule(Vec::new(), r"D:\More"));
-        assert_eq!(manager.save(next).unwrap()[2].id, "rule-3");
+        assert_eq!(manager.save(next).unwrap()[1].id, "rule-3");
+    }
+
+    #[test]
+    fn keeps_the_posts_rule_last_and_never_loses_it() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        let mut first = rule(Vec::new(), r"D:\First");
+        first.id = "rule-1".to_owned();
+        let moved = manager.save(vec![posts_rule(None), first.clone()]).unwrap();
+        assert_eq!(moved, vec![first.clone(), posts_rule(None)]);
+
+        let without = manager.save(vec![first.clone()]).unwrap();
+        assert_eq!(
+            without,
+            vec![
+                first,
+                FolderRule {
+                    enabled: false,
+                    ..posts_rule(None)
+                }
+            ],
+            "it comes back, turned off"
+        );
     }
 
     #[test]
@@ -761,7 +804,8 @@ mod tests {
         let no_folder = vec![posts_rule(None), rule(Vec::new(), "  ")];
         assert_eq!(
             manager.save(no_folder),
-            Err(RuleError::EmptyFolder { rule: 2 })
+            Err(RuleError::EmptyFolder { rule: 1 }),
+            "numbered as saved, with the posts rule last"
         );
         let empty = vec![rule(
             vec![condition(RuleField::Title, RuleOperator::Contains, " ")],
