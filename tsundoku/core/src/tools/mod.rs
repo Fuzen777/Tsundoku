@@ -57,14 +57,15 @@ pub enum ToolId {
     YtDlp,
     Ffmpeg,
     Deno,
-    /// Downloads image posts, such as Instagram photos. Optional, like Deno, and not part of the first-run setup.
+    /// Downloads image posts, such as Instagram photos. Set up with the others, but optional like Deno: downloads of
+    /// videos work without it.
     GalleryDl,
 }
 
 impl ToolId {
     pub const ALL: [Self; 4] = [Self::YtDlp, Self::Ffmpeg, Self::Deno, Self::GalleryDl];
-    /// The tools the first-run setup offers.
-    pub const SETUP: [Self; 3] = [Self::YtDlp, Self::Ffmpeg, Self::Deno];
+    /// The tools the first-run setup sets up: all of them. Only yt-dlp and ffmpeg are needed to leave it.
+    pub const SETUP: [Self; 4] = Self::ALL;
 }
 
 /// Why a tool can't be set up, updated or run. The UI turns each into a sentence; `detail` fields carry the

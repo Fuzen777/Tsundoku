@@ -18,7 +18,7 @@ import { formatBytes } from "../format"
 import { useDetectedTools, useFinishSetup, useFirstRunOptions, useToolDownloads } from "../queries"
 import { strings } from "../strings"
 import { describeDownloadError, describeToolError, isCancelled, type ErrorDescription } from "../errors"
-import { setupToolOrder } from "../toolInfo"
+import { optionalTools, setupToolOrder } from "../toolInfo"
 import { useToolStage } from "../toolProgress"
 
 /** For a tool found on this PC: use that copy, or download Tsundoku's own anyway. */
@@ -242,7 +242,8 @@ function ToolsScreen({ onBack }: { onBack: () => void }) {
 
   const remaining = setupToolOrder.filter((id) => outcomes[id]?.state !== "ready")
   const hasFailures = remaining.some((id) => outcomes[id]?.state === "failed")
-  const onlyDenoFailed = hasFailures && remaining.length === 1 && remaining[0] === "deno"
+  // Videos download without Deno or gallery-dl, so failing to set them up needn't hold the app back.
+  const onlyOptionalFailed = hasFailures && remaining.every((id) => optionalTools.includes(id))
   const anyReady = remaining.length < setupToolOrder.length
   const primaryLabel = hasFailures
     ? strings.setup.tryAgain
@@ -293,9 +294,11 @@ function ToolsScreen({ onBack }: { onBack: () => void }) {
                   {strings.setup.back}
                 </Button>
               )}
-              {onlyDenoFailed && (
+              {onlyOptionalFailed && (
                 <Button variant="ghost" onClick={finishSetup}>
-                  {strings.setup.continueWithoutDeno}
+                  {remaining.length === 1
+                    ? strings.setup.continueWithout(strings.tools.names[remaining[0]])
+                    : strings.setup.continueWithoutThem}
                 </Button>
               )}
             </>
@@ -362,7 +365,7 @@ function SetupToolCard({ id, found, size, choice, onChoose, outcome, working }: 
             checked={choice === "download"}
             onSelect={() => onChoose("download")}
             label={strings.setup.downloadFresh}
-            detail={strings.setup.downloadDetail(size)}
+            detail={strings.setup.downloadDetail(size, strings.tools.hosts[id])}
           />
         </fieldset>
       ) : (

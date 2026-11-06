@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.25 · 2026-11-06
+
+### Changed
+
+- **gallery-dl is set up at the first start**, with yt-dlp, ffmpeg and Deno: image posts are as much what Tsundoku is for as videos. A copy already on the PC, such as an installed Tsundoku's in AppData, is used as it is. If only Deno or gallery-dl fails to download, Continue Without leaves them for Settings → Tools. Installs already set up aren't asked again.
+
 ## 0.1.24 · 2026-11-06
 
 ### New

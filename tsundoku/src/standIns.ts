@@ -262,11 +262,13 @@ export const standIns = {
     },
     { id: "ffmpeg", found: null },
     { id: "deno", found: null },
+    { id: "galleryDl", found: null },
   ] satisfies DetectedTool[],
   toolDownloads: [
     { id: "ytDlp", size: 23_575_744 },
     { id: "ffmpeg", size: 90_993_957 },
     { id: "deno", size: 42_917_472 },
+    { id: "galleryDl", size: 22_649_344 },
   ] satisfies ToolDownload[],
   presetsOverview: {
     presets: presetStandIns,

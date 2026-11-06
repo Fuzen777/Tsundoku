@@ -427,7 +427,14 @@ export const strings = {
       ytDlp: "Downloads the videos.",
       ffmpeg: "Merges video and audio, and converts formats. Comes with ffprobe.",
       deno: "Runs YouTube's player code for yt-dlp. Without it, some YouTube formats may be missing.",
-      galleryDl: "Downloads image posts, such as Instagram photos and carousels. Optional.",
+      galleryDl: "Downloads image posts, such as Instagram photos and carousels.",
+    },
+    /** Where each tool's official builds come from (the core's `catalog`). */
+    hosts: {
+      ytDlp: "GitHub",
+      ffmpeg: "GitHub",
+      deno: "GitHub",
+      galleryDl: "Codeberg",
     },
     managed: "Tsundoku's Copy",
     external: "Your Copy",
@@ -465,7 +472,7 @@ export const strings = {
     choicesBody:
       "Before setting up its tools, Tsundoku asks where they and your downloads go, so nothing appears anywhere you didn't choose.",
     toolsFolder: "Tools",
-    toolsFolderHint: "The programs Tsundoku downloads with, about 350 MB once set up.",
+    toolsFolderHint: "The programs Tsundoku downloads with, about 370 MB once set up.",
     toolsInDataFolder: "In Tsundoku's Data Folder",
     toolsFolderTitle: "Choose Where the Tools Go",
     toolsInAppData: "In AppData",
@@ -489,13 +496,15 @@ export const strings = {
     noFolderChosen: "Pick any folder.",
     back: "Back",
     title: "Set Up Your Tools",
-    body: "Tsundoku downloads videos with three free tools. Use copies you already have, or let Tsundoku download its own and keep them up to date.",
+    body: "Tsundoku downloads videos and image posts with four free tools. Use copies you already have, or let Tsundoku download its own and keep them up to date.",
     lookingForTools: "Looking for tools on this PC…",
     useThisCopy: "Use This Copy",
     foundDetail: (version: string, path: string) => `Version ${version} · ${path}`,
     downloadFresh: "Download Fresh",
-    downloadDetail: (size: string | null) =>
-      size === null ? "From GitHub. Tsundoku keeps it up to date." : `${size} from GitHub. Tsundoku keeps it up to date.`,
+    downloadDetail: (size: string | null, host: string) =>
+      size === null
+        ? `From ${host}. Tsundoku keeps it up to date.`
+        : `${size} from ${host}. Tsundoku keeps it up to date.`,
     notFound: (size: string | null) =>
       size === null
         ? "Not found on this PC, so Tsundoku will download it."
@@ -505,7 +514,8 @@ export const strings = {
     downloadAndContinue: "Download and Continue",
     tryAgain: "Try Again",
     cancel: "Cancel",
-    continueWithoutDeno: "Continue Without Deno",
+    continueWithout: (name: string) => `Continue Without ${name}`,
+    continueWithoutThem: "Continue Without Them",
   },
   settings: {
     tools: "Tools",

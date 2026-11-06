@@ -125,7 +125,7 @@ type: Features
 
 ## Tools
 
-Tsundoku downloads with three free tools: yt-dlp, ffmpeg (with ffprobe) and Deno, which yt-dlp needs for some YouTube formats. A fourth, gallery-dl, can be set up in Settings → Tools for image posts.
+Tsundoku downloads with four free tools: yt-dlp, ffmpeg (with ffprobe), Deno, which yt-dlp needs for some YouTube formats, and gallery-dl, for image posts.
 
 ### First-Run Setup
 
@@ -134,7 +134,8 @@ Tsundoku downloads with three free tools: yt-dlp, ffmpeg (with ffprobe) and Deno
 - **Use This Copy or Download Fresh**: for each tool found, use that copy or download Tsundoku's own; tools not found are downloaded. Each download shows its size and its progress.
 - **Official builds, checked**: downloads come from each tool's official releases, on GitHub (yt-dlp's own FFmpeg builds for ffmpeg) or Codeberg for gallery-dl, and are checked against the release's published SHA-256 before they're installed.
 - **Antivirus check**: after installing, Tsundoku runs the tool to make sure it's there and works, and says so clearly when Windows Security or an antivirus took it.
-- **Deno is optional**: the app opens once yt-dlp and ffmpeg are ready. If Deno's download fails, Continue Without Deno leaves it for later.
+- **gallery-dl too**: image posts are as much what Tsundoku is for as videos, so the setup sets up gallery-dl with the others (a copy found, such as an installed Tsundoku's in AppData, is used as it is).
+- **Deno and gallery-dl are optional**: the app opens once yt-dlp and ffmpeg are ready. If only Deno's or gallery-dl's download fails, Continue Without Deno (or gallery-dl, or Them) leaves them for Settings → Tools. An install set up before 0.1.25 isn't asked again; Settings → Tools sets gallery-dl up.
 
 ### Settings → Tools
 
