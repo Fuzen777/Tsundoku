@@ -18,6 +18,8 @@ pub struct QueueRun {
 #[derive(Debug)]
 struct Member {
     state: QueueState,
+    /// Its video's title, for the notification when it fails.
+    title: String,
     /// Its size in bytes, when known as a whole: a file host's link from the start, a single file once it downloads,
     /// and any download once done.
     size: Option<u64>,
@@ -31,6 +33,7 @@ impl Member {
     fn new(item: &QueueItem) -> Self {
         Self {
             state: item.state,
+            title: item.video.title.clone(),
             size: item.video.files.map(|files| files.bytes),
             fraction: None,
             split: false,
@@ -92,14 +95,23 @@ impl Member {
 impl QueueRun {
     /// Follows the queue's items. A download waiting or running joins the run (a new one if there was none), so do
     /// those added or resumed meanwhile. One removed from the queue leaves it, unless it was done (Clear Finished).
-    /// The run ends once none of its downloads is waiting, running or stopped.
-    pub fn update(&mut self, items: &[QueueItem]) {
+    /// The run ends once none of its downloads is waiting, running or stopped. Answers what happened, for the
+    /// notifications: downloads that failed, and the run ending.
+    pub fn update(&mut self, items: &[QueueItem]) -> Vec<RunEvent> {
+        let mut events = Vec::new();
         self.members.retain(|id, member| {
             member.state == QueueState::Done || items.iter().any(|item| item.id == *id)
         });
         for item in items {
             match self.members.get_mut(&item.id) {
-                Some(member) => member.follow(item),
+                Some(member) => {
+                    if item.state == QueueState::Failed && member.state != QueueState::Failed {
+                        events.push(RunEvent::Failed {
+                            title: member.title.clone(),
+                        });
+                    }
+                    member.follow(item);
+                }
                 None if matches!(item.state, QueueState::Waiting | QueueState::Running) => {
                     let mut member = Member::new(item);
                     if let Some(progress) = &item.progress {
@@ -110,9 +122,15 @@ impl QueueRun {
                 None => {}
             }
         }
-        if self.members.values().all(Member::has_ended) {
+        if !self.members.is_empty() && self.members.values().all(Member::has_ended) {
+            let summary = self.summary();
+            events.push(RunEvent::Ended {
+                finished: summary.done,
+                failed: summary.failed,
+            });
             self.members.clear();
         }
+        events
     }
 
     /// A running download's progress.
@@ -235,6 +253,89 @@ impl RunSummary {
         .flatten()
         .collect();
         Some(parts.join(" · "))
+    }
+}
+
+/// What happened to the run, for the notifications.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RunEvent {
+    /// One of its downloads failed.
+    Failed { title: String },
+    /// Every one of its downloads has ended: how many finished and how many failed. Cancelled ones aren't counted.
+    Ended { finished: usize, failed: usize },
+}
+
+/// A Windows notification's title and text. The UI's texts are in strings.ts; these show outside it, in the same voice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Notice {
+    pub title: String,
+    pub body: String,
+}
+
+/// The notifications for events that came close together, as Settings → Adding Links asks: one for all the failures
+/// among them (`failures`), then one for a run that ended (`finished`). A run where nothing finished adds nothing to
+/// the failures already told.
+pub fn notices(events: &[RunEvent], failures: bool, finished: bool) -> Vec<Notice> {
+    let mut notices = Vec::new();
+    let failed: Vec<&str> = events
+        .iter()
+        .filter_map(|event| match event {
+            RunEvent::Failed { title } => Some(title.as_str()),
+            RunEvent::Ended { .. } => None,
+        })
+        .collect();
+    if failures && !failed.is_empty() {
+        notices.push(failure_notice(&failed));
+    }
+    for event in events {
+        if let RunEvent::Ended {
+            finished: done,
+            failed,
+        } = *event
+            && finished
+            && !(done == 0 && failures)
+        {
+            notices.push(ended_notice(done, failed));
+        }
+    }
+    notices
+}
+
+/// "Couldn't Download" and the title, or for several, how many and the first titles.
+fn failure_notice(titles: &[&str]) -> Notice {
+    match titles {
+        [title] => Notice {
+            title: "Couldn't Download".to_owned(),
+            body: (*title).to_owned(),
+        },
+        [first, second] => Notice {
+            title: "Couldn't Download 2 Links".to_owned(),
+            body: format!("{first} and {second}"),
+        },
+        [first, second, rest @ ..] => Notice {
+            title: format!("Couldn't Download {} Links", titles.len()),
+            body: format!("{first}, {second} and {} more", rest.len()),
+        },
+        [] => Notice {
+            title: "Couldn't Download".to_owned(),
+            body: String::new(),
+        },
+    }
+}
+
+/// "All 12 downloads finished", or with failures, "11 of 12 downloads finished · 1 failed".
+fn ended_notice(finished: usize, failed: usize) -> Notice {
+    let total = finished + failed;
+    let body = match (finished, failed) {
+        (1, 0) => "Your download finished".to_owned(),
+        (_, 0) => format!("All {total} downloads finished"),
+        (0, 1) => "Your download failed".to_owned(),
+        (0, _) => format!("All {total} downloads failed"),
+        _ => format!("{finished} of {total} downloads finished · {failed} failed"),
+    };
+    Notice {
+        title: "Downloads Finished".to_owned(),
+        body,
     }
 }
 
@@ -395,6 +496,146 @@ mod tests {
         assert_eq!(
             run.summary().tooltip().as_deref(),
             Some("1 downloading · 75% · 1 failed")
+        );
+    }
+
+    fn titled(id: i64, state: QueueState) -> QueueItem {
+        let mut item = item(id, state);
+        item.video.title = format!("Video {id}");
+        item
+    }
+
+    fn failed(title: &str) -> RunEvent {
+        RunEvent::Failed {
+            title: title.to_owned(),
+        }
+    }
+
+    #[test]
+    fn tells_each_failure_once_and_the_end_with_what_finished() {
+        let mut run = QueueRun::default();
+        let none: Vec<RunEvent> = Vec::new();
+        assert_eq!(
+            run.update(&[
+                titled(1, QueueState::Running),
+                titled(2, QueueState::Running),
+                titled(3, QueueState::Waiting),
+                titled(4, QueueState::Waiting),
+            ]),
+            none
+        );
+        let events = run.update(&[
+            titled(1, QueueState::Failed),
+            titled(2, QueueState::Running),
+            titled(3, QueueState::Running),
+            titled(4, QueueState::Waiting),
+        ]);
+        assert_eq!(events, [failed("Video 1")]);
+        let events = run.update(&[
+            titled(1, QueueState::Failed),
+            done(2, 10),
+            titled(3, QueueState::Running),
+            titled(4, QueueState::Waiting),
+        ]);
+        assert_eq!(events, none, "a failure is told once");
+
+        // The fourth is cancelled, which isn't a failure, and the third finishes the run.
+        let events = run.update(&[titled(1, QueueState::Failed), done(2, 10), done(3, 10)]);
+        assert_eq!(
+            events,
+            [RunEvent::Ended {
+                finished: 2,
+                failed: 1
+            }]
+        );
+        assert_eq!(
+            run.update(&[titled(1, QueueState::Failed), done(2, 10), done(3, 10)]),
+            none,
+            "it ends once"
+        );
+    }
+
+    #[test]
+    fn a_retried_download_that_fails_again_is_told_again() {
+        let mut run = QueueRun::default();
+        run.update(&[
+            titled(1, QueueState::Running),
+            titled(2, QueueState::Running),
+        ]);
+        assert_eq!(
+            run.update(&[
+                titled(1, QueueState::Failed),
+                titled(2, QueueState::Running)
+            ]),
+            [failed("Video 1")]
+        );
+        run.update(&[
+            titled(1, QueueState::Waiting),
+            titled(2, QueueState::Running),
+        ]);
+        assert_eq!(
+            run.update(&[
+                titled(1, QueueState::Failed),
+                titled(2, QueueState::Running)
+            ]),
+            [failed("Video 1")]
+        );
+    }
+
+    #[test]
+    fn failures_that_come_together_are_one_notice() {
+        let notice = |title: &str, body: &str| Notice {
+            title: title.to_owned(),
+            body: body.to_owned(),
+        };
+        assert_eq!(
+            notices(&[failed("Zoo")], true, true),
+            [notice("Couldn't Download", "Zoo")]
+        );
+        assert_eq!(
+            notices(&[failed("Zoo"), failed("Cats")], true, true),
+            [notice("Couldn't Download 2 Links", "Zoo and Cats")]
+        );
+        assert_eq!(
+            notices(&[failed("Zoo"), failed("Cats"), failed("Tour")], true, true),
+            [notice("Couldn't Download 3 Links", "Zoo, Cats and 1 more")]
+        );
+        assert_eq!(notices(&[failed("Zoo")], false, true), []);
+    }
+
+    #[test]
+    fn the_end_says_how_many_finished() {
+        let ended = |finished, failed| RunEvent::Ended { finished, failed };
+        let body = |events: &[RunEvent], failures| {
+            notices(events, failures, true)
+                .into_iter()
+                .map(|notice| notice.body)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(body(&[ended(12, 0)], true), ["All 12 downloads finished"]);
+        assert_eq!(body(&[ended(1, 0)], true), ["Your download finished"]);
+        assert_eq!(
+            body(&[ended(11, 1)], true),
+            ["11 of 12 downloads finished · 1 failed"]
+        );
+        assert_eq!(
+            body(&[failed("Zoo"), ended(0, 1)], true),
+            ["Zoo"],
+            "nothing finished: the failure says it all"
+        );
+        assert_eq!(
+            body(&[ended(0, 3)], false),
+            ["All 3 downloads failed"],
+            "unless failures aren't told"
+        );
+        assert_eq!(notices(&[ended(12, 0)], true, false), []);
+        assert_eq!(
+            notices(&[failed("Zoo"), ended(1, 1)], true, true)
+                .iter()
+                .map(|notice| notice.title.as_str())
+                .collect::<Vec<_>>(),
+            ["Couldn't Download", "Downloads Finished"],
+            "the failure first"
         );
     }
 

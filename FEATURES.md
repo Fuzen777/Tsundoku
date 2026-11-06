@@ -26,6 +26,7 @@ type: Features
 - **Tray tooltip**: hovering the tray icon sums up the same downloads, such as "3 downloading · 45% · 1 failed" (also waiting and stopped), leaving out what's zero, or reads Tsundoku with nothing going on.
 - **Start with Windows**: Tsundoku opens when you sign in to Windows; with Keep Running in the Tray on, it starts in the tray without showing its window.
 - **Notifications**: while the window isn't in front (hidden, minimized or behind another app), a Windows notification says when a copied link was added to Pending or started downloading (with its title), what the clipboard shortcut or the browser added, and how many links Start All Pending started from the tray. Clicking one opens Tsundoku. On to start with; Settings → Adding Links → Show Notifications turns them off.
+- **Failed and finished downloads**: while the window isn't in front, a notification says when a download failed ("Couldn't Download" and its title; downloads that fail together are one notification, "Couldn't Download 3 Links"), and when every download started since the queue was last idle has ended ("All 12 downloads finished", or "11 of 12 downloads finished · 1 failed"). When none finished, the failures have said it already. Cancelled downloads don't count. Each has its own switch in Settings → Adding Links, Notify When a Download Fails and Notify When Downloads Finish, on to start with.
 
 ## Navigation
 
@@ -133,7 +134,7 @@ type: Features
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
-- **Adding Links**: Watch Clipboard, the Clipboard Shortcut, Send from Your Browser, Download Right Away for the links they add (see Pending), and Show Notifications (see Window).
+- **Adding Links**: Watch Clipboard, the Clipboard Shortcut, Send from Your Browser, Download Right Away for the links they add (see Pending), Show Notifications, Notify When a Download Fails and Notify When Downloads Finish (see Window).
 - **Running in the Background**: Keep Running in the Tray and Start with Windows (see Window).
 - **Appearance**: Theme, Auto (the default, following Windows' light or dark mode), Light or Dark, taken at once and from the first frame at the next start.
 - **Keyboard Shortcuts**: the window's shortcuts (see Navigation), and the Clipboard Shortcut once one is picked.

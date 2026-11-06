@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.45 · 2026-11-06
+
+### Added
+
+- **Notifications for failed and finished downloads**: while Tsundoku's window isn't in front, a notification says when a download failed ("Couldn't Download" and its title, or "Couldn't Download 3 Links" when several fail together), and when every download started since the queue was last idle has ended ("All 12 downloads finished", or "11 of 12 downloads finished · 1 failed"). Cancelled downloads don't count. Settings → Adding Links has a switch for each, Notify When a Download Fails and Notify When Downloads Finish, both on to start with. The switches came with 0.1.41, but the notifications themselves only work from this version.
+
 ## 0.1.44 · 2026-11-06
 
 ### Added
