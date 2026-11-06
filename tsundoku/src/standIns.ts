@@ -167,7 +167,11 @@ const postStandIn: VideoPreview = {
 
 /** What api.ts returns when the UI runs in a plain browser, to check layouts without the app. */
 export const standIns = {
-  appInfo: { version: "browser", hasMicaBackdrop: false } satisfies AppInfo,
+  appInfo: {
+    version: "browser",
+    hasMicaBackdrop: false,
+    dataFolder: String.raw`C:\Users\You\AppData\Local\io.github.fuzen777.tsundoku`,
+  } satisfies AppInfo,
   toolsOverview: {
     tools: [
       {

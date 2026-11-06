@@ -10,4 +10,6 @@ pub struct AppInfo {
     pub version: String,
     /// Whether the window has Windows 11's Mica backdrop. Without it (Windows 10), the UI paints its own background.
     pub has_mica_backdrop: bool,
+    /// The data folder (settings, tools, history, logs), shown in Settings → About with Open Folder.
+    pub data_folder: String,
 }

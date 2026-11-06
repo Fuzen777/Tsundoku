@@ -507,5 +507,9 @@ export const strings = {
       imagesNotSetUp: "Image sites such as Pixiv and DeviantArt are listed once image downloads are set up in Tools.",
     },
     about: "About",
+    dataFolder: "Data Folder",
+    dataFolderHint: "Settings, the history, the tools and each download's log.",
+    openDataFolder: "Open Folder",
+    dataFolderOpenFailed: "Couldn't open the data folder.",
   },
 } as const

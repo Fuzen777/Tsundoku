@@ -76,6 +76,12 @@ export function getAppInfo(): Promise<AppInfo> {
   return invoke<AppInfo>("app_info")
 }
 
+/** Opens the data folder in File Explorer. Rejects with Windows' reason as a string. */
+export async function openDataFolder(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("open_data_folder")
+}
+
 /** The window starts hidden (tauri.conf.json); the UI shows it once its first frame is painted. */
 export async function showMainWindow(): Promise<void> {
   if (!isTauri()) return

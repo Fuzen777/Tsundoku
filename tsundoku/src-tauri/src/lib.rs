@@ -6,11 +6,13 @@ mod tools;
 
 use std::error::Error;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use tauri::{App, AppHandle, Manager, State, WebviewWindow};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::StateFlags;
 use tsundoku_core::app_info::AppInfo;
 use tsundoku_core::data_folder::{self, BuildKind, DataPaths};
@@ -32,12 +34,30 @@ struct Backdrop {
     has_mica: bool,
 }
 
+/// Where this build keeps its data, resolved once at startup.
+struct DataFolder {
+    path: PathBuf,
+}
+
 #[tauri::command]
-fn app_info(app: AppHandle, backdrop: State<'_, Backdrop>) -> AppInfo {
+fn app_info(
+    app: AppHandle,
+    backdrop: State<'_, Backdrop>,
+    data_folder: State<'_, DataFolder>,
+) -> AppInfo {
     AppInfo {
         version: app.package_info().version.to_string(),
         has_mica_backdrop: backdrop.has_mica,
+        data_folder: data_folder.path.display().to_string(),
     }
+}
+
+/// Opens the data folder in File Explorer. Fails only if Windows can't open it, with its reason.
+#[tauri::command]
+fn open_data_folder(app: AppHandle, data_folder: State<'_, DataFolder>) -> Result<(), String> {
+    app.opener()
+        .open_path(data_folder.path.display().to_string(), None::<&str>)
+        .map_err(|error| error.to_string())
 }
 
 /// Brings the main window to the front, for a second launch of the app.
@@ -72,8 +92,9 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     };
     let root = data_folder::resolve(build, app.path().app_local_data_dir()?)
         .ok_or("Windows has no local app data folder")?;
-    let paths = DataPaths::new(root);
+    let paths = DataPaths::new(root.clone());
     fs::create_dir_all(paths.root())?;
+    app.manage(DataFolder { path: root });
 
     let settings = Arc::new(SettingsStore::open(paths.settings_file())?);
     let database = Arc::new(Database::open(&paths.database_file())?);
@@ -144,6 +165,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info,
+            open_data_folder,
             tools::tools_need_setup,
             tools::tools_overview,
             tools::detect_tools,

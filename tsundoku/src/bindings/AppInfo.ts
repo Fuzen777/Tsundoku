@@ -11,4 +11,8 @@ version: string,
 /**
  * Whether the window has Windows 11's Mica backdrop. Without it (Windows 10), the UI paints its own background.
  */
-hasMicaBackdrop: boolean, };
+hasMicaBackdrop: boolean, 
+/**
+ * The data folder (settings, tools, history, logs), shown in Settings → About with Open Folder.
+ */
+dataFolder: string, };

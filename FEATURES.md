@@ -23,6 +23,7 @@ type: Features
 
 - **Sidebar**: Queue, History, Presets and Rules at the top, Settings at the bottom.
 - **About**: Settings shows the app's version.
+- **Data folder**: Settings → About shows the data folder's path, with Open Folder to open it in File Explorer.
 
 ## Adding a Video or Post
 

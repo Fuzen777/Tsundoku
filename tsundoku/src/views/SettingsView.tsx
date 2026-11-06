@@ -1,3 +1,5 @@
+import { useState } from "react"
+import { openDataFolder } from "../api"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { Page } from "../components/Page"
@@ -24,11 +26,25 @@ export function SettingsView() {
   )
 }
 
-/** The version, and Check for Updates. A newer release shows as the banner under the add bar. */
+/**
+ * The version and Check for Updates, then the data folder and Open Folder. A newer release shows as the banner under
+ * the add bar.
+ */
 function AboutSection() {
   const { data: appInfo } = useAppInfo()
   const update = useAppUpdate()
   const checked = update.isFetchedAfterMount
+  const [openFolderError, setOpenFolderError] = useState<string | null>(null)
+
+  async function showDataFolder() {
+    setOpenFolderError(null)
+    try {
+      await openDataFolder()
+    } catch (caught) {
+      setOpenFolderError(String(caught))
+    }
+  }
+
   return (
     <Section title={strings.settings.about}>
       <Card className="flex flex-col gap-3 px-4 py-3">
@@ -49,6 +65,23 @@ function AboutSection() {
         )}
         {checked && !update.isFetching && update.data && (
           <StatusMessage tone="neutral" message={strings.appUpdate.available(update.data.version)} />
+        )}
+        <div className="flex items-center gap-3 border-t border-line pt-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{strings.settings.dataFolder}</p>
+            <p className="text-fg-secondary">{strings.settings.dataFolderHint}</p>
+            {appInfo && (
+              <p className="truncate text-xs text-fg-muted select-text" title={appInfo.dataFolder}>
+                {appInfo.dataFolder}
+              </p>
+            )}
+          </div>
+          <Button size="sm" onClick={() => void showDataFolder()}>
+            {strings.settings.openDataFolder}
+          </Button>
+        </div>
+        {openFolderError !== null && (
+          <StatusMessage tone="danger" message={strings.settings.dataFolderOpenFailed} detail={openFolderError} />
         )}
       </Card>
     </Section>
