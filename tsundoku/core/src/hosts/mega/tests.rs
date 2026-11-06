@@ -190,6 +190,7 @@ fn lists_a_shared_folder_with_its_layout() {
             attributes: attributes.to_owned(),
             key: format!("{handle}:{key}"),
             size,
+            timestamp: Some(1_746_576_000),
         };
     let answer = [
         node("Root1234", "Owner123", 1, ROOT_ATTRIBUTES, ROOT_KEY, 0),
@@ -203,7 +204,9 @@ fn lists_a_shared_folder_with_its_layout() {
             FILE_SIZE as u64,
         ),
     ];
-    let nodes = decrypt_nodes(&answer, &folder_key).unwrap();
+    let root = share_root(&answer).unwrap();
+    assert_eq!(root.handle, "Root1234");
+    let nodes = decrypt_nodes(&answer, &root.handle, &folder_key);
     assert_eq!(
         nodes
             .iter()
@@ -213,8 +216,12 @@ fn lists_a_shared_folder_with_its_layout() {
     );
     assert_eq!(nodes[2].key, Some(file_key(FILE_KEY)));
 
-    let (title, files) = folder_files(&nodes, "Fold3r12", None).unwrap();
-    assert_eq!(title, "Shared");
+    let (top, files) = folder_files(&nodes, "Fold3r12", "Root1234", None).unwrap();
+    assert_eq!(top.name, "Shared");
+    assert_eq!(
+        top.timestamp.and_then(date_of).as_deref(),
+        Some("2025-05-07")
+    );
     assert_eq!(files.len(), 1);
     assert_eq!(
         files[0].path,
@@ -232,20 +239,108 @@ fn lists_a_shared_folder_with_its_layout() {
         })
     );
 
-    let (title, files) = folder_files(&nodes, "Fold3r12", Some("Sub12345")).unwrap();
-    assert_eq!(title, "Sub: one");
+    let (top, files) = folder_files(&nodes, "Fold3r12", "Root1234", Some("Sub12345")).unwrap();
+    assert_eq!(top.name, "Sub: one");
     assert_eq!(
         files[0].path,
         PathBuf::from("Sub_ one").join("Test file.txt")
     );
 
-    let (title, files) = folder_files(&nodes, "Fold3r12", Some("File1234")).unwrap();
-    assert_eq!(title, "Test file.txt");
+    let (top, files) = folder_files(&nodes, "Fold3r12", "Root1234", Some("File1234")).unwrap();
+    assert_eq!(top.name, "Test file.txt");
     assert_eq!(files[0].path, PathBuf::from("Test file.txt"));
 
     assert!(matches!(
-        folder_files(&nodes, "Fold3r12", Some("Missing1")),
+        folder_files(&nodes, "Fold3r12", "Root1234", Some("Missing1")),
         Err(PreviewError::Unavailable { .. })
+    ));
+}
+
+/// A node can list its key several times, each for another folder. Seen on MEGA: a file whose first key is for a
+/// folder the link doesn't open, which used to fail the whole folder.
+#[test]
+fn opens_a_node_by_the_key_for_the_shared_folder() {
+    let folder_key: [u8; 16] = decode(FOLDER_KEY).unwrap().try_into().unwrap();
+    let node = |handle: &str, parent: &str, kind: u8, attributes: &str, key: String| NodeAnswer {
+        handle: handle.to_owned(),
+        parent: parent.to_owned(),
+        kind,
+        attributes: attributes.to_owned(),
+        key,
+        size: FILE_SIZE as u64,
+        timestamp: None,
+    };
+    let answer = [
+        node(
+            "Root1234",
+            "Owner123",
+            1,
+            ROOT_ATTRIBUTES,
+            format!("Root1234:{ROOT_KEY}"),
+        ),
+        // Another folder's key first, then the shared folder's.
+        node(
+            "File1234",
+            "Root1234",
+            0,
+            FILE_ATTRIBUTES,
+            format!("Other123:{FILE_KEY_128K}/Root1234:{NODE_FILE_KEY}"),
+        ),
+        // The shared folder's key last, after one this link can't open.
+        node(
+            "File5678",
+            "Root1234",
+            0,
+            FILE_ATTRIBUTES,
+            format!("Other123:{FILE_KEY_128K}/Root1234:{NODE_FILE_KEY}")
+                .split('/')
+                .rev()
+                .collect::<Vec<_>>()
+                .join("/"),
+        ),
+        // No key this link opens: left out, and the rest still listed.
+        node(
+            "Lost1234",
+            "Root1234",
+            0,
+            FILE_ATTRIBUTES,
+            format!("Other123:{FILE_KEY_128K}"),
+        ),
+    ];
+    let nodes = decrypt_nodes(&answer, "Root1234", &folder_key);
+    assert_eq!(
+        nodes
+            .iter()
+            .map(|node| node.handle.as_str())
+            .collect::<Vec<_>>(),
+        ["Root1234", "File1234", "File5678"]
+    );
+    assert!(
+        nodes[1..]
+            .iter()
+            .all(|node| node.key == Some(file_key(FILE_KEY)))
+    );
+    let (_, files) = folder_files(&nodes, "Fold3r12", "Root1234", None).unwrap();
+    assert_eq!(files.len(), 2);
+}
+
+#[test]
+fn a_folder_its_key_cant_open_is_an_incomplete_link() {
+    let wrong_key = [7; 16];
+    let answer = [NodeAnswer {
+        handle: "Root1234".to_owned(),
+        parent: "Owner123".to_owned(),
+        kind: 1,
+        attributes: ROOT_ATTRIBUTES.to_owned(),
+        key: format!("Root1234:{ROOT_KEY}"),
+        size: 0,
+        timestamp: None,
+    }];
+    let nodes = decrypt_nodes(&answer, "Root1234", &wrong_key);
+    assert!(nodes.is_empty());
+    assert!(matches!(
+        folder_files(&nodes, "Fold3r12", "Root1234", None),
+        Err(PreviewError::LinkIncomplete { .. })
     ));
 }
 

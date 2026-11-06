@@ -2,7 +2,7 @@
 //! names are encrypted. The key is the part of the link after "#", which never leaves the PC: names are decrypted
 //! here, and a file's content as it's saved (AES-128 in counter mode), then checked against the MAC in its key.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -21,7 +21,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
-    Address, FileCheck, FileSource, Host, RemoteFile, Share, check_cancel, network_error,
+    Address, FileCheck, FileSource, Host, RemoteFile, Share, check_cancel, date_of, network_error,
     safe_name, status_error,
 };
 use crate::cancel::CancelToken;
@@ -259,8 +259,12 @@ pub(super) fn read(
                 json!({"a": "f", "c": 1, "ca": 1, "r": 1}),
                 cancel,
             )?;
-            let nodes = decrypt_nodes(&answer.nodes, &key)?;
-            let (title, files) = folder_files(&nodes, &handle, within.as_deref())?;
+            let root = share_root(&answer.nodes).ok_or_else(|| PreviewError::Unavailable {
+                detail: "MEGA listed no shared folder".to_owned(),
+            })?;
+            let nodes = decrypt_nodes(&answer.nodes, &root.handle, &key);
+            let (top, files) = folder_files(&nodes, &handle, &root.handle, within.as_deref())?;
+            let (title, upload_date) = (top.name.clone(), top.timestamp.and_then(date_of));
             let id = match &within {
                 Some(node) => format!("{handle}/{node}"),
                 None => handle,
@@ -270,7 +274,7 @@ pub(super) fn read(
                 id,
                 url: link.to_owned(),
                 title,
-                upload_date: None,
+                upload_date,
                 files,
             })
         }
@@ -338,11 +342,14 @@ struct NodeAnswer {
     kind: u8,
     #[serde(rename = "a", default)]
     attributes: String,
-    /// "<owner>:<key encrypted with the folder's key>", sometimes several separated by "/".
+    /// "<handle>:<key encrypted with that folder's key>", sometimes several separated by "/".
     #[serde(rename = "k", default)]
     key: String,
     #[serde(rename = "s", default)]
     size: u64,
+    /// When it was added, in seconds since 1970.
+    #[serde(rename = "ts", default)]
+    timestamp: Option<i64>,
 }
 
 /// A decrypted node.
@@ -354,6 +361,7 @@ struct Node {
     size: u64,
     /// Set for a file.
     key: Option<FileKey>,
+    timestamp: Option<i64>,
 }
 
 /// Sends one command to MEGA's API and returns its answer, trying again while MEGA says it's busy.
@@ -591,64 +599,70 @@ fn decrypt_name(attributes: &str, key: &[u8; 16]) -> Result<String, PreviewError
         .map_err(|_| wrong_key())
 }
 
-/// Decrypts a shared folder's nodes with the folder's key: each node's key, then its name.
-fn decrypt_nodes(nodes: &[NodeAnswer], folder_key: &[u8; 16]) -> Result<Vec<Node>, PreviewError> {
+/// The shared folder's own node: the folder whose parent isn't in the listing.
+fn share_root(nodes: &[NodeAnswer]) -> Option<&NodeAnswer> {
+    let handles: HashSet<&str> = nodes.iter().map(|node| node.handle.as_str()).collect();
+    nodes
+        .iter()
+        .find(|node| node.kind == 1 && !handles.contains(node.parent.as_str()))
+}
+
+/// Decrypts a shared folder's nodes with the folder's key: each node's key, then its name. A node may list its key
+/// several times, each encrypted for another folder ("<handle>:<key>/<handle>:<key>"); the link's key opens the one
+/// under the shared folder (`root`), so that one is tried first, then the others. A node that none of them opens is
+/// left out, with whatever is inside it, rather than failing the whole folder.
+fn decrypt_nodes(nodes: &[NodeAnswer], root: &str, folder_key: &[u8; 16]) -> Vec<Node> {
     let cipher = Aes128::new(&(*folder_key).into());
     nodes
         .iter()
         .filter(|node| node.kind <= 1)
-        .map(|node| {
-            let encrypted = node
-                .key
-                .split('/')
-                .find_map(|part| part.split_once(':').map(|(_, key)| key))
-                .and_then(decode)
-                .ok_or_else(|| PreviewError::LinkIncomplete {
-                    site: Host::Mega.name().to_owned(),
-                })?;
-            let mut key = Vec::with_capacity(encrypted.len());
-            for block in encrypted.as_chunks::<16>().0 {
-                let mut block = (*block).into();
-                cipher.decrypt_block(&mut block);
-                key.extend_from_slice(&<[u8; 16]>::from(block));
-            }
-            let (name_key, file_key) = match (node.kind, <[u8; 32]>::try_from(key.as_slice())) {
-                (0, Ok(file_key)) => {
-                    let file_key = FileKey(file_key);
-                    (file_key.aes_key(), Some(file_key))
-                }
-                (1, _) => (
-                    <[u8; 16]>::try_from(key.get(..16).unwrap_or_default()).map_err(|_| {
-                        PreviewError::LinkIncomplete {
-                            site: Host::Mega.name().to_owned(),
-                        }
-                    })?,
-                    None,
-                ),
-                _ => {
-                    return Err(PreviewError::LinkIncomplete {
-                        site: Host::Mega.name().to_owned(),
-                    });
-                }
-            };
-            Ok(Node {
-                handle: node.handle.clone(),
-                parent: node.parent.clone(),
-                name: decrypt_name(&node.attributes, &name_key)?,
-                size: node.size,
-                key: file_key,
-            })
-        })
+        .filter_map(|node| decrypt_node(node, root, &cipher))
         .collect()
 }
 
-/// The folder's name and its files, each with its path inside it, sorted by path. With `within`, only that file, or
-/// that subfolder and what it holds.
-fn folder_files(
-    nodes: &[Node],
+fn decrypt_node(node: &NodeAnswer, root: &str, cipher: &Aes128) -> Option<Node> {
+    let mut keys: Vec<(&str, &str)> = node
+        .key
+        .split('/')
+        .filter_map(|part| part.split_once(':'))
+        .collect();
+    // Stable, so the others keep MEGA's order.
+    keys.sort_by_key(|(handle, _)| *handle != root);
+    keys.into_iter().find_map(|(_, encrypted)| {
+        let encrypted = decode(encrypted)?;
+        let mut key = Vec::with_capacity(encrypted.len());
+        for block in encrypted.as_chunks::<16>().0 {
+            let mut block = (*block).into();
+            cipher.decrypt_block(&mut block);
+            key.extend_from_slice(&<[u8; 16]>::from(block));
+        }
+        let (name_key, file_key) = match (node.kind, <[u8; 32]>::try_from(key.as_slice())) {
+            (0, Ok(file_key)) => {
+                let file_key = FileKey(file_key);
+                (file_key.aes_key(), Some(file_key))
+            }
+            (1, _) => (<[u8; 16]>::try_from(key.get(..16)?).ok()?, None),
+            _ => return None,
+        };
+        Some(Node {
+            handle: node.handle.clone(),
+            parent: node.parent.clone(),
+            name: decrypt_name(&node.attributes, &name_key).ok()?,
+            size: node.size,
+            key: file_key,
+            timestamp: node.timestamp,
+        })
+    })
+}
+
+/// The shared folder (`root_handle`), or with `within` the file or subfolder the link points to, and its files,
+/// each with its path inside it, sorted by path. `folder_handle` is the link's, which downloads name.
+fn folder_files<'a>(
+    nodes: &'a [Node],
     folder_handle: &str,
+    root_handle: &str,
     within: Option<&str>,
-) -> Result<(String, Vec<RemoteFile>), PreviewError> {
+) -> Result<(&'a Node, Vec<RemoteFile>), PreviewError> {
     let by_handle: HashMap<&str, &Node> = nodes
         .iter()
         .map(|node| (node.handle.as_str(), node))
@@ -658,11 +672,12 @@ fn folder_files(
     };
     let root = match within {
         Some(handle) => *by_handle.get(handle).ok_or_else(missing)?,
-        // The shared folder is the one whose parent isn't in it.
-        None => nodes
-            .iter()
-            .find(|node| node.key.is_none() && !by_handle.contains_key(node.parent.as_str()))
-            .ok_or_else(missing)?,
+        // The link's key didn't open the shared folder itself.
+        None => *by_handle
+            .get(root_handle)
+            .ok_or_else(|| PreviewError::LinkIncomplete {
+                site: Host::Mega.name().to_owned(),
+            })?,
     };
     let to_file = |node: &Node, path: PathBuf| RemoteFile {
         path,
@@ -675,7 +690,7 @@ fn folder_files(
     };
     if root.key.is_some() {
         return Ok((
-            root.name.clone(),
+            root,
             vec![to_file(root, PathBuf::from(safe_name(&root.name)))],
         ));
     }
@@ -697,7 +712,7 @@ fn folder_files(
         }
     }
     files.sort_by(|first, second| first.path.cmp(&second.path));
-    Ok((root.name.clone(), files))
+    Ok((root, files))
 }
 
 #[cfg(test)]

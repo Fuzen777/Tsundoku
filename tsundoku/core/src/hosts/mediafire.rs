@@ -71,7 +71,7 @@ pub(super) fn read(
                 &[("folder_key", &folder_key)],
                 cancel,
             )?;
-            let name = answer.folder_info.name;
+            let FolderInfo { name, created } = answer.folder_info;
             let mut files = Vec::new();
             let mut folders = vec![(folder_key.clone(), PathBuf::from(safe_name(&name)))];
             while let Some((key, path)) = folders.pop() {
@@ -89,7 +89,7 @@ pub(super) fn read(
                 id: folder_key,
                 url: link.to_owned(),
                 title: name,
-                upload_date: None,
+                upload_date: created.get(..10).map(str::to_owned),
                 files,
             })
         }
@@ -173,6 +173,9 @@ struct FolderInfoAnswer {
 #[derive(Deserialize)]
 struct FolderInfo {
     name: String,
+    /// "YYYY-MM-DD HH:MM:SS".
+    #[serde(default)]
+    created: String,
 }
 
 #[derive(Deserialize)]
@@ -390,7 +393,8 @@ fn page_error(final_url: &str, html: &str) -> PreviewError {
         PreviewError::Unavailable {
             detail: "MediaFire says the file was removed".to_owned(),
         }
-    } else if html.contains("challenge-platform") || html.contains("Just a moment...") {
+    } else if html.contains("Just a moment...") || html.contains("_cf_chl_opt") {
+        // Cloudflare's check page. Its "challenge-platform" script is on every MediaFire page, so it isn't a sign.
         PreviewError::Failed {
             detail: "MediaFire asked for a browser check before the download".to_owned(),
         }
@@ -467,6 +471,14 @@ mod tests {
         assert!(matches!(
             page_error("https://www.mediafire.com/file/x", "<title>Just a moment...</title>"),
             PreviewError::Failed { detail } if detail.contains("browser check")
+        ));
+        // Every MediaFire page loads Cloudflare's challenge-platform script, check or not.
+        assert!(matches!(
+            page_error(
+                "https://www.mediafire.com/file/x",
+                "/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+            ),
+            PreviewError::Failed { detail } if detail.contains("no Download button")
         ));
     }
 

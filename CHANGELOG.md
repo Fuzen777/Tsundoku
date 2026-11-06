@@ -2,6 +2,18 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.16 · 2026-11-06
+
+### Fixed
+
+- **MEGA folders**: a shared folder no longer fails with "missing its key" when some of its files also keep their key for another folder, which about a third of public MEGA folders do. A file the link can't open is left out instead of failing the whole folder.
+- **MediaFire**: a file page without a Download button is no longer always taken for a browser check.
+
+### Changed
+
+- MEGA shared folders and MediaFire folders show their date on the preview card.
+- A folder's download shows Finishing only after its last file, and the speed shown after resuming no longer starts out far too low.
+
 ## 0.1.15 · 2026-11-06
 
 ### New

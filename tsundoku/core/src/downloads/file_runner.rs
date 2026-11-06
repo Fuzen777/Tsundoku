@@ -120,7 +120,10 @@ fn download(
             log,
             on_progress,
         )?;
-        on_progress(DownloadProgress::at(DownloadStage::Finishing));
+        // Checking a file and moving it is quick between a folder's files, so only the last one shows Finishing.
+        if index + 1 == share.files.len() {
+            on_progress(DownloadProgress::at(DownloadStage::Finishing));
+        }
         if !check(&address.check, &part, cancel)? {
             // A damaged file is downloaded again from the start.
             let _ = fs::remove_file(&part);
@@ -176,6 +179,7 @@ fn fetch(
         }
     }
     meter.skip(offset);
+    meter.start_transfer();
 
     let mut output = OpenOptions::new()
         .create(true)
@@ -358,6 +362,16 @@ impl Meter {
     /// Counts bytes that didn't need downloading: a file already there, or the part an earlier run fetched.
     fn skip(&mut self, count: u64) {
         self.done += count;
+    }
+
+    /// Starts timing afresh once a file's bytes begin to arrive, so the time spent asking for its address and
+    /// connecting neither lowers the speed shown nor lets the next bytes come faster than the speed limit.
+    fn start_transfer(&mut self) {
+        let now = Instant::now();
+        self.paced_since = now;
+        self.paced_bytes = 0;
+        self.last_report = now;
+        self.bytes_since_report = 0;
     }
 
     /// Counts bytes just downloaded, waits if they came faster than the speed limit, and reports now and then.
