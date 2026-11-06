@@ -33,5 +33,7 @@ function describeStage(stage: ToolStage): { text: string; fraction?: number } {
       return { text: text.checking }
     case "updating":
       return { text: text.updating }
+    case "waiting":
+      return { text: text.waiting }
   }
 }

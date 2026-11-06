@@ -335,8 +335,10 @@ pub struct ToolsSettings {
     pub deno: Option<ToolSetup>,
     pub gallery_dl: Option<ToolSetup>,
     pub yt_dlp_channel: UpdateChannel,
-    /// When yt-dlp was last checked for updates, in seconds since 1970, so the startup check runs at most once a day.
+    /// When yt-dlp was last checked for updates, in seconds since 1970, so its update runs at most once a day.
     pub yt_dlp_last_update_check: Option<u64>,
+    /// The same for gallery-dl.
+    pub gallery_dl_last_update_check: Option<u64>,
     /// Where the app's own copies go, picked at the first-run setup, or `None` for the data folder's `tools\`.
     pub folder: Option<PathBuf>,
     /// Where yt-dlp, gallery-dl and Deno keep their caches. `None` until the first-run setup asks; an install set up
@@ -371,6 +373,24 @@ impl ToolsSettings {
             ToolId::Ffmpeg => self.ffmpeg = setup,
             ToolId::Deno => self.deno = setup,
             ToolId::GalleryDl => self.gallery_dl = setup,
+        }
+    }
+
+    /// When a tool that updates itself once a day (`ToolId::UPDATED_DAILY`) was last checked, or `None` for the others.
+    pub fn last_update_check(&self, id: ToolId) -> Option<u64> {
+        match id {
+            ToolId::YtDlp => self.yt_dlp_last_update_check,
+            ToolId::GalleryDl => self.gallery_dl_last_update_check,
+            ToolId::Ffmpeg | ToolId::Deno => None,
+        }
+    }
+
+    /// Records when a tool that updates itself once a day was checked, in seconds since 1970. The others keep no record.
+    pub fn set_last_update_check(&mut self, id: ToolId, seconds: u64) {
+        match id {
+            ToolId::YtDlp => self.yt_dlp_last_update_check = Some(seconds),
+            ToolId::GalleryDl => self.gallery_dl_last_update_check = Some(seconds),
+            ToolId::Ffmpeg | ToolId::Deno => {}
         }
     }
 }

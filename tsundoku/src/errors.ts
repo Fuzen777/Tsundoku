@@ -64,6 +64,8 @@ export function describeToolError(error: unknown, id: ToolId): ErrorDescription 
       return { message: text.updateFailed(name), detail: error.detail || undefined }
     case "busy":
       return { message: text.busy(name) }
+    case "inUse":
+      return { message: text.inUse(name) }
     case "cancelled":
       return { message: strings.errors.cancelled }
     case "notManaged":

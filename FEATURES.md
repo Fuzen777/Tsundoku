@@ -147,7 +147,7 @@ type: Features
 
 - **A site's page couldn't be read**: Update yt-dlp, and Try Nightly when Tsundoku's copy is on Stable, right under the error, on the preview card or the queue row.
 - **The video needs a signed-in account**: with cookies off, Set Up Cookies opens Settings. With cookies on, the preview names the site and says whether a browser is signed in to it: "Instagram needs you signed in. Sign in to Instagram in your browser, then try again." or that the site refused the browser's sign-in, with Try Again and Cookie Settings.
-- **A post of images while gallery-dl isn't set up**: Set Up Image Downloads sets it up and fetches the post again. A site gallery-dl couldn't read offers Update gallery-dl.
+- **A post of images while gallery-dl isn't set up**: Set Up Image Downloads sets it up and fetches the post again. A site gallery-dl couldn't read offers Update gallery-dl, which updates Tsundoku's copy (or sets it up in place of yours).
 
 ## Tools
 
@@ -173,7 +173,7 @@ Tsundoku downloads with four free tools: yt-dlp, ffmpeg (with ffprobe), Deno, wh
 
 ### Updates
 
-- **yt-dlp**: Tsundoku's copy updates itself in the background at startup, at most once a day, and on demand with Update Now.
+- **yt-dlp and gallery-dl**: Tsundoku's copies update themselves in the background once a day, at startup and while Tsundoku keeps running (in the tray for days, say), and on demand with Update Now. Settings → Tools says so under each. An update waits until no preview, read or download is using the tool, so nothing running is cut off, and one that fails leaves the copy as it was. gallery-dl is only downloaded again when a newer build is out.
 - **Update channel**: Stable or Nightly, which gets site fixes sooner. Switching updates Tsundoku's copy right away, including back from a nightly build to the latest stable one.
-- **ffmpeg, Deno and gallery-dl**: Check for Updates asks for a newer build, and Update installs it. They're never updated without asking.
+- **ffmpeg and Deno**: Check for Updates asks for a newer build, and Update installs it. They're never updated without asking, since they rarely break downloads.
 - **Your own copies are never updated** by Tsundoku.

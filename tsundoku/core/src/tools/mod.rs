@@ -35,7 +35,7 @@ const GALLERY_DL_CACHE: &str = "gallery-dl";
 /// it first.
 const VERSION_TIMEOUT: Duration = Duration::from_secs(60);
 const UPDATE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-/// yt-dlp is checked for updates at startup at most this often.
+/// The tools that update themselves (`ToolId::UPDATED_DAILY`) are checked at most this often.
 const UPDATE_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 /// How long a release looked up on GitHub is reused, so the setup's sizes and downloads take one request per tool.
 const RELEASE_CACHE_LIFETIME: Duration = Duration::from_secs(10 * 60);
@@ -66,6 +66,9 @@ impl ToolId {
     pub const ALL: [Self; 4] = [Self::YtDlp, Self::Ffmpeg, Self::Deno, Self::GalleryDl];
     /// The tools the first-run setup sets up: all of them. Only yt-dlp and ffmpeg are needed to leave it.
     pub const SETUP: [Self; 4] = Self::ALL;
+    /// The tools whose app copies update themselves once a day, since sites' changes break them: yt-dlp, and gallery-dl
+    /// for Instagram and X. ffmpeg's and Deno's updates are only offered.
+    pub const UPDATED_DAILY: [Self; 2] = [Self::YtDlp, Self::GalleryDl];
 }
 
 /// Why a tool can't be set up, updated or run. The UI turns each into a sentence; `detail` fields carry the
@@ -106,6 +109,9 @@ pub enum ToolError {
     /// The tool is already being installed or updated.
     #[error("already being installed or updated")]
     Busy,
+    /// Its old copy kept running (previews, reads, downloads) for as long as an install waits to replace it.
+    #[error("in use for too long to be replaced")]
+    InUse,
     #[error("cancelled")]
     Cancelled,
     /// Only the app's own copy is updated by the app.
@@ -282,6 +288,8 @@ pub enum ToolStage {
     Checking,
     /// yt-dlp updating itself.
     Updating,
+    /// Waiting for the runs of the old copy (previews, reads, downloads) to end before replacing it.
+    Waiting,
 }
 
 /// Runs everything to do with the tools. Shared by the app's commands; every method may be called from any thread.
@@ -390,29 +398,18 @@ impl ToolManager {
         operation.report(ToolStage::Connecting);
         let github = GitHub::new(&self.app_version)?;
         let release = self.latest_release(id, &github, false)?;
-        let checksum = install::install_release(
+        let checksum = install::release_checksum(id, &release, &github)?;
+        install::install_release(
             id,
             &release,
+            &checksum,
             &github,
             &self.tools_folder(),
             &operation.cancel,
             &|stage| operation.report(stage),
         )?;
-
         operation.report(ToolStage::Checking);
-        let executable = locate::managed_executable(&self.tools_folder(), id);
-        let version = read_version(id, &executable).map_err(missing_means_blocked)?;
-        let setup = ToolSetup::Managed {
-            checksum: Some(checksum),
-        };
-        self.settings.update(|settings| {
-            settings.tools.set(id, Some(setup.clone()));
-            if id == ToolId::YtDlp {
-                // Just downloaded, so already up to date.
-                settings.tools.yt_dlp_last_update_check = Some(seconds_since_epoch());
-            }
-        })?;
-        Ok(tool_status(id, &setup, &executable, Ok(version)))
+        self.adopt_installed(id, checksum)
     }
 
     /// Sets up a copy already on this PC, such as one found at setup or picked in Settings.
@@ -464,9 +461,7 @@ impl ToolManager {
         let result =
             process::run_collecting_with_cancel(&command, &operation.cancel, UPDATE_TIMEOUT);
         // Recorded even when it failed, so a failing update isn't retried at every start.
-        let _ = self.settings.update(|settings| {
-            settings.tools.yt_dlp_last_update_check = Some(seconds_since_epoch())
-        });
+        self.record_update_check(ToolId::YtDlp);
 
         let output = result.map_err(|error| match error {
             RunError::Start { source, .. } => start_error(source, &executable),
@@ -485,17 +480,52 @@ impl ToolManager {
         Ok(tool_status(ToolId::YtDlp, &setup, &executable, Ok(version)))
     }
 
-    /// Whether the app's copy of yt-dlp is due its startup update check.
-    pub fn yt_dlp_update_due(&self) -> bool {
+    /// Updates the app's copy of gallery-dl to its latest release, unless it's that release already. Through the app's
+    /// own install rather than gallery-dl's `--update`, which looks for its GitHub releases: they've had no files since
+    /// gallery-dl moved to Codeberg. Waits for its runs to end before replacing it (`ToolStage::Waiting`).
+    pub fn update_gallery_dl(
+        &self,
+        on_progress: &dyn Fn(ToolProgress),
+    ) -> Result<ToolStatus, ToolError> {
+        self.update_to_latest(
+            ToolId::GalleryDl,
+            &ReleaseHosts { manager: self },
+            on_progress,
+        )
+        .map(|update| update.status)
+    }
+
+    /// Whether the app's copy of a tool that updates itself (`ToolId::UPDATED_DAILY`) is due its daily update.
+    pub fn update_due(&self, id: ToolId) -> bool {
         let tools = self.settings.get().tools;
-        matches!(tools.yt_dlp, Some(ToolSetup::Managed { .. }))
-            && tools.yt_dlp_last_update_check.is_none_or(|last_check| {
+        ToolId::UPDATED_DAILY.contains(&id)
+            && matches!(tools.get(id), Some(ToolSetup::Managed { .. }))
+            && tools.last_update_check(id).is_none_or(|last_check| {
                 seconds_since_epoch().saturating_sub(last_check) >= UPDATE_CHECK_INTERVAL.as_secs()
             })
     }
 
-    /// Asks GitHub whether a newer build than the app's copy exists. For ffmpeg, Deno and gallery-dl, whose updates
-    /// are offered, never automatic.
+    /// Runs the daily update of each tool that's due one (yt-dlp, then gallery-dl), one after the other. A tool that's
+    /// running (a preview, a read or a download) is left for a later call, so no run has its program replaced under it.
+    /// Returns whether a tool changed.
+    pub fn run_due_updates(&self, on_progress: &dyn Fn(ToolProgress)) -> bool {
+        let mut changed = false;
+        for id in ToolId::UPDATED_DAILY {
+            if !self.update_due(id) || self.is_running(id) {
+                continue;
+            }
+            changed |= if id == ToolId::YtDlp {
+                self.update_yt_dlp(on_progress).is_ok()
+            } else {
+                self.update_to_latest(id, &ReleaseHosts { manager: self }, on_progress)
+                    .is_ok_and(|update| update.changed)
+            };
+        }
+        changed
+    }
+
+    /// Asks the release host whether a newer build than the app's copy exists. For ffmpeg and Deno, whose updates are
+    /// offered, never automatic.
     pub fn check_for_update(&self, id: ToolId) -> Result<ToolUpdateCheck, ToolError> {
         let Some(ToolSetup::Managed { checksum }) = self.settings.get().tools.get(id).cloned()
         else {
@@ -532,6 +562,93 @@ impl ToolManager {
             let _ = fs::create_dir_all(root.join(GALLERY_DL_CACHE));
             ToolCacheFolder::new(root)
         })
+    }
+
+    /// Updates the app's copy of `id` to the latest build `releases` has, unless it's that build already, and records the
+    /// daily check.
+    fn update_to_latest(
+        &self,
+        id: ToolId,
+        releases: &dyn Releases,
+        on_progress: &dyn Fn(ToolProgress),
+    ) -> Result<ToolUpdate, ToolError> {
+        let Some(ToolSetup::Managed { checksum: current }) =
+            self.settings.get().tools.get(id).cloned()
+        else {
+            return Err(ToolError::NotManaged);
+        };
+        let operation = self.begin(id, on_progress)?;
+        operation.report(ToolStage::Connecting);
+        let installed = releases.latest(id).and_then(|(release, latest)| {
+            if current.as_deref() == Some(latest.as_str()) {
+                return Ok(None);
+            }
+            releases.install(
+                id,
+                &release,
+                &latest,
+                &self.tools_folder(),
+                &operation.cancel,
+                &|stage| operation.report(stage),
+            )?;
+            Ok(Some(latest))
+        });
+        // Recorded even when it failed, so a failing update isn't retried at every start; not when the old copy stayed
+        // in use, so it's tried again once it's free.
+        if !matches!(installed, Err(ToolError::InUse)) {
+            self.record_update_check(id);
+        }
+
+        match installed? {
+            None => {
+                let setup = ToolSetup::Managed { checksum: current };
+                let executable = locate::managed_executable(&self.tools_folder(), id);
+                Ok(ToolUpdate {
+                    status: tool_status(id, &setup, &executable, read_version(id, &executable)),
+                    changed: false,
+                })
+            }
+            Some(checksum) => {
+                operation.report(ToolStage::Checking);
+                Ok(ToolUpdate {
+                    status: self.adopt_installed(id, checksum)?,
+                    changed: true,
+                })
+            }
+        }
+    }
+
+    /// Sets up the copy just installed in the tool's folder as the app's own, once it runs. `checksum` is its release
+    /// file's.
+    fn adopt_installed(&self, id: ToolId, checksum: String) -> Result<ToolStatus, ToolError> {
+        let executable = locate::managed_executable(&self.tools_folder(), id);
+        let version = read_version(id, &executable).map_err(missing_means_blocked)?;
+        let setup = ToolSetup::Managed {
+            checksum: Some(checksum),
+        };
+        self.settings.update(|settings| {
+            settings.tools.set(id, Some(setup.clone()));
+            // Just downloaded, so already up to date.
+            settings
+                .tools
+                .set_last_update_check(id, seconds_since_epoch());
+        })?;
+        Ok(tool_status(id, &setup, &executable, Ok(version)))
+    }
+
+    /// Records that a tool that updates itself was just checked. A record that can't be saved only means an earlier
+    /// check next time.
+    fn record_update_check(&self, id: ToolId) {
+        let _ = self.settings.update(|settings| {
+            settings
+                .tools
+                .set_last_update_check(id, seconds_since_epoch());
+        });
+    }
+
+    /// Whether a program from the app's copy of the tool is running.
+    fn is_running(&self, id: ToolId) -> bool {
+        process::is_running_from(&self.tools_folder().join(spec(id).folder))
     }
 
     /// The folder the app's own copies go in: the one picked at the first-run setup, or the data folder's `tools\`.
@@ -587,6 +704,57 @@ impl ToolManager {
             cancel,
             on_progress,
         })
+    }
+}
+
+/// What an update did: the copy's status, and whether it's a new build.
+struct ToolUpdate {
+    status: ToolStatus,
+    changed: bool,
+}
+
+/// Where an update finds a tool's latest build and installs it: the release hosts, or a stand-in in tests.
+trait Releases {
+    /// The latest release, and the SHA-256 it lists for the tool's file.
+    fn latest(&self, id: ToolId) -> Result<(Release, String), ToolError>;
+
+    /// Downloads the tool's file from `release`, checks it against `checksum` and puts it in its folder under
+    /// `tools_folder` once its old copy isn't running.
+    fn install(
+        &self,
+        id: ToolId,
+        release: &Release,
+        checksum: &str,
+        tools_folder: &Path,
+        cancel: &CancelToken,
+        report: &dyn Fn(ToolStage),
+    ) -> Result<(), ToolError>;
+}
+
+/// The tools' release hosts: GitHub, and Codeberg for gallery-dl.
+struct ReleaseHosts<'a> {
+    manager: &'a ToolManager,
+}
+
+impl Releases for ReleaseHosts<'_> {
+    fn latest(&self, id: ToolId) -> Result<(Release, String), ToolError> {
+        let github = GitHub::new(&self.manager.app_version)?;
+        let release = self.manager.latest_release(id, &github, true)?;
+        let checksum = install::release_checksum(id, &release, &github)?;
+        Ok((release, checksum))
+    }
+
+    fn install(
+        &self,
+        id: ToolId,
+        release: &Release,
+        checksum: &str,
+        tools_folder: &Path,
+        cancel: &CancelToken,
+        report: &dyn Fn(ToolStage),
+    ) -> Result<(), ToolError> {
+        let github = GitHub::new(&self.manager.app_version)?;
+        install::install_release(id, release, checksum, &github, tools_folder, cancel, report)
     }
 }
 
@@ -844,36 +1012,201 @@ mod tests {
         let manager = manager_in(&folder);
         assert_eq!(manager.update_yt_dlp(&|_| {}), Err(ToolError::NotManaged));
         assert_eq!(
+            manager.update_gallery_dl(&|_| {}),
+            Err(ToolError::NotManaged)
+        );
+        assert_eq!(
             manager.check_for_update(ToolId::Deno),
             Err(ToolError::NotManaged)
         );
-        assert!(!manager.yt_dlp_update_due());
+        assert!(!manager.update_due(ToolId::YtDlp));
+
+        manager
+            .settings
+            .update(|settings| {
+                settings.tools.set(
+                    ToolId::GalleryDl,
+                    Some(ToolSetup::External {
+                        path: "gallery-dl.exe".into(),
+                    }),
+                );
+            })
+            .unwrap();
+        assert!(
+            !manager.update_due(ToolId::GalleryDl),
+            "never the user's copy"
+        );
+        assert!(!manager.run_due_updates(&|_| {}));
+    }
+
+    /// Sets the tool up as the app's own copy from the release file with `checksum`, last checked at `last_check`.
+    fn set_managed(manager: &ToolManager, id: ToolId, checksum: &str, last_check: Option<u64>) {
+        manager
+            .settings
+            .update(|settings| {
+                settings.tools.set(
+                    id,
+                    Some(ToolSetup::Managed {
+                        checksum: Some(checksum.to_owned()),
+                    }),
+                );
+                settings.tools.yt_dlp_last_update_check = None;
+                settings.tools.gallery_dl_last_update_check = None;
+                if let Some(seconds) = last_check {
+                    settings.tools.set_last_update_check(id, seconds);
+                }
+            })
+            .unwrap();
     }
 
     #[test]
-    fn checks_yt_dlp_for_updates_once_a_day() {
+    fn updates_yt_dlp_and_gallery_dl_once_a_day() {
         let folder = tempfile::tempdir().unwrap();
         let manager = manager_in(&folder);
-        let set_last_check = |last_check| {
-            manager
-                .settings
-                .update(|settings| {
-                    settings
-                        .tools
-                        .set(ToolId::YtDlp, Some(ToolSetup::Managed { checksum: None }));
-                    settings.tools.yt_dlp_last_update_check = last_check;
-                })
-                .unwrap();
+        for id in ToolId::UPDATED_DAILY {
+            set_managed(&manager, id, "abc", None);
+            assert!(manager.update_due(id), "{id:?} never checked");
+            set_managed(&manager, id, "abc", Some(seconds_since_epoch() - 60));
+            assert!(!manager.update_due(id), "{id:?} checked a minute ago");
+            set_managed(
+                &manager,
+                id,
+                "abc",
+                Some(seconds_since_epoch() - UPDATE_CHECK_INTERVAL.as_secs()),
+            );
+            assert!(manager.update_due(id), "{id:?} checked a day ago");
+        }
+        for id in [ToolId::Ffmpeg, ToolId::Deno] {
+            set_managed(&manager, id, "abc", None);
+            assert!(!manager.update_due(id), "{id:?}'s updates are only offered");
+        }
+    }
+
+    /// A release host that has `latest`, and records each install asked of it, which ends with `install_result`.
+    struct FakeReleases {
+        latest: Result<String, ToolError>,
+        install_result: Result<(), ToolError>,
+        installs: Mutex<Vec<String>>,
+    }
+
+    impl FakeReleases {
+        fn new(latest: Result<&str, ToolError>, install_result: Result<(), ToolError>) -> Self {
+            Self {
+                latest: latest.map(str::to_owned),
+                install_result,
+                installs: Mutex::default(),
+            }
+        }
+    }
+
+    impl Releases for FakeReleases {
+        fn latest(&self, _id: ToolId) -> Result<(Release, String), ToolError> {
+            let release = Release {
+                tag_name: "v1.32.0".into(),
+                published_at: None,
+                assets: Vec::new(),
+            };
+            self.latest.clone().map(|checksum| (release, checksum))
+        }
+
+        fn install(
+            &self,
+            _id: ToolId,
+            _release: &Release,
+            checksum: &str,
+            _tools_folder: &Path,
+            _cancel: &CancelToken,
+            _report: &dyn Fn(ToolStage),
+        ) -> Result<(), ToolError> {
+            lock(&self.installs).push(checksum.to_owned());
+            self.install_result.clone()
+        }
+    }
+
+    #[test]
+    fn leaves_a_copy_that_is_already_the_latest_build() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        set_managed(&manager, ToolId::GalleryDl, "abc", None);
+        let releases = FakeReleases::new(Ok("abc"), Ok(()));
+        let ends = Mutex::new(0);
+        let on_progress = |progress: ToolProgress| {
+            if progress.stage.is_none() {
+                *lock(&ends) += 1;
+            }
         };
 
-        set_last_check(None);
-        assert!(manager.yt_dlp_update_due());
-        set_last_check(Some(seconds_since_epoch() - 60));
-        assert!(!manager.yt_dlp_update_due());
-        set_last_check(Some(
-            seconds_since_epoch() - UPDATE_CHECK_INTERVAL.as_secs(),
+        let update = manager
+            .update_to_latest(ToolId::GalleryDl, &releases, &on_progress)
+            .unwrap();
+        assert!(!update.changed);
+        assert_eq!(update.status.setup, Some(ToolSetupKind::Managed));
+        assert!(lock(&releases.installs).is_empty(), "nothing downloaded");
+        assert!(
+            !manager.update_due(ToolId::GalleryDl),
+            "the check is recorded"
+        );
+        assert_eq!(*lock(&ends), 1, "the operation ended");
+        assert_eq!(
+            manager.settings.get().tools.gallery_dl,
+            Some(ToolSetup::Managed {
+                checksum: Some("abc".into())
+            })
+        );
+    }
+
+    #[test]
+    fn installs_a_newer_build_and_records_a_failed_check() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        set_managed(&manager, ToolId::GalleryDl, "abc", None);
+        let releases = FakeReleases::new(
+            Ok("def"),
+            Err(ToolError::Network {
+                detail: "offline".into(),
+            }),
+        );
+        assert!(matches!(
+            manager.update_to_latest(ToolId::GalleryDl, &releases, &|_| {}),
+            Err(ToolError::Network { .. })
         ));
-        assert!(manager.yt_dlp_update_due());
+        assert_eq!(*lock(&releases.installs), ["def"]);
+        assert!(
+            !manager.update_due(ToolId::GalleryDl),
+            "a failed update isn't retried at once"
+        );
+        assert_eq!(
+            manager.settings.get().tools.gallery_dl,
+            Some(ToolSetup::Managed {
+                checksum: Some("abc".into())
+            }),
+            "the old copy stays"
+        );
+
+        set_managed(&manager, ToolId::GalleryDl, "abc", None);
+        let unreachable = FakeReleases::new(Err(ToolError::RateLimited), Ok(()));
+        assert_eq!(
+            manager
+                .update_to_latest(ToolId::GalleryDl, &unreachable, &|_| {})
+                .err(),
+            Some(ToolError::RateLimited)
+        );
+        assert!(!manager.update_due(ToolId::GalleryDl));
+    }
+
+    #[test]
+    fn tries_again_soon_when_the_old_copy_stayed_in_use() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        set_managed(&manager, ToolId::GalleryDl, "abc", None);
+        let releases = FakeReleases::new(Ok("def"), Err(ToolError::InUse));
+        assert_eq!(
+            manager
+                .update_to_latest(ToolId::GalleryDl, &releases, &|_| {})
+                .err(),
+            Some(ToolError::InUse)
+        );
+        assert!(manager.update_due(ToolId::GalleryDl), "not recorded");
     }
 
     #[test]

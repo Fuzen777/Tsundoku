@@ -47,7 +47,7 @@ Existing yt-dlp GUIs put a window on top of the command line but don't keep trac
 1. Three tools: yt-dlp (official release), ffmpeg and ffprobe (yt-dlp's own FFmpeg builds), and Deno (official release). Since 2025.11.12, yt-dlp needs a JavaScript runtime for full YouTube support, and Deno is the one it recommends.
 2. They live in the app's data folder under `tools\`. The first run finds copies already on PATH (such as winget's) and offers to use them; otherwise it downloads the official ones. Settings can point each tool at any file.
 3. Downloaded at runtime, never bundled: the installer stays small, and the app never redistributes ffmpeg, which is GPL.
-4. yt-dlp is checked for updates at startup (at most once a day) and on demand. The Stable channel is the default; Nightly is offered in Settings for faster site fixes.
+4. yt-dlp and gallery-dl are checked for updates once a day (at startup, and while the app keeps running) and on demand, since sites' changes break them. For yt-dlp, the Stable channel is the default; Nightly is offered in Settings for faster site fixes.
 5. ffmpeg and Deno updates are offered, never automatic, since they rarely break anything.
 6. Tools the user picked (such as winget's) are never updated by the app; Settings shows their version.
 

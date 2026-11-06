@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.47 · 2026-11-06
+
+### Added
+
+- **Image downloads keep working by themselves**: Tsundoku's copy of gallery-dl, the tool behind posts of images, now updates itself once a day like yt-dlp's, so a change at Instagram or X no longer leaves posts failing until someone thinks to update it. It's only downloaded again when a newer build is out. In Settings → Tools, its Check for Updates is now Update Now, and both tools say they update once a day.
+- **Daily updates while Tsundoku keeps running**: yt-dlp and gallery-dl are now updated whenever Tsundoku stays open past a day, in the tray with Start with Windows, say, not only when it starts.
+
+### Fixed
+
+- **Updates no longer pull a tool from under a download**: a new gallery-dl only replaces the old one once no preview, read or download is using it, and the daily updates of yt-dlp and gallery-dl wait until the tool isn't running. Meanwhile Update Now shows "Waiting for the downloads using it to finish…", for up to five minutes. A failed or cancelled update leaves the old copy working.
+
 ## 0.1.46 · 2026-11-06
 
 ### Fixed

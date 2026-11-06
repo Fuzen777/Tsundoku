@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { installTool, setYtDlpChannel, updateYtDlp } from "../api"
+import { installTool, setYtDlpChannel, updateGalleryDl, updateYtDlp } from "../api"
 import { describeToolError, fixFor, isCancelled, type ErrorDescription } from "../errors"
 import { useAppActions } from "../navigation"
 import { useStoreToolStatus, useStoreYtDlpChannel, useToolsOverview } from "../queries"
@@ -38,22 +38,37 @@ export function FailureFixes({ error, onRetry }: { error: unknown; onRetry?: () 
     )
   }
   if (fix === "updateYtDlp") return <UpdateYtDlp />
-  if (fix === "updateGalleryDl") return <InstallGalleryDl label={strings.queue.fixes.updateGalleryDl} onDone={onRetry} />
+  if (fix === "updateGalleryDl") {
+    return <InstallGalleryDl label={strings.queue.fixes.updateGalleryDl} updateOwnCopy onDone={onRetry} />
+  }
   if (fix === "setUpImages") return <InstallGalleryDl label={strings.queue.fixes.setUpImages} onDone={onRetry} />
   return null
 }
 
-/** Downloads Tsundoku's own copy of gallery-dl, the latest one, then tries again when the caller can. */
-function InstallGalleryDl({ label, onDone }: { label: string; onDone?: () => void }) {
+/**
+ * Downloads Tsundoku's own copy of gallery-dl, the latest one, then tries again when the caller can. With
+ * `updateOwnCopy`, a copy that's already Tsundoku's is updated instead, downloaded only when a newer one exists.
+ */
+function InstallGalleryDl({
+  label,
+  updateOwnCopy = false,
+  onDone,
+}: {
+  label: string
+  updateOwnCopy?: boolean
+  onDone?: () => void
+}) {
+  const { data: tools } = useToolsOverview()
   const storeToolStatus = useStoreToolStatus()
   const [installing, setInstalling] = useState(false)
   const [outcome, setOutcome] = useState<(ErrorDescription & { tone: "success" | "danger" }) | null>(null)
+  const isOwnCopy = tools?.tools.find((tool) => tool.id === "galleryDl")?.setup === "managed"
 
   async function install() {
     setInstalling(true)
     setOutcome(null)
     try {
-      const installed = await installTool("galleryDl")
+      const installed = updateOwnCopy && isOwnCopy ? await updateGalleryDl() : await installTool("galleryDl")
       storeToolStatus(installed)
       if (onDone) onDone()
       else setOutcome({ tone: "success", message: strings.queue.fixes.installed })

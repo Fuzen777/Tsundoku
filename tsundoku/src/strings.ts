@@ -551,6 +551,7 @@ export const strings = {
       installing: "Installing…",
       checking: "Making sure it runs…",
       updating: "Updating…",
+      waiting: "Waiting for the downloads using it to finish…",
     },
     errors: {
       network: "Couldn't reach the download site. Check your connection, then try again.",
@@ -567,6 +568,7 @@ export const strings = {
       wontRun: (name: string) => `${name} won't run.`,
       updateFailed: (name: string) => `${name} couldn't update.`,
       busy: (name: string) => `${name} is already being set up or updated.`,
+      inUse: (name: string) => `${name} stayed in use by downloads, so it wasn't replaced. Try again once they finish.`,
       notManaged: (name: string) => `Only Tsundoku's own copy of ${name} can be updated.`,
       storage: "Couldn't write the tool's files.",
     },
@@ -625,6 +627,7 @@ export const strings = {
     tools: "Tools",
     loadingTools: "Checking the tools…",
     updateNow: "Update Now",
+    updatesDaily: "Tsundoku updates it once a day.",
     checkForUpdates: "Check for Updates",
     update: "Update",
     download: "Download",

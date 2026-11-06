@@ -239,7 +239,7 @@ pub fn run() {
             app.manage(Backdrop { has_mica });
 
             let tool_manager = open_data(app)?;
-            tools::start_daily_yt_dlp_update(app.handle().clone(), tool_manager);
+            tools::start_daily_updates(app.handle().clone(), tool_manager);
             // The saved theme, while the window is still hidden, so its title bar, Mica and the WebView match from the
             // first frame. A window left in Windows' theme is still usable, so a failure doesn't stop the app.
             let theme = app.state::<Arc<SettingsStore>>().get().appearance.theme;
@@ -267,6 +267,7 @@ pub fn run() {
             tools::use_tool_copy,
             tools::cancel_tool_operation,
             tools::update_yt_dlp,
+            tools::update_gallery_dl,
             tools::check_tool_update,
             tools::set_yt_dlp_channel,
             tools::supported_sites,

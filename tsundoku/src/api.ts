@@ -78,7 +78,7 @@ export const queryKeys = {
 
 /** Sent by the core while a tool is installed or updated. */
 const TOOL_PROGRESS_EVENT = "tool-progress"
-/** Sent by the core when a tool changed on its own, such as yt-dlp's daily update. */
+/** Sent by the core when a tool changed on its own, such as yt-dlp's or gallery-dl's daily update. */
 const TOOLS_CHANGED_EVENT = "tools-changed"
 /** Sent by the core with every queue item when the queue changes. */
 const QUEUE_CHANGED_EVENT = "queue-changed"
@@ -202,6 +202,15 @@ export async function cancelToolOperation(id: ToolId): Promise<void> {
 export function updateYtDlp(): Promise<ToolStatus> {
   if (!isTauri()) return outsideTauri()
   return invoke<ToolStatus>("update_yt_dlp")
+}
+
+/**
+ * Updates Tsundoku's own copy of gallery-dl to its latest release, downloading it only when it's newer, once nothing is
+ * running it. Progress arrives through `onToolProgress`.
+ */
+export function updateGalleryDl(): Promise<ToolStatus> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<ToolStatus>("update_gallery_dl")
 }
 
 export function checkToolUpdate(id: ToolId): Promise<ToolUpdateCheck> {

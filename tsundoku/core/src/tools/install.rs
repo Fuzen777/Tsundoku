@@ -3,6 +3,8 @@
 use std::fs::{self, File};
 use std::io::{self, BufReader};
 use std::path::Path;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use zip::ZipArchive;
 
@@ -11,20 +13,26 @@ use super::github::{GitHub, Release};
 use super::locate::ffprobe_beside;
 use super::{ToolError, ToolId, ToolStage, checksum};
 use crate::cancel::CancelToken;
+use crate::process;
 
-/// Downloads the tool from `release`, checks it against the release's checksum and puts it in its folder under
-/// `tools_folder`, in place of any older copy. Returns the release file's checksum.
+/// The longest an install waits for the runs of the tool's old copy to end before giving up with `ToolError::InUse`.
+const IN_USE_LIMIT: Duration = Duration::from_secs(5 * 60);
+/// How often it looks again meanwhile.
+const IN_USE_RECHECK: Duration = Duration::from_millis(500);
+
+/// Downloads the tool from `release`, checks it against `expected` (the release's checksum, from `release_checksum`)
+/// and puts it in its folder under `tools_folder`, in place of any older copy once nothing runs it.
 pub(crate) fn install_release(
     id: ToolId,
     release: &Release,
+    expected: &str,
     github: &GitHub,
     tools_folder: &Path,
     cancel: &CancelToken,
     report: &dyn Fn(ToolStage),
-) -> Result<String, ToolError> {
+) -> Result<(), ToolError> {
     let tool = spec(id);
     let asset = release.asset(tool.release.asset)?;
-    let expected = release_checksum(id, release, github)?;
     // One working folder per tool, since the first-run setup installs several at once.
     let download_folder = tools_folder.join(format!(".download-{}", tool.folder));
     let new_folder = tools_folder.join(format!(".new-{}", tool.folder));
@@ -54,8 +62,13 @@ pub(crate) fn install_release(
             Package::Zip { keep } => extract_zip(&download_path, &new_folder, keep)?,
         }
         require_executables(id, &new_folder)?;
-        replace_folder(&new_folder, &tools_folder.join(tool.folder))?;
-        Ok(expected)
+        replace_once_unused(
+            &new_folder,
+            &tools_folder.join(tool.folder),
+            cancel,
+            report,
+            IN_USE_LIMIT,
+        )
     })();
 
     let _ = fs::remove_dir_all(&download_folder);
@@ -133,8 +146,39 @@ fn require_executables(id: ToolId, folder: &Path) -> Result<(), ToolError> {
     }
 }
 
+/// Puts `new_folder` in place of `target` once no program in `target` runs (a preview, a read or a download), so a
+/// run is never left with its program swapped under it. Gives up with `ToolError::InUse` after `limit`.
+fn replace_once_unused(
+    new_folder: &Path,
+    target: &Path,
+    cancel: &CancelToken,
+    report: &dyn Fn(ToolStage),
+    limit: Duration,
+) -> Result<(), ToolError> {
+    let started = Instant::now();
+    let mut waiting = false;
+    loop {
+        if let Some(replaced) =
+            process::unless_running_from(target, || replace_folder(new_folder, target))
+        {
+            return Ok(replaced?);
+        }
+        if cancel.is_cancelled() {
+            return Err(ToolError::Cancelled);
+        }
+        if started.elapsed() >= limit {
+            return Err(ToolError::InUse);
+        }
+        if !waiting {
+            report(ToolStage::Waiting);
+            waiting = true;
+        }
+        thread::sleep(IN_USE_RECHECK);
+    }
+}
+
 /// Puts `new_folder` in place of `target`. The old copy is moved aside first and deleted after, or put back if the
-/// new one can't take its place. Fails if a file in the old copy is in use.
+/// new one can't take its place.
 fn replace_folder(new_folder: &Path, target: &Path) -> io::Result<()> {
     let mut old_name = std::ffi::OsString::from(".old-");
     old_name.push(target.file_name().unwrap_or_default());
@@ -244,6 +288,77 @@ mod tests {
 
         assert_eq!(names_in(&target), ["new.txt"]);
         assert_eq!(names_in(folder.path()), ["deno"]);
+    }
+
+    /// A program counted as running from `folder` for as long as the returned run lasts: a `cmd.exe` copied there,
+    /// waiting on ping.
+    #[cfg(windows)]
+    fn run_from(folder: &Path) -> (CancelToken, thread::JoinHandle<()>) {
+        let program = folder.join("cmd.exe");
+        let shell = std::env::var_os("ComSpec").expect("Windows sets ComSpec");
+        fs::copy(shell, &program).unwrap();
+        let cancel = CancelToken::new();
+        let run_cancel = cancel.clone();
+        let runner = thread::spawn(move || {
+            let command =
+                process::ProgramCommand::new(program).args(["/d", "/c", "ping -n 30 127.0.0.1"]);
+            let _ = process::run(&command, &run_cancel, None, |_| {});
+        });
+        while !process::is_running_from(folder) {
+            thread::sleep(Duration::from_millis(10));
+        }
+        (cancel, runner)
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn waits_for_the_old_copy_to_stop_running() {
+        let folder = tempfile::tempdir().unwrap();
+        let target = folder.path().join("gallery-dl");
+        let new_folder = folder.path().join(".new-gallery-dl");
+        fs::create_dir(&target).unwrap();
+        fs::create_dir(&new_folder).unwrap();
+        fs::write(new_folder.join("new.txt"), b"new").unwrap();
+        let (cancel_run, runner) = run_from(&target);
+        let stages = std::sync::Mutex::new(Vec::new());
+        let report = |stage| stages.lock().unwrap().push(stage);
+
+        let error = replace_once_unused(
+            &new_folder,
+            &target,
+            &CancelToken::new(),
+            &report,
+            Duration::from_millis(600),
+        )
+        .unwrap_err();
+        assert_eq!(error, ToolError::InUse);
+        assert_eq!(*stages.lock().unwrap(), [ToolStage::Waiting]);
+        assert!(target.join("cmd.exe").is_file(), "the old copy stays");
+        assert!(new_folder.join("new.txt").is_file());
+
+        let cancel_install = CancelToken::new();
+        cancel_install.cancel();
+        let error = replace_once_unused(
+            &new_folder,
+            &target,
+            &cancel_install,
+            &report,
+            Duration::from_secs(60),
+        )
+        .unwrap_err();
+        assert_eq!(error, ToolError::Cancelled);
+
+        cancel_run.cancel();
+        runner.join().unwrap();
+        replace_once_unused(
+            &new_folder,
+            &target,
+            &CancelToken::new(),
+            &report,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert_eq!(names_in(&target), ["new.txt"]);
     }
 
     #[test]

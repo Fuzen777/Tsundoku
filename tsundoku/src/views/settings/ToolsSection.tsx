@@ -8,8 +8,10 @@ import {
   pickProgram,
   setToolCaches,
   setYtDlpChannel,
+  updateGalleryDl,
   updateYtDlp,
 } from "../../api"
+import type { ToolId } from "../../bindings/ToolId"
 import type { ToolCaches } from "../../bindings/ToolCaches"
 import type { ToolSetupKind } from "../../bindings/ToolSetupKind"
 import type { ToolStatus } from "../../bindings/ToolStatus"
@@ -36,6 +38,15 @@ const CACHE_OPTIONS = [
   { value: "dataFolder", label: strings.settings.cacheLocations.dataFolder },
   { value: "usualFolders", label: strings.settings.cacheLocations.usualFolders },
 ] as const satisfies readonly { value: ToolCaches; label: string }[]
+
+/**
+ * The tools whose own copies Tsundoku updates once a day (the core's `ToolId::UPDATED_DAILY`), each with how it's
+ * updated on demand. ffmpeg's and Deno's updates are checked for and offered instead.
+ */
+const DAILY_UPDATES: Partial<Record<ToolId, () => Promise<ToolStatus>>> = {
+  ytDlp: updateYtDlp,
+  galleryDl: updateGalleryDl,
+}
 
 /** Settings → Tools: each tool's copy, version and updates, then where they keep their caches. */
 export function ToolsSection() {
@@ -67,6 +78,7 @@ interface Feedback {
 function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChannel }) {
   const { id } = status
   const name = strings.tools.names[id]
+  const updateDaily = DAILY_UPDATES[id]
   const stage = useToolStage(id)
   const storeToolStatus = useStoreToolStatus()
   const storeYtDlpChannel = useStoreYtDlpChannel()
@@ -90,7 +102,8 @@ function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChan
     onError: showError,
   })
   const update = useMutation({
-    mutationFn: updateYtDlp,
+    // Only offered for the tools that update themselves.
+    mutationFn: () => (updateDaily ? updateDaily() : Promise.reject(new Error(`${name} doesn't update itself.`))),
     onMutate: () => {
       clearFeedback()
       return { previousVersion: status.version }
@@ -160,7 +173,7 @@ function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChan
         </Button>
       )
     }
-    if (id === "ytDlp") {
+    if (updateDaily) {
       return (
         <Button size="sm" disabled={busy} onClick={() => update.mutate()}>
           {strings.settings.updateNow}
@@ -185,6 +198,7 @@ function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChan
     <Card className="flex flex-col gap-3 p-4">
       <ToolHeading id={id}>{status.setup && <SourceBadge setup={status.setup} />}</ToolHeading>
       <ToolDetails status={status} />
+      {updateDaily && isManaged && <p className="text-xs text-fg-muted">{strings.settings.updatesDaily}</p>}
       {stage ? (
         <ToolStageProgress stage={stage} />
       ) : (

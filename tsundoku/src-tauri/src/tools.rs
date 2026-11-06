@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 use tsundoku_core::data_folder::{self, DataPaths};
@@ -17,8 +18,11 @@ use tsundoku_core::tools::{
 
 /// Sent with a `ToolProgress` while a tool is installed or updated.
 const TOOL_PROGRESS_EVENT: &str = "tool-progress";
-/// Sent when a tool changed without the UI asking, such as yt-dlp's daily update.
+/// Sent when a tool changed without the UI asking, such as yt-dlp's or gallery-dl's daily update.
 const TOOLS_CHANGED_EVENT: &str = "tools-changed";
+/// How often the daily updates look whether one is due: a look only reads the settings, and a short wait means an
+/// update put off while its tool ran comes soon after.
+const DAILY_UPDATES_LOOK_AGAIN: Duration = Duration::from_secs(10 * 60);
 
 type Tools<'a> = State<'a, Arc<ToolManager>>;
 
@@ -166,15 +170,23 @@ pub fn set_yt_dlp_channel(tools: Tools<'_>, channel: UpdateChannel) -> Result<()
     tools.set_yt_dlp_channel(channel)
 }
 
-/// Updates the app's copy of yt-dlp in the background if it hasn't been checked today. Sites change often, and an
-/// outdated yt-dlp is the most common reason a download fails.
-pub fn start_daily_yt_dlp_update(app: AppHandle, tools: Arc<ToolManager>) {
-    if !tools.yt_dlp_update_due() {
-        return;
-    }
+#[tauri::command]
+pub async fn update_gallery_dl(app: AppHandle, tools: Tools<'_>) -> Result<ToolStatus, ToolError> {
+    let tools = Arc::clone(&tools);
+    run_blocking(move || tools.update_gallery_dl(&progress_reporter(app))).await
+}
+
+/// Updates the app's copies of yt-dlp and gallery-dl in the background, each at most once a day: at startup, then
+/// whenever one is due again while Tsundoku keeps running (in the tray for days, say). Sites change often, and an
+/// outdated tool is the most common reason a download fails. A tool that's running when its update is due is updated
+/// at a later look, once it's free.
+pub fn start_daily_updates(app: AppHandle, tools: Arc<ToolManager>) {
     thread::spawn(move || {
-        if tools.update_yt_dlp(&progress_reporter(app.clone())).is_ok() {
-            let _ = app.emit(TOOLS_CHANGED_EVENT, ());
+        loop {
+            if tools.run_due_updates(&progress_reporter(app.clone())) {
+                let _ = app.emit(TOOLS_CHANGED_EVENT, ());
+            }
+            thread::sleep(DAILY_UPDATES_LOOK_AGAIN);
         }
     });
 }

@@ -1,19 +1,68 @@
-//! The one place that starts external programs (yt-dlp, ffmpeg, Deno). Each starts without a console window and, on
-//! Windows, inside a job object, so ending it also ends every process it started (yt-dlp's ffmpeg) and nothing outlives
-//! the app. Its output is read line by line as it comes.
+//! The one place that starts external programs (yt-dlp, ffmpeg, Deno, gallery-dl). Each starts without a console window
+//! and, on Windows, inside a job object, so ending it also ends every process it started (yt-dlp's ffmpeg) and nothing
+//! outlives the app. Its output is read line by line as it comes. Every run is counted while it lasts, so a tool's
+//! folder is never replaced under a program running from it (`unless_running_from`).
 
 use std::ffi::OsString;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::Mutex;
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::cancel::CancelToken;
+use crate::sync::lock;
 
 /// How often a running program is checked for cancellation, its time limit and its end.
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// The program of every run in progress, from just before it starts until it and everything it started have ended.
+/// Windows lets a folder be renamed while a program in it runs, so this, not the rename failing, is what keeps an update
+/// from swapping a tool's folder under a running copy.
+static RUNNING_PROGRAMS: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+/// Runs `work` unless a program inside `folder` is running, and returns what it returned, or `None` without running it.
+/// No program starts while `work` runs, so one started right after runs whatever `work` left in the folder.
+pub(crate) fn unless_running_from<T>(folder: &Path, work: impl FnOnce() -> T) -> Option<T> {
+    let running = lock(&RUNNING_PROGRAMS);
+    if running.iter().any(|program| program.starts_with(folder)) {
+        return None;
+    }
+    let result = work();
+    drop(running);
+    Some(result)
+}
+
+/// Whether a program inside `folder` is running now.
+pub(crate) fn is_running_from(folder: &Path) -> bool {
+    unless_running_from(folder, || ()).is_none()
+}
+
+/// A run counted in `RUNNING_PROGRAMS` until it's dropped.
+struct RunningProgram {
+    program: PathBuf,
+}
+
+impl RunningProgram {
+    /// Counts a run of `program`. Waits while `unless_running_from` works, so a program never starts mid-swap.
+    fn register(program: &Path) -> Self {
+        lock(&RUNNING_PROGRAMS).push(program.to_path_buf());
+        Self {
+            program: program.to_path_buf(),
+        }
+    }
+}
+
+impl Drop for RunningProgram {
+    fn drop(&mut self) {
+        let mut running = lock(&RUNNING_PROGRAMS);
+        if let Some(index) = running.iter().position(|program| *program == self.program) {
+            running.swap_remove(index);
+        }
+    }
+}
 
 /// A program to run, with its arguments and any environment variables it gets besides the app's own.
 #[derive(Debug, Clone)]
@@ -122,6 +171,8 @@ pub fn run(
     mut on_line: impl FnMut(OutputLine),
 ) -> Result<ExitStatus, RunError> {
     let started = Instant::now();
+    // Dropped last, once the program and everything it started have ended.
+    let _running = RunningProgram::register(&command.program);
     let mut process = SpawnedProcess::start(command)?;
     let (sender, lines) = mpsc::channel();
     if let Some(stdout) = process.child.stdout.take() {
@@ -450,5 +501,42 @@ mod tests {
         let error = run(&cmd("ping -n 30 127.0.0.1"), &cancel, None, |_| {}).unwrap_err();
         assert!(matches!(error, RunError::Cancelled));
         assert!(started.elapsed() < Duration::from_secs(10));
+    }
+
+    #[test]
+    fn a_folder_is_held_off_while_a_program_in_it_counts_as_running() {
+        let folder = Path::new(r"C:\Test Tools\gallery-dl");
+        let running = RunningProgram::register(&folder.join("gallery-dl.exe"));
+        assert_eq!(unless_running_from(folder, || "swapped"), None);
+        assert!(is_running_from(folder));
+        assert_eq!(
+            unless_running_from(Path::new(r"C:\Test Tools\yt-dlp"), || "swapped"),
+            Some("swapped"),
+            "another tool's folder"
+        );
+
+        drop(running);
+        assert_eq!(unless_running_from(folder, || "swapped"), Some("swapped"));
+    }
+
+    #[test]
+    fn a_program_counts_as_running_until_its_run_ends() {
+        let shell = PathBuf::from(std::env::var_os("ComSpec").expect("Windows sets ComSpec"));
+        let folder = shell.parent().unwrap().to_path_buf();
+        let cancel = CancelToken::new();
+        let run_cancel = cancel.clone();
+        let runner = thread::spawn(move || {
+            let command = ProgramCommand::new(shell).args(["/d", "/c", "ping -n 30 127.0.0.1"]);
+            run(&command, &run_cancel, None, |_| {})
+        });
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !is_running_from(&folder) {
+            assert!(Instant::now() < deadline, "the run never counted");
+            thread::sleep(Duration::from_millis(10));
+        }
+        cancel.cancel();
+        assert!(matches!(runner.join().unwrap(), Err(RunError::Cancelled)));
+        assert!(!is_running_from(&folder));
     }
 }
