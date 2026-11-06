@@ -370,10 +370,26 @@ pub(crate) fn probe(
         .header(RANGE, "bytes=0-0")
         .send()
         .map_err(network_error)?;
-    let headers = response.headers();
+    if let Some(found) = found(response.status(), response.headers()) {
+        return Ok(Answer::File(found));
+    }
+    // An empty file has no first byte. Google Drive answers 416 without its size then, but gives it for the whole
+    // file, which a Google Doc doesn't have.
+    if response.status() == StatusCode::RANGE_NOT_SATISFIABLE {
+        check_cancel(cancel)?;
+        let whole = client.head(url).send().map_err(network_error)?;
+        if let Some(found) = found(whole.status(), whole.headers()) {
+            return Ok(Answer::File(found));
+        }
+    }
+    Ok(Answer::Page(Page::read(response)))
+}
+
+/// The file's name and size, if the answer to a request for it is the file.
+fn found(status: StatusCode, headers: &HeaderMap) -> Option<Found> {
     let header = |name| headers.get(name).and_then(|value| value.to_str().ok());
-    let size = match response.status() {
-        // An empty file has no first byte: "bytes */0".
+    let size = match status {
+        // Part of the file, or none of an empty one ("bytes */0").
         StatusCode::PARTIAL_CONTENT | StatusCode::RANGE_NOT_SATISFIABLE => {
             header(CONTENT_RANGE).and_then(range_total)
         }
@@ -382,16 +398,11 @@ pub(crate) fn probe(
             header(CONTENT_LENGTH).and_then(|value| value.trim().parse().ok())
         }
         _ => None,
-    };
-    let name = header(CONTENT_DISPOSITION).and_then(attachment_name);
-    let modified = header(LAST_MODIFIED).and_then(http_date);
-    Ok(match size {
-        Some(size) => Answer::File(Found {
-            name,
-            size,
-            modified,
-        }),
-        None => Answer::Page(Page::read(response)),
+    }?;
+    Some(Found {
+        name: header(CONTENT_DISPOSITION).and_then(attachment_name),
+        size,
+        modified: header(LAST_MODIFIED).and_then(http_date),
     })
 }
 
@@ -657,11 +668,36 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         assert!(!is_attachment(&headers));
+        assert!(found(StatusCode::OK, &headers).is_none(), "a page");
         headers.insert(
             CONTENT_DISPOSITION,
             HeaderValue::from_static("Attachment; filename=\"a.zip\""),
         );
         assert!(is_attachment(&headers));
+        assert!(
+            found(StatusCode::RANGE_NOT_SATISFIABLE, &headers).is_none(),
+            "an empty file on Google Drive, or a Google Doc"
+        );
+        headers.insert(CONTENT_LENGTH, HeaderValue::from_static("0"));
+        headers.insert(
+            LAST_MODIFIED,
+            HeaderValue::from_static("Fri, 11 Oct 2019 03:51:58 GMT"),
+        );
+        let empty = found(StatusCode::OK, &headers).unwrap();
+        assert_eq!(
+            (empty.name.as_deref(), empty.size, empty.modified.as_deref()),
+            (Some("a.zip"), 0, Some("2019-10-11"))
+        );
+        headers.insert(CONTENT_RANGE, HeaderValue::from_static("bytes 0-0/1234"));
+        assert_eq!(
+            found(StatusCode::PARTIAL_CONTENT, &headers).map(|found| found.size),
+            Some(1234)
+        );
+        headers.insert(CONTENT_RANGE, HeaderValue::from_static("bytes */0"));
+        assert_eq!(
+            found(StatusCode::RANGE_NOT_SATISFIABLE, &headers).map(|found| found.size),
+            Some(0)
+        );
     }
 
     #[test]

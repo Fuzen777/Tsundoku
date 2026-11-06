@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.23 · 2026-11-06
+
+### Fixed
+
+- **Google Drive folders**: a folder holding an empty file no longer fails to load with a message about Google Docs. The empty file downloads like the rest, and a link to one empty file works too.
+
 ## 0.1.22 · 2026-11-06
 
 ### Fixed
