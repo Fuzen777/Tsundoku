@@ -19,6 +19,7 @@ title: AGENTS
 - Never suppress, ignore or work around an ESLint, Clippy or TypeScript error or warning; fix the cause.
 - Meta files (docs, scripts) go at the project root; `tsundoku/` holds code only.
 - After implementing a feature, update [FEATURES](./FEATURES.md) and remove the item from [TODO](./TODO.md) if it is listed.
+- A change the checks can't confirm on their own (how it looks or behaves in the real app, a real site's answer) gets an entry in [TESTING](./TESTING.md) in the same commit: its version, where in the app, what to do and what should happen, and whether it was tried in the real app. Entries leave once the user confirms them.
 - Every change bumps the patch version and gets an entry in [CHANGELOG](./CHANGELOG.md); a commit that bumps the version is tagged `vX.Y.Z`. A release bumps the minor or major version and folds in the patch entries since the previous release.
 
 ## Layout

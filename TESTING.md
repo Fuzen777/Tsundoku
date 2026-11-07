@@ -1,0 +1,245 @@
+# Testing
+
+What to check by hand in the real app. Every change here passed `Scripts\Check.cmd` (formatting, Clippy, the Rust and UI tests), but none has been confirmed by you in the app yet. Most were only seen in unit tests or in a browser preview with stand-in data; an item says when Claude also tried it in the real app.
+
+Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
+
+Up to date with 0.1.63 (2026-11-07).
+
+## Decisions Waiting on You
+
+1. **Dark mode** (item 2): approve it or say what to change. The light mode revamp starts once you're happy with it.
+2. **Links from dropped files** (item 11): links with nothing to download leave quietly, as copied links do. Keep that, or keep every link from a file?
+3. **Waits after a restart** (items 26 and 27): a site's slow-down wait and a download's retry wait are forgotten when Tsundoku restarts, so the download tries once and waits again if it still fails. Fine as it is, or should they survive a restart (a database change)?
+
+## Before You Start
+
+1. Quit every running Tsundoku, including one in the tray (right-click its icon, Quit Tsundoku). Only one copy runs at a time, and the installed one in `D:\Apps\Tsundoku` is still 0.1.17, so starting another build would only bring that one to the front.
+2. Run `Scripts\Build-Portable.cmd`. It builds 0.1.63 as a release build into `D:\Dev\tsundoku\portable`, which keeps its settings, history and tools in its own `data` folder, so your real history isn't touched. (`Scripts\Dev.cmd` works too, with its data in `D:\Dev\tsundoku\data`.)
+3. Start `D:\Dev\tsundoku\portable\Tsundoku.exe`. Settings → About should say 0.1.63 and Portable.
+4. Keep Zen signed in to Instagram and X, and these at hand:
+   - A short video: `https://www.youtube.com/watch?v=jNQXAC9IVRw` (19 s)
+   - A long one, for stopping and progress: `https://www.youtube.com/watch?v=aqz-KE-bpKQ` (Big Buck Bunny, 250 MB at 1080p)
+   - An Instagram carousel of 6 files (2 images, 4 videos): `https://www.instagram.com/p/DfPQchkG1tg/`
+   - A download that fails on purpose: add a rule "When the title contains zoo" with Save In set to a drive you don't have, such as `Z:\Nowhere`. The short video then fails with "Couldn't create the download folder." Turn the rule off when you're done.
+
+## Look and Feel
+
+**1. Light, Dark or Auto** · 0.1.32
+- [ ] Settings → Appearance → Theme: switching between Auto, Light and Dark changes everything at once: colors, title bar, Mica, scrollbars and dropdown lists.
+- [ ] Pick the opposite of Windows' mode, quit and start again → it opens in the chosen theme from the first frame, with no flash of the other one.
+
+**2. RJ Library–inspired dark mode** · 0.1.34 · *needs your approval*
+- [ ] In Dark, the current view sits darker than the sidebar and title bar, with cards and fields lighter again, in plain grays. Main buttons (Add, Download, Start All), the selected choice of a switch and the sidebar's counts are deep indigo with white text; buttons confirming a deletion are dark red with white text. [Before and after](https://claude.ai/artifact/3DE2KntFCUKpBc8ofHyHjd) (browser shots, so without Mica).
+- [ ] Light mode looks exactly as it did.
+
+**3. Icons for row actions** · 0.1.31
+- [ ] The actions on each row are icons in Pending, the Queue, Rules, Presets and under the preview card's "already downloaded" warning. Hovering each shows its name, even while it's greyed out.
+- [ ] The preview card closes with its × at the top right, also while a link is being read and after it fails.
+- [ ] In History, Open Source Page is an icon beside Open File and Show in Folder.
+
+**4. What's New** · 0.1.51
+- [ ] The first start after rebuilding the portable copy shows a What's New card under the add bar with the changes since the version that copy last ran (only 0.1.63's if it last ran before 0.1.51, which didn't record it). Its × closes it, and it doesn't come back at the next start.
+- Can't be tested yet: the update banner's What's New link, which needs a published release that the app can fetch.
+
+## Adding Links
+
+**5. Pending tab** · 0.1.14
+- [ ] Paste three or more links at once in the add bar (one per line) → they go to Pending instead of the preview card. Each row fills in one at a time (thumbnail, title, site); one downloaded before is marked, with Download Again. The sidebar count matches.
+- [ ] Quit and start again → the links are still there.
+- [ ] Pick a preset in Videos Start As, then Start All → every link not downloaded before goes to the queue with it; a row's own preset picker wins. Ticking links gives Start Selected and Remove Selected.
+- [ ] With Downloads at Once at 2, start two Instagram posts → the second waits until the first is done, while a YouTube video goes ahead.
+
+**6. Watch Clipboard and Download Right Away** · 0.1.15
+- [ ] Turn on Watch Clipboard (the box on Pending, or Settings → Adding Links), then copy a YouTube video's link in Zen → "Checking 1 copied link…", then it's in Pending.
+- [ ] Copy an ordinary page (a news article), a link you already downloaded, a direct image link and a sentence with a link in it → none of them shows up.
+- [ ] Copy a password from your password manager → nothing happens.
+- [ ] Turn on Download Right Away and copy a video's link → it starts downloading once it's read, with the default preset (or a rule's).
+
+**7. Clipboard Shortcut** · 0.1.17
+- [ ] Settings → Adding Links → Clipboard Shortcut: pick Ctrl+Alt+D. Copy two links in Notepad and press it with Tsundoku in the background → both are in Pending, even with Watch Clipboard off.
+- [ ] If another app already uses one of the four choices, picking it is refused with a message, and the shortcut picked before stays.
+
+**8. Send from Your Browser** · 0.1.18
+- [ ] Settings → Adding Links → Send from Your Browser → Copy Bookmark Address, then add a toolbar bookmark in Zen with that as its address.
+- [ ] Click it on a YouTube video's page → Zen asks once whether to open Tsundoku, the video lands in Pending, Zen stays in front, and a notification says what was added.
+- [ ] With Keep Running in the Tray on, quit Tsundoku and click the bookmark again → Tsundoku starts in the tray and adds the page.
+- Note: the bookmark opens whichever copy started last (portable, installed or dev).
+
+**9. Keyboard shortcuts** · 0.1.38
+- [ ] Copy a link, click an empty spot in the window (not a text field) and press Ctrl+V → its preview opens. With several links copied → they go to Pending.
+- [ ] Ctrl+L → the add bar, its text selected. Ctrl+1 to Ctrl+6 → Queue, Pending, History, Presets, Rules, Settings.
+- [ ] In Pending, tick links and press Delete → they're removed (with Undo). In a text field, Delete only edits the text.
+- [ ] Hovering a sidebar item says its key ("Queue (Ctrl+1)"), and Settings → Keyboard Shortcuts lists them all.
+
+**10. Send buttons on Instagram, X and YouTube** · 0.1.53
+- [ ] Settings → Adding Links → Copy Userscript, and add it to Tampermonkey or Violentmonkey in Zen as the row explains.
+- [ ] A Send to Tsundoku button shows on Instagram after Share (feed posts, post pages, reels), in each X post's row of actions, beside Share on a YouTube watch page, in a Short's column of actions, and in the corner of YouTube thumbnails on hover (feed, search, channels, the list beside a video).
+- [ ] Clicking one sends that post or video to Pending without opening it, and the button keeps a check while the tab stays open.
+- Claude tried YouTube signed out and Instagram's public post and reel pages in a scripted browser. The signed-in Instagram feed and X weren't tried.
+- Known: the script updates itself from GitHub's main branch, so it can't until main is pushed and readable.
+
+**11. Drop a file of links** · 0.1.56 · *one decision above*
+- [ ] Export Zen's bookmarks (Ctrl+Shift+O → Import and Backup → Export Bookmarks to HTML) and drop the file on the window → "Checking N links from files…" in Pending. Pages with nothing to download leave on their own; videos and posts stay. Over 300 links, a Windows dialog asks first, with about how long it takes.
+- [ ] Drop a .txt with a few links, and a .url shortcut (drag a link from Zen onto the desktop to make one) → their links go to Pending.
+- [ ] Drop a file without links → "No links found in" and the file's name.
+- [ ] With hundreds of links, Pending shows 200 at a time, with Show More under them.
+
+**12. Ways to add links on the empty screens** · 0.1.59
+- [ ] With the queue empty (Clear Finished), it lists every way to add links, each with where it stands and one button: Paste, Choose File…, Watch Clipboard (Turn On, or a check once on), Clipboard Shortcut (its keys with Change, or Set Up), and Send from Your Browser and the send buttons (Set Up opens Settings → Adding Links right at them).
+- [ ] Paste adds what you copied; Choose File… adds a file's links as a drop does.
+- [ ] An empty Pending lists the same ways, the ones that work on their own first.
+
+**13. File host links that Pending keeps** · 0.1.28, 0.1.29
+- [ ] With Watch Clipboard on, copy the link behind a MediaFire page's Download button (`download1234.mediafire.com/…`, the one your userscript copies) → it's read as that file and stays in Pending.
+- [ ] Copy a MEGA link that isn't a file or a folder, such as `https://mega.nz/about` → it stays in Pending with "This MEGA link isn't one Tsundoku recognizes" instead of vanishing.
+
+## Previews and Picking
+
+**14. Pick from a channel, playlist or account** · 0.1.57
+- [ ] Paste a YouTube channel (such as `https://www.youtube.com/@NASA`, any tab) → "Listing the channel's newest videos…", then its newest 50 videos, newest first, each with a box, thumbnail, title, rough date and length. New ones are ticked; downloaded ones are greyed, unticked and marked Downloaded (hovering says when); queued ones say In Queue.
+- [ ] A playlist is listed whole, in its own order. A `watch?v=…&list=…` link is still that one video.
+- [ ] An Instagram account (`https://www.instagram.com/natgeo/`) lists its newest 50 posts and reels; it can take a minute.
+- [ ] The box at the top ticks all or none and counts them. Download Selected queues each ticked item as its own download, with a rule's preset or the one in Videos Start As.
+- [ ] An X account's media page says plainly that Tsundoku can't list it yet. A channel link pasted with others waits in Pending, saying to paste it in the add bar.
+
+**15. Pick which files of a post to download** · 0.1.55
+- [ ] Paste the Instagram carousel → a strip of 6 small pictures with their numbers and a play mark on videos, all ticked. Untick 2 to 5 and Download → the queue row says "2 of 6 files", and only files 1 and 6 arrive.
+- [ ] Paste it again → 2 to 5 are marked Not Picked (with a ring) and ticked, 1 and 6 Downloaded; Download Again gets just the rest.
+- [ ] In Pending, a post's row has Pick Files, which opens the same strip. Untick some, restart: the ticks are kept, and Start downloads only those.
+- [ ] Pick files of an X post with several images.
+- Claude tried the first check in the real app: exactly files 1 and 6 arrived. Pending's strip and X weren't tried.
+- Known: Start All skips a post downloaded before, even partly; use its row's Download Again.
+
+**16. Readable names for posts' files** · 0.1.40
+- [ ] Download an Instagram post → its files are named like `instagram 2026-11-02 DfPQchkG1tg 1.jpg`: the account's handle, the post's date, its ID and the file's number. An X post's files carry the account's handle too.
+- [ ] Settings → Posts of Images → File Name: the Insert buttons put {account}, {date}, {post}, {number} and {site} at the cursor, the example under the field follows, and Use Default puts it back.
+- [ ] A name without {post} or {number}, with an unknown {word}, or with a `:` isn't saved and says why.
+- Claude checked the Instagram names in a real download.
+
+**17. Instagram signed out asks for a sign-in** · 0.1.61
+- [ ] Turn cookies off in Settings → Cookies, then paste `https://www.instagram.com/natgeo/` → it says Instagram needs you signed in, with Set Up Cookies, not "Couldn't reach the site". A download that hits this fails once and isn't retried by itself. Put cookies back to Automatic afterwards.
+
+**18. MEGA, MediaFire, Google Drive and Dropbox** · 0.1.13, 0.1.16, 0.1.21, 0.1.23
+- [ ] Paste a link of each, to a file and to a shared folder → name, date and size ("14 files, 1.2 GB") on the card, and Download without a preset. A folder keeps its own folders; files already there are skipped; Stop then Retry continues where it stopped.
+- [ ] A MEGA link cut off before its key (the part after #) → a message saying so.
+- Claude downloaded real links of all four on your PC, so this is a quick look in the app.
+
+## Pending and the Queue
+
+**19. Group and sort** · 0.1.33
+- [ ] Pending's toolbar groups by Folder, Site or Status, or not at all, each group under a heading with its count (a folder group shows its path), and sorts by Date Added, Title, Uploader or Site, either way.
+- [ ] The Queue has the same toolbar (status groups: Downloading, Waiting, Stopped, Failed, Done). Sorting doesn't change the order downloads start in.
+- [ ] Restart → each view keeps its own choice.
+
+**20. Where each Pending link goes, and "Everything else"** · 0.1.30
+- [ ] A read link's row shows the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder). It follows the row's preset, and clicking it opens where that's set.
+- [ ] With no other rules, a YouTube video goes to the download folder's YouTube folder by "Everything else". Turning that rule off sends it to the download folder itself.
+
+**21. Undo after removing** · 0.1.48
+- [ ] In Pending, tick two links and Remove Selected → "Removed 2 links" shows at the bottom for 8 seconds, with Undo, which puts them back in their places, still ticked, with their presets.
+- [ ] The message stays while the pointer is on it; Escape or its × closes it.
+- [ ] Clear Finished in the Queue → "Cleared N finished downloads" with Undo, which puts them back.
+
+**22. Buttons for the whole queue, and Download Next** · 0.1.35
+- [ ] With two long downloads running, Pause All stops them (and holds waiting ones), Resume All resumes them, and with a failed one, Retry Failed retries it. Each shows only while a download needs it.
+- [ ] The tray menu has Pause All Downloads, which reads Resume All Downloads while every download is stopped.
+- [ ] With Downloads at Once at 1, queue three videos. The third's ⋯ menu → Download Next → it starts right after the current one, before the second, also after a restart in between.
+
+**23. Copy Details** · 0.1.41, 0.1.46
+- [ ] On a failed row (the `Z:\` rule above), hovering Copy Details says its name, and it says Copied after a click. Pasted in Notepad: Tsundoku's version, each tool's version, Windows' version and build, the link, the error and the log's last lines, with your user name blanked out.
+
+## Waiting and Retrying
+
+**24. Room checked before downloading** · 0.1.58
+- [ ] If you have a small USB stick or a nearly full drive: make a rule save there and queue Big Buck Bunny at Best Video → it waits with "E: has X free, and this needs Y." while the downloads after it that fit go ahead. Free some space → it starts within 30 seconds.
+- Known: posts, videos added before a restart and videos whose site gives no sizes aren't checked.
+
+**25. Hourly limit for Instagram** · 0.1.49
+- [ ] Settings → Instagram → Hourly Limit: set 3, then download Instagram posts → once the past hour holds 3 Instagram files, the next Instagram download waits, says so on its row, and starts by itself later. Set it back to none afterwards.
+
+**26. Waiting when a site asks to slow down** · 0.1.49 · *watch for it*
+- [ ] When Instagram (or any site) answers that it's getting too many requests, the download goes back to waiting instead of failing: "Instagram asked to slow down. Continuing at 2:32 PM." with the time left counting down. The site's other downloads, its links in Pending and the preview card wait too, other sites carry on, and it continues by itself. Try Now on a waiting row ends the site's wait.
+- Hard to cause on purpose, so check it when it happens.
+- Known: yt-dlp's "rate-limit reached or login required" still counts as a sign-in problem.
+
+**27. Downloads recover by themselves** · 0.1.52
+- [ ] Start Big Buck Bunny, then turn the network off until its row changes (yt-dlp retries on its own first, which can take a minute) → "The connection dropped. Trying again at … (1 of 3)." with the time left. Try Now starts it at once; with the network back, it continues from what it had.
+- [ ] Pause All stops a waiting row; Resume starts its retries over.
+- [ ] Watch for a MEGA, Google Drive or Dropbox download limit → it waits 30 minutes, then an hour, two and four, and never fails for it.
+- Not tried against a real dropped connection or host limit.
+
+## Rules
+
+**28. Placeholders and patterns** · 0.1.19, 0.1.44
+- [ ] Rules → Add Rule: the buttons under the folder field put {site}, {uploader}, {title}, {id}, {kind}, {preset}, {year}, {month}, {date} and {added} at the cursor, and hovering one says what it becomes.
+- [ ] A folder like `{site}\{year}\{month}` shows filled in on the preview card.
+- [ ] A condition with Matches and a pattern that captures, such as title matches `^(\w+)`, with `{1}` in the folder → the captured text is in the folder. A pattern that isn't valid, such as `(`, is caught on Save with what's wrong.
+
+**29. Rules that pick the preset** · 0.1.43
+- [ ] Add "When the site is SoundCloud → Start As Audio MP3" without a folder. A SoundCloud track's preview preselects Audio MP3 with "Rule N" beside it, which opens Rules; picking another preset on the card wins.
+- [ ] The same link in Pending preselects Audio MP3 with "Rule N", and Start All uses it.
+- [ ] Download Right Away On in a rule makes copied links it matches start downloading even with Settings' Download Right Away off (and Off the other way round).
+- [ ] A rule that checks the kind or the preset can't save a Start As. Deleting the preset a rule starts as → the rule says so, and the default is used.
+
+**30. {account} and {playlist}** · 0.1.63
+- [ ] A rule "When the site is Instagram" with the folder `{account}` → natgeo's posts go into a `natgeo` folder (the handle), where `{uploader}` gives National Geographic.
+- [ ] "Uploader is natgeo" matches National Geographic's Instagram posts.
+- [ ] A rule with `D:\Channels\{playlist}`, then videos picked from a channel or playlist → they go into a folder named after it; a link pasted on its own goes into No Playlist.
+
+## History
+
+**31. A quick history** · 0.1.50
+- [ ] History opens at once and loads more as you scroll; a search runs as soon as you pause typing; a row you expanded is still expanded after scrolling away and back.
+- Measured with 5,000 test rows (opening went from about 1.4 s to under 40 ms). The portable copy's history is small, so the real test is your own history after the next update.
+
+**32. Filters and acting on several** · 0.1.54
+- [ ] Filter by kind (Videos, Audio, Posts, Shared Files), by date (Today, 7 days, 30 days, the year, or between two dates) and Only Missing Files (rename a downloaded file to see one).
+- [ ] Tick rows, or every row the search and filters show with the box above the list. Forget Selected asks once and keeps the files; Show Selected in Folder opens each folder once with its files selected, asking first above 5 folders. Changing a filter clears the ticks.
+- [ ] Both Forget dialogs read well, and neither mentions yt-dlp's archive any more.
+
+**33. Thumbnails that don't go blank** · 0.1.60
+- [ ] History rows have pictures, older downloads included, which fill in within a minute or so; the data folder has a `thumbnails` folder of small JPEGs.
+- [ ] A day or more later, Instagram rows still have their pictures after Instagram's own links expire.
+- [ ] Forgetting a row deletes its thumbnail.
+
+## Running in the Background
+
+**34. Tray and Start with Windows** · 0.1.17
+- [ ] Settings → Running in the Background → Keep Running in the Tray: closing the window leaves Tsundoku in the tray, still downloading. Clicking the icon opens the window; right-clicking gives Open Tsundoku, Watch Clipboard, Start All Pending (with how many), Pause All Downloads and Quit Tsundoku, which asks first while downloads run.
+- [ ] Start with Windows → Task Manager's Startup apps lists "Tsundoku (Portable)"; signing out and in starts it in the tray without its window. Turn it off afterwards if you don't want the portable copy starting.
+
+**35. Notifications** · 0.1.17, 0.1.45
+- [ ] With the window hidden or behind Zen: a copied link says it was added to Pending (or started, with Download Right Away); the shortcut and the bookmark say what they added; Start All Pending in the tray says how many started. Clicking one opens Tsundoku.
+- [ ] A failing download (the `Z:\` rule) → "Couldn't Download" with its title; several failing together → "Couldn't Download 3 Links".
+- [ ] Once every download started since the queue was idle has ended → "All 3 downloads finished", or "2 of 3 downloads finished · 1 failed". Cancelled ones don't count.
+- [ ] Settings → Adding Links: Show Notifications, Notify When a Download Fails and Notify When Downloads Finish each turn theirs off.
+
+**36. Progress on the taskbar and in the tray** · 0.1.39
+- [ ] Queue Big Buck Bunny and the short video → the taskbar button fills with their progress, moving across until sizes are known; yellow after Pause All; red once one failed; gone once all have ended.
+- [ ] Hovering the tray icon sums it up ("2 downloading · 45%"), and reads Tsundoku with nothing going on.
+
+## Settings and Upkeep
+
+**37. Settings → Instagram** · 0.1.27
+- [ ] The card is called Instagram, with Pause Between Files (5 to 10 seconds for a new copy; a range you saved stays) and the Hourly Limit, and no note about rules.
+
+**38. Back up and restore** · 0.1.37
+- [ ] Settings → About → Back Up… saves `Tsundoku Backup 2026-11-07.zip` where you choose.
+- [ ] Rename a preset, then Restore… that zip → it asks first, restarts, and the preset has its old name. The data folder's `backups` folder holds a "(Before Restore)" zip; the tools and Start with Windows are as they were.
+- Do this in the portable copy, so your real data isn't involved.
+
+**39. gallery-dl keeps itself up to date** · 0.1.47
+- [ ] Settings → Tools: gallery-dl has Update Now, and yt-dlp and gallery-dl both say they update once a day.
+- [ ] Update Now while a post downloads → "Waiting for the downloads using it to finish…", then it updates once the download is done.
+
+## Portable Copy and First Start
+
+**40. Portable copy and the first-run setup** · 0.1.20, 0.1.22, 0.1.24, 0.1.25, 0.1.26
+- [ ] Run `Scripts\Build-Portable.cmd` while the portable copy runs → it quits that copy (never the installed one or a dev build), replaces it and starts it again.
+- [ ] For a first start from nothing, quit Tsundoku, run `Scripts\Build-Portable.cmd D:\Dev\tsundoku\portable-fresh` and start the `Tsundoku.exe` it makes there. The first screen asks where the tools, their caches and downloads go, with caches and downloads unpicked and Continue waiting for them; Tools offers In AppData, picked when the installed copy's tools are there, which are then used without downloading. Back from the tools screen keeps the picks; the tools screen includes gallery-dl and wraps long paths; Continue Without shows if only Deno or gallery-dl fails. Delete the folder afterwards.
+
+## Docs
+
+**41. README** · 25d40db and later
+- [ ] README.md describes the app as it is at 0.1.63. It's only local until main is pushed.
