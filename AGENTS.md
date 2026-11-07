@@ -20,6 +20,7 @@ title: AGENTS
 - Meta files (docs, scripts) go at the project root; `tsundoku/` holds code only.
 - After implementing a feature, update [FEATURES](./FEATURES.md) and remove the item from [TODO](./TODO.md) if it is listed.
 - A change the checks can't confirm on their own (how it looks or behaves in the real app, a real site's answer) gets an entry in [TESTING](./TESTING.md) in the same commit: its version, where in the app, what to do and what should happen, and whether it was tried in the real app. Entries leave once the user confirms them.
+- A question only the user can answer (an approval, a choice between two behaviours, whether to start something) goes on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7CP6hgzwFj) page rather than waiting in a thread: add a document to its `decisions` collection with the ArtifactData tool (`title`, `group`, `order`, `context`, `source`, `options` as `{id, label, detail}`, `recommended` or `defaultOption`, `status: "open"`, `addedAt`), and meanwhile build the recommended answer where it is easy to change later. The user's answers are in its `answers` collection (`choice`, `choiceLabel`, `text`); the thread that acts on one sets the decision's `status` to `"done"` with a one-line `resolution`.
 - Every change bumps the patch version and gets an entry in [CHANGELOG](./CHANGELOG.md); a commit that bumps the version is tagged `vX.Y.Z`. A release bumps the minor or major version and folds in the patch entries since the previous release.
 
 ## Layout

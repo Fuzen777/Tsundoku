@@ -8,9 +8,7 @@ Up to date with 0.1.63 (2026-11-07).
 
 ## Decisions Waiting on You
 
-1. **Dark mode** (item 2): approve it or say what to change. The light mode revamp starts once you're happy with it.
-2. **Links from dropped files** (item 11): links with nothing to download leave quietly, as copied links do. Keep that, or keep every link from a file?
-3. **Waits after a restart** (items 26 and 27): a site's slow-down wait and a download's retry wait are forgotten when Tsundoku restarts, so the download tries once and waits again if it still fails. Fine as it is, or should they survive a restart (a database change)?
+Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7CP6hgzwFj) page, with everything else waiting on your call: the new dark mode (item 2), links from dropped files (item 11) and waits after a restart (items 26 and 27) among them. Pick a suggested answer or write your own there; threads read the answers from the page.
 
 ## Before You Start
 
@@ -79,7 +77,7 @@ Up to date with 0.1.63 (2026-11-07).
 - Claude tried YouTube signed out and Instagram's public post and reel pages in a scripted browser. The signed-in Instagram feed and X weren't tried.
 - Known: the script updates itself from GitHub's main branch, so it can't until main is pushed and readable.
 
-**11. Drop a file of links** · 0.1.56 · *one decision above*
+**11. Drop a file of links** · 0.1.56 · *one open decision*
 - [ ] Export Zen's bookmarks (Ctrl+Shift+O → Import and Backup → Export Bookmarks to HTML) and drop the file on the window → "Checking N links from files…" in Pending. Pages with nothing to download leave on their own; videos and posts stay. Over 300 links, a Windows dialog asks first, with about how long it takes.
 - [ ] Drop a .txt with a few links, and a .url shortcut (drag a link from Zen onto the desktop to make one) → their links go to Pending.
 - [ ] Drop a file without links → "No links found in" and the file's name.
