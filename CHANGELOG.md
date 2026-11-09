@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.78 · 2026-11-09
+
+### Changed
+
+- **Instagram's "rate-limit reached or login required"**: while a browser is signed in to Instagram, this message now counts as Instagram asking to slow down, so the download waits and carries on by itself instead of failing. Signed out, it still asks you to sign in.
+
 ## 0.1.77 · 2026-11-09
 
 ### Added

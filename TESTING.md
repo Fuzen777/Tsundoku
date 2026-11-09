@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.77 (2026-11-09).
+Up to date with 0.1.78 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -197,7 +197,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **26. Waiting when a site asks to slow down** · 0.1.49 · *watch for it*
 - [ ] When Instagram (or any site) answers that it's getting too many requests, the download goes back to waiting instead of failing: "Instagram asked to slow down. Continuing at 2:32 PM." with the time left counting down. The site's other downloads, its links in Pending and the preview card wait too, other sites carry on, and it continues by itself. Try Now on a waiting row ends the site's wait.
 - Hard to cause on purpose, so check it when it happens.
-- Known: yt-dlp's "rate-limit reached or login required" still counts as a sign-in problem.
+- [ ] Since 0.1.78, Instagram's "rate-limit reached or login required" waits the same way while Zen is signed in to Instagram; with Settings → Cookies at None it fails asking for a sign-in instead.
 
 **27. Downloads recover by themselves** · 0.1.52
 - [ ] Start Big Buck Bunny, then turn the network off until its row changes (yt-dlp retries on its own first, which can take a minute) → "The connection dropped. Trying again at … (1 of 3)." with the time left. Try Now starts it at once; with the network back, it continues from what it had.

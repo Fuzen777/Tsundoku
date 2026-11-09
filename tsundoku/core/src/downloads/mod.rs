@@ -1004,6 +1004,17 @@ impl DownloadQueue {
             let outcome = queue.runner.run(&job, &cancel, &mut |progress| {
                 queue.report_progress(id, progress)
             });
+            // Instagram's "rate-limit reached or login required" waits like a slow-down while signed in; the
+            // browsers are read here, outside the queue's lock.
+            let outcome = match outcome {
+                JobOutcome::Failed(DownloadError::YtDlp { error }) if error.may_be_slow_down() => {
+                    let choice = queue.options().cookies_browser;
+                    JobOutcome::Failed(DownloadError::YtDlp {
+                        error: browsers::slow_down_if_signed_in(error, choice, &job.url),
+                    })
+                }
+                other => other,
+            };
             queue.finish(&job, outcome);
         });
     }

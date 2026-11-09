@@ -235,7 +235,16 @@ pub enum SignInCookies {
     SignedIn,
 }
 
+/// What yt-dlp says about Instagram when it can't tell a missing sign-in from a slow-down, in lowercase.
+const SIGN_IN_OR_SLOW_DOWN: &str = "rate-limit reached or login required";
+
 impl PreviewError {
+    /// A sign-in error whose message may as well mean the site asked to slow down (`SIGN_IN_OR_SLOW_DOWN`).
+    pub fn may_be_slow_down(&self) -> bool {
+        matches!(self, Self::SignInRequired { detail, .. }
+            if detail.to_lowercase().contains(SIGN_IN_OR_SLOW_DOWN))
+    }
+
     /// A sign-in error with only the tool's message; the preview fills in the rest.
     pub fn sign_in(detail: String) -> Self {
         Self::SignInRequired {
@@ -256,7 +265,8 @@ impl PreviewError {
 }
 
 /// What yt-dlp's and gallery-dl's errors say when a site answered "too many requests", in lowercase. A message that
-/// could also mean a missing sign-in ("rate-limit reached or login required") is sorted as one first.
+/// could also mean a missing sign-in ("rate-limit reached or login required") is sorted as one first, and
+/// `browsers::slow_down_if_signed_in` makes it a slow-down again when a browser is signed in to Instagram.
 pub(crate) const TOO_MANY_REQUESTS_PHRASES: [&str; 7] = [
     "error 429",
     "'429",

@@ -267,13 +267,14 @@ fn read_for_preview(
     found.map_err(|error| with_sign_in_state(error, cookies_choice, link))
 }
 
-/// A sign-in error says which site and whether a browser is signed in to it, for the hint on the card.
+/// A sign-in error says which site and whether a browser is signed in to it, for the hint on the card; Instagram's
+/// "rate-limit reached or login required" is a slow-down instead while a browser is signed in to it.
 fn with_sign_in_state(
     error: PreviewError,
     cookies_choice: Option<CookiesBrowser>,
     link: &str,
 ) -> PreviewError {
-    match error {
+    match browsers::slow_down_if_signed_in(error, cookies_choice, link) {
         PreviewError::SignInRequired { detail, .. } => PreviewError::SignInRequired {
             detail,
             site: sites::sign_in_site(link).map(|site| site.name.to_owned()),

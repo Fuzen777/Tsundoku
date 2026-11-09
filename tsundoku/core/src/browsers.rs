@@ -15,9 +15,9 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::metadata::SignInCookies;
+use crate::metadata::{PreviewError, SignInCookies};
 use crate::settings::CookiesBrowser;
-use crate::sites::{self, SignInSite};
+use crate::sites::{self, PacedSite, SignInSite};
 
 /// Chromium counts time in microseconds from 1601, Unix from 1970.
 const CHROMIUM_EPOCH_OFFSET_SECONDS: i64 = 11_644_473_600;
@@ -412,6 +412,30 @@ pub fn cookies_for(choice: Option<CookiesBrowser>, link: &str) -> Option<String>
     }
 }
 
+/// Instagram's "rate-limit reached or login required" (`PreviewError::may_be_slow_down`) is a slow-down when a
+/// browser profile (of the chosen browser) is signed in to Instagram, so the download waits and carries on by itself,
+/// and stays a sign-in error otherwise. Any other error is returned as it is.
+pub fn slow_down_if_signed_in(
+    error: PreviewError,
+    choice: Option<CookiesBrowser>,
+    link: &str,
+) -> PreviewError {
+    slow_down_if(error, link, || {
+        sign_in_state(choice, link) == SignInCookies::SignedIn
+    })
+}
+
+fn slow_down_if(error: PreviewError, link: &str, signed_in: impl FnOnce() -> bool) -> PreviewError {
+    let on_instagram = sites::paced_site(link) == Some(PacedSite::Instagram);
+    if !(on_instagram && error.may_be_slow_down() && signed_in()) {
+        return error;
+    }
+    match error {
+        PreviewError::SignInRequired { detail, .. } => PreviewError::too_many_requests(detail),
+        other => other,
+    }
+}
+
 /// Whether a browser profile (of the chosen browser) is signed in to `link`'s site, for the hint shown when the
 /// site asks for a sign-in.
 pub fn sign_in_state(choice: Option<CookiesBrowser>, link: &str) -> SignInCookies {
@@ -449,6 +473,50 @@ fn sign_in_state_among(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn instagrams_rate_limit_or_login_is_a_slow_down_when_signed_in() {
+        let ambiguous = || {
+            PreviewError::sign_in(
+                "[instagram] abc: Requested content is not available, rate-limit reached or login required. Use --cookies"
+                    .to_owned(),
+            )
+        };
+        let post = "https://www.instagram.com/p/abc/";
+        assert!(matches!(
+            slow_down_if(ambiguous(), post, || true),
+            PreviewError::TooManyRequests { .. }
+        ));
+        assert!(
+            matches!(
+                slow_down_if(ambiguous(), post, || false),
+                PreviewError::SignInRequired { .. }
+            ),
+            "signed out, it asks for a sign-in"
+        );
+        let plain = PreviewError::sign_in("login required".to_owned());
+        assert!(matches!(
+            slow_down_if(plain, post, || true),
+            PreviewError::SignInRequired { .. }
+        ));
+        assert!(
+            matches!(
+                slow_down_if(ambiguous(), "https://x.com/a/status/1", || true),
+                PreviewError::SignInRequired { .. }
+            ),
+            "Instagram only"
+        );
+        assert!(matches!(
+            slow_down_if(
+                PreviewError::Unavailable {
+                    detail: String::new()
+                },
+                post,
+                || { panic!("only asked for the ambiguous message") }
+            ),
+            PreviewError::Unavailable { .. }
+        ),);
+    }
 
     fn roots(folder: &Path) -> BrowserRoots {
         BrowserRoots {
