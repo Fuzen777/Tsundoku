@@ -16,7 +16,12 @@ preset: Preset | null,
 /**
  * Where the file goes, or a post's files: the site's folder in the posts folder.
  */
-folder: string, state: QueueState, 
+folder: string, 
+/**
+ * The folder was picked for this download (`set_folder`, or picked before it was added) rather than given by the
+ * rules.
+ */
+folderChosen: boolean, state: QueueState, 
 /**
  * Download Again with the same preset: replace the file made before.
  */

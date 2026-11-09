@@ -294,6 +294,7 @@ fn adds_many_at_once_with_one_change() {
         video,
         preset_id: preset_id.map(str::to_owned),
         overwrite: false,
+        folder: None,
     };
     let added = test.queue.add_many(vec![
         pick(video("b"), Some("best-video")),
@@ -343,6 +344,67 @@ fn stopping_keeps_the_partial_files_and_resume_continues() {
     test.queue.resume(id).unwrap();
     wait_until("it runs again", || test.runner.started() == [id, id]);
     assert_eq!(test.queue.resume(id), Err(DownloadError::WrongState));
+}
+
+#[test]
+fn a_download_can_go_to_a_folder_picked_for_it() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let first = test.add("a");
+    let picked = test.folder.path().join("picked").display().to_string();
+    let second = test
+        .queue
+        .add_in(video("b"), "best-video", false, Some(picked.clone()))
+        .unwrap();
+    assert_eq!(second.folder, picked);
+    assert!(second.folder_chosen);
+
+    wait_until("the first runs", || {
+        test.state(first) == Some(QueueState::Running)
+    });
+    assert_eq!(
+        test.queue.set_folder(first, Some(picked.clone())),
+        Err(DownloadError::WrongState),
+        "not while it runs"
+    );
+
+    let back = test.queue.set_folder(second.id, None).unwrap();
+    assert!(!back.folder_chosen);
+    assert_ne!(back.folder, picked, "back in the rules' folder");
+    let relative = test
+        .queue
+        .set_folder(second.id, Some("Clips".to_owned()))
+        .unwrap();
+    assert!(relative.folder_chosen);
+    assert!(
+        Path::new(&relative.folder).is_absolute() && relative.folder.ends_with("Clips"),
+        "inside the download folder: {}",
+        relative.folder
+    );
+
+    let reopened = test.reopen();
+    let kept = reopened
+        .items()
+        .into_iter()
+        .find(|item| item.id == second.id)
+        .unwrap();
+    assert_eq!((kept.folder, kept.folder_chosen), (relative.folder, true));
+}
+
+#[test]
+fn picking_another_folder_for_a_stopped_download_drops_its_partial_files() {
+    let test = Test::new();
+    let id = test.add("a");
+    wait_until("it runs", || test.state(id) == Some(QueueState::Running));
+    test.queue.stop(id).unwrap();
+    wait_until("it stops", || test.state(id) == Some(QueueState::Stopped));
+    assert!(test.temp_folder(id).exists());
+
+    let picked = test.folder.path().join("elsewhere").display().to_string();
+    test.queue.set_folder(id, Some(picked)).unwrap();
+    assert!(!test.temp_folder(id).exists());
 }
 
 #[test]
@@ -509,6 +571,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         video: video("a"),
         preset: None,
         folder: String::new(),
+        folder_chosen: false,
         state,
         overwrite: false,
         added_at: 0,

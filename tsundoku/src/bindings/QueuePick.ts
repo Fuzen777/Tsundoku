@@ -12,4 +12,8 @@ presetId: string | null,
 /**
  * Download Again with the same preset: replace the file made before.
  */
-overwrite: boolean, };
+overwrite: boolean, 
+/**
+ * A folder picked for it instead of the one the rules give.
+ */
+folder: string | null, };

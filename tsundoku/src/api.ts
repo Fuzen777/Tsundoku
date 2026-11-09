@@ -358,16 +358,28 @@ export function getQueueItems(): Promise<QueueItem[]> {
 }
 
 /** Adds a video to the download queue. Rejects with a DownloadError. */
-export function addToQueue(video: VideoInfo, presetId: string, overwrite: boolean): Promise<QueueItem> {
+export function addToQueue(
+  video: VideoInfo,
+  presetId: string,
+  overwrite: boolean,
+  folder: string | null = null,
+): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
-  return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite })
+  return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite, folder })
 }
 
 /** Adds a post of images, with the files its `postFiles` tick (all of them when it lists none), into the folder the
  * rules give it. Rejects with a DownloadError, `nothingPicked` when every file is unticked. */
-export function addPostToQueue(video: VideoInfo): Promise<QueueItem> {
+export function addPostToQueue(video: VideoInfo, folder: string | null = null): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
-  return invoke<QueueItem>("add_post_to_queue", { video })
+  return invoke<QueueItem>("add_post_to_queue", { video, folder })
+}
+
+/** Saves a download that isn't running in a folder picked for it, or back in the usual one (`null`). A stopped one
+ * starts over, since its partial files are in the old folder. */
+export function setQueueFolder(id: number, folder: string | null): Promise<QueueItem> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<QueueItem>("set_queue_folder", { id, folder })
 }
 
 /** The files of a post its downloads left out, by number, or null when they left none out (or there were none). */
@@ -584,6 +596,12 @@ export async function setPendingPostFiles(id: number, picked: number[]): Promise
 }
 
 /** Picks one link's preset, or null for the one picked for them all. */
+/** Picks one pending link's folder, or `null` for the one the rules give. */
+export async function setPendingFolder(id: number, folder: string | null): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("set_pending_folder", { id, folder })
+}
+
 export async function setPendingPreset(id: number, presetId: string | null): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("set_pending_preset", { id, presetId })

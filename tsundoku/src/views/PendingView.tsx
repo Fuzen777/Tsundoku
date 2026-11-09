@@ -6,6 +6,7 @@ import {
   removePendingLinks,
   restoreRemovedPendingLinks,
   setPendingPostFiles,
+  setPendingFolder,
   setPendingPreset,
   startPendingLinks,
 } from "../api"
@@ -376,7 +377,14 @@ function PendingRow({
           <ReadingStatus link={link} />
         )}
         {hold && <StatusMessage tone="neutral" message={describeSiteWait(hold)} detail={holdTimeLeft ?? undefined} />}
-        {video && !preview?.inQueue && <PendingDestination video={video} presetId={presetId} />}
+        {video && !preview?.inQueue && (
+          <PendingDestination
+            video={video}
+            presetId={presetId}
+            chosenFolder={link.folder}
+            onChoose={(folder) => act(() => setPendingFolder(link.id, folder))}
+          />
+        )}
         {preview?.lastDownload && (
           <StatusMessage
             tone="warning"
@@ -498,10 +506,22 @@ function PendingPostFiles({
 
 /** Where a read link will be saved, and what picked the folder, as the preview card shows it: with the preset it would
  * start with, or none for a post or a file host's files. Nothing until it's known. */
-function PendingDestination({ video, presetId }: { video: VideoInfo; presetId: string | null }) {
+function PendingDestination({
+  video,
+  presetId,
+  chosenFolder,
+  onChoose,
+}: {
+  video: VideoInfo
+  presetId: string | null
+  chosenFolder: string | null
+  onChoose: (folder: string | null) => void
+}) {
   const request = destinationRequest(video, presetId)
   const { data: destination } = useDownloadDestination(request.video, request.presetId, request.enabled)
-  return destination ? <DestinationLine destination={destination} /> : null
+  return destination || chosenFolder ? (
+    <DestinationLine destination={destination} chosenFolder={chosenFolder} onChoose={onChoose} />
+  ) : null
 }
 
 /** Removes links, then offers for a few seconds to put them back as they were. */
@@ -583,8 +603,9 @@ function pendingGroup(
   byStatus: boolean,
 ): GroupPlace {
   const video = link.preview?.video
-  if (group === "destination" && destination) return folderGroup(destination.folder)
-  if (group === "rule" && destination && ruleGroupOf) return ruleGroupOf(destination)
+  const shown: Destination | undefined = link.folder ? { folder: link.folder, source: { kind: "chosen" } } : destination
+  if (group === "destination" && shown) return folderGroup(shown.folder)
+  if (group === "rule" && shown && ruleGroupOf) return ruleGroupOf(shown)
   if (group === "site" && video) return { key: `site:${video.site}`, label: video.siteName, rank: 0 }
   if (byStatus) return NO_GROUP
   const status = pendingStatusGroup(link)

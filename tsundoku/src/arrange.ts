@@ -184,5 +184,12 @@ export function ruleGroup(destination: Destination, ruleFolders: readonly string
         label: strings.lists.downloadFolderGroup(destination.folder),
         rank: AFTER_RULES + 1,
       }
+    case "chosen":
+      return chosenFolderGroup(destination.folder)
   }
+}
+
+/** The group of downloads whose folder was picked for them, by folder, after the rules' and the presets'. */
+export function chosenFolderGroup(folder: string): GroupPlace {
+  return { key: `chosen:${folder.toLowerCase()}`, label: strings.lists.chosenFolderGroup(folder), rank: AFTER_RULES + 2 }
 }

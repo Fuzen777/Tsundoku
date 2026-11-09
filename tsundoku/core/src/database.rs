@@ -101,6 +101,10 @@ const MIGRATIONS: &[&str] = &[
     // 10: the thumbnail kept in the data folder's `thumbnails\` for each video (thumbnails.rs), by its name: NULL until
     // it's made, "" when none can be.
     "ALTER TABLE videos ADD COLUMN thumbnail_file TEXT;",
+    // 11: a folder picked for one link or download instead of the one the rules give: a pending link's (NULL when
+    // none), and whether a queue item's folder was picked so.
+    "ALTER TABLE pending_links ADD COLUMN folder TEXT;
+    ALTER TABLE queue_items ADD COLUMN folder_chosen INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub struct Database {

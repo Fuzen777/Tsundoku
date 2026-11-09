@@ -18,6 +18,10 @@ preview: VideoPreview | null, error: PreviewError | null,
  */
 presetId: string | null, 
 /**
+ * A folder picked for this link instead of the one the rules give, as a full path.
+ */
+folder: string | null, 
+/**
  * Started before it was read: it joins the queue once it's read, unless it was downloaded before.
  */
 startWhenRead: boolean, 

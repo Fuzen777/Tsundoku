@@ -125,6 +125,8 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
   const pickedByRule = rulePreset && rulePreset.presetId === presetId ? rulePreset.rule : null
   const ready = presetId !== null && !pickingPreset
   const { data: destination } = useDownloadDestination(preview.video, presetId, ready)
+  // A folder picked for this download instead of the one the rules give.
+  const [chosenFolder, setChosenFolder] = useState<string | null>(null)
 
   async function download() {
     const preset = presets?.presets.find((candidate) => candidate.id === presetId)
@@ -144,7 +146,7 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
     setAdding(true)
     setError(null)
     try {
-      await addToQueue(preview.video, preset.id, sameAsBefore)
+      await addToQueue(preview.video, preset.id, sameAsBefore, chosenFolder)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))
@@ -156,7 +158,13 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
     <div className="flex flex-col items-end gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex w-full items-center gap-2">
-        <DestinationLine destination={destination} className="flex-1" />
+        <DestinationLine
+          destination={destination}
+          chosenFolder={chosenFolder}
+          onChoose={setChosenFolder}
+          disabled={adding}
+          className="flex-1"
+        />
         <PresetRuleLink rule={pickedByRule} />
         <SelectInput
           aria-label={strings.preview.preset}
@@ -193,12 +201,13 @@ function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onA
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const { data: destination } = useDownloadDestination(video, null)
+  const [chosenFolder, setChosenFolder] = useState<string | null>(null)
 
   async function download() {
     setAdding(true)
     setError(null)
     try {
-      await addPostToQueue(picksFiles ? withPicked(video, picked) : video)
+      await addPostToQueue(picksFiles ? withPicked(video, picked) : video, chosenFolder)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))
@@ -224,7 +233,13 @@ function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onA
       <div className="flex flex-col items-end gap-2">
         {error && <StatusMessage tone="danger" {...error} />}
         <div className="flex w-full items-center gap-2">
-          <DestinationLine destination={destination} className="flex-1" />
+          <DestinationLine
+            destination={destination}
+            chosenFolder={chosenFolder}
+            onChoose={setChosenFolder}
+            disabled={adding}
+            className="flex-1"
+          />
           <Button
             variant="primary"
             loading={adding}

@@ -68,6 +68,8 @@ pub struct PendingLink {
     pub error: Option<PreviewError>,
     /// The preset picked for this link, or `None` for the one picked for them all. A post has none.
     pub preset_id: Option<String>,
+    /// A folder picked for this link instead of the one the rules give, as a full path.
+    pub folder: Option<String>,
     /// Started before it was read: it joins the queue once it's read, unless it was downloaded before.
     pub start_when_read: bool,
     /// In seconds since 1970.
@@ -175,6 +177,8 @@ struct Entry {
     /// The preset picked for this link. For one started before it was read, the one picked for them all then, which
     /// a rule's comes before.
     preset_id: Option<String>,
+    /// A folder picked for this link instead of the one the rules give.
+    folder: Option<String>,
     start_when_read: StartWhenRead,
     added_at: i64,
     origin: LinkOrigin,
@@ -385,6 +389,7 @@ impl PendingLinks {
                     fetched: None,
                     error: None,
                     preset_id: None,
+                    folder: None,
                     start_when_read,
                     added_at,
                     origin,
@@ -529,6 +534,31 @@ impl PendingLinks {
         Ok(())
     }
 
+    /// Picks one link's folder, or `None` for the one the rules give. One that isn't a full path is inside the download
+    /// folder.
+    pub fn set_folder(&self, id: i64, folder: Option<String>) -> Result<(), DownloadError> {
+        let folder = folder
+            .map(|folder| folder.trim().to_owned())
+            .filter(|folder| !folder.is_empty())
+            .map(|folder| {
+                let path = std::path::Path::new(&folder);
+                if path.is_absolute() {
+                    folder
+                } else {
+                    let downloads = self.settings.get().downloads.resolved_folder();
+                    downloads.join(path).display().to_string()
+                }
+            });
+        {
+            let mut state = lock(&self.state);
+            let entry = find(&mut state.entries, id)?;
+            entry.folder = folder;
+            self.store.update(entry)?;
+        }
+        self.notify();
+        Ok(())
+    }
+
     /// Starts links. One that was read joins the download queue now, with its own preset, else the one a rule picks,
     /// else `preset_id`, and leaves the pending links; one not read yet joins once it's read, unless it turns out to be
     /// downloaded already, with the preset a rule picks then, else `preset_id`. One that couldn't be read stays. A
@@ -587,8 +617,9 @@ impl PendingLinks {
             .as_ref()
             .map(|fetched| fetched.video.clone())
             .ok_or(DownloadError::WrongState)?;
+        let folder = entry.folder.clone();
         let added = if video.post.is_some() || video.files.is_some() {
-            self.queue.add_post(video)
+            self.queue.add_post_in(video, folder)
         } else {
             let preset =
                 self.start_preset(&video, chosen, otherwise)
@@ -601,7 +632,7 @@ impl PendingLinks {
                 .ok()
                 .flatten()
                 .is_some_and(|last| last.preset == preset.name);
-            self.queue.add(video, &preset.id, overwrite)
+            self.queue.add_in(video, &preset.id, overwrite, folder)
         };
         match added {
             Ok(_) | Err(DownloadError::AlreadyQueued) => Ok(()),
@@ -850,6 +881,7 @@ impl PendingLinks {
             preview,
             error: entry.error,
             preset_id: entry.preset_id,
+            folder: entry.folder,
             start_when_read: self.shows_starting_once_read(entry.start_when_read),
             added_at: entry.added_at,
             caught: entry.origin == LinkOrigin::Copied,

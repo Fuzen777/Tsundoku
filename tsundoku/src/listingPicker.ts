@@ -68,12 +68,17 @@ export function picksFor(
   const picks: QueuePick[] = []
   for (const item of selectedItems(items, selection)) {
     if (!takesPreset(item)) {
-      picks.push({ video: item.video, presetId: null, overwrite: false })
+      picks.push({ video: item.video, presetId: null, overwrite: false, folder: null })
       continue
     }
     const preset = presetFor(item)
     if (!preset) return null
-    picks.push({ video: item.video, presetId: preset.id, overwrite: item.lastDownload?.preset === preset.name })
+    picks.push({
+      video: item.video,
+      presetId: preset.id,
+      overwrite: item.lastDownload?.preset === preset.name,
+      folder: null,
+    })
   }
   return picks
 }

@@ -23,7 +23,7 @@ rules:
 
 - [x] Check and update all tools instead of one by one.
 
-- [ ] Per item destination override
+- [x] Per item destination override
 
 - [ ] Move already downloaded files
 

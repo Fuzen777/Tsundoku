@@ -156,14 +156,29 @@ pub fn add_to_queue(
     video: VideoInfo,
     preset_id: String,
     overwrite: bool,
+    folder: Option<String>,
 ) -> Result<QueueItem, DownloadError> {
-    queue.add(video, &preset_id, overwrite)
+    queue.add_in(video, &preset_id, overwrite, folder)
 }
 
 /// Adds a post of images, whose files all go into the site's folder in the posts folder.
 #[tauri::command]
-pub fn add_post_to_queue(queue: Queue<'_>, video: VideoInfo) -> Result<QueueItem, DownloadError> {
-    queue.add_post(video)
+pub fn add_post_to_queue(
+    queue: Queue<'_>,
+    video: VideoInfo,
+    folder: Option<String>,
+) -> Result<QueueItem, DownloadError> {
+    queue.add_post_in(video, folder)
+}
+
+/// Saves a download that isn't running in a folder picked for it, or back in the rules' (`None`).
+#[tauri::command]
+pub fn set_queue_folder(
+    queue: Queue<'_>,
+    id: i64,
+    folder: Option<String>,
+) -> Result<QueueItem, DownloadError> {
+    queue.set_folder(id, folder)
 }
 
 /// Adds the items picked from a channel, playlist or account, each as its own download. How many were added.

@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.70 (2026-11-09).
+Up to date with 0.1.71 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -147,6 +147,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Rule: each group reads "Rule 2 · D:\Videos" (a rule saving in `D:\Videos\{site}` shows `D:\Videos`), then "Preset's Folder · …" and "Download Folder · …" for downloads no rule places.
 - [ ] Status with Site, Folder or Rule: each status's heading holds the other groups under smaller, indented headings. Links not read yet sit under their status without a heading of their own.
 - [ ] Clicking a heading folds its group, and again unfolds it. Restart → the grouping is kept (the folding isn't).
+
+**49. A folder for one download** · 0.1.71
+- [ ] Preview card: the folder icon after the destination line → pick a folder → the line shows it "· Picked for This One"; Download → it's saved there, whatever the rules say. The arrow icon goes back to the usual folder. Same for a post and a shared folder.
+- [ ] Pending: Change Folder… on a read link, restart, the folder is still there; Start → it downloads there. Grouped by Folder or Rule, it sits under its folder or "Picked Folder · …".
+- [ ] Queue: ⋯ → Change Folder… on a waiting or failed download → it downloads there (a failed one after Retry). On a stopped one it asks first, then starts over in the new folder, leaving no `.tsundoku-<n>` folder behind in the old one. Use the Usual Folder puts it back.
 
 **20. Where each Pending link goes, and "Everything else"** · 0.1.30
 - [ ] A read link's row shows the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder). It follows the row's preset, and clicking it opens where that's set.

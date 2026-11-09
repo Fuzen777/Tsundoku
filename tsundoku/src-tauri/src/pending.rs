@@ -144,6 +144,16 @@ pub fn set_pending_post_files(
     pending.set_post_files(id, &picked)
 }
 
+/// Picks one link's folder, or `None` for the one the rules give.
+#[tauri::command]
+pub fn set_pending_folder(
+    pending: Pending<'_>,
+    id: i64,
+    folder: Option<String>,
+) -> Result<(), DownloadError> {
+    pending.set_folder(id, folder)
+}
+
 /// Picks one link's preset, or `None` for the one picked for them all.
 #[tauri::command]
 pub fn set_pending_preset(

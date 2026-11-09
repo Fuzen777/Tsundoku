@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.71 · 2026-11-09
+
+### Added
+
+- **A folder for one download**: the preview card's destination line and each read link in Pending have Change Folder…, which saves that one download in a folder you pick, whatever the rules say, and Use the Usual Folder to go back. In the Queue, the ⋯ menu of a download that's waiting, stopped or failed has them too; a stopped one starts over in its new folder, after asking.
+
 ## 0.1.70 · 2026-11-09
 
 ### Added

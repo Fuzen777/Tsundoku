@@ -467,6 +467,40 @@ fn starting_a_read_link_puts_it_in_the_queue() {
 }
 
 #[test]
+fn a_links_own_folder_goes_with_it_to_the_queue_and_through_a_restart() {
+    let test = Test::new();
+    let post = "https://www.instagram.com/p/Post1/";
+    test.add(&[FIRST, post]);
+    for link in [FIRST, post] {
+        test.wait_until_read(link);
+    }
+    let picked = r"D:\Picked".to_owned();
+    for link in test.links.list() {
+        test.links
+            .set_folder(link.id, Some(picked.clone()))
+            .unwrap();
+    }
+    let reopened = test.reopen();
+    assert!(
+        reopened
+            .list()
+            .iter()
+            .all(|link| link.folder.as_deref() == Some(picked.as_str())),
+        "kept through a restart"
+    );
+
+    let ids: Vec<i64> = test.links.list().iter().map(|link| link.id).collect();
+    test.links.start(&ids, "best-video").unwrap();
+    for video_id in ["first", "Post1"] {
+        let item = test.queued(video_id).unwrap();
+        assert_eq!(
+            (item.folder.as_str(), item.folder_chosen),
+            (picked.as_str(), true)
+        );
+    }
+}
+
+#[test]
 fn a_links_own_preset_wins() {
     let test = Test::new();
     test.add(&[FIRST]);

@@ -165,6 +165,8 @@ pub enum DestinationSource {
     Preset,
     /// The download folder (Settings → Downloads).
     DownloadFolder,
+    /// A folder picked for this one download, which the rules don't change.
+    Chosen,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS, thiserror::Error)]

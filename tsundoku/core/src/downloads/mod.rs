@@ -71,6 +71,10 @@ pub struct QueueItem {
     pub preset: Option<crate::presets::Preset>,
     /// Where the file goes, or a post's files: the site's folder in the posts folder.
     pub folder: String,
+    /// The folder was picked for this download (`set_folder`, or picked before it was added) rather than given by the
+    /// rules.
+    #[serde(default)]
+    pub folder_chosen: bool,
     pub state: QueueState,
     /// Download Again with the same preset: replace the file made before.
     pub overwrite: bool,
@@ -156,6 +160,9 @@ pub struct QueuePick {
     pub preset_id: Option<String>,
     /// Download Again with the same preset: replace the file made before.
     pub overwrite: bool,
+    /// A folder picked for it instead of the one the rules give.
+    #[serde(default)]
+    pub folder: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -386,7 +393,18 @@ impl DownloadQueue {
         preset_id: &str,
         overwrite: bool,
     ) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_video(video, preset_id, overwrite)?;
+        self.add_in(video, preset_id, overwrite, None)
+    }
+
+    /// `add`, into `folder` when one was picked for it instead of the one the rules give.
+    pub fn add_in(
+        &self,
+        video: VideoInfo,
+        preset_id: &str,
+        overwrite: bool,
+        folder: Option<String>,
+    ) -> Result<QueueItem, DownloadError> {
+        let item = self.insert_video(video, preset_id, overwrite, folder)?;
         self.schedule();
         Ok(item)
     }
@@ -397,6 +415,7 @@ impl DownloadQueue {
         video: VideoInfo,
         preset_id: &str,
         overwrite: bool,
+        chosen: Option<String>,
     ) -> Result<QueueItem, DownloadError> {
         let preset = self.presets.get(preset_id).ok_or(DownloadError::Preset {
             error: PresetError::NotFound,
@@ -407,10 +426,13 @@ impl DownloadQueue {
         if self.contains(&video.site, &video.video_id) {
             return Err(DownloadError::AlreadyQueued);
         }
-        let folder = self.destination(&video, Some(&preset)).folder;
+        let chosen = self.chosen_folder(chosen);
+        let folder_chosen = chosen.is_some();
+        let folder = chosen.unwrap_or_else(|| self.destination(&video, Some(&preset)).folder);
         let mut item = QueueItem {
             id: 0,
             folder,
+            folder_chosen,
             video,
             preset: Some(preset),
             state: QueueState::Waiting,
@@ -431,7 +453,16 @@ impl DownloadQueue {
     /// download all its files into the folder the rules give it (a post's by default the site's folder in the
     /// download folder). Files already there are skipped, so adding it again only fetches what's missing.
     pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_post(video)?;
+        self.add_post_in(video, None)
+    }
+
+    /// `add_post`, into `folder` when one was picked for it instead of the one the rules give.
+    pub fn add_post_in(
+        &self,
+        video: VideoInfo,
+        folder: Option<String>,
+    ) -> Result<QueueItem, DownloadError> {
+        let item = self.insert_post(video, folder)?;
         self.schedule();
         Ok(item)
     }
@@ -446,11 +477,12 @@ impl DownloadQueue {
             video,
             preset_id,
             overwrite,
+            folder,
         } in picks
         {
             let inserted = match preset_id {
-                Some(preset_id) => self.insert_video(video, &preset_id, overwrite),
-                None => self.insert_post(video),
+                Some(preset_id) => self.insert_video(video, &preset_id, overwrite, folder),
+                None => self.insert_post(video, folder),
             };
             match inserted {
                 Ok(_) => added += 1,
@@ -467,7 +499,11 @@ impl DownloadQueue {
     }
 
     /// Saves a post or a file host's link in the queue, waiting, for `add_post` or `add_many` to start.
-    fn insert_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
+    fn insert_post(
+        &self,
+        video: VideoInfo,
+        chosen: Option<String>,
+    ) -> Result<QueueItem, DownloadError> {
         if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
         }
@@ -478,10 +514,13 @@ impl DownloadQueue {
         if self.contains(&video.site, &video.video_id) {
             return Err(DownloadError::AlreadyQueued);
         }
-        let folder = self.destination(&video, None).folder;
+        let chosen = self.chosen_folder(chosen);
+        let folder_chosen = chosen.is_some();
+        let folder = chosen.unwrap_or_else(|| self.destination(&video, None).folder);
         let mut item = QueueItem {
             id: 0,
             folder,
+            folder_chosen,
             video,
             preset: None,
             state: QueueState::Waiting,
@@ -619,6 +658,61 @@ impl DownloadQueue {
         drop(state);
         self.notify();
         Ok(())
+    }
+
+    /// Saves a download in another folder, picked for it, or back in the one the rules give it (`None`). Only while it
+    /// isn't running or done; its partial files, which sit in its folder, are deleted, so a stopped one starts over.
+    pub fn set_folder(&self, id: i64, folder: Option<String>) -> Result<QueueItem, DownloadError> {
+        let chosen = self.chosen_folder(folder);
+        let item = {
+            let mut state = lock(&self.state);
+            let item = state
+                .items
+                .iter_mut()
+                .find(|item| item.id == id)
+                .ok_or(DownloadError::NotFound)?;
+            if !matches!(
+                item.state,
+                QueueState::Waiting | QueueState::Stopped | QueueState::Failed
+            ) {
+                return Err(DownloadError::WrongState);
+            }
+            let folder_chosen = chosen.is_some();
+            let folder = match chosen {
+                Some(folder) => folder,
+                None => self.destination(&item.video, item.preset.as_ref()).folder,
+            };
+            if folder != item.folder {
+                remove_folder(&temp_folder(item));
+            }
+            item.folder = folder;
+            item.folder_chosen = folder_chosen;
+            self.store.set_folder(item)?;
+            item.clone()
+        };
+        self.notify();
+        self.schedule();
+        Ok(item)
+    }
+
+    /// A folder picked for a download, as a full path: one that isn't is inside the download folder. Blank means none.
+    fn chosen_folder(&self, folder: Option<String>) -> Option<String> {
+        let folder = folder?.trim().to_owned();
+        if folder.is_empty() {
+            return None;
+        }
+        let path = Path::new(&folder);
+        Some(if path.is_absolute() {
+            folder
+        } else {
+            self.settings
+                .get()
+                .downloads
+                .resolved_folder()
+                .join(path)
+                .display()
+                .to_string()
+        })
     }
 
     /// What the tray's Pause All item would do now.

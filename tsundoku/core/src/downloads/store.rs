@@ -21,7 +21,7 @@ impl QueueStore {
         let connection = self.database.lock();
         let mut statement = connection
             .prepare(
-                "SELECT id, video, preset, folder, state, overwrite, added_at, result, error
+                "SELECT id, video, preset, folder, state, overwrite, added_at, result, error, folder_chosen
                 FROM queue_items ORDER BY position, id",
             )
             .map_err(storage_error)?;
@@ -37,14 +37,25 @@ impl QueueStore {
                     row.get::<_, i64>(6)?,
                     row.get::<_, Option<String>>(7)?,
                     row.get::<_, Option<String>>(8)?,
+                    row.get::<_, bool>(9)?,
                 ))
             })
             .map_err(storage_error)?;
 
         let mut items = Vec::new();
         for row in rows {
-            let (id, video, preset, folder, state, overwrite, added_at, result, error) =
-                row.map_err(storage_error)?;
+            let (
+                id,
+                video,
+                preset,
+                folder,
+                state,
+                overwrite,
+                added_at,
+                result,
+                error,
+                folder_chosen,
+            ) = row.map_err(storage_error)?;
             // An item that can't be read (from a newer version, say) is skipped rather than blocking the queue.
             let (Ok(video), Ok(preset), Some(state)) = (
                 serde_json::from_str(&video),
@@ -58,6 +69,7 @@ impl QueueStore {
                 video,
                 preset,
                 folder,
+                folder_chosen,
                 state,
                 overwrite,
                 added_at,
@@ -86,8 +98,9 @@ impl QueueStore {
         let connection = self.database.lock();
         connection
             .query_row(
-                "INSERT INTO queue_items (id, video, preset, folder, state, overwrite, added_at, result, error, position)
-                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10) RETURNING id",
+                "INSERT INTO queue_items
+                    (id, video, preset, folder, state, overwrite, added_at, result, error, position, folder_chosen)
+                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11) RETURNING id",
                 params![
                     to_json(&item.video),
                     to_json(&item.preset),
@@ -99,6 +112,7 @@ impl QueueStore {
                     item.error.as_ref().map(to_json),
                     put_back_at.map(|_| item.id),
                     put_back_at.unwrap_or(0),
+                    item.folder_chosen,
                 ],
                 |row| row.get(0),
             )
@@ -117,6 +131,18 @@ impl QueueStore {
                     item.result.as_ref().map(to_json),
                     item.error.as_ref().map(to_json),
                 ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    /// Saves an item's folder and whether it was picked for it.
+    pub fn set_folder(&self, item: &QueueItem) -> Result<(), DownloadError> {
+        self.database
+            .lock()
+            .execute(
+                "UPDATE queue_items SET folder = ?2, folder_chosen = ?3 WHERE id = ?1",
+                params![item.id, item.folder, item.folder_chosen],
             )
             .map_err(storage_error)?;
         Ok(())

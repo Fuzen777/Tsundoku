@@ -3,20 +3,23 @@ import { CircleStop, FileText, FolderOpen, ListVideo, Play, RefreshCw, X } from 
 import {
   cancelDownload,
   clearFinishedDownloads,
+  confirmWithUser,
   downloadNext,
   openDownload,
   openDownloadLog,
+  pickFolder,
   restoreClearedDownloads,
   resumeAllDownloads,
   resumeDownload,
   retryDownload,
   retryFailedDownloads,
+  setQueueFolder,
   showDownloadInFolder,
   stopAllDownloads,
   stopDownload,
   tryDownloadNow,
 } from "../api"
-import { arrangeNested, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
+import { arrangeNested, chosenFolderGroup, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
 import type { Destination } from "../bindings/Destination"
 import type { DownloadProgress } from "../bindings/DownloadProgress"
 import type { ListGroup } from "../bindings/ListGroup"
@@ -165,6 +168,7 @@ function queueGroup(
     case "site":
       return { key: item.video.site, label: item.video.siteName, rank: 0 }
     case "rule":
+      if (item.folderChosen) return chosenFolderGroup(item.folder)
       return destination && ruleGroupOf ? ruleGroupOf(destination) : NO_GROUP
   }
 }
@@ -261,15 +265,44 @@ function QueueRow({ item }: { item: QueueItem }) {
         {item.state !== "done" && (
           <IconButton label={strings.queue.cancel} icon={X} onClick={() => act(cancelDownload)} />
         )}
-        {item.state === "waiting" && (
+        {(item.state === "waiting" || item.state === "stopped" || item.state === "failed") && (
           <Menu
             label={strings.queue.moreActions}
-            items={[{ label: strings.queue.downloadNext, onSelect: () => act(downloadNext) }]}
+            items={[
+              ...(item.state === "waiting" ? [{ label: strings.queue.downloadNext, onSelect: () => act(downloadNext) }] : []),
+              { label: strings.queue.changeFolder, onSelect: () => act((id) => changeFolder(id, item)) },
+              ...(item.folderChosen
+                ? [{ label: strings.queue.usualFolder, onSelect: () => act((id) => moveToFolder(id, item, null)) }]
+                : []),
+            ]}
           />
         )}
       </div>
     </Card>
   )
+}
+
+/** Change Folder…: asks for a folder, then saves the download there. */
+async function changeFolder(id: number, item: QueueItem): Promise<void> {
+  const folder = await pickFolder(strings.queue.changeFolderTitle)
+  if (folder) await moveToFolder(id, item, folder)
+}
+
+/** Saves the download in `folder`, or the usual one, asking first when a stopped one would lose what it downloaded. */
+async function moveToFolder(id: number, item: QueueItem, folder: string | null): Promise<void> {
+  const startsOver = item.state === "stopped"
+  if (
+    startsOver &&
+    !(await confirmWithUser({
+      title: strings.queue.changeFolderStoppedTitle,
+      message: strings.queue.changeFolderStoppedMessage,
+      confirmLabel: strings.queue.changeFolderConfirm,
+      cancelLabel: strings.dialogs.cancel,
+    }))
+  ) {
+    return
+  }
+  await setQueueFolder(id, folder)
 }
 
 /** What the item is doing: its state, or while it runs, the stage yt-dlp is at. */

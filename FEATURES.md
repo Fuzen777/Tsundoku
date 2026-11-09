@@ -63,6 +63,7 @@ type: Features
 - **Without Deno**: a YouTube preview warns that some formats may be missing.
 - **Download**: pick a preset (the one a rule picks, else the default, is preselected) and Download: the video joins the queue, and the card and the add bar clear. With a video already downloaded, it's Download Again; with the same preset as before, it asks first, since the new file replaces the old one.
 - **Where it goes**: beside Download, the folder the download will be saved in and what picked it: a rule ("Rule 2"), the preset's folder or the download folder. Clicking it opens the rules, the presets or Settings.
+- **Another folder for this one**: the folder icon after it (Change Folder…) picks a folder for this download only, shown as "Picked for This One", whatever the rules say; the arrow beside it (Use the Usual Folder) goes back.
 - **Preset picked by a rule**: when a rule picks the preset, "Rule 3" shows beside the preset picker, and clicking it opens the rules. Picking another preset takes it instead.
 - **Already in the queue**: the card says so, without Download.
 
@@ -95,7 +96,7 @@ type: Features
 - **Select**: with links ticked (or all of them, with the box at the top), Start Selected and Remove Selected act on those instead. Starting a video again with the preset it was downloaded with asks first, since the new file replaces the old one.
 - **Undo**: removing links (Remove Selected or a row's Remove) shows "Removed 12 links" at the bottom of the window for 8 seconds, with Undo, which puts them back as they were: in the same places, ticked if they were, with their presets and what was read. The message waits while the pointer is on it or it has the keyboard's focus, and Escape or its × closes it. Only the latest removal can be undone, and a link that's in Pending again by then (copied again, say) isn't added twice.
 - **Each row**: Start (or Download Again), Remove, and the preset picker for a video, with "Rule 3" beside it when a rule picked the preset. A link that couldn't be read shows why, the same fixes as the preview card, and Try Again.
-- **Where it goes**: under a read link's details, the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder), as the preview card shows it. It follows the preset the link would start with, and clicking it opens the rules, the presets or Settings.
+- **Where it goes**: under a read link's details, the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder), as the preview card shows it. It follows the preset the link would start with, and clicking it opens the rules, the presets or Settings. Change Folder… picks a folder for that link alone, kept through a restart and used when it starts.
 - **Sidebar count**: the number of links waiting, beside Pending, leaving out copied links and links from files still being checked.
 - **Ways to add links**: an empty Pending lists the same ways as an empty queue, the ones that work on their own first.
 
@@ -103,6 +104,7 @@ type: Features
 
 - **Two at a time**: downloads start in the order they were added, two at once.
 - **Download Next**: a waiting download's ⋯ menu moves it to the front, so it starts before the others waiting, even after a restart.
+- **Change Folder…**: the ⋯ menu of a download that's waiting, stopped or failed picks another folder for it, and Use the Usual Folder puts it back in the rules' folder. A stopped one asks first, since it then starts over.
 - **The whole queue**: on the title's right, Pause All stops every download running and holds every one waiting, Resume All resumes every stopped one, Retry Failed retries every failed one and Clear Finished removes the finished ones. Each does what the row's own button does, and shows only while a download needs it.
 - **Posts**: a post's row shows what it holds ("3 images, 1 video"), or how many of its files it takes when some were left out ("3 of 6 files"), instead of a preset, and its progress counts files. On Instagram, each file waits a random 5 to 10 seconds first (Settings → Instagram), so the account isn't blocked.
 - **MEGA, MediaFire, Google Drive and Dropbox**: a file host's row shows what it holds instead of a preset. Its progress covers every file together, with the speed limit applied; Stop and Retry continue the file they stopped in.
