@@ -7,6 +7,7 @@ import {
   downloadNext,
   openDownload,
   pickFolder,
+  removeFinishedDownload,
   restoreClearedDownloads,
   resumeAllDownloads,
   resumeDownload,
@@ -131,6 +132,7 @@ export function QueueView() {
           </div>
           {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           <GroupedList
+            view="queue"
             groups={groups}
             grouped={group !== "none" || byStatus}
             keyOf={(item) => item.id}
@@ -180,10 +182,20 @@ function QueueRow({ item }: { item: QueueItem }) {
   const stage = stageLabel(item, progress)
   const hold = item.state === "waiting" ? item.hold : null
   const holdTimeLeft = useTimeLeft(hold ? holdEnd(hold) : null)
+  const offerUndo = useOfferUndo()
 
   const act = (action: (id: number) => Promise<void>, describe = describeDownloadError) => {
     setActionError(null)
     action(item.id).catch((error: unknown) => setActionError(describe(error)))
+  }
+  /** Remove from Queue, then an offer for a few seconds to put it back where it was. */
+  const removeWithUndo = async (id: number) => {
+    await removeFinishedDownload(id)
+    offerUndo({
+      message: strings.queue.removed(item.video.title),
+      undo: restoreClearedDownloads,
+      describeError: describeDownloadError,
+    })
   }
   const actOnFile = (action: (downloadId: number) => Promise<void>) => {
     if (!item.result) return
@@ -269,7 +281,9 @@ function QueueRow({ item }: { item: QueueItem }) {
         {item.state === "failed" && item.error && (
           <CopyDetailsButton id={item.id} error={describeDownloadError(item.error)} onError={setActionError} />
         )}
-        {item.state !== "done" && (
+        {item.state === "done" ? (
+          <IconButton label={strings.queue.removeFinished} icon={X} onClick={() => act(removeWithUndo)} />
+        ) : (
           <IconButton label={strings.queue.cancel} icon={X} onClick={() => act(cancelDownload)} />
         )}
         {(item.state === "waiting" || item.state === "stopped" || item.state === "failed") && (

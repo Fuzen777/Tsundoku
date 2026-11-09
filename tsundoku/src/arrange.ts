@@ -133,7 +133,6 @@ function compareValues(first: string | number, second: string | number): number 
   return collator.compare(String(first), String(second))
 }
 
-/** The group of a folder. Windows doesn't tell letter case apart in paths, so neither do the groups. */
 /** The groups holding the first `count` items, the last of them cut short: a long list shown a page at a time. */
 export function firstItems<Item>(groups: readonly ItemGroup<Item>[], count: number): ItemGroup<Item>[] {
   const shown: ItemGroup<Item>[] = []
@@ -152,6 +151,7 @@ export function firstItems<Item>(groups: readonly ItemGroup<Item>[], count: numb
   return shown
 }
 
+/** The group of a folder. Windows doesn't tell letter case apart in paths, so neither do the groups. */
 export function folderGroup(folder: string): GroupPlace {
   return { key: `folder:${folder.toLowerCase()}`, label: folder, rank: 0, folder: true }
 }

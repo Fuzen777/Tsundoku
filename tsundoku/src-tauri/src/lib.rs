@@ -74,6 +74,20 @@ fn open_data_folder(app: AppHandle, data_folder: State<'_, DataFolder>) -> Resul
         .map_err(|error| error.to_string())
 }
 
+/// Opens the download folder (Settings → Downloads, the end of Rules) in File Explorer, making it first if no download
+/// has yet. The core resolves it, so the UI never names a path to open. Fails with Windows' reason.
+#[tauri::command]
+fn open_download_folder(
+    app: AppHandle,
+    queue: State<'_, Arc<DownloadQueue>>,
+) -> Result<(), String> {
+    let folder = queue.options().resolved_folder();
+    fs::create_dir_all(&folder).map_err(|error| error.to_string())?;
+    app.opener()
+        .open_path(folder.display().to_string(), None::<&str>)
+        .map_err(|error| error.to_string())
+}
+
 /// Brings the main window to the front: for a second launch of the app, the tray icon, or a click on a notification.
 fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -277,6 +291,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             app_info,
             open_data_folder,
+            open_download_folder,
             backup::save_backup,
             backup::restore_backup,
             tools::tools_need_setup,
@@ -342,6 +357,7 @@ pub fn run() {
             downloads::retry_failed_downloads,
             downloads::download_next,
             downloads::clear_finished_downloads,
+            downloads::remove_finished_download,
             downloads::restore_cleared_downloads,
             downloads::open_download_log,
             downloads::download_log,

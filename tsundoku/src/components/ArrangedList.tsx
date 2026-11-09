@@ -78,24 +78,43 @@ export function ArrangeControls({ arrangement, onChange, disabled = false }: Arr
 }
 
 interface GroupedListProps<Item> {
+  /** Which view's list it is: each remembers the groups folded away in it. */
+  view: "pending" | "queue"
   groups: readonly ItemGroup<Item>[]
   /** Whether to show the groups' headings: off when the list isn't grouped. */
   grouped: boolean
   keyOf: (item: Item) => number
   renderItem: (item: Item) => ReactNode
+  /** With it, each heading has a box that ticks or unticks every item in its group (Pending). */
+  selection?: GroupSelection<Item>
+}
+
+/** A list's ticked items, for the boxes on its groups' headings. */
+export interface GroupSelection<Item> {
+  isSelected: (item: Item) => boolean
+  /** Ticks (`selected`) or unticks every item of a group. */
+  onSelect: (items: readonly Item[], selected: boolean) => void
+}
+
+/** The groups folded away in each view, by heading, kept while the app runs so leaving a view doesn't unfold them. */
+const collapsedByView: Record<GroupedListProps<unknown>["view"], ReadonlySet<string>> = {
+  pending: new Set(),
+  queue: new Set(),
 }
 
 /**
  * A list of cards, under a heading per group when it's grouped: the group's name (a folder's path with its icon) and
  * how many it holds. A status's group holds the other grouping's groups under smaller headings. Clicking a heading
- * folds its group away, until the view is left.
+ * folds its group away; each view remembers which while the app runs. With `selection`, a box before each heading
+ * ticks its whole group.
  */
-export function GroupedList<Item>({ groups, grouped, keyOf, renderItem }: GroupedListProps<Item>) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+export function GroupedList<Item>({ view, groups, grouped, keyOf, renderItem, selection }: GroupedListProps<Item>) {
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(collapsedByView[view])
   const toggle = (key: string) =>
     setCollapsed((current) => {
       const next = new Set(current)
       if (!next.delete(key)) next.add(key)
+      collapsedByView[view] = next
       return next
     })
   const rows = (items: readonly Item[]) =>
@@ -110,13 +129,15 @@ export function GroupedList<Item>({ groups, grouped, keyOf, renderItem }: Groupe
     const Chevron = isCollapsed ? ChevronRight : ChevronDown
     return (
       <section key={key} className={`flex flex-col ${nested ? "gap-2" : "gap-3"}`}>
-        <button
+        <div className={`flex min-w-0 items-center gap-2 ${nested ? "pl-4" : ""}`}>
+          {selection && <GroupCheckbox items={group.items} selection={selection} label={group.label} />}
+          <button
           type="button"
           aria-expanded={!isCollapsed}
           aria-label={isCollapsed ? text.expand(group.label) : text.collapse(group.label)}
           onClick={() => toggle(key)}
           className={`flex min-w-0 items-center gap-1.5 rounded text-left text-xs text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-accent ${
-            nested ? "pl-4 font-medium" : "font-semibold"
+            nested ? "font-medium" : "font-semibold"
           }`}
         >
           <Chevron size={14} className="shrink-0" aria-hidden />
@@ -125,7 +146,8 @@ export function GroupedList<Item>({ groups, grouped, keyOf, renderItem }: Groupe
             {group.label}
           </span>
           <span className="shrink-0 font-normal text-fg-muted tabular-nums">{group.items.length}</span>
-        </button>
+          </button>
+        </div>
         {!isCollapsed &&
           (group.subgroups ? (
             <div className="flex flex-col gap-3">{group.subgroups.map((subgroup) => section(subgroup, key, true))}</div>
@@ -136,4 +158,31 @@ export function GroupedList<Item>({ groups, grouped, keyOf, renderItem }: Groupe
     )
   }
   return <div className="flex flex-col gap-4">{groups.map((group) => section(group, "", false))}</div>
+}
+
+/** A group heading's box: ticked when all its items are, part-ticked when some are; it ticks or unticks them all. */
+function GroupCheckbox<Item>({
+  items,
+  selection,
+  label,
+}: {
+  items: readonly Item[]
+  selection: GroupSelection<Item>
+  label: string
+}) {
+  const selectedCount = items.filter(selection.isSelected).length
+  const all = items.length > 0 && selectedCount === items.length
+  return (
+    <input
+      type="checkbox"
+      className="size-4 shrink-0 accent-accent"
+      aria-label={text.selectGroup(label)}
+      title={text.selectGroup(label)}
+      checked={all}
+      ref={(box) => {
+        if (box) box.indeterminate = selectedCount > 0 && !all
+      }}
+      onChange={() => selection.onSelect(items, !all)}
+    />
+  )
 }

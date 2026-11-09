@@ -723,6 +723,35 @@ fn undo_puts_cleared_downloads_back_where_they_were() {
 }
 
 #[test]
+fn removes_one_finished_download_and_puts_it_back() {
+    let test = Test::new();
+    let first = test.add("a");
+    let second = test.add("b");
+    wait_until("both run", || test.runner.started().len() == 2);
+    assert!(
+        matches!(
+            test.queue.remove_finished(first),
+            Err(DownloadError::WrongState)
+        ),
+        "not while it runs"
+    );
+    test.runner.complete(first, test.finished_file("a.mkv"));
+    test.runner.complete(second, test.finished_file("b.mkv"));
+    wait_until("both are done", || {
+        test.state(first) == Some(QueueState::Done) && test.state(second) == Some(QueueState::Done)
+    });
+    let before = test.queue.items();
+
+    test.queue.remove_finished(first).unwrap();
+    let ids: Vec<_> = test.queue.items().iter().map(|item| item.id).collect();
+    assert_eq!(ids, [second], "only that one");
+    assert_eq!(test.reopen().items().len(), 1, "removed for good");
+
+    assert_eq!(test.queue.restore_cleared().unwrap(), 1);
+    assert_eq!(test.queue.items(), before, "back in its place");
+}
+
+#[test]
 fn undo_leaves_out_a_download_queued_again() {
     let test = Test::new();
     let done = test.add("a");

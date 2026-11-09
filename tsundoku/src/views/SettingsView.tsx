@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { openDataFolder } from "../api"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
@@ -31,21 +31,42 @@ export function SettingsView({ place = null }: { place?: SettingsTarget | null }
   return (
     <Page title={strings.nav.settings}>
       <div className="flex max-w-3xl flex-col gap-6">
-        <DownloadsSection />
-        <AddingSection />
-        <BackgroundSection />
-        <AppearanceSection />
-        <ShortcutsSection />
-        <PostsSection />
-        <InstagramSection />
-        <CookiesSection />
-        <SupportedSitesSection />
-        <ToolsSection />
-        <AboutSection />
+        <nav aria-label={strings.settings.jumpTo} className="-mt-1 flex flex-wrap gap-1.5">
+          {SETTINGS_SECTIONS.map(({ id, title }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" })}
+              className="rounded-full border border-line px-2.5 py-0.5 text-xs font-medium text-fg-secondary transition-colors hover:border-line-strong hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              {title}
+            </button>
+          ))}
+        </nav>
+        {SETTINGS_SECTIONS.map(({ id, Content }) => (
+          <div key={id} id={id} className="scroll-mt-4">
+            <Content />
+          </div>
+        ))}
       </div>
     </Page>
   )
 }
+
+/** Settings' sections in order, with the title each jump link at the top shows (the section's own heading). */
+const SETTINGS_SECTIONS: readonly { id: string; title: string; Content: () => ReactNode }[] = [
+  { id: "settings-downloads", title: strings.settings.downloads, Content: DownloadsSection },
+  { id: "settings-adding", title: strings.settings.adding, Content: AddingSection },
+  { id: "settings-background", title: strings.settings.background, Content: BackgroundSection },
+  { id: "settings-appearance", title: strings.settings.appearance, Content: AppearanceSection },
+  { id: "settings-shortcuts", title: strings.settings.keyboardShortcuts, Content: ShortcutsSection },
+  { id: "settings-posts", title: strings.settings.posts, Content: PostsSection },
+  { id: "settings-instagram", title: strings.settings.instagram, Content: InstagramSection },
+  { id: "settings-cookies", title: strings.settings.cookies, Content: CookiesSection },
+  { id: "settings-sites", title: strings.settings.sites.title, Content: SupportedSitesSection },
+  { id: "settings-tools", title: strings.settings.tools, Content: ToolsSection },
+  { id: "settings-about", title: strings.settings.about, Content: AboutSection },
+]
 
 /**
  * The version and Check for Updates, then the data folder and Open Folder. A newer release shows as the banner under

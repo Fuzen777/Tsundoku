@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.74 (2026-11-09).
+Up to date with 0.1.75 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -147,7 +147,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Pending and the Queue: Group By shows Status as its own toggle, then None, Site, Folder and Rule side by side. A view grouped by status before keeps that, as the Status toggle with None.
 - [ ] Rule: each group reads "Rule 2 · D:\Videos" (a rule saving in `D:\Videos\{site}` shows `D:\Videos`), then "Preset's Folder · …" and "Download Folder · …" for downloads no rule places.
 - [ ] Status with Site, Folder or Rule: each status's heading holds the other groups under smaller, indented headings. Links not read yet sit under their status without a heading of their own.
-- [ ] Clicking a heading folds its group, and again unfolds it. Restart → the grouping is kept (the folding isn't).
+- [ ] Clicking a heading folds its group, and again unfolds it, and it stays folded when you come back to the view. Restart → the grouping is kept (the folding isn't).
 
 **49. A folder for one download** · 0.1.71
 - [ ] Preview card: the folder icon after the destination line → pick a folder → the line shows it "· Picked for This One"; Download → it's saved there, whatever the rules say. The arrow icon goes back to the usual folder. Same for a post and a shared folder.
@@ -172,6 +172,15 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Queue: Show Log on a running download → its log opens under the row and grows every second, staying at the bottom; scroll up and it stays put. Hide Log closes it.
 - [ ] On a done or failed download, Show Log shows the whole log; Copy Log copies it, Open in Editor opens the file as before.
 - [ ] A very long log (a channel's playlist, say) says "The log is long: this is its end." and the app stays quick.
+
+**52. Small additions from the open decisions** · 0.1.75
+- [ ] Settings → Downloads: Open Folder opens the download folder in File Explorer (made first if it wasn't there). The same button sits at the end of Rules.
+- [ ] Settings: the links at the top (Downloads … About) each scroll to their section.
+- [ ] With Deno not set up (rename `tools\deno` with the app closed), a YouTube preview's warning has Set Up Deno → it installs, and the preview is read again without the warning.
+- [ ] Queue: a finished download's × (Remove from Queue) removes it with "Removed “…” from the queue" and Undo, which puts it back in its place. History still has it.
+- [ ] Pending grouped by Folder: rows show "Rule 3" (or what else picked the folder) without the path; the box on a heading ticks every link in that group, part-ticked when only some are.
+- [ ] Fold a group in Pending, go to the Queue and back → it's still folded. A restart unfolds it.
+- Seen in the browser preview with stand-in data.
 
 **23. Copy Details** · 0.1.41, 0.1.46
 - [ ] On a failed row (the `Z:\` rule above), hovering Copy Details says its name, and it says Copied after a click. Pasted in Notepad: Tsundoku's version, each tool's version, Windows' version and build, the link, the error and the log's last lines, with your user name blanked out.

@@ -15,6 +15,7 @@ import { describeDownloadError, describePresetError, type ErrorDescription } fro
 import { fillPlaceholders } from "../../placeholders"
 import { useDefaultDownloadFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
+import { useOpenDownloadFolder } from "../../useOpenDownloadFolder"
 
 const text = strings.settings
 
@@ -75,6 +76,7 @@ export function DownloadsSection() {
   const { data: presets } = usePresets()
   const storePresets = useStorePresets()
   const [presetError, setPresetError] = useState<ErrorDescription | null>(null)
+  const openFolder = useOpenDownloadFolder()
   // The speed limit is saved when the field is left or Enter is pressed, not at every key.
   const [rateLimit, setRateLimit] = useState<string | null>(null)
   const [rateLimitSaved, setRateLimitSaved] = useState(false)
@@ -124,6 +126,7 @@ export function DownloadsSection() {
             <Button disabled={!options} onClick={() => void chooseFolder()}>
               {text.chooseFolder}
             </Button>
+            <Button onClick={() => void openFolder.open()}>{text.openDownloadFolder}</Button>
             {folder && (
               <Button variant="ghost" onClick={() => void saveFolder(null)}>
                 {text.useDefaultFolder}
@@ -131,6 +134,9 @@ export function DownloadsSection() {
             )}
           </div>
         </Field>
+        {openFolder.error !== null && (
+          <StatusMessage tone="danger" message={text.downloadFolderOpenFailed} detail={openFolder.error} />
+        )}
         <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-4">
           <Field label={text.atOnce} hint={text.atOnceHint} htmlFor="settings-at-once">
             <SelectInput

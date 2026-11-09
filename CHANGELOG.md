@@ -2,6 +2,21 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.75 · 2026-11-09
+
+### Added
+
+- **Open the download folder**: Settings → Downloads and the end of Rules have Open Folder beside the download folder.
+- **Jump to a section of Settings**: a row of links at the top of Settings goes straight to each section.
+- **Set Up Deno from the preview card**: the warning that Deno is missing has Set Up Deno, which sets it up and reads the link again.
+- **Remove one finished download**: a finished download in the Queue has Remove from Queue (×), with Undo. It stays in the history.
+- **Tick a whole group in Pending**: each group's heading has a box that ticks or unticks every link in it.
+
+### Changed
+
+- **Folded groups stay folded**: Pending and the Queue remember the groups you folded while Tsundoku runs, instead of unfolding them when you leave the view.
+- **No repeated folder when grouped by folder**: in Pending grouped by Folder, a row shows only what picks its folder, since the heading shows the folder.
+
 ## 0.1.74 · 2026-11-09
 
 ### Added

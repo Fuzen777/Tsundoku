@@ -249,7 +249,13 @@ pub fn clear_finished_downloads(queue: Queue<'_>) -> Result<usize, DownloadError
     queue.clear_finished()
 }
 
-/// Undo for the last Clear Finished.
+/// Removes one finished download; Undo puts it back (`restore_cleared_downloads`).
+#[tauri::command]
+pub fn remove_finished_download(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
+    queue.remove_finished(id)
+}
+
+/// Undo for the last Clear Finished, or the last finished download removed.
 #[tauri::command]
 pub fn restore_cleared_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
     queue.restore_cleared().map(|_| ())

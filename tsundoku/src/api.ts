@@ -125,6 +125,12 @@ export async function openDataFolder(): Promise<void> {
   await invoke("open_data_folder")
 }
 
+/** Opens the download folder in File Explorer, making it if it isn't there yet. Rejects with Windows' reason. */
+export async function openDownloadFolder(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("open_download_folder")
+}
+
 /** Asks where to save a backup, suggesting `fileName`. Resolves to its path, or null if the user cancelled. */
 export async function chooseBackupDestination(title: string, fileName: string, filterName: string): Promise<string | null> {
   if (!isTauri()) return null
@@ -486,7 +492,13 @@ export function clearFinishedDownloads(): Promise<number> {
   return invoke<number>("clear_finished_downloads")
 }
 
-/** Undo for the last Clear Finished: its downloads go back where they were, unless the queue has their video again. */
+/** Removes one finished download, which restoreClearedDownloads puts back. The history keeps it. */
+export async function removeFinishedDownload(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("remove_finished_download", { id })
+}
+
+/** Undo for the last Clear Finished, or the last finished download removed: its downloads go back where they were, unless the queue has their video again. */
 export async function restoreClearedDownloads(): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("restore_cleared_downloads")

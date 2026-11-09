@@ -18,7 +18,7 @@ import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
 import { Card } from "./Card"
 import { DestinationLine } from "./DestinationLine"
-import { FailureFixes } from "./FailureFixes"
+import { FailureFixes, InstallTool } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
 import { ListingPicker } from "./ListingPicker"
@@ -66,7 +66,12 @@ export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardPro
         (state.preview.kind === "listing" ? (
           <ListingPicker listing={state.preview.listing} onClose={onClose} onAdded={onAdded} />
         ) : (
-          <VideoDetails preview={state.preview} onClose={onClose} onAdded={onAdded} />
+          <VideoDetails
+            preview={state.preview}
+            onClose={onClose}
+            onAdded={onAdded}
+            onRetry={onRetry}
+          />
         ))}
     </Card>
   )
@@ -76,9 +81,11 @@ interface VideoDetailsProps {
   preview: VideoPreview
   onClose: () => void
   onAdded: () => void
+  /** Read the link again, once Deno is set up. */
+  onRetry: (link: string) => void
 }
 
-function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
+function VideoDetails({ preview, onClose, onAdded, onRetry }: VideoDetailsProps) {
   const { video, lastDownload, missingJsRuntime } = preview
   return (
     <>
@@ -101,7 +108,11 @@ function VideoDetails({ preview, onClose, onAdded }: VideoDetailsProps) {
         <IconButton label={strings.preview.close} icon={X} onClick={onClose} />
       </div>
       {lastDownload && <AlreadyDownloaded download={lastDownload} />}
-      {missingJsRuntime && <StatusMessage tone="warning" message={strings.preview.missingDeno} />}
+      {missingJsRuntime && (
+        <StatusMessage tone="warning" message={strings.preview.missingDeno}>
+          <InstallTool tool="deno" label={strings.preview.setUpDeno} onDone={() => onRetry(video.url)} />
+        </StatusMessage>
+      )}
       {preview.inQueue ? (
         <p className="text-right text-fg-secondary">{strings.preview.inQueue}</p>
       ) : video.post || video.files ? (

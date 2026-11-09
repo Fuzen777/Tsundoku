@@ -170,6 +170,8 @@ export const strings = {
     timeLeft: (time: string) => `${time} left`,
     count: (count: number) => `${count} ${count === 1 ? "download" : "downloads"}`,
     cleared: (count: number) => `Cleared ${count} finished ${count === 1 ? "download" : "downloads"}`,
+    removeFinished: "Remove from Queue",
+    removed: (title: string) => `Removed “${title}” from the queue`,
     groups: {
       running: "Downloading",
       waiting: "Waiting",
@@ -326,6 +328,7 @@ export const strings = {
     chosenFolderGroup: (folder: string) => `Picked Folder · ${folder}`,
     collapse: (group: string) => `Collapse ${group}`,
     expand: (group: string) => `Expand ${group}`,
+    selectGroup: (group: string) => `Select Everything in ${group}`,
     sortBy: "Sort By",
     sorts: {
       added: "Date Added",
@@ -472,7 +475,8 @@ export const strings = {
     overwriteMessage: (preset: string) =>
       `It was already downloaded with ${preset}, so the new file will replace the one made before.`,
     overwriteConfirm: "Replace",
-    missingDeno: "Deno isn't set up, so some YouTube formats may be missing. You can set it up in Settings.",
+    missingDeno: "Deno isn't set up, so some YouTube formats may be missing.",
+    setUpDeno: "Set Up Deno",
     errors: {
       invalidLink: "That isn't a link. Paste a link that starts with https://.",
       playlist: "This link holds several videos or posts. Paste it in the add bar to pick which to download.",
@@ -870,6 +874,7 @@ export const strings = {
       usualFolders: "Usual Folders",
     },
     usualCacheFolders: "Each tool's own folder in your user folder.",
+    jumpTo: "Jump to a Section",
     downloads: "Downloads",
     adding: "Adding Links",
     watchClipboard: "Watch Clipboard",
@@ -1039,6 +1044,8 @@ export const strings = {
     dataFolderHint: "Settings, the history, the tools and each download's log.",
     openDataFolder: "Open Folder",
     dataFolderOpenFailed: "Couldn't open the data folder.",
+    openDownloadFolder: "Open Folder",
+    downloadFolderOpenFailed: "Couldn't open the download folder.",
     backup: "Back Up and Restore",
     backupHint:
       "Your settings, presets, folder rules and history in one file, to keep them safe or move them to another PC. The tools and logs aren't in it.",

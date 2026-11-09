@@ -149,6 +149,18 @@ export function PendingView() {
     })
   }
 
+  /** A group heading's box: ticks or unticks every link in the group. */
+  function selectAllOf(groupLinks: readonly PendingLink[], on: boolean) {
+    setSelection((current) => {
+      const next = new Set(current)
+      for (const link of groupLinks) {
+        if (on) next.add(link.id)
+        else next.delete(link.id)
+      }
+      return next
+    })
+  }
+
   function toggle(id: number, on: boolean) {
     setSelection((current) => {
       const next = new Set(current)
@@ -269,9 +281,11 @@ export function PendingView() {
           {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           {error && <StatusMessage tone="danger" {...error} />}
           <GroupedList
+            view="pending"
             groups={firstItems(groups, shownCount)}
             grouped={group !== "none" || byStatus}
             keyOf={(link) => link.id}
+            selection={{ isSelected: (link) => selection.has(link.id), onSelect: selectAllOf }}
             renderItem={(link) => (
               <PendingRow
                 link={link}
@@ -279,6 +293,7 @@ export function PendingView() {
                 allPresetId={followedPreset(link)}
                 batchPresetId={presetId}
                 rulePreset={rulePresetOf.get(link.id) ?? null}
+                folderInHeading={group === "destination"}
                 selected={selection.has(link.id)}
                 onSelect={(on) => toggle(link.id, on)}
                 onStart={() => void start([link])}
@@ -308,6 +323,8 @@ interface PendingRowProps {
   rulePreset: RulePreset | null
   /** Videos Start As: a row whose preset is that one shows Default. */
   batchPresetId: string | null
+  /** Grouped by folder: the heading shows the folder, so the row shows only what picked it. */
+  folderInHeading: boolean
   selected: boolean
   onSelect: (selected: boolean) => void
   onStart: () => void
@@ -320,6 +337,7 @@ function PendingRow({
   allPresetId,
   rulePreset,
   batchPresetId,
+  folderInHeading,
   selected,
   onSelect,
   onStart,
@@ -379,6 +397,7 @@ function PendingRow({
         {hold && <StatusMessage tone="neutral" message={describeSiteWait(hold)} detail={holdTimeLeft ?? undefined} />}
         {video && !preview?.inQueue && (
           <PendingDestination
+            folderInHeading={folderInHeading}
             video={video}
             presetId={presetId}
             chosenFolder={link.folder}
@@ -510,17 +529,24 @@ function PendingDestination({
   video,
   presetId,
   chosenFolder,
+  folderInHeading,
   onChoose,
 }: {
   video: VideoInfo
   presetId: string | null
   chosenFolder: string | null
+  folderInHeading: boolean
   onChoose: (folder: string | null) => void
 }) {
   const request = destinationRequest(video, presetId)
   const { data: destination } = useDownloadDestination(request.video, request.presetId, request.enabled)
   return destination || chosenFolder ? (
-    <DestinationLine destination={destination} chosenFolder={chosenFolder} onChoose={onChoose} />
+    <DestinationLine
+      destination={destination}
+      chosenFolder={chosenFolder}
+      folderShown={!folderInHeading}
+      onChoose={onChoose}
+    />
   ) : null
 }
 

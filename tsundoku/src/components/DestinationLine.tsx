@@ -13,6 +13,8 @@ interface DestinationLineProps {
   chosenFolder?: string | null
   /** Picks a folder for this one download, or `null` to go back to the usual one. Without it, the line only shows. */
   onChoose?: (folder: string | null) => void
+  /** Off when a heading above already shows the folder (Pending grouped by folder): only what picked it is left. */
+  folderShown?: boolean
   disabled?: boolean
   className?: string
 }
@@ -27,6 +29,7 @@ export function DestinationLine({
   destination,
   chosenFolder = null,
   onChoose,
+  folderShown = true,
   disabled = false,
   className,
 }: DestinationLineProps) {
@@ -51,20 +54,27 @@ export function DestinationLine({
 
   return (
     <div className={classes("flex min-w-0 items-center gap-1.5 text-xs text-fg-secondary", className)}>
-      <Folder size={14} className="shrink-0" />
-      <span className="truncate" title={strings.preview.savesIn(shown.folder)}>
-        {shown.folder}
-      </span>
+      {folderShown && (
+        <>
+          <Folder size={14} className="shrink-0" />
+          <span className="truncate" title={strings.preview.savesIn(shown.folder)}>
+            {shown.folder}
+          </span>
+        </>
+      )}
       {from ? (
         <button
           type="button"
           className="shrink-0 rounded-sm text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
+          title={folderShown ? undefined : strings.preview.savesIn(shown.folder)}
           onClick={() => navigate(from[1])}
         >
-          {strings.preview.destinationFrom(from[0])}
+          {folderShown ? strings.preview.destinationFrom(from[0]) : from[0]}
         </button>
       ) : (
-        <span className="shrink-0 text-fg-muted">{strings.preview.destinationFrom(sources.chosen)}</span>
+        <span className="shrink-0 text-fg-muted">
+          {folderShown ? strings.preview.destinationFrom(sources.chosen) : sources.chosen}
+        </span>
       )}
       {onChoose && (
         <span className="-my-1.5 flex shrink-0 items-center">

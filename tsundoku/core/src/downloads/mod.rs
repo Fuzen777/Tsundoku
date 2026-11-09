@@ -760,12 +760,29 @@ impl DownloadQueue {
     /// Removes the finished downloads from the queue. They stay in the history, and in the queue's memory until the
     /// next Clear Finished, so Undo can put them back (`restore_cleared`). How many were removed.
     pub fn clear_finished(&self) -> Result<usize, DownloadError> {
+        self.clear_done(|_| true)
+    }
+
+    /// Removes one finished download from the queue, as Clear Finished does for them all: it stays in the history,
+    /// and Undo (`restore_cleared`) puts it back.
+    pub fn remove_finished(&self, id: i64) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            if find(&mut state.items, id)?.state != QueueState::Done {
+                return Err(DownloadError::WrongState);
+            }
+        }
+        self.clear_done(|item| item.id == id).map(|_| ())
+    }
+
+    /// Removes the finished downloads `pick` takes, keeping them for Undo in place of the last ones removed.
+    fn clear_done(&self, pick: impl Fn(&QueueItem) -> bool) -> Result<usize, DownloadError> {
         let mut state = lock(&self.state);
         let mut cleared = Vec::new();
         let mut kept = Vec::new();
         let mut first_error = None;
         for (index, item) in std::mem::take(&mut state.items).into_iter().enumerate() {
-            if item.state != QueueState::Done {
+            if item.state != QueueState::Done || !pick(&item) {
                 kept.push(item);
                 continue;
             }

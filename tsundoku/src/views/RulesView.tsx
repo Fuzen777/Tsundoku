@@ -17,6 +17,7 @@ import { joinDetails } from "../format"
 import { useAppActions } from "../navigation"
 import { useDefaultDownloadFolder, useDownloadOptions, useFolderRules, usePresets } from "../queries"
 import { strings } from "../strings"
+import { useOpenDownloadFolder } from "../useOpenDownloadFolder"
 import { RuleEditor } from "./rules/RuleEditor"
 import { CATCH_ALL_RULE_ID, describeActions, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
 
@@ -43,6 +44,7 @@ export function RulesView() {
   const [editing, setEditing] = useState<Editing | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
+  const openFolder = useOpenDownloadFolder()
 
   if (!rules) return <Page title={strings.nav.rules} />
   const presets = presetsOverview?.presets ?? []
@@ -174,10 +176,16 @@ export function RulesView() {
             <p className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={downloadFolder}>
               {text.otherwise(downloadFolder)}
             </p>
+            <Button size="sm" variant="ghost" onClick={() => void openFolder.open()}>
+              {strings.settings.openDownloadFolder}
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => navigate("settings")}>
               {text.changeDownloadFolder}
             </Button>
           </div>
+        )}
+        {openFolder.error !== null && (
+          <StatusMessage tone="danger" message={strings.settings.downloadFolderOpenFailed} detail={openFolder.error} />
         )}
       </div>
     </Page>
