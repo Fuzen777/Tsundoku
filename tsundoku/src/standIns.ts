@@ -177,7 +177,7 @@ function matchingHistory(query: HistoryQuery, count: number | null): HistoryVide
     (video) =>
       video.title.toLowerCase().includes((query.search ?? "").toLowerCase()) &&
       (query.kind === null || (query.kind === "post") === (video.post !== null)) &&
-      (!query.onlyMissing || !video.lastDownload.fileExists),
+      (query.files === null || (query.files === "missing") !== video.lastDownload.fileExists),
   )
 }
 

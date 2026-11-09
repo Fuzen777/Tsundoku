@@ -155,6 +155,15 @@ pub struct HistorySite {
     pub site_name: String,
 }
 
+/// Whether a video's latest download's file is still where it was saved.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum FileState {
+    Present,
+    Missing,
+}
+
 /// What the history view asks for.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
@@ -168,8 +177,8 @@ pub struct HistoryQuery {
     pub preset: Option<String>,
     /// Only videos downloaded at least once as this kind: video, audio, a post or a file host's files.
     pub kind: Option<DownloadKind>,
-    /// Only videos whose latest download's file isn't there anymore: those showing File Missing.
-    pub only_missing: bool,
+    /// Only videos whose latest download's file is still there, or only those where it isn't (showing File Missing).
+    pub files: Option<FileState>,
     /// Only videos last downloaded at or after this time, in seconds since 1970.
     #[ts(type = "number | null")]
     pub downloaded_from: Option<i64>,
@@ -429,7 +438,7 @@ impl History {
 
     /// One page of the videos matching the query, each with its latest download, from the `offset`th on, and how
     /// many match in all. Whether each file is still there is checked for this page's videos only, once the database
-    /// is free again. With `only_missing`, the first page checks every video the other filters take (`note_missing`),
+    /// is free again. With `files`, the first page checks every video the other filters take (`note_missing`),
     /// and the pages after it go by that.
     pub fn page(
         &self,
@@ -437,7 +446,7 @@ impl History {
         offset: u32,
         limit: u32,
     ) -> Result<HistoryPage, HistoryError> {
-        if query.only_missing && offset == 0 {
+        if query.files.is_some() && offset == 0 {
             self.note_missing(query)?;
         }
         let (filter, mut values) = filter_of(query);
@@ -488,7 +497,7 @@ impl History {
 
     /// The IDs of every video matching the query, in its order: what ticking them all in the history view ticks.
     pub fn ids(&self, query: &HistoryQuery) -> Result<Vec<i64>, HistoryError> {
-        if query.only_missing {
+        if query.files.is_some() {
             self.note_missing(query)?;
         }
         let (filter, values) = filter_of(query);
@@ -509,7 +518,7 @@ impl History {
     /// download's file. The disk is asked for each, several at a time, once the database is free.
     fn note_missing(&self, query: &HistoryQuery) -> Result<(), HistoryError> {
         let others = HistoryQuery {
-            only_missing: false,
+            files: None,
             ..query.clone()
         };
         let (filter, values) = filter_of(&others);
@@ -865,8 +874,14 @@ fn filter_of(query: &HistoryQuery) -> (String, Vec<Value>) {
             values.len()
         ));
     }
-    if query.only_missing {
-        conditions.push("d.id IN (SELECT download FROM temp.missing_files)".to_owned());
+    match query.files {
+        Some(FileState::Missing) => {
+            conditions.push("d.id IN (SELECT download FROM temp.missing_files)".to_owned());
+        }
+        Some(FileState::Present) => {
+            conditions.push("d.id NOT IN (SELECT download FROM temp.missing_files)".to_owned());
+        }
+        None => {}
     }
     if let Some(from) = query.downloaded_from {
         values.push(Value::Integer(from));
@@ -1849,7 +1864,7 @@ mod tests {
             (
                 "only missing files (each first page checks them all)",
                 HistoryQuery {
-                    only_missing: true,
+                    files: Some(FileState::Missing),
                     ..query(None, HistorySort::Downloaded)
                 },
             ),
@@ -2027,7 +2042,7 @@ mod tests {
     }
 
     #[test]
-    fn lists_only_videos_whose_file_is_missing_page_after_page() {
+    fn lists_only_videos_whose_file_is_missing_or_there_page_after_page() {
         let test = TestHistory::new();
         for index in 0..5 {
             record_kind(
@@ -2046,7 +2061,7 @@ mod tests {
             );
         }
         let query = HistoryQuery {
-            only_missing: true,
+            files: Some(FileState::Missing),
             sort: HistorySort::Title,
             ..HistoryQuery::default()
         };
@@ -2074,6 +2089,17 @@ mod tests {
             test.history.ids(&query).unwrap().len(),
             5,
             "ticking them all ticks those"
+        );
+
+        let present = HistoryQuery {
+            files: Some(FileState::Present),
+            ..query
+        };
+        let here = test.history.page(&present, 0, 10).unwrap();
+        assert_eq!(here.total, 5);
+        assert_eq!(
+            titles(&here.videos),
+            ["gone0", "here0", "here1", "here2", "here3"]
         );
     }
 

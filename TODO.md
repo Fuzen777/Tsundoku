@@ -33,7 +33,7 @@ rules:
 
 - [ ] Group by : change dropdown for buttons. Group by Status is its own dimension. Site/Folder/Rule (Rule is new) is a segmented picker. Rule shows Rule number and Destination. (So for instance Downloads\\{site} shows Downloads.) Groups should be collapsible.
 
-- [ ] History : only missing ⇒ add only existing
+- [x] History : only missing ⇒ add only existing
 
 - [ ] Add, remove, duplicate and move presets, default can’t be deleted and is always first, it can be edited.
 

@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.65 (2026-11-09).
+Up to date with 0.1.66 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -199,6 +199,9 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Filter by kind (Videos, Audio, Posts, Shared Files), by date (Today, 7 days, 30 days, the year, or between two dates) and Only Missing Files (rename a downloaded file to see one).
 - [ ] Tick rows, or every row the search and filters show with the box above the list. Forget Selected asks once and keeps the files; Show Selected in Folder opens each folder once with its files selected, asking first above 5 folders. Changing a filter clears the ticks.
 - [ ] Both Forget dialogs read well, and neither mentions yt-dlp's archive any more.
+
+**44. Only Existing Files** · 0.1.66
+- [ ] History: the checkbox is now a Files list. Rename a downloaded file → Only Missing Files shows it, Only Existing Files hides it and shows the rest; All Files shows both. The count follows, and Select All ticks only what the list shows.
 
 **33. Thumbnails that don't go blank** · 0.1.60
 - [ ] History rows have pictures, older downloads included, which fill in within a minute or so; the data folder has a `thumbnails` folder of small JPEGs.

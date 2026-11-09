@@ -25,6 +25,7 @@ import {
   showVideosInFolders,
 } from "../api"
 import type { DownloadKind } from "../bindings/DownloadKind"
+import type { FileState } from "../bindings/FileState"
 import type { HistoryQuery } from "../bindings/HistoryQuery"
 import type { HistorySort } from "../bindings/HistorySort"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
@@ -33,7 +34,7 @@ import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
 import { ExpandToggle } from "../components/LinkButton"
-import { Checkbox, SelectInput, TextInput } from "../components/Field"
+import { SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
@@ -52,6 +53,7 @@ const text = strings.history
 
 const SORTS: readonly HistorySort[] = ["downloaded", "title", "uploader", "site", "duration", "size", "preset"]
 const KINDS: readonly DownloadKind[] = ["video", "audio", "post", "file"]
+const FILE_STATES: readonly FileState[] = ["present", "missing"]
 /** Showing more folders than this asks first, since each opens a window. */
 const FOLDERS_WITHOUT_ASKING = 5
 
@@ -73,7 +75,7 @@ export function HistoryView() {
   const [site, setSite] = useState<string | null>(null)
   const [preset, setPreset] = useState<string | null>(null)
   const [kind, setKind] = useState<DownloadKind | null>(null)
-  const [onlyMissing, setOnlyMissing] = useState(false)
+  const [files, setFiles] = useState<FileState | null>(null)
   const [dates, setDates] = useState<{ range: DateRange; from: string; to: string; bounds: DateBounds }>({
     range: "any",
     from: "",
@@ -89,7 +91,7 @@ export function HistoryView() {
     site,
     preset,
     kind,
-    onlyMissing,
+    files,
     downloadedFrom: dates.bounds.from,
     downloadedUntil: dates.bounds.until,
     sort,
@@ -98,7 +100,7 @@ export function HistoryView() {
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useHistory(query)
   const { data: filters } = useHistoryFilters()
   const isFiltered =
-    query.search !== null || site !== null || preset !== null || kind !== null || onlyMissing || dates.range !== "any"
+    query.search !== null || site !== null || preset !== null || kind !== null || files !== null || dates.range !== "any"
 
   // The dates are worked out when they're picked, so the query doesn't change while the view is open.
   const changeDates = (range: DateRange, from = dates.from, to = dates.to) =>
@@ -336,9 +338,19 @@ export function HistoryView() {
                 />
               </>
             )}
-            <span className="ml-1 text-fg-secondary">
-              <Checkbox label={text.onlyMissing} checked={onlyMissing} onChange={setOnlyMissing} />
-            </span>
+            <SelectInput
+              aria-label={text.fileStates.label}
+              title={text.fileStates.label}
+              value={files ?? ""}
+              onChange={(event) => setFiles((event.target.value || null) as FileState | null)}
+            >
+              <option value="">{text.fileStates.any}</option>
+              {FILE_STATES.map((option) => (
+                <option key={option} value={option}>
+                  {text.fileStates[option]}
+                </option>
+              ))}
+            </SelectInput>
           </div>
 
           {total !== undefined && total > 0 && (

@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.66 · 2026-11-09
+
+### Added
+
+- **Only Existing Files in the history**: the Only Missing Files checkbox is now a Files list with All Files, Only Existing Files and Only Missing Files, so you can also list only the downloads whose file is still there.
+
 ## 0.1.65 · 2026-11-09
 
 ### Added

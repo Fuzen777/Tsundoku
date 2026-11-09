@@ -258,7 +258,12 @@ export const strings = {
     dateRange: "Downloaded",
     dateFrom: "From",
     dateTo: "To",
-    onlyMissing: "Only Missing Files",
+    fileStates: {
+      label: "Files",
+      any: "All Files",
+      present: "Only Existing Files",
+      missing: "Only Missing Files",
+    },
     selectAll: "Select All",
     select: "Select",
     selectedCount: (count: number) => `${count} selected`,
