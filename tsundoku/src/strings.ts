@@ -338,6 +338,8 @@ export const strings = {
     select: "Select",
     videosStartAs: "Videos Start As",
     videosStartAsHint: "For videos no rule picks a preset for, and that have none of their own.",
+    defaultPreset: "Default",
+    defaultPresetHint: (preset: string) => `Follows Videos Start As: ${preset}.`,
     startAll: "Start All",
     startSelected: "Start Selected",
     removeSelected: "Remove Selected",

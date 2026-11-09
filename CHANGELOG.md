@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.67 · 2026-11-09
+
+### Changed
+
+- **Default in Pending's preset pickers**: a link that starts with the preset picked in Videos Start As now shows Default in its own picker, so the links you set apart stand out. Hovering it names the preset, and picking Default sends a link back to following Videos Start As. A link whose preset a rule picks still shows that preset and the rule.
+
 ## 0.1.66 · 2026-11-09
 
 ### Added

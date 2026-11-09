@@ -55,6 +55,8 @@ const PENDING_WAYS: readonly WayToAdd[] = ["watch", "shortcut", "bookmark", "sen
 
 /** How many links Pending shows at first, and how many more Show More adds. */
 const PENDING_PAGE = 200
+/** The row's preset list's value for following Videos Start As. */
+const DEFAULT_PRESET = ""
 
 /**
  * Links waiting to be started: pasted or dropped several at once, or copied while Watch Clipboard is on, each read in
@@ -270,6 +272,7 @@ export function PendingView() {
                 link={link}
                 presets={presets}
                 allPresetId={followedPreset(link)}
+                batchPresetId={presetId}
                 rulePreset={rulePresetOf.get(link.id) ?? null}
                 selected={selection.has(link.id)}
                 onSelect={(on) => toggle(link.id, on)}
@@ -298,18 +301,33 @@ interface PendingRowProps {
   allPresetId: string | null
   /** The preset a rule picks for the link, and which rule. */
   rulePreset: RulePreset | null
+  /** Videos Start As: a row whose preset is that one shows Default. */
+  batchPresetId: string | null
   selected: boolean
   onSelect: (selected: boolean) => void
   onStart: () => void
   busy: boolean
 }
 
-function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect, onStart, busy }: PendingRowProps) {
+function PendingRow({
+  link,
+  presets,
+  allPresetId,
+  rulePreset,
+  batchPresetId,
+  selected,
+  onSelect,
+  onStart,
+  busy,
+}: PendingRowProps) {
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const removeLinks = useRemoveLinks()
   const preview = link.preview
   const video = preview?.video ?? null
   const presetId = link.presetId ?? allPresetId
+  // Videos Start As's preset shows as Default, unless a rule picks the link's preset, which the rule's link says.
+  const showsDefault = presetId !== null && presetId === batchPresetId && !rulePreset
+  const batchPresetName = presets?.presets.find((preset) => preset.id === batchPresetId)?.name
   const [showsFiles, setShowsFiles] = useState(false)
   const files = video?.postFiles ?? []
   // A post of one file has nothing to pick.
@@ -393,14 +411,19 @@ function PendingRow({ link, presets, allPresetId, rulePreset, selected, onSelect
             <PresetRuleLink rule={rulePreset && rulePreset.presetId === presetId ? rulePreset.rule : null} />
             <SelectInput
               aria-label={strings.pending.preset}
-              title={strings.pending.preset}
-              value={presetId ?? ""}
+              title={
+                showsDefault && batchPresetName ? strings.pending.defaultPresetHint(batchPresetName) : strings.pending.preset
+              }
+              value={showsDefault ? DEFAULT_PRESET : (presetId ?? "")}
               disabled={!presets}
               onChange={(event) => {
                 const chosen = event.target.value
-                act(() => setPendingPreset(link.id, chosen === allPresetId ? null : chosen))
+                act(() =>
+                  setPendingPreset(link.id, chosen === DEFAULT_PRESET || chosen === allPresetId ? null : chosen),
+                )
               }}
             >
+              {batchPresetId && !rulePreset && <option value={DEFAULT_PRESET}>{strings.pending.defaultPreset}</option>}
               {presets?.presets.map((preset) => (
                 <option key={preset.id} value={preset.id}>
                   {preset.name}

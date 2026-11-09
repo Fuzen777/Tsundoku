@@ -29,7 +29,7 @@ rules:
 
 - [ ] In app log + viewer so we avoid depending on external programs ? Need to make sure the app remains lightweight.
 
-- [ ] Pending : when "Video Download as" match batch, show "default" on individual entries.
+- [x] Pending : when "Video Download as" match batch, show "default" on individual entries.
 
 - [ ] Group by : change dropdown for buttons. Group by Status is its own dimension. Site/Folder/Rule (Rule is new) is a segmented picker. Rule shows Rule number and Destination. (So for instance Downloads\\{site} shows Downloads.) Groups should be collapsible.
 

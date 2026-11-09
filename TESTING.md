@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.66 (2026-11-09).
+Up to date with 0.1.67 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -133,6 +133,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Pending's toolbar groups by Folder, Site or Status, or not at all, each group under a heading with its count (a folder group shows its path), and sorts by Date Added, Title, Uploader or Site, either way.
 - [ ] The Queue has the same toolbar (status groups: Downloading, Waiting, Stopped, Failed, Done). Sorting doesn't change the order downloads start in.
 - [ ] Restart → each view keeps its own choice.
+
+**45. Default in Pending's preset pickers** · 0.1.67
+- [ ] Pending, with a video link no rule picks a preset for: its picker shows Default, and hovering it says "Follows Videos Start As: <preset>". Changing Videos Start As changes what it starts with, still showing Default.
+- [ ] Pick another preset on that row, then Default again → it follows Videos Start As once more. A row whose own preset is the one Videos Start As then gets also shows Default. A row a rule picks for shows the preset's name with the rule's link, and no Default.
 
 **20. Where each Pending link goes, and "Everything else"** · 0.1.30
 - [ ] A read link's row shows the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder). It follows the row's preset, and clicking it opens where that's set.
