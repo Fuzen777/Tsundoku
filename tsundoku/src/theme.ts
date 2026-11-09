@@ -11,13 +11,18 @@ export function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
 }
 
-/** Colors primary buttons, selections and links with the accent picked in Settings → Appearance (`data-accent`). */
-export function applyAccent(accent: Accent) {
-  document.documentElement.dataset.accent = accent
+/**
+ * Colors primary buttons, selections and links with the accent picked in Settings → Appearance (`data-accent`).
+ * The color picked for Custom is always set (`--accent-custom`), so its swatch shows it whichever accent is on.
+ */
+export function applyAccent(accent: Accent, customAccent: string) {
+  const root = document.documentElement
+  root.dataset.accent = accent
+  root.style.setProperty("--accent-custom", customAccent)
 }
 
 /** The theme and the accent, as Settings → Appearance has them. */
-export function applyAppearance({ theme, accent }: AppearanceSettings) {
+export function applyAppearance({ theme, accent, customAccent }: AppearanceSettings) {
   applyTheme(theme)
-  applyAccent(accent)
+  applyAccent(accent, customAccent)
 }

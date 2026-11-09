@@ -934,6 +934,7 @@ export const strings = {
       amber: "Amber",
       rose: "Rose",
       purple: "Purple",
+      custom: "Pick a Color",
     },
     keyboardShortcuts: "Keyboard Shortcuts",
     shortcutActions: {

@@ -417,7 +417,7 @@ export const standIns = {
     notifyFinished: true,
   } satisfies AddingSettings,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
-  appearanceOptions: { theme: "auto", accent: "indigo" } satisfies AppearanceSettings,
+  appearanceOptions: { theme: "auto", accent: "indigo", customAccent: "#165e83" } satisfies AppearanceSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   folderRules: [
     {

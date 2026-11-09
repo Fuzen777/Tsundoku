@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.74 · 2026-11-09
+
+### Added
+
+- **Any accent color**: Settings → Appearance → Accent Color has a seventh swatch, Pick a Color, which opens Windows' color picker. Tsundoku keeps the color's hue and works out shades for light and dark mode that read as well as the six others.
+
 ## 0.1.73 · 2026-11-09
 
 ### Added

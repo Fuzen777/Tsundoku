@@ -143,7 +143,7 @@ pub struct BackgroundSettings {
 }
 
 /// How Tsundoku looks. Settings → Appearance edits it.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
 pub struct AppearanceSettings {
@@ -152,6 +152,38 @@ pub struct AppearanceSettings {
     pub theme: Theme,
     /// The color of primary buttons, selections, progress bars and links.
     pub accent: Accent,
+    /// The color picked for `Accent::Custom`, as `#rrggbb`, kept when another accent is picked. The UI works out its
+    /// shades for light and dark.
+    pub custom_accent: String,
+}
+
+/// Ai-iro's fill, what the custom accent starts as.
+pub const DEFAULT_CUSTOM_ACCENT: &str = "#165e83";
+
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        Self {
+            theme: Theme::default(),
+            accent: Accent::default(),
+            custom_accent: DEFAULT_CUSTOM_ACCENT.to_owned(),
+        }
+    }
+}
+
+impl AppearanceSettings {
+    /// The settings with a custom accent that's a `#rrggbb` color, in lowercase, else the one it starts as.
+    pub fn checked(mut self) -> Self {
+        let color = self.custom_accent.trim().to_ascii_lowercase();
+        let valid = color.len() == 7
+            && color.starts_with('#')
+            && color[1..].chars().all(|digit| digit.is_ascii_hexdigit());
+        self.custom_accent = if valid {
+            color
+        } else {
+            DEFAULT_CUSTOM_ACCENT.to_owned()
+        };
+        self
+    }
 }
 
 /// Settings → Appearance's accent colors, each with a shade for light and one for dark (`index.css`, `data-accent`).
@@ -167,6 +199,8 @@ pub enum Accent {
     Amber,
     Rose,
     Purple,
+    /// The color in `AppearanceSettings::custom_accent`.
+    Custom,
 }
 
 /// Whether Tsundoku is light or dark.
@@ -682,6 +716,22 @@ mod tests {
             Some(&ToolSetup::Managed { checksum: None })
         );
         assert_eq!(settings.tools.yt_dlp_channel, UpdateChannel::Stable);
+    }
+
+    #[test]
+    fn keeps_a_custom_accent_only_when_it_is_a_color() {
+        let with = |color: &str| {
+            AppearanceSettings {
+                custom_accent: color.to_owned(),
+                ..AppearanceSettings::default()
+            }
+            .checked()
+            .custom_accent
+        };
+        assert_eq!(with(" #A1B2C3 "), "#a1b2c3");
+        assert_eq!(with("#12345"), DEFAULT_CUSTOM_ACCENT);
+        assert_eq!(with("red"), DEFAULT_CUSTOM_ACCENT);
+        assert_eq!(with("#12345g"), DEFAULT_CUSTOM_ACCENT);
     }
 
     #[test]

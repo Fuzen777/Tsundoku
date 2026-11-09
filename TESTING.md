@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.73 (2026-11-09).
+Up to date with 0.1.74 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -33,6 +33,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 **48. Accent color** · 0.1.70
 - [ ] Settings → Appearance → Accent Color: picking Teal, Green, Amber, Rose or Purple recolors at once the primary buttons, the selected segments, the sidebar's counts and selection pill, checkboxes, progress bars and links. The picked swatch has a check.
+- [ ] Pick a Color (the last swatch, with a pipette) → Windows' color picker → pick a bright orange → the app turns orange in both themes, readable, and the swatch gets the check. Pick another swatch and back: the orange is remembered. (0.1.74)
 - [ ] Each one reads well in Light and in Dark (white text on filled buttons, links readable on the background). Restart → the accent is there from the first frame.
 
 **3. Icons for row actions** · 0.1.31

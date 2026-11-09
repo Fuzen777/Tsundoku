@@ -68,6 +68,26 @@
   --color-accent-fill: light-dark(#165e83, #236e98);
   --color-accent-fill-hover: light-dark(#124d6c, #2a7aa8);
 }
+/* A color picked in Settings: theme.ts sets --accent-custom on <html>; its hue and some of its chroma are kept at the
+   lightness of indigo's shades, so text on it and it on the background read as well as the others. */
+[data-accent="custom"] {
+  --color-accent: light-dark(
+    oklch(from var(--accent-custom) 0.46 min(c, 0.15) h),
+    oklch(from var(--accent-custom) 0.76 min(c, 0.12) h)
+  );
+  --color-accent-hover: light-dark(
+    oklch(from var(--accent-custom) 0.4 min(c, 0.15) h),
+    oklch(from var(--accent-custom) 0.82 min(c, 0.1) h)
+  );
+  --color-accent-fill: light-dark(
+    oklch(from var(--accent-custom) 0.46 min(c, 0.15) h),
+    oklch(from var(--accent-custom) 0.5 min(c, 0.14) h)
+  );
+  --color-accent-fill-hover: light-dark(
+    oklch(from var(--accent-custom) 0.4 min(c, 0.15) h),
+    oklch(from var(--accent-custom) 0.55 min(c, 0.14) h)
+  );
+}
 [data-accent="teal"] {
   --color-accent: light-dark(#0f6b6b, #5cc4c0);
   --color-accent-hover: light-dark(#0b5757, #7ed3cf);

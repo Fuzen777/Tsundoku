@@ -14,4 +14,9 @@ theme: Theme,
 /**
  * The color of primary buttons, selections, progress bars and links.
  */
-accent: Accent, };
+accent: Accent, 
+/**
+ * The color picked for `Accent::Custom`, as `#rrggbb`, kept when another accent is picked. The UI works out its
+ * shades for light and dark.
+ */
+customAccent: string, };

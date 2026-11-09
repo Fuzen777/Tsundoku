@@ -3,4 +3,4 @@
 /**
  * Settings → Appearance's accent colors, each with a shade for light and one for dark (`index.css`, `data-accent`).
  */
-export type Accent = "indigo" | "teal" | "green" | "amber" | "rose" | "purple";
+export type Accent = "indigo" | "teal" | "green" | "amber" | "rose" | "purple" | "custom";

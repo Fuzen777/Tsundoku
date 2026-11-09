@@ -30,8 +30,9 @@ pub fn save_appearance_options(
     settings: State<'_, Arc<SettingsStore>>,
     options: AppearanceSettings,
 ) -> Result<AppearanceSettings, DownloadError> {
+    let options = options.checked();
     settings
-        .update(|settings| settings.appearance = options)
+        .update(|settings| settings.appearance = options.clone())
         .map_err(|error| DownloadError::Storage {
             detail: error.to_string(),
         })?;
