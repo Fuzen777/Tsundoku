@@ -70,6 +70,20 @@ pub fn duplicate_preset(
 }
 
 #[tauri::command]
+pub fn add_preset(presets: Presets<'_>, name: String) -> Result<Preset, PresetError> {
+    presets.add(name)
+}
+
+#[tauri::command]
+pub fn move_preset(
+    presets: Presets<'_>,
+    id: String,
+    index: usize,
+) -> Result<PresetsOverview, PresetError> {
+    presets.move_to(&id, index)
+}
+
+#[tauri::command]
 pub fn delete_preset(presets: Presets<'_>, id: String) -> Result<PresetsOverview, PresetError> {
     presets.delete(&id)
 }

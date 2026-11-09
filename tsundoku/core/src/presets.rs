@@ -102,9 +102,10 @@ pub enum PresetError {
     UnclosedQuote,
     #[error("no such preset")]
     NotFound,
-    /// Built-ins can be reset, not deleted.
-    #[error("built-in presets can't be deleted")]
-    BuiltIn,
+    /// The default preset is what videos start with when nothing else picks one, so another must become the default
+    /// before it goes.
+    #[error("the default preset can't be deleted")]
+    IsDefault,
     #[error("couldn't save: {detail}")]
     Storage { detail: String },
 }
@@ -376,8 +377,10 @@ impl Default for PresetsSettings {
 pub struct PresetsOverview {
     pub presets: Vec<Preset>,
     pub default_id: String,
-    /// IDs of the built-ins, which can be reset but not deleted.
+    /// IDs of the built-ins, which can be reset.
     pub built_in_ids: Vec<String>,
+    /// The built-ins that were deleted, as they ship, which can be put back.
+    pub removed_built_ins: Vec<Preset>,
     /// Where presets without a folder save: the download folder.
     pub default_folder: String,
 }
@@ -394,7 +397,12 @@ impl PresetManager {
 
     pub fn overview(&self) -> PresetsOverview {
         let settings = self.settings.get();
-        let presets = settings.presets;
+        let mut presets = settings.presets;
+        default_first(&mut presets);
+        let removed_built_ins = built_in_presets()
+            .into_iter()
+            .filter(|built_in| !presets.list.iter().any(|preset| preset.id == built_in.id))
+            .collect();
         PresetsOverview {
             presets: presets.list,
             default_id: presets.default_id,
@@ -402,6 +410,7 @@ impl PresetManager {
                 .into_iter()
                 .map(|preset| preset.id)
                 .collect(),
+            removed_built_ins,
             default_folder: settings.downloads.resolved_folder().display().to_string(),
         }
     }
@@ -428,19 +437,28 @@ impl PresetManager {
         Ok(self.overview())
     }
 
+    /// Adds a new preset at the end of the list, named `name` and set up as Best Video ships. Returns it.
+    pub fn add(&self, name: String) -> Result<Preset, PresetError> {
+        let preset = self.settings.update(|settings| {
+            let list = &mut settings.presets.list;
+            let preset = Preset {
+                id: next_custom_id(list),
+                name,
+                ..built_in_presets().swap_remove(0)
+            };
+            list.push(preset.clone());
+            preset
+        })?;
+        Ok(preset)
+    }
+
     /// Adds a copy of a preset right after it, under `name`. Returns the copy.
     pub fn duplicate(&self, id: &str, name: String) -> Result<Preset, PresetError> {
         let copy = self.settings.update(|settings| {
             let list = &mut settings.presets.list;
             let index = list.iter().position(|preset| preset.id == id)?;
-            let next_number = list
-                .iter()
-                .filter_map(|preset| preset.id.strip_prefix("custom-")?.parse::<u32>().ok())
-                .max()
-                .unwrap_or(0)
-                + 1;
             let copy = Preset {
-                id: format!("custom-{next_number}"),
+                id: next_custom_id(list),
                 name,
                 ..list[index].clone()
             };
@@ -450,20 +468,17 @@ impl PresetManager {
         copy.ok_or(PresetError::NotFound)
     }
 
-    /// Deletes a preset the user made. If it was the default, Best Video becomes the default.
+    /// Deletes any preset but the default. A built-in deleted can be put back with `reset`.
     pub fn delete(&self, id: &str) -> Result<PresetsOverview, PresetError> {
-        if is_built_in(id) {
-            return Err(PresetError::BuiltIn);
-        }
         let found = self.settings.update(|settings| {
             let presets = &mut settings.presets;
+            if presets.default_id == id {
+                return Err(PresetError::IsDefault);
+            }
             let count = presets.list.len();
             presets.list.retain(|preset| preset.id != id);
-            if presets.default_id == id {
-                presets.default_id = DEFAULT_PRESET_ID.to_owned();
-            }
-            presets.list.len() < count
-        })?;
+            Ok(presets.list.len() < count)
+        })??;
         if found {
             Ok(self.overview())
         } else {
@@ -480,18 +495,67 @@ impl PresetManager {
         self.save(original)
     }
 
+    /// Makes a preset the default, which moves it to the top of the list.
     pub fn set_default(&self, id: &str) -> Result<PresetsOverview, PresetError> {
         if self.get(id).is_none() {
             return Err(PresetError::NotFound);
         }
-        self.settings
-            .update(|settings| settings.presets.default_id = id.to_owned())?;
+        self.settings.update(|settings| {
+            settings.presets.default_id = id.to_owned();
+            default_first(&mut settings.presets);
+        })?;
+        Ok(self.overview())
+    }
+
+    /// Moves a preset to `index` in the list, below the default, which always stays first and can't be moved.
+    pub fn move_to(&self, id: &str, index: usize) -> Result<PresetsOverview, PresetError> {
+        self.settings.update(|settings| {
+            let presets = &mut settings.presets;
+            default_first(presets);
+            if presets.default_id == id {
+                return Ok::<(), PresetError>(());
+            }
+            let from = presets
+                .list
+                .iter()
+                .position(|preset| preset.id == id)
+                .ok_or(PresetError::NotFound)?;
+            let preset = presets.list.remove(from);
+            let lowest = usize::from(
+                presets
+                    .list
+                    .first()
+                    .is_some_and(|first| first.id == presets.default_id),
+            );
+            let to = index.clamp(lowest, presets.list.len());
+            presets.list.insert(to, preset);
+            Ok(())
+        })??;
         Ok(self.overview())
     }
 }
 
-fn is_built_in(id: &str) -> bool {
-    built_in_presets().iter().any(|preset| preset.id == id)
+/// Puts the default preset at the top of the list, where it always shows.
+fn default_first(presets: &mut PresetsSettings) {
+    if let Some(index) = presets
+        .list
+        .iter()
+        .position(|preset| preset.id == presets.default_id)
+    {
+        let default = presets.list.remove(index);
+        presets.list.insert(0, default);
+    }
+}
+
+/// The next `custom-<n>` ID the list doesn't have.
+fn next_custom_id(list: &[Preset]) -> String {
+    let next_number = list
+        .iter()
+        .filter_map(|preset| preset.id.strip_prefix("custom-")?.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0)
+        + 1;
+    format!("custom-{next_number}")
 }
 
 #[cfg(test)]
@@ -712,16 +776,82 @@ mod tests {
         manager.reset("best-video").unwrap();
         assert_eq!(manager.get("best-video").unwrap().name, "Best Video");
 
+        assert_eq!(manager.delete("best-video"), Err(PresetError::IsDefault));
         manager.set_default("custom-1").unwrap();
+        assert_eq!(manager.delete("custom-1"), Err(PresetError::IsDefault));
+        manager.set_default("best-video").unwrap();
         manager.delete("custom-1").unwrap();
+        manager.delete("best-audio").unwrap();
+        let removed: Vec<_> = manager
+            .overview()
+            .removed_built_ins
+            .into_iter()
+            .map(|preset| preset.name)
+            .collect();
         assert_eq!(
-            manager.overview().default_id,
-            "best-video",
-            "the default falls back to Best Video"
+            removed,
+            ["Best Audio"],
+            "a built-in can be deleted, and put back"
         );
-        assert_eq!(manager.delete("best-video"), Err(PresetError::BuiltIn));
+        manager.reset("best-audio").unwrap();
+        assert!(manager.overview().removed_built_ins.is_empty());
         assert_eq!(manager.delete("custom-9"), Err(PresetError::NotFound));
         assert_eq!(manager.set_default("custom-9"), Err(PresetError::NotFound));
+    }
+
+    fn ids(manager: &PresetManager) -> Vec<String> {
+        manager
+            .overview()
+            .presets
+            .into_iter()
+            .map(|preset| preset.id)
+            .collect()
+    }
+
+    #[test]
+    fn adds_new_presets_and_keeps_the_default_first() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        let added = manager.add("New Preset".to_owned()).unwrap();
+        assert_eq!(added.id, "custom-1");
+        assert_eq!(added.output, built_in("best-video").output);
+        assert_eq!(ids(&manager).last().unwrap(), "custom-1");
+
+        manager.set_default("audio-mp3").unwrap();
+        assert_eq!(
+            ids(&manager),
+            [
+                "audio-mp3",
+                "best-video",
+                "1080p-mp4",
+                "best-audio",
+                "custom-1"
+            ],
+            "the default moves to the top"
+        );
+
+        manager.move_to("custom-1", 1).unwrap();
+        assert_eq!(
+            ids(&manager),
+            [
+                "audio-mp3",
+                "custom-1",
+                "best-video",
+                "1080p-mp4",
+                "best-audio"
+            ]
+        );
+        manager.move_to("custom-1", 0).unwrap();
+        assert_eq!(
+            ids(&manager)[..2],
+            ["audio-mp3", "custom-1"],
+            "never above the default"
+        );
+        manager.move_to("audio-mp3", 3).unwrap();
+        assert_eq!(ids(&manager)[0], "audio-mp3", "the default doesn't move");
+        manager.move_to("best-video", 99).unwrap();
+        assert_eq!(ids(&manager).last().unwrap(), "best-video");
+        assert_eq!(manager.move_to("custom-9", 1), Err(PresetError::NotFound));
     }
 
     #[test]

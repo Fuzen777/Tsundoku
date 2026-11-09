@@ -316,6 +316,8 @@ pub fn run() {
             downloads::save_preset,
             downloads::duplicate_preset,
             downloads::delete_preset,
+            downloads::add_preset,
+            downloads::move_preset,
             downloads::reset_preset,
             downloads::set_default_preset,
             downloads::preset_arguments,

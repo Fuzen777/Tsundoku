@@ -170,8 +170,8 @@ export function describePresetError(error: unknown): ErrorDescription {
       return { message: text.unclosedQuote }
     case "notFound":
       return { message: text.notFound }
-    case "builtIn":
-      return { message: text.builtIn }
+    case "isDefault":
+      return { message: text.isDefault }
     case "storage":
       return { message: text.storage, detail: error.detail }
   }

@@ -6,9 +6,13 @@ import type { Preset } from "./Preset";
  */
 export type PresetsOverview = { presets: Array<Preset>, defaultId: string, 
 /**
- * IDs of the built-ins, which can be reset but not deleted.
+ * IDs of the built-ins, which can be reset.
  */
 builtInIds: Array<string>, 
+/**
+ * The built-ins that were deleted, as they ship, which can be put back.
+ */
+removedBuiltIns: Array<Preset>, 
 /**
  * Where presets without a folder save: the download folder.
  */

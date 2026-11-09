@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.67 (2026-11-09).
+Up to date with 0.1.68 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -174,6 +174,15 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Pause All stops a waiting row; Resume starts its retries over.
 - [ ] Watch for a MEGA, Google Drive or Dropbox download limit → it waits 30 minutes, then an hour, two and four, and never fails for it.
 - Not tried against a real dropped connection or host limit.
+
+## Presets
+
+**46. Adding, moving and deleting presets** · 0.1.68
+- [ ] Presets → Add Preset → "New Preset" appears at the end of the list, set up as Best Video, and opens. Rename it and Save.
+- [ ] Move Up and Move Down move the open preset; Move Up is greyed out right under the default, Move Down at the end. The default has neither, and no Delete.
+- [ ] Set as Default on another preset → it jumps to the top with the Default badge, and the previous default can now be moved and deleted.
+- [ ] Delete a built-in such as Best Audio (after making another the default if it was) → a ↺ button appears beside Add Preset; its menu's Put Back Best Audio adds it again as it ships.
+- [ ] The preview card's, Pending's and the rules' preset lists follow the new order.
 
 ## Rules
 

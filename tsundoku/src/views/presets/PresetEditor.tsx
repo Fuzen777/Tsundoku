@@ -1,9 +1,10 @@
 import { useState } from "react"
-import { Copy, RotateCcw, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Copy, RotateCcw, Trash2 } from "lucide-react"
 import {
   confirmWithUser,
   deletePreset,
   duplicatePreset,
+  movePreset,
   pickFolder,
   resetPreset,
   savePreset,
@@ -60,6 +61,9 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const isBuiltIn = overview.builtInIds.includes(saved.id)
   const isDefault = overview.defaultId === saved.id
+  const index = overview.presets.findIndex((preset) => preset.id === saved.id)
+  // The default is always first, so nothing moves above it and it doesn't move.
+  const lowestIndex = overview.presets[0]?.id === overview.defaultId ? 1 : 0
   const argumentsError = args.error ? describePresetError(args.error).message : undefined
   const { output } = draft
   const defaultFolder = overview.defaultFolder
@@ -95,6 +99,10 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
     })
   const duplicate = () =>
     run(async () => onSelect((await duplicatePreset(saved.id, strings.presets.copyName(saved.name))).id))
+  const moveTo = (to: number) =>
+    run(async () => {
+      storePresets(await movePreset(saved.id, to))
+    })
   const reset = () =>
     run(async () => {
       storePresets(await resetPreset(saved.id))
@@ -127,10 +135,27 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
             {strings.presets.setAsDefault}
           </Button>
         )}
+        {!isDefault && (
+          <>
+            <IconButton
+              label={strings.presets.moveUp}
+              icon={ArrowUp}
+              disabled={index <= lowestIndex}
+              onClick={() => void moveTo(index - 1)}
+            />
+            <IconButton
+              label={strings.presets.moveDown}
+              icon={ArrowDown}
+              disabled={index >= overview.presets.length - 1}
+              onClick={() => void moveTo(index + 1)}
+            />
+          </>
+        )}
         <IconButton label={strings.presets.duplicate} icon={Copy} disabled={isDirty} onClick={() => void duplicate()} />
-        {isBuiltIn ? (
+        {isBuiltIn && (
           <IconButton label={strings.presets.reset} icon={RotateCcw} disabled={isDirty} onClick={() => void reset()} />
-        ) : (
+        )}
+        {!isDefault && (
           <IconButton label={strings.presets.delete} icon={Trash2} disabled={isDirty} onClick={() => void remove()} />
         )}
       </div>

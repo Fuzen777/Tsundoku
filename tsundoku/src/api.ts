@@ -317,6 +317,18 @@ export function duplicatePreset(id: string, name: string): Promise<Preset> {
   return invoke<Preset>("duplicate_preset", { id, name })
 }
 
+/** Adds a preset at the end of the list, set up as Best Video ships. */
+export function addPreset(name: string): Promise<Preset> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<Preset>("add_preset", { name })
+}
+
+/** Moves a preset to `index` in the list; the default stays first. */
+export function movePreset(id: string, index: number): Promise<PresetsOverview> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<PresetsOverview>("move_preset", { id, index })
+}
+
 export function deletePreset(id: string): Promise<PresetsOverview> {
   if (!isTauri()) return outsideTauri()
   return invoke<PresetsOverview>("delete_preset", { id })

@@ -128,7 +128,8 @@ type: Features
 - **Four to start with**: Best Video (best quality, in MKV, the default), 1080p MP4 (up to 1080p, H.264 and AAC for older devices), Best Audio (the audio as it is) and Audio MP3.
 - **Editor**: name; video or audio; for video, the quality limit and the container (MKV, MP4 or as merged); for audio, the format (as it is, MP3, M4A, Opus or FLAC); the file name; the folder (the download folder by default); what to embed (metadata, thumbnail, chapters, subtitles with their languages); SponsorBlock (off, mark as chapters, remove sponsors); and extra yt-dlp arguments.
 - **Arguments shown**: the editor shows the yt-dlp arguments the preset gives, as they change. Extra arguments that would break downloads (such as `--yes-playlist` or `-o`) are refused, with the reason.
-- **Set as Default, Duplicate, Delete**, and **Reset** for the four built-ins, which can be edited but not deleted.
+- **Add Preset** under the list adds one set up as Best Video ships, at the end, and opens it.
+- **Set as Default, Move Up, Move Down, Duplicate, Delete**, and **Reset** for the four built-ins. The default is always first in the list: setting another as the default moves it there, and nothing moves above it. Any preset can be deleted except the default, the built-ins included; a deleted built-in comes back as it ships with the ↺ menu beside Add Preset.
 - **Kept per download**: a download keeps the preset as it was when it was added, so editing a preset doesn't change downloads already in the queue.
 
 ## Rules

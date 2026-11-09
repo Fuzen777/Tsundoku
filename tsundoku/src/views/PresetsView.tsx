@@ -1,10 +1,15 @@
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { confirmWithUser, queryKeys } from "../api"
+import { Plus, RotateCcw } from "lucide-react"
+import { addPreset, confirmWithUser, queryKeys, resetPreset } from "../api"
 import type { Preset } from "../bindings/Preset"
+import { Button } from "../components/Button"
+import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
+import { StatusMessage } from "../components/StatusMessage"
+import { describePresetError, type ErrorDescription } from "../errors"
 import { classes } from "../components/styles"
-import { usePresets } from "../queries"
+import { usePresets, useStorePresets } from "../queries"
 import { strings } from "../strings"
 import { PresetEditor } from "./presets/PresetEditor"
 import { presetSummary } from "./presets/presetLabels"
@@ -15,6 +20,8 @@ export function PresetsView() {
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Preset | null>(null)
+  const storePresets = useStorePresets()
+  const [listError, setListError] = useState<ErrorDescription | null>(null)
 
   if (!overview) return <Page title={strings.nav.presets} />
   const selected = overview.presets.find((preset) => preset.id === selectedId) ?? overview.presets[0]
@@ -36,6 +43,25 @@ export function PresetsView() {
     setDraft(null)
     setSelectedId(id)
   }
+
+  /** Adds a preset, or puts back a deleted built-in, then opens it. Not while the open one has unsaved changes. */
+  async function addThenSelect(add: () => Promise<string>) {
+    setListError(null)
+    try {
+      const id = await add()
+      void queryClient.invalidateQueries({ queryKey: queryKeys.presets })
+      setDraft(null)
+      setSelectedId(id)
+    } catch (error) {
+      setListError(describePresetError(error))
+    }
+  }
+  const addNew = () => addThenSelect(async () => (await addPreset(strings.presets.newName)).id)
+  const putBack = (id: string) =>
+    addThenSelect(async () => {
+      storePresets(await resetPreset(id))
+      return id
+    })
 
   return (
     <Page title={strings.nav.presets}>
@@ -67,6 +93,23 @@ export function PresetsView() {
               </button>
             )
           })}
+          <div className="mt-2 flex items-center gap-1">
+            <Button size="sm" disabled={isDirty} onClick={() => void addNew()}>
+              <Plus className="size-4" aria-hidden />
+              {strings.presets.add}
+            </Button>
+            {overview.removedBuiltIns.length > 0 && !isDirty && (
+              <Menu
+                label={strings.presets.restoreBuiltIn}
+                icon={RotateCcw}
+                items={overview.removedBuiltIns.map((preset) => ({
+                  label: strings.presets.restoreItem(preset.name),
+                  onSelect: () => void putBack(preset.id),
+                }))}
+              />
+            )}
+          </div>
+          {listError && <StatusMessage tone="danger" {...listError} />}
         </nav>
         <PresetEditor
           key={selected.id}

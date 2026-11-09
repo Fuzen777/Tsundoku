@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.68 · 2026-11-09
+
+### Added
+
+- **Add and move presets**: Presets has Add Preset under the list, which adds one set up like Best Video, and Move Up and Move Down on each preset. The default preset now always sits at the top: setting another as the default moves it there.
+
+### Changed
+
+- **Delete any preset but the default**: the built-in presets can now be deleted too, and put back as they ship from the ↺ menu beside Add Preset. The default can't be deleted, so another one has to become the default first.
+
 ## 0.1.67 · 2026-11-09
 
 ### Changed

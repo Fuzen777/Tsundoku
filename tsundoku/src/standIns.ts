@@ -358,6 +358,7 @@ export const standIns = {
     presets: presetStandIns,
     defaultId: "best-video",
     builtInIds: presetStandIns.map((preset) => preset.id),
+    removedBuiltIns: [],
     defaultFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   } satisfies PresetsOverview,
   presetArguments: ["-f", "bv*+ba/b", "--merge-output-format", "mkv", "-o", "%(title).150B [%(id)s].%(ext)s"],

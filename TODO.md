@@ -35,7 +35,7 @@ rules:
 
 - [x] History : only missing ⇒ add only existing
 
-- [ ] Add, remove, duplicate and move presets, default can’t be deleted and is always first, it can be edited.
+- [x] Add, remove, duplicate and move presets, default can’t be deleted and is always first, it can be edited.
 
 - [x] Pending and Queue ⇒ Group + Sort so we can group by destination and sort by recency for instance.
 - [x] Manual select of Dark/Light/Auto
