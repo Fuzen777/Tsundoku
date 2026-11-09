@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isDeleteKey, isTextEntry, shortcutFor, SHORTCUT_VIEWS, type KeyPress, viewKeys } from "./shortcuts"
+import { isDeleteKey, isTextEntry, keepsPageMenu, shortcutFor, SHORTCUT_VIEWS, type KeyPress, viewKeys } from "./shortcuts"
 
 function press(key: string, code: string, modifiers: Partial<KeyPress> = {}): KeyPress {
   return { key, code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...modifiers }
@@ -52,5 +52,16 @@ describe("text entry", () => {
     expect(isTextEntry({ tagName: "BUTTON", type: "button" })).toBe(false)
     expect(isTextEntry({ tagName: "BODY", isContentEditable: false })).toBe(false)
     expect(isTextEntry(null)).toBe(false)
+  })
+
+  it("keeps the right-click menu only in text fields and over selected text", () => {
+    expect(keepsPageMenu({ tagName: "INPUT", type: "text" }, "")).toBe(true)
+    expect(keepsPageMenu({ tagName: "TEXTAREA" }, "")).toBe(true)
+    expect(keepsPageMenu({ tagName: "DIV" }, "Some title")).toBe(true)
+    expect(keepsPageMenu({ tagName: "DIV" }, "")).toBe(false)
+    expect(keepsPageMenu({ tagName: "DIV" }, "  ")).toBe(false)
+    expect(keepsPageMenu({ tagName: "SELECT" }, "")).toBe(false)
+    expect(keepsPageMenu({ tagName: "BUTTON", type: "button" }, "")).toBe(false)
+    expect(keepsPageMenu(null, "")).toBe(false)
   })
 })

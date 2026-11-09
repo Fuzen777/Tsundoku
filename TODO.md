@@ -18,6 +18,25 @@ rules:
 
 ## Priority
 
+- [ ] Tools ⇒ Check all for update
+- [x] Fix default RMB ⇒ It still uses some kind of default that make no sense in our app.
+
+- [ ] Check and update all tools instead of one by one.
+
+- [ ] Per item destination override
+
+- [ ] Move already downloaded files
+
+- [ ] In app log + viewer so we avoid depending on external programs ? Need to make sure the app remains lightweight.
+
+- [ ] Pending : when "Video Download as" match batch, show "default" on individual entries.
+
+- [ ] Group by : change dropdown for buttons. Group by Status is its own dimension. Site/Folder/Rule (Rule is new) is a segmented picker. Rule shows Rule number and Destination. (So for instance Downloads\\{site} shows Downloads.) Groups should be collapsible.
+
+- [ ] History : only missing ⇒ add only existing
+
+- [ ] Add, remove, duplicate and move presets, default can’t be deleted and is always first, it can be edited.
+
 - [x] Pending and Queue ⇒ Group + Sort so we can group by destination and sort by recency for instance.
 - [x] Manual select of Dark/Light/Auto
 
@@ -26,6 +45,7 @@ rules:
 - [x] Use Icons instead of Text where it makes sense (accept, reject…) with hover text.
 - [x] RJ-Library inspired dark mode
 - [ ] Light mode revamp that takes its roots from the dark mode above
+- [ ] Accent color picker
 
 ## Features
 

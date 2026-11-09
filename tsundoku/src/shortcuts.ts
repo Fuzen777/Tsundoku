@@ -124,3 +124,20 @@ export function useDeleteKey(onDelete: (() => void) | null) {
     return () => window.removeEventListener("keydown", pressed)
   }, [enabled])
 }
+
+/**
+ * Whether a right-click keeps the WebView's own menu: in a text field, where it offers Cut, Copy and Paste, or over
+ * selected text, where it offers Copy. Anywhere else its Back, Reload, Save As and Print would act on the app's page
+ * as if it were a website, so the click opens nothing.
+ */
+export function keepsPageMenu(clicked: unknown, selectedText: string): boolean {
+  if (selectedText.trim() !== "") return true
+  return isTextEntry(clicked) && (clicked as { tagName?: string }).tagName !== "SELECT"
+}
+
+/** Turns off the WebView's right-click menu outside text fields and selected text, for the whole window. */
+export function limitPageMenu() {
+  document.addEventListener("contextmenu", (event) => {
+    if (!keepsPageMenu(event.target, window.getSelection()?.toString() ?? "")) event.preventDefault()
+  })
+}

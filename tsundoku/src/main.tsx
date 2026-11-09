@@ -12,6 +12,7 @@ import {
   queryKeys,
 } from "./api"
 import { trackQueue } from "./queueEvents"
+import { limitPageMenu } from "./shortcuts"
 import { applyTheme } from "./theme"
 import { trackToolProgress } from "./toolProgress"
 import "./index.css"
@@ -33,6 +34,7 @@ applyTheme(appearance.theme)
 if (needsSetup) queryClient.setQueryData(queryKeys.firstRunOptions, await getFirstRunOptions())
 document.documentElement.dataset.backdrop = appInfo.hasMicaBackdrop ? "mica" : "solid"
 
+limitPageMenu()
 trackToolProgress()
 trackQueue(queryClient)
 void onToolsChanged(() => void queryClient.invalidateQueries({ queryKey: queryKeys.toolsOverview }))

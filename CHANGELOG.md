@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.64 · 2026-11-09
+
+### Fixed
+
+- **No browser menu on right-click**: right-clicking the window showed the WebView's own menu (Back, Reload, Save As, Print), which made no sense in the app. It now opens nothing, except in a text field, where Cut, Copy and Paste stay, and over selected text, where Copy stays.
+
 ## 0.1.63 · 2026-11-06
 
 ### Added

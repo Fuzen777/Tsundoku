@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.63 (2026-11-07).
+Up to date with 0.1.64 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -35,6 +35,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] The actions on each row are icons in Pending, the Queue, Rules, Presets and under the preview card's "already downloaded" warning. Hovering each shows its name, even while it's greyed out.
 - [ ] The preview card closes with its × at the top right, also while a link is being read and after it fails.
 - [ ] In History, Open Source Page is an icon beside Open File and Show in Folder.
+
+**42. No browser menu on right-click** · 0.1.64
+- [ ] Right-click a row, a button or an empty spot in any view → nothing opens (no Back, Reload, Save As, Print or Inspect).
+- [ ] Right-click in the add bar or a search field → the usual Cut, Copy, Paste menu. Select a title's text and right-click it → Copy.
 
 **4. What's New** · 0.1.51
 - [ ] The first start after rebuilding the portable copy shows a What's New card under the add bar with the changes since the version that copy last ran (only 0.1.63's if it last ran before 0.1.51, which didn't record it). Its × closes it, and it doesn't come back at the next start.
