@@ -22,9 +22,30 @@ const IMAGE_SITES: [&str; 15] = [
     "wallhaven.cc",
 ];
 
-/// Sites that block an account reading them too fast, by domain: a post's files are downloaded with a pause
-/// between them (`DownloadSettings::post_pause`).
-const PACED_SITES: [&str; 1] = ["instagram.com"];
+/// Sites that limit how fast an account reads them: a post's files can be downloaded with a pause between them, and
+/// their links in Pending read with a pause between them too (`DownloadSettings::pause_for`). Instagram always is,
+/// the others when Settings → Pacing gives them a pause.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PacedSite {
+    Instagram,
+    X,
+    Pixiv,
+    Tumblr,
+}
+
+impl PacedSite {
+    const ALL: [Self; 4] = [Self::Instagram, Self::X, Self::Pixiv, Self::Tumblr];
+
+    /// The site's domains: its links, and their subdomains.
+    fn domains(self) -> &'static [&'static str] {
+        match self {
+            Self::Instagram => &["instagram.com"],
+            Self::X => &["x.com", "twitter.com"],
+            Self::Pixiv => &["pixiv.net"],
+            Self::Tumblr => &["tumblr.com"],
+        }
+    }
+}
 
 /// A site where an account changes what can be read, and the cookies that show a browser is signed in to it.
 #[derive(Debug, PartialEq, Eq)]
@@ -105,12 +126,12 @@ pub fn prefers_images(link: &str) -> bool {
     IMAGE_SITES.iter().any(|site| on_domain(&host, site))
 }
 
-/// Whether a post at `link` is downloaded with a pause between its files.
-pub fn paces_downloads(link: &str) -> bool {
-    let Some(host) = host(link) else {
-        return false;
-    };
-    PACED_SITES.iter().any(|site| on_domain(&host, site))
+/// The site `link` is on, if it's one that may be paced (`PacedSite`).
+pub fn paced_site(link: &str) -> Option<PacedSite> {
+    let host = host(link)?;
+    PacedSite::ALL
+        .into_iter()
+        .find(|site| site.domains().iter().any(|domain| on_domain(&host, domain)))
 }
 
 /// The sign-in site `link` belongs to, if any.
@@ -210,12 +231,29 @@ mod tests {
     }
 
     #[test]
-    fn paces_instagram_only() {
-        assert!(paces_downloads("https://www.instagram.com/p/DfPQchkG1tg/"));
-        assert!(!paces_downloads(
-            "https://x.com/NASA/status/2105698284354367897"
-        ));
-        assert!(!paces_downloads("https://notinstagram.com/p/1"));
+    fn knows_the_sites_that_may_be_paced() {
+        assert_eq!(
+            paced_site("https://www.instagram.com/p/DfPQchkG1tg/"),
+            Some(PacedSite::Instagram)
+        );
+        assert_eq!(
+            paced_site("https://x.com/NASA/status/2105698284354367897"),
+            Some(PacedSite::X)
+        );
+        assert_eq!(
+            paced_site("https://twitter.com/NASA/status/1"),
+            Some(PacedSite::X)
+        );
+        assert_eq!(
+            paced_site("https://www.pixiv.net/en/artworks/1"),
+            Some(PacedSite::Pixiv)
+        );
+        assert_eq!(
+            paced_site("https://someone.tumblr.com/post/1"),
+            Some(PacedSite::Tumblr)
+        );
+        assert_eq!(paced_site("https://notinstagram.com/p/1"), None);
+        assert_eq!(paced_site("https://www.youtube.com/watch?v=1"), None);
     }
 
     #[test]

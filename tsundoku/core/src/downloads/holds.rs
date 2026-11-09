@@ -246,7 +246,7 @@ impl DownloadQueue {
             });
         }
         let limit = DownloadSettings::normalized_hourly_limit(options.hourly_file_limit)
-            .filter(|_| sites::paces_downloads(&item.video.url))?;
+            .filter(|_| sites::paced_site(&item.video.url) == Some(sites::PacedSite::Instagram))?;
         let since = (now - site_limits::HOUR_MS) / 1000;
         let recent: Vec<(i64, u32)> = self
             .history

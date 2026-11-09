@@ -407,6 +407,7 @@ export const standIns = {
     cookiesBrowser: "automatic",
     postFileName: "{account} {date} {post} {number}",
     postPause: { min: 5, max: 10 },
+    sitePauses: { x: { min: 2, max: 5 }, pixiv: null, tumblr: null },
     hourlyFileLimit: null,
   } satisfies DownloadSettings,
   addingOptions: {

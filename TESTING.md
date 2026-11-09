@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.76 (2026-11-09).
+Up to date with 0.1.77 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -192,7 +192,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - Known: posts, videos added before a restart and videos whose site gives no sizes aren't checked.
 
 **25. Hourly limit for Instagram** · 0.1.49
-- [ ] Settings → Instagram → Hourly Limit: set 3, then download Instagram posts → once the past hour holds 3 Instagram files, the next Instagram download waits, says so on its row, and starts by itself later. Set it back to none afterwards.
+- [ ] Settings → Pacing → Hourly Limit: set 3, then download Instagram posts → once the past hour holds 3 Instagram files, the next Instagram download waits, says so on its row, and starts by itself later. Set it back to none afterwards.
 
 **26. Waiting when a site asks to slow down** · 0.1.49 · *watch for it*
 - [ ] When Instagram (or any site) answers that it's getting too many requests, the download goes back to waiting instead of failing: "Instagram asked to slow down. Continuing at 2:32 PM." with the time left counting down. The site's other downloads, its links in Pending and the preview card wait too, other sites carry on, and it continues by itself. Try Now on a waiting row ends the site's wait.
@@ -281,8 +281,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Settings and Upkeep
 
-**37. Settings → Instagram** · 0.1.27
-- [ ] The card is called Instagram, with Pause Between Files (5 to 10 seconds for a new copy; a range you saved stays) and the Hourly Limit, and no note about rules.
+**37. Settings → Pacing** · 0.1.27, 0.1.77
+- [ ] The card is called Pacing: Instagram's Pause Between Files (5 to 10 seconds for a new copy; a range you saved stays) and the Hourly Limit, then X, Pixiv and Tumblr with empty fields (None).
+- [ ] Give X 3 to 6 seconds, then download an X post with several images → its log shows gallery-dl sleeping between files, and a second X post waits until the first is done while a YouTube video starts. Empty both fields → X posts download at once again.
+- [ ] Paste several X links with the pause set → Pending reads them a few seconds apart.
 
 **38. Back up and restore** · 0.1.37
 - [ ] Settings → About → Back Up… saves `Tsundoku Backup 2026-11-07.zip` where you choose.

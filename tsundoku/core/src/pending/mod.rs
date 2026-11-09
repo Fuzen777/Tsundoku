@@ -11,8 +11,8 @@ pub mod files;
 mod store;
 pub mod watcher;
 
-use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
+use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasher, Hasher};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::thread;
@@ -32,7 +32,7 @@ use crate::preview::VideoPreview;
 use crate::rules::{self, RuleSubject};
 use crate::settings::{AddingSettings, PauseRange, SettingsStore};
 use crate::site_limits::SiteWait;
-use crate::sites;
+use crate::sites::{self, PacedSite};
 use crate::sync::lock;
 
 /// How long the reading thread waits when there's nothing to read before looking again. Adding a link wakes it at
@@ -232,8 +232,9 @@ struct Contents {
     entries: Vec<Entry>,
     /// The link being read, and what stops it.
     reading: Option<(i64, CancelToken)>,
-    /// When the next link on a site that limits how fast it's read (Instagram) may be read.
-    paced_until: Option<Instant>,
+    /// When the next link on each site that limits how fast it's read (Instagram, and X, Pixiv or Tumblr with a pause
+    /// set) may be read.
+    paced_until: HashMap<PacedSite, Instant>,
     /// What the last Remove took, oldest first, for Undo to put back.
     removed: Vec<Entry>,
 }
@@ -712,10 +713,12 @@ impl PendingLinks {
         if readable(&state, now, |link| self.site_waits(link)).is_some() {
             return;
         }
-        let wait = match state.paced_until {
-            Some(until) if until > now => (until - now).min(IDLE_WAIT),
-            _ => IDLE_WAIT,
-        };
+        let wait = state
+            .paced_until
+            .values()
+            .filter(|until| **until > now)
+            .map(|until| *until - now)
+            .fold(IDLE_WAIT, Duration::min);
         drop(
             self.wake
                 .wait_timeout(state, wait)
@@ -744,9 +747,13 @@ impl PendingLinks {
         {
             let mut state = lock(&self.state);
             state.reading = None;
-            if sites::paces_downloads(&turn.link) {
-                let pause = random_pause(settings.downloads.post_pause);
-                state.paced_until = Some(Instant::now() + pause);
+            if let (Some(site), Some(pause)) = (
+                sites::paced_site(&turn.link),
+                settings.downloads.pause_for(&turn.link),
+            ) {
+                state
+                    .paced_until
+                    .insert(site, Instant::now() + random_pause(pause));
             }
             // Removed while it was read.
             if turn.cancel.is_cancelled() {
@@ -1023,11 +1030,13 @@ fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
 /// Where the next link to read is: the oldest waiting one, leaving paced sites for later while their pause runs, and
 /// sites that asked to slow down while they wait (`site_waits`).
 fn readable(state: &Contents, now: Instant, site_waits: impl Fn(&str) -> bool) -> Option<usize> {
-    let paced_ready = state.paced_until.is_none_or(|until| until <= now);
+    let paced_ready = |link: &str| {
+        sites::paced_site(link)
+            .and_then(|site| state.paced_until.get(&site))
+            .is_none_or(|until| *until <= now)
+    };
     state.entries.iter().position(|entry| {
-        entry.state == PendingState::Waiting
-            && (paced_ready || !sites::paces_downloads(&entry.link))
-            && !site_waits(&entry.link)
+        entry.state == PendingState::Waiting && paced_ready(&entry.link) && !site_waits(&entry.link)
     })
 }
 

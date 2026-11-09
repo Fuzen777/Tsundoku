@@ -779,6 +779,11 @@ fn checks_and_saves_the_options() {
             cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
             post_file_name: "  {site} {post} {number} ".to_owned(),
             post_pause: crate::settings::PauseRange { min: 30, max: 5 },
+            site_pauses: crate::settings::SitePauses {
+                x: Some(crate::settings::PauseRange { min: 2, max: 900 }),
+                pixiv: None,
+                tumblr: None,
+            },
             hourly_file_limit: Some(0),
         })
         .unwrap();
@@ -791,6 +796,11 @@ fn checks_and_saves_the_options() {
         saved.post_pause,
         crate::settings::PauseRange { min: 5, max: 5 },
         "the shortest pause is never longer than the longest"
+    );
+    assert_eq!(
+        saved.site_pauses.x,
+        Some(crate::settings::PauseRange { min: 2, max: 600 }),
+        "capped"
     );
     assert_eq!(test.queue.options(), saved);
     assert_eq!(
@@ -922,6 +932,59 @@ fn runs_one_instagram_post_at_a_time() {
         .complete(first, JobOutcome::Failed(DownloadError::NoFile));
     wait_until("the second post starts", || {
         test.runner.started().contains(&second)
+    });
+}
+
+/// A post on X, which is paced only once Settings → Pacing gives X a pause.
+fn x_post(post_id: &str) -> VideoInfo {
+    VideoInfo {
+        site: "twitter".to_owned(),
+        site_name: "x.com".to_owned(),
+        url: format!("https://x.com/someone/status/{post_id}"),
+        ..post(post_id)
+    }
+}
+
+#[test]
+fn paces_x_posts_once_x_has_a_pause() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 3)
+        .unwrap();
+    let first = test.queue.add_post(x_post("1")).unwrap().id;
+    let second = test.queue.add_post(x_post("2")).unwrap().id;
+    wait_until("both run without a pause", || {
+        test.runner.started().len() == 2
+    });
+    assert_eq!(test.runner.job(first).post.unwrap().pause, None);
+    test.runner
+        .complete(first, JobOutcome::Failed(DownloadError::NoFile));
+    test.runner
+        .complete(second, JobOutcome::Failed(DownloadError::NoFile));
+    wait_until("both end", || {
+        test.state(second) == Some(QueueState::Failed)
+    });
+
+    let pause = crate::settings::PauseRange { min: 2, max: 4 };
+    test.settings
+        .update(|settings| settings.downloads.site_pauses.x = Some(pause))
+        .unwrap();
+    let third = test.queue.add_post(x_post("3")).unwrap().id;
+    let fourth = test.queue.add_post(x_post("4")).unwrap().id;
+    let instagram = test.queue.add_post(post("Ig")).unwrap().id;
+    wait_until("one X post and the Instagram one run", || {
+        test.runner.started().len() == 4
+    });
+    assert_eq!(test.runner.job(third).post.unwrap().pause, Some(pause));
+    assert!(
+        test.runner.started().contains(&instagram),
+        "another site's post goes ahead"
+    );
+    assert_eq!(test.state(fourth), Some(QueueState::Waiting));
+    test.runner
+        .complete(third, JobOutcome::Failed(DownloadError::NoFile));
+    wait_until("the next X post starts", || {
+        test.runner.started().contains(&fourth)
     });
 }
 

@@ -5,6 +5,7 @@ import type { CookiesBrowser } from "../../bindings/CookiesBrowser"
 import type { DownloadSettings } from "../../bindings/DownloadSettings"
 import type { PauseRange } from "../../bindings/PauseRange"
 import type { PostNamePlaceholder } from "../../bindings/PostNamePlaceholder"
+import type { SitePauses } from "../../bindings/SitePauses"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
@@ -272,26 +273,20 @@ export function PostsSection() {
   )
 }
 
-/** Settings → Instagram: the pause before each Instagram file, and between Instagram links in Pending, and the hourly
- * limit on Instagram's files. */
-export function InstagramSection() {
+/** The sites besides Instagram that Settings → Pacing can give a pause, in the order shown. */
+const OTHER_PACED_SITES: readonly { key: keyof SitePauses; name: string }[] = [
+  { key: "x", name: "X" },
+  { key: "pixiv", name: "Pixiv" },
+  { key: "tumblr", name: "Tumblr" },
+]
+
+/** Settings → Pacing: Instagram's pause before each file and between its links in Pending, and its hourly limit; then
+ * the same pause for X, Pixiv and Tumblr, none until one is set. */
+export function PacingSection() {
   const { options, save, error } = useSaveOptions()
-  // The pause is saved when a field is left or Enter is pressed, not at every key.
-  const [pause, setPause] = useState<{ min: string; max: string } | null>(null)
-  const savedPause = options?.postPause ?? { min: 5, max: 10 }
-  const shownPause = pause ?? { min: String(savedPause.min), max: String(savedPause.max) }
+  const sitePauses = options?.sitePauses ?? { x: null, pixiv: null, tumblr: null }
 
-  async function savePause() {
-    if (pause === null) return
-    const read = (value: string, fallback: number) => {
-      const number = Number.parseInt(value, 10)
-      return Number.isNaN(number) ? fallback : Math.max(0, number)
-    }
-    const changed: PauseRange = { min: read(pause.min, savedPause.min), max: read(pause.max, savedPause.max) }
-    if (await save({ postPause: changed })) setPause(null)
-  }
-
-  // The hourly limit too, empty for none.
+  // The hourly limit is saved when the field is left or Enter is pressed, not at every key; empty for none.
   const [hourlyLimit, setHourlyLimit] = useState<string | null>(null)
   const savedLimit = options?.hourlyFileLimit ?? null
   const shownLimit = hourlyLimit ?? (savedLimit === null ? "" : String(savedLimit))
@@ -303,33 +298,18 @@ export function InstagramSection() {
     if (await save({ hourlyFileLimit: changed })) setHourlyLimit(null)
   }
 
-  const pauseInput = (end: "min" | "max", label: string) => (
-    <TextInput
-      id={`settings-pause-${end}`}
-      aria-label={label}
-      inputMode="numeric"
-      className="w-20 text-right tabular-nums"
-      value={shownPause[end]}
-      disabled={!options}
-      onChange={(event) => setPause({ ...shownPause, [end]: event.target.value })}
-      onBlur={() => void savePause()}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") void savePause()
-      }}
-    />
-  )
-
   return (
-    <Section title={text.instagram}>
+    <Section title={text.pacing}>
       <Card className="flex flex-col gap-3 p-4">
-        <Field label={text.postPause} hint={text.postPauseHint(LONGEST_PAUSE)} htmlFor="settings-pause-min">
-          <div className="flex items-center gap-2 text-fg-secondary">
-            <span>{text.pauseFrom}</span>
-            {pauseInput("min", text.pauseFrom)}
-            <span>{text.pauseTo}</span>
-            {pauseInput("max", text.pauseTo)}
-            <span>{text.seconds}</span>
-          </div>
+        <p className="text-fg-secondary">{text.pacingIntro(LONGEST_PAUSE)}</p>
+        <p className="text-xs font-semibold text-fg-secondary">{text.instagram}</p>
+        <Field label={text.postPause} hint={text.postPauseHint} htmlFor="settings-pause-instagram-min">
+          <PauseFields
+            id="settings-pause-instagram"
+            saved={options?.postPause ?? { min: 5, max: 10 }}
+            disabled={!options}
+            onSave={(range) => (range ? save({ postPause: range }) : Promise.resolve(false))}
+          />
         </Field>
         <Field label={text.hourlyLimit} hint={text.hourlyLimitHint} htmlFor="settings-hourly-limit">
           <div className="flex items-center gap-2 text-fg-secondary">
@@ -349,9 +329,80 @@ export function InstagramSection() {
             <span>{text.files}</span>
           </div>
         </Field>
+        <div className="flex flex-col gap-3 border-t border-line pt-3">
+          <p className="text-xs text-fg-secondary">{text.otherSitesPause}</p>
+          {OTHER_PACED_SITES.map(({ key, name }) => (
+            <Field key={key} label={name} htmlFor={`settings-pause-${key}-min`}>
+              <PauseFields
+                id={`settings-pause-${key}`}
+                saved={sitePauses[key]}
+                disabled={!options}
+                onSave={(range) => save({ sitePauses: { ...sitePauses, [key]: range } })}
+              />
+            </Field>
+          ))}
+        </div>
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
     </Section>
+  )
+}
+
+/**
+ * "From [5] to [10] seconds", saved when a field is left or Enter is pressed. `saved` null shows both fields empty
+ * (No Pause), and emptying both saves null; one end left empty takes the other's value.
+ */
+function PauseFields({
+  id,
+  saved,
+  disabled,
+  onSave,
+}: {
+  id: string
+  saved: PauseRange | null
+  disabled: boolean
+  onSave: (range: PauseRange | null) => Promise<boolean>
+}) {
+  const [draft, setDraft] = useState<{ min: string; max: string } | null>(null)
+  const shown = draft ?? { min: saved ? String(saved.min) : "", max: saved ? String(saved.max) : "" }
+
+  async function commit() {
+    if (draft === null) return
+    const read = (value: string) => {
+      const number = Number.parseInt(value, 10)
+      return Number.isNaN(number) ? null : Math.max(0, number)
+    }
+    const min = read(draft.min)
+    const max = read(draft.max)
+    const range = min === null && max === null ? null : { min: min ?? max ?? 0, max: max ?? min ?? 0 }
+    if (await onSave(range)) setDraft(null)
+  }
+
+  const input = (end: "min" | "max", label: string) => (
+    <TextInput
+      id={`${id}-${end}`}
+      aria-label={label}
+      inputMode="numeric"
+      className="w-20 text-right tabular-nums"
+      placeholder={text.noPause}
+      value={shown[end]}
+      disabled={disabled}
+      onChange={(event) => setDraft({ ...shown, [end]: event.target.value })}
+      onBlur={() => void commit()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") void commit()
+      }}
+    />
+  )
+
+  return (
+    <div className="flex items-center gap-2 text-fg-secondary">
+      <span>{text.pauseFrom}</span>
+      {input("min", text.pauseFrom)}
+      <span>{text.pauseTo}</span>
+      {input("max", text.pauseTo)}
+      <span>{text.seconds}</span>
+    </div>
   )
 }
 

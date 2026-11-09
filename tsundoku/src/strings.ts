@@ -1009,9 +1009,13 @@ export const strings = {
     chooseFolder: "Choose Folder…",
     useDefaultFolder: "Use Default",
     defaultFolder: (path: string) => `The default: ${path}`,
+    pacing: "Pacing",
+    pacingIntro: (longest: number) =>
+      `Some sites block accounts that read too fast. For these, Tsundoku waits a random time in a range before each file of a post, and between the site's links in Pending, up to ${longest} seconds, and downloads one of the site's posts at a time.`,
     postPause: "Pause Between Files",
-    postPauseHint: (longest: number) =>
-      `Instagram blocks accounts that read too fast, so Tsundoku waits a random time in this range before each file, and between Instagram links in Pending, up to ${longest} seconds.`,
+    postPauseHint: "Instagram always gets a pause, 5 to 10 seconds to start with.",
+    otherSitesPause: "Other sites get no pause until you give them one. Leave both fields empty for none.",
+    noPause: "None",
     pauseFrom: "From",
     pauseTo: "to",
     seconds: "seconds",

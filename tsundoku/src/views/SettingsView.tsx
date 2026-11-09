@@ -12,7 +12,7 @@ import { AddingSection } from "./settings/AddingSection"
 import { AppearanceSection } from "./settings/AppearanceSection"
 import { BackgroundSection } from "./settings/BackgroundSection"
 import { BackupRow } from "./settings/BackupRow"
-import { CookiesSection, DownloadsSection, InstagramSection, PostsSection } from "./settings/DownloadsSection"
+import { CookiesSection, DownloadsSection, PacingSection, PostsSection } from "./settings/DownloadsSection"
 import { ShortcutsSection } from "./settings/ShortcutsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { ToolsSection } from "./settings/ToolsSection"
@@ -61,7 +61,7 @@ const SETTINGS_SECTIONS: readonly { id: string; title: string; Content: () => Re
   { id: "settings-appearance", title: strings.settings.appearance, Content: AppearanceSection },
   { id: "settings-shortcuts", title: strings.settings.keyboardShortcuts, Content: ShortcutsSection },
   { id: "settings-posts", title: strings.settings.posts, Content: PostsSection },
-  { id: "settings-instagram", title: strings.settings.instagram, Content: InstagramSection },
+  { id: "settings-pacing", title: strings.settings.pacing, Content: PacingSection },
   { id: "settings-cookies", title: strings.settings.cookies, Content: CookiesSection },
   { id: "settings-sites", title: strings.settings.sites.title, Content: SupportedSitesSection },
   { id: "settings-tools", title: strings.settings.tools, Content: ToolsSection },

@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.77 · 2026-11-09
+
+### Added
+
+- **Pacing for X, Pixiv and Tumblr**: Settings → Instagram becomes Pacing. Instagram's pause and hourly limit stay as they were, and X, Pixiv and Tumblr can each get a pause too: their posts then wait between files, their links in Pending wait between reads, and one post of the site downloads at a time. They have none until you set one.
+
 ## 0.1.76 · 2026-11-09
 
 ### Added

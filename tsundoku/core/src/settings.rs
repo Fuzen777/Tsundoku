@@ -13,6 +13,7 @@ use crate::data_folder;
 use crate::post_names;
 use crate::presets::PresetsSettings;
 use crate::rules::{RulesSettings, catch_all_rule, posts_folder_rule, with_catch_all_last};
+use crate::sites::{self, PacedSite};
 use crate::sync::lock;
 use crate::tools::ToolId;
 
@@ -234,9 +235,11 @@ pub struct DownloadSettings {
     /// How the files of a post are named, with placeholders such as `{account}` and `{number}` (`post_names`).
     /// The extension is added to it.
     pub post_file_name: String,
-    /// How long to wait before each file of a post on a site that limits how fast it's read
-    /// (`sites::paces_downloads`, Instagram), so the account isn't blocked.
+    /// How long to wait before each file of an Instagram post, and between Instagram links read in Pending, so the
+    /// account isn't blocked (`pause_for`).
     pub post_pause: PauseRange,
+    /// The same for the other sites that limit how fast they're read, each `None` for no pause (Settings → Pacing).
+    pub site_pauses: SitePauses,
     /// The most files from that site (Instagram) downloaded in an hour, or `None` for no limit: once the past hour
     /// holds this many, its next download waits (`site_limits::hourly_limit_end`).
     pub hourly_file_limit: Option<u32>,
@@ -251,6 +254,7 @@ impl Default for DownloadSettings {
             cookies_browser: Some(CookiesBrowser::Automatic),
             post_file_name: post_names::DEFAULT_POST_FILE_NAME.to_owned(),
             post_pause: PauseRange::default(),
+            site_pauses: SitePauses::default(),
             hourly_file_limit: None,
         }
     }
@@ -265,6 +269,17 @@ impl DownloadSettings {
         limit
             .filter(|limit| *limit > 0)
             .map(|limit| limit.min(Self::HIGHEST_HOURLY_LIMIT))
+    }
+
+    /// The pause before each file of a post at `link`, and between its site's links in Pending: Instagram's always,
+    /// X's, Pixiv's and Tumblr's when set, none elsewhere.
+    pub fn pause_for(&self, link: &str) -> Option<PauseRange> {
+        match sites::paced_site(link)? {
+            PacedSite::Instagram => Some(self.post_pause),
+            PacedSite::X => self.site_pauses.x,
+            PacedSite::Pixiv => self.site_pauses.pixiv,
+            PacedSite::Tumblr => self.site_pauses.tumblr,
+        }
     }
 
     /// The download folder: the chosen one, or a Tsundoku folder in Downloads. A portable copy's folder that isn't a
@@ -295,6 +310,27 @@ pub fn default_download_folder() -> PathBuf {
         .or_else(dirs::home_dir)
         .unwrap_or_default()
         .join("Tsundoku")
+}
+
+/// The pauses for the sites besides Instagram that limit how fast they're read: none to start with.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct SitePauses {
+    pub x: Option<PauseRange>,
+    pub pixiv: Option<PauseRange>,
+    pub tumblr: Option<PauseRange>,
+}
+
+impl SitePauses {
+    /// Each pause within `PauseRange`'s bounds.
+    pub fn normalized(self) -> Self {
+        Self {
+            x: self.x.map(PauseRange::normalized),
+            pixiv: self.pixiv.map(PauseRange::normalized),
+            tumblr: self.tumblr.map(PauseRange::normalized),
+        }
+    }
 }
 
 /// A random wait between `min` and `max` seconds.
