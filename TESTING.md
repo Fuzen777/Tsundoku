@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.68 (2026-11-09).
+Up to date with 0.1.69 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -137,6 +137,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **45. Default in Pending's preset pickers** · 0.1.67
 - [ ] Pending, with a video link no rule picks a preset for: its picker shows Default, and hovering it says "Follows Videos Start As: <preset>". Changing Videos Start As changes what it starts with, still showing Default.
 - [ ] Pick another preset on that row, then Default again → it follows Videos Start As once more. A row whose own preset is the one Videos Start As then gets also shows Default. A row a rule picks for shows the preset's name with the rule's link, and no Default.
+
+**47. Group By's new controls** · 0.1.69
+- [ ] Pending and the Queue: Group By shows Status as its own toggle, then None, Site, Folder and Rule side by side. A view grouped by status before keeps that, as the Status toggle with None.
+- [ ] Rule: each group reads "Rule 2 · D:\Videos" (a rule saving in `D:\Videos\{site}` shows `D:\Videos`), then "Preset's Folder · …" and "Download Folder · …" for downloads no rule places.
+- [ ] Status with Site, Folder or Rule: each status's heading holds the other groups under smaller, indented headings. Links not read yet sit under their status without a heading of their own.
+- [ ] Clicking a heading folds its group, and again unfolds it. Restart → the grouping is kept (the folding isn't).
 
 **20. Where each Pending link goes, and "Everything else"** · 0.1.30
 - [ ] A read link's row shows the folder it will be saved in and what picked it (a rule, the preset's folder or the download folder). It follows the row's preset, and clicking it opens where that's set.

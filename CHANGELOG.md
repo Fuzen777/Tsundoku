@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.69 · 2026-11-09
+
+### Changed
+
+- **Group By as buttons, with Status apart**: in Pending and the Queue, grouping by status is now a switch of its own, beside None, Site, Folder and Rule as buttons. With Status on and one of the others picked, each status holds the other groups. Grouping by status from before is kept.
+
+### Added
+
+- **Group by rule**: Rule groups the links or downloads by what picks their folder: the rule, shown with its number and the part of its folder that doesn't change (a rule saving in `Downloads\{site}` shows Downloads), then a preset's own folder, then the download folder.
+- **Folding groups**: clicking a group's heading folds it away, and clicking again unfolds it.
+
 ## 0.1.68 · 2026-11-09
 
 ### Added

@@ -470,16 +470,19 @@ pub struct ListArrangements {
 
 /// How one list is grouped and sorted. By default, ungrouped and oldest first, as the list is stored.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase", default)]
+#[serde(rename_all = "camelCase", from = "StoredListArrangement")]
 #[ts(export)]
 pub struct ListArrangement {
     pub group: ListGroup,
+    /// Grouped by where each item stands first (waiting, running, done… in the queue; read, downloaded before,
+    /// failed… in Pending), then by `group` within each.
+    pub by_status: bool,
     pub sort: ListSort,
     /// Newest or Z first.
     pub descending: bool,
 }
 
-/// What a list's items are grouped by.
+/// What a list's items are grouped by, besides where they stand (`ListArrangement::by_status`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -489,8 +492,46 @@ pub enum ListGroup {
     /// The folder the download goes to.
     Destination,
     Site,
-    /// Where it stands: waiting, running, done… in the queue; read, downloaded before, failed… in Pending.
+    /// The folder rule that picks the folder, or the preset's folder, or the download folder.
+    Rule,
+}
+
+/// A `ListArrangement` as `settings.json` may hold it: before 0.1.69, grouping by status was one of the groups.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct StoredListArrangement {
+    group: StoredListGroup,
+    by_status: bool,
+    sort: ListSort,
+    descending: bool,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+enum StoredListGroup {
+    #[default]
+    None,
+    Destination,
+    Site,
+    Rule,
     Status,
+}
+
+impl From<StoredListArrangement> for ListArrangement {
+    fn from(stored: StoredListArrangement) -> Self {
+        let group = match stored.group {
+            StoredListGroup::None | StoredListGroup::Status => ListGroup::None,
+            StoredListGroup::Destination => ListGroup::Destination,
+            StoredListGroup::Site => ListGroup::Site,
+            StoredListGroup::Rule => ListGroup::Rule,
+        };
+        Self {
+            group,
+            by_status: stored.by_status || matches!(stored.group, StoredListGroup::Status),
+            sort: stored.sort,
+            descending: stored.descending,
+        }
+    }
 }
 
 /// What a list's items are sorted by, within their groups.
@@ -625,7 +666,10 @@ mod tests {
         let folder = tempfile::tempdir().unwrap();
         fs::write(
             folder.path().join("settings.json"),
-            r#"{ "lists": { "pending": { "group": "destination", "sort": "title", "descending": true } } }"#,
+            r#"{ "lists": {
+                "pending": { "group": "destination", "sort": "title", "descending": true },
+                "queue": { "group": "rule", "byStatus": true }
+            } }"#,
         )
         .unwrap();
 
@@ -634,11 +678,39 @@ mod tests {
             lists.pending,
             ListArrangement {
                 group: ListGroup::Destination,
+                by_status: false,
                 sort: ListSort::Title,
                 descending: true,
             }
         );
-        assert_eq!(lists.queue, ListArrangement::default());
+        assert_eq!(
+            lists.queue,
+            ListArrangement {
+                group: ListGroup::Rule,
+                by_status: true,
+                ..ListArrangement::default()
+            }
+        );
+    }
+
+    #[test]
+    fn grouping_by_status_from_before_0_1_69_becomes_its_own_switch() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "lists": { "queue": { "group": "status", "sort": "site" } } }"#,
+        )
+        .unwrap();
+        let queue = store_in(&folder).get().lists.queue;
+        assert_eq!(
+            queue,
+            ListArrangement {
+                group: ListGroup::None,
+                by_status: true,
+                sort: ListSort::Site,
+                descending: false,
+            }
+        );
     }
 
     #[test]

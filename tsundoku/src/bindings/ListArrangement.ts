@@ -5,7 +5,12 @@ import type { ListSort } from "./ListSort";
 /**
  * How one list is grouped and sorted. By default, ungrouped and oldest first, as the list is stored.
  */
-export type ListArrangement = { group: ListGroup, sort: ListSort, 
+export type ListArrangement = { group: ListGroup, 
+/**
+ * Grouped by where each item stands first (waiting, running, done… in the queue; read, downloaded before,
+ * failed… in Pending), then by `group` within each.
+ */
+byStatus: boolean, sort: ListSort, 
 /**
  * Newest or Z first.
  */

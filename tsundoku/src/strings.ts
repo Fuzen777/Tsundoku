@@ -290,11 +290,18 @@ export const strings = {
   lists: {
     groupBy: "Group By",
     groups: {
-      none: "No Groups",
-      destination: "Group by Folder",
-      site: "Group by Site",
-      status: "Group by Status",
+      none: "None",
+      site: "Site",
+      destination: "Folder",
+      rule: "Rule",
     },
+    byStatus: "Status",
+    byStatusHint: "Group by where each one stands first",
+    ruleGroup: (number: number, folder: string) => `Rule ${number} · ${folder}`,
+    presetFolderGroup: (folder: string) => `Preset's Folder · ${folder}`,
+    downloadFolderGroup: (folder: string) => `Download Folder · ${folder}`,
+    collapse: (group: string) => `Collapse ${group}`,
+    expand: (group: string) => `Expand ${group}`,
     sortBy: "Sort By",
     sorts: {
       added: "Date Added",

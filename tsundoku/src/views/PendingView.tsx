@@ -9,7 +9,7 @@ import {
   setPendingPreset,
   startPendingLinks,
 } from "../api"
-import { arrange, firstItems, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
+import { AFTER_GROUPS, arrangeNested, firstItems, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
 import type { Destination } from "../bindings/Destination"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { PendingLink } from "../bindings/PendingLink"
@@ -40,6 +40,7 @@ import {
   useDownloadDestinations,
   useLeftOutFiles,
   useListArrangement,
+  useRuleGroupOf,
   usePendingLinks,
   usePresets,
   useRulePresets,
@@ -87,7 +88,9 @@ export function PendingView() {
   const allSelected = links.length > 0 && selected.length === links.length
 
   const { arrangement, ready, change: changeArrangement, error: arrangeError } = useListArrangement("pending")
-  const { group } = arrangement
+  const { group, byStatus } = arrangement
+  const needsDestinations = group === "destination" || group === "rule"
+  const ruleGroupOf = useRuleGroupOf(group === "rule")
   // Where each read link will be saved, to group them by folder. The rows ask the same, so they share the answers.
   const readLinks = links.flatMap((link) => (link.preview ? [{ link, video: link.preview.video }] : []))
   // The preset a rule picks for each read video. A link follows it, else the one picked for them all, until it gets
@@ -97,15 +100,16 @@ export function PendingView() {
   const followedPreset = (link: PendingLink) => rulePresetOf.get(link.id)?.presetId ?? presetId
   const destinations = useDownloadDestinations(
     readLinks.map(({ link, video }) =>
-      destinationRequest(video, link.presetId ?? followedPreset(link), group === "destination"),
+      destinationRequest(video, link.presetId ?? followedPreset(link), needsDestinations),
     ),
   )
   const destinationOf = new Map(readLinks.map(({ link }, index) => [link.id, destinations[index]]))
-  const groups = arrange(
+  const groups = arrangeNested(
     links,
     arrangement,
     pendingFacts,
-    group === "none" ? null : (link) => pendingGroup(link, group, destinationOf.get(link.id)),
+    byStatus ? pendingStatusGroup : null,
+    group === "none" ? null : (link) => pendingGroup(link, group, destinationOf.get(link.id), ruleGroupOf, byStatus),
   )
 
   async function run(action: () => Promise<void>) {
@@ -265,7 +269,7 @@ export function PendingView() {
           {error && <StatusMessage tone="danger" {...error} />}
           <GroupedList
             groups={firstItems(groups, shownCount)}
-            grouped={group !== "none"}
+            grouped={group !== "none" || byStatus}
             keyOf={(link) => link.id}
             renderItem={(link) => (
               <PendingRow
@@ -560,19 +564,31 @@ function pendingFacts(link: PendingLink): SortFacts {
   }
 }
 
-/** The group a link falls in: its folder, its site, or where it stands. Without a folder or site known yet (not read,
- * or couldn't be read), it goes by where it stands, after the folders or sites. */
+/** The group of where a link stands. */
+function pendingStatusGroup(link: PendingLink): GroupPlace {
+  const status = pendingStatus(link)
+  return { key: status, label: strings.pending.groups[status], rank: PENDING_STATUSES.indexOf(status) }
+}
+
+/**
+ * The group a link falls in: its folder, its site, or what picks its folder. Without one known yet (not read, or
+ * couldn't be read), it goes under no heading of its own when grouped by status too, else by where it stands, after
+ * the others.
+ */
 function pendingGroup(
   link: PendingLink,
   group: Exclude<ListGroup, "none">,
   destination: Destination | undefined,
+  ruleGroupOf: ((destination: Destination) => GroupPlace) | null,
+  byStatus: boolean,
 ): GroupPlace {
   const video = link.preview?.video
   if (group === "destination" && destination) return folderGroup(destination.folder)
+  if (group === "rule" && destination && ruleGroupOf) return ruleGroupOf(destination)
   if (group === "site" && video) return { key: `site:${video.site}`, label: video.siteName, rank: 0 }
-  const status = pendingStatus(link)
-  const rank = PENDING_STATUSES.indexOf(status)
-  return { key: status, label: strings.pending.groups[status], rank: group === "status" ? rank : rank + 1 }
+  if (byStatus) return NO_GROUP
+  const status = pendingStatusGroup(link)
+  return { ...status, rank: AFTER_GROUPS + status.rank }
 }
 
 /** Whether Start All takes the link: not one that couldn't be read, is in the queue, or was downloaded before. */

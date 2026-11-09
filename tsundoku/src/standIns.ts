@@ -552,8 +552,8 @@ export const standIns = {
     pendingStandIn(11, "https://vimeo.com/76979871", { state: "reading", fromFile: true }),
   ] satisfies PendingLink[],
   listArrangements: {
-    pending: { group: "none", sort: "added", descending: false },
-    queue: { group: "none", sort: "added", descending: false },
+    pending: { group: "none", byStatus: false, sort: "added", descending: false },
+    queue: { group: "none", byStatus: false, sort: "added", descending: false },
   } satisfies ListArrangements,
   /** Words that start with http:// or https://, each once: the core also takes links without them. */
   linksInText(text: string): string[] {

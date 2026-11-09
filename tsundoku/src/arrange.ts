@@ -1,5 +1,7 @@
+import type { Destination } from "./bindings/Destination"
 import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListSort } from "./bindings/ListSort"
+import { strings } from "./strings"
 
 /*
   Grouping and sorting the Pending and Queue views' lists, as each view's toolbar chose (ListArrangement, saved in
@@ -7,7 +9,7 @@ import type { ListSort } from "./bindings/ListSort"
 */
 
 /** A list as it's stored: ungrouped, oldest first. Shown until the saved arrangement is read. */
-export const STORED_ORDER: ListArrangement = { group: "none", sort: "added", descending: false }
+export const STORED_ORDER: ListArrangement = { group: "none", byStatus: false, sort: "added", descending: false }
 
 /** What sorting needs to know about an item. */
 export interface SortFacts {
@@ -32,7 +34,13 @@ export interface GroupPlace {
 
 export interface ItemGroup<Item> extends GroupPlace {
   items: Item[]
+  /** Within a status's group, the items grouped again by the list's other grouping. */
+  subgroups?: ItemGroup<Item>[]
 }
+
+/** An item in no group of the second grouping, such as a link not read yet when grouping by site: shown under its
+ * status's heading without one of its own. */
+export const NO_GROUP: GroupPlace = { key: "", label: "", rank: -1 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
 
@@ -76,6 +84,37 @@ export function arrange<Item>(
   )
 }
 
+/**
+ * Arranges the items as `arrange` does, grouped first by `statusOf` when given, then by `groupOf` within each of
+ * those groups (or alone, without `statusOf`).
+ */
+export function arrangeNested<Item>(
+  items: readonly Item[],
+  arrangement: ListArrangement,
+  factsOf: (item: Item) => SortFacts,
+  statusOf: ((item: Item) => GroupPlace) | null,
+  groupOf: ((item: Item) => GroupPlace) | null,
+): ItemGroup<Item>[] {
+  if (!statusOf) return arrange(items, arrangement, factsOf, groupOf)
+  const byStatus = arrange(items, arrangement, factsOf, statusOf)
+  if (!groupOf) return byStatus
+  return byStatus.map((group) => ({ ...group, subgroups: arrange(group.items, arrangement, factsOf, groupOf) }))
+}
+
+/**
+ * The part of a rule's folder that doesn't change from one download to the next: the folders before the first one
+ * with a placeholder, joined to the download folder when it isn't a full path. `Downloads\{site}` gives `Downloads`.
+ */
+export function fixedFolder(template: string, downloadFolder: string): string {
+  const network = template.startsWith("\\\\")
+  const parts = (network ? template.slice(2) : template).split(/[\\/]/)
+  const placeholder = parts.findIndex((part) => /\{[^{}]+\}/.test(part))
+  const fixed = (placeholder === -1 ? parts : parts.slice(0, placeholder)).filter(Boolean)
+  const joined = (network ? "\\\\" : "") + fixed.join("\\")
+  if (network || /^[A-Za-z]:/.test(template)) return joined || template
+  return joined ? `${downloadFolder.replace(/[\\/]+$/, "")}\\${joined}` : downloadFolder
+}
+
 function sortValue(facts: SortFacts, sort: ListSort): string | number | null {
   switch (sort) {
     case "added":
@@ -101,7 +140,13 @@ export function firstItems<Item>(groups: readonly ItemGroup<Item>[], count: numb
   let left = count
   for (const group of groups) {
     if (left <= 0) break
-    shown.push(group.items.length > left ? { ...group, items: group.items.slice(0, left) } : group)
+    if (group.items.length <= left) shown.push(group)
+    else
+      shown.push({
+        ...group,
+        items: group.items.slice(0, left),
+        subgroups: group.subgroups && firstItems(group.subgroups, left),
+      })
     left -= group.items.length
   }
   return shown
@@ -109,4 +154,35 @@ export function firstItems<Item>(groups: readonly ItemGroup<Item>[], count: numb
 
 export function folderGroup(folder: string): GroupPlace {
   return { key: `folder:${folder.toLowerCase()}`, label: folder, rank: 0, folder: true }
+}
+
+/** Ranks that put a group after every rule's group, and after every group of the list's grouping. */
+const AFTER_RULES = 1_000_000
+export const AFTER_GROUPS = 2_000_000
+
+/**
+ * The group of a download by what picks its folder: the rule, with the part of its folder that doesn't change, then
+ * the preset's own folder, then the download folder. `ruleFolders` are the rules' folders in their order.
+ */
+export function ruleGroup(destination: Destination, ruleFolders: readonly string[], downloadFolder: string): GroupPlace {
+  const { source } = destination
+  switch (source.kind) {
+    case "rule": {
+      const template = ruleFolders[source.number - 1]
+      const folder = template ? fixedFolder(template, downloadFolder) : destination.folder
+      return { key: `rule:${source.number}`, label: strings.lists.ruleGroup(source.number, folder), rank: source.number }
+    }
+    case "preset":
+      return {
+        key: `preset:${destination.folder.toLowerCase()}`,
+        label: strings.lists.presetFolderGroup(destination.folder),
+        rank: AFTER_RULES,
+      }
+    case "downloadFolder":
+      return {
+        key: "download-folder",
+        label: strings.lists.downloadFolderGroup(destination.folder),
+        rank: AFTER_RULES + 1,
+      }
+  }
 }

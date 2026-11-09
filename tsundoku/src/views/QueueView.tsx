@@ -16,7 +16,8 @@ import {
   stopDownload,
   tryDownloadNow,
 } from "../api"
-import { arrange, folderGroup, type GroupPlace, type SortFacts } from "../arrange"
+import { arrangeNested, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
+import type { Destination } from "../bindings/Destination"
 import type { DownloadProgress } from "../bindings/DownloadProgress"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { QueueItem } from "../bindings/QueueItem"
@@ -38,7 +39,7 @@ import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescript
 import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
 import { pickSummary } from "../postFiles"
 import { describeHold, holdEnd, useTimeLeft } from "../holds"
-import { useListArrangement, useQueue } from "../queries"
+import { useDownloadDestinations, useListArrangement, useQueue, useRuleGroupOf } from "../queries"
 import { useDownloadProgress } from "../queueEvents"
 import { strings } from "../strings"
 import { useOfferUndo, type UndoOffer } from "../undo"
@@ -76,8 +77,20 @@ export function QueueView() {
   const { data: items = [] } = useQueue()
   const [queueError, setQueueError] = useState<ErrorDescription | null>(null)
   const { arrangement, ready, change: changeArrangement, error: arrangeError } = useListArrangement("queue")
-  const { group } = arrangement
-  const groups = arrange(items, arrangement, queueFacts, group === "none" ? null : (item) => queueGroup(item, group))
+  const { group, byStatus } = arrangement
+  // What picks each download's folder is asked again, since the queue keeps only the folder.
+  const ruleGroupOf = useRuleGroupOf(group === "rule")
+  const destinations = useDownloadDestinations(
+    items.map((item) => ({ video: item.video, presetId: item.preset?.id ?? null, enabled: group === "rule" })),
+  )
+  const destinationOf = new Map(items.map((item, index) => [item.id, destinations[index]]))
+  const groups = arrangeNested(
+    items,
+    arrangement,
+    queueFacts,
+    byStatus ? queueStatusGroup : null,
+    group === "none" ? null : (item) => queueGroup(item, group, destinationOf.get(item.id), ruleGroupOf),
+  )
   const actions = WHOLE_QUEUE_ACTIONS.filter(({ states }) => items.some((item) => states.includes(item.state)))
 
   const offerUndo = useOfferUndo()
@@ -116,7 +129,7 @@ export function QueueView() {
           {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           <GroupedList
             groups={groups}
-            grouped={group !== "none"}
+            grouped={group !== "none" || byStatus}
             keyOf={(item) => item.id}
             renderItem={(item) => <QueueRow item={item} />}
           />
@@ -134,15 +147,25 @@ function queueFacts(item: QueueItem): SortFacts {
   return { id: item.id, addedAt: item.addedAt, title: video.title, uploader: video.uploader, site: video.siteName }
 }
 
-/** The group a download falls in: its folder, its site, or where it stands. */
-function queueGroup(item: QueueItem, group: Exclude<ListGroup, "none">): GroupPlace {
+/** The group of where a download stands. */
+function queueStatusGroup(item: QueueItem): GroupPlace {
+  return { key: item.state, label: strings.queue.groups[item.state], rank: QUEUE_STATUSES.indexOf(item.state) }
+}
+
+/** The group a download falls in: its folder, its site, or what picks its folder (none until that's known). */
+function queueGroup(
+  item: QueueItem,
+  group: Exclude<ListGroup, "none">,
+  destination: Destination | undefined,
+  ruleGroupOf: ((destination: Destination) => GroupPlace) | null,
+): GroupPlace {
   switch (group) {
     case "destination":
       return folderGroup(item.folder)
     case "site":
       return { key: item.video.site, label: item.video.siteName, rank: 0 }
-    case "status":
-      return { key: item.state, label: strings.queue.groups[item.state], rank: QUEUE_STATUSES.indexOf(item.state) }
+    case "rule":
+      return destination && ruleGroupOf ? ruleGroupOf(destination) : NO_GROUP
   }
 }
 
