@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.72 (2026-11-09).
+Up to date with 0.1.73 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -166,6 +166,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] With two long downloads running, Pause All stops them (and holds waiting ones), Resume All resumes them, and with a failed one, Retry Failed retries it. Each shows only while a download needs it.
 - [ ] The tray menu has Pause All Downloads, which reads Resume All Downloads while every download is stopped.
 - [ ] With Downloads at Once at 1, queue three videos. The third's ⋯ menu → Download Next → it starts right after the current one, before the second, also after a restart in between.
+
+**51. Logs inside the app** · 0.1.73
+- [ ] Queue: Show Log on a running download → its log opens under the row and grows every second, staying at the bottom; scroll up and it stays put. Hide Log closes it.
+- [ ] On a done or failed download, Show Log shows the whole log; Copy Log copies it, Open in Editor opens the file as before.
+- [ ] A very long log (a channel's playlist, say) says "The log is long: this is its end." and the app stays quick.
 
 **23. Copy Details** · 0.1.41, 0.1.46
 - [ ] On a failed row (the `Z:\` rule above), hovering Copy Details says its name, and it says Copied after a click. Pasted in Notepad: Tsundoku's version, each tool's version, Windows' version and build, the link, the error and the log's last lines, with your user name blanked out.

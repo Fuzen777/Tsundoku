@@ -5,6 +5,7 @@ import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
+import type { DownloadLog } from "./bindings/DownloadLog"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
 import type { FirstRunOptions } from "./bindings/FirstRunOptions"
 import type { FolderRule } from "./bindings/FolderRule"
@@ -363,6 +364,14 @@ export const standIns = {
     removedBuiltIns: [],
     defaultFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   } satisfies PresetsOverview,
+  downloadLog: {
+    text: [
+      "[youtube] Extracting URL: https://www.youtube.com/watch?v=jNQXAC9IVRw",
+      "[download] Destination: Me at the zoo [jNQXAC9IVRw].mp4",
+      "[download]  42.0% of 1.20MiB at 1.10MiB/s ETA 00:01",
+    ].join("\n"),
+    cut: false,
+  } satisfies DownloadLog,
   presetArguments: ["-f", "bv*+ba/b", "--merge-output-format", "mkv", "-o", "%(title).150B [%(id)s].%(ext)s"],
   /** A page of the history, searched by title, posts or not, and missing files: a few videos, or `count` of them. */
   historyPage: (query: HistoryQuery, offset: number, limit: number, count: number | null): HistoryPage => {

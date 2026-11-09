@@ -18,6 +18,7 @@ import {
   getDefaultDownloadFolder,
   getDownloadDestination,
   getDownloadFiles,
+  getDownloadLog,
   getDownloadOptions,
   getLeftOutFiles,
   getFirstRunOptions,
@@ -295,6 +296,15 @@ export function useHistoryFilters() {
 }
 
 /** Every download of a video, loaded when its row is expanded. */
+/** A download's log, read again every second while `live` (it's running). */
+export function useDownloadLog(downloadId: number, live: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.downloadLog, downloadId],
+    queryFn: () => getDownloadLog(downloadId),
+    refetchInterval: live ? 1000 : false,
+  })
+}
+
 export function useDownloadFiles(downloadId: number, enabled: boolean) {
   return useQuery({
     queryKey: [...queryKeys.downloadFiles, downloadId],

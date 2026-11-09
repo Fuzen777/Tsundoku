@@ -6,7 +6,6 @@ import {
   confirmWithUser,
   downloadNext,
   openDownload,
-  openDownloadLog,
   pickFolder,
   restoreClearedDownloads,
   resumeAllDownloads,
@@ -32,6 +31,7 @@ import { CopyDetailsButton } from "../components/CopyDetailsButton"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { IconButton } from "../components/IconButton"
+import { LogPanel } from "../components/LogPanel"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
 import { ProgressBar } from "../components/ProgressBar"
@@ -176,6 +176,7 @@ function queueGroup(
 function QueueRow({ item }: { item: QueueItem }) {
   const progress = useDownloadProgress(item)
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
+  const [showsLog, setShowsLog] = useState(false)
   const stage = stageLabel(item, progress)
   const hold = item.state === "waiting" ? item.hold : null
   const holdTimeLeft = useTimeLeft(hold ? holdEnd(hold) : null)
@@ -212,6 +213,7 @@ function QueueRow({ item }: { item: QueueItem }) {
           </StatusMessage>
         )}
         {actionError && <StatusMessage tone="danger" {...actionError} />}
+        {showsLog && item.state !== "waiting" && <LogPanel downloadId={item.id} live={item.state === "running"} />}
       </div>
       <div className="flex shrink-0 flex-wrap items-start justify-end gap-1">
         {(item.state === "running" || item.state === "waiting") && (
@@ -256,8 +258,13 @@ function QueueRow({ item }: { item: QueueItem }) {
             />
           </>
         )}
-        {(item.state === "failed" || item.state === "done") && (
-          <IconButton label={strings.queue.openLog} icon={FileText} onClick={() => act(openDownloadLog)} />
+        {item.state !== "waiting" && (
+          <IconButton
+            label={showsLog ? strings.queue.hideLog : strings.queue.showLog}
+            icon={FileText}
+            aria-expanded={showsLog}
+            onClick={() => setShowsLog((shown) => !shown)}
+          />
         )}
         {item.state === "failed" && item.error && (
           <CopyDetailsButton id={item.id} error={describeDownloadError(item.error)} onError={setActionError} />

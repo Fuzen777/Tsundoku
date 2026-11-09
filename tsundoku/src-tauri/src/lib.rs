@@ -344,6 +344,7 @@ pub fn run() {
             downloads::clear_finished_downloads,
             downloads::restore_cleared_downloads,
             downloads::open_download_log,
+            downloads::download_log,
             report::download_details,
             whats_new::whats_new,
             whats_new::dismiss_whats_new,

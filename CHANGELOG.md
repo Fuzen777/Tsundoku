@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.73 · 2026-11-09
+
+### Added
+
+- **Logs inside the app**: Show Log on a download in the Queue opens its log under the row instead of in another program: the log's end, following along every second while it downloads, with Copy Log and Open in Editor beside it.
+
 ## 0.1.72 · 2026-11-09
 
 ### Added

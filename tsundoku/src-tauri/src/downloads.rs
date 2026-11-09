@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::{
-    DownloadError, DownloadProgress, DownloadProgressEvent, DownloadQueue, QueueItem,
+    DownloadError, DownloadLog, DownloadProgress, DownloadProgressEvent, DownloadQueue, QueueItem,
     QueueListener, QueuePick,
 };
 use tsundoku_core::metadata::VideoInfo;
@@ -289,6 +289,12 @@ pub fn save_list_arrangements(
 }
 
 /// Opens the download's log in the default text editor.
+/// The end of a download's log, for the Queue's log viewer.
+#[tauri::command]
+pub fn download_log(queue: Queue<'_>, id: i64) -> Result<DownloadLog, DownloadError> {
+    queue.log(id)
+}
+
 #[tauri::command]
 pub fn open_download_log(app: AppHandle, queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
     let path = queue.log_path(id);

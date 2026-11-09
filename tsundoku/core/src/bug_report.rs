@@ -100,20 +100,26 @@ fn tool_name(id: ToolId) -> &'static str {
 
 /// The last `count` lines of the log at `path`, or `None` if it can't be read. Only its end is read.
 pub fn log_tail(path: &Path, count: usize) -> Option<String> {
+    read_end(path, LOG_TAIL_BYTES).map(|(text, _)| last_lines(&text, count))
+}
+
+/// The end of the text file at `path`, at most `bytes` of it, from the first whole line, and whether there's more
+/// before it; `None` if it can't be read.
+pub fn read_end(path: &Path, bytes: u64) -> Option<(String, bool)> {
     let mut file = File::open(path).ok()?;
     let length = file.metadata().ok()?.len();
-    let start = length.saturating_sub(LOG_TAIL_BYTES);
+    let start = length.saturating_sub(bytes);
     file.seek(SeekFrom::Start(start)).ok()?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).ok()?;
-    let text = String::from_utf8_lossy(&bytes);
+    let mut read = Vec::new();
+    file.read_to_end(&mut read).ok()?;
+    let text = String::from_utf8_lossy(&read);
     // Reading from the middle of the file, the first line is probably cut.
     let text = if start > 0 {
         text.split_once('\n').map_or("", |(_, rest)| rest)
     } else {
         &text
     };
-    Some(last_lines(text, count))
+    Some((text.to_owned(), start > 0))
 }
 
 /// The last `count` lines, without the empty ones at the end.
@@ -329,6 +335,13 @@ mod tests {
         let tail = log_tail(&path, 3).unwrap();
         assert_eq!(tail, "line 19997\nline 19998\nline 19999");
         assert_eq!(log_tail(&folder.path().join("missing.log"), 3), None);
+
+        let (end, cut) = read_end(&path, 12).unwrap();
+        assert!(cut, "there's more before it");
+        assert!(!end.is_empty() && std::fs::read_to_string(&path).unwrap().ends_with(&end));
+        let (whole, cut) = read_end(&path, 1_000_000).unwrap();
+        assert!(!cut);
+        assert_eq!(whole, std::fs::read_to_string(&path).unwrap());
     }
 
     #[test]

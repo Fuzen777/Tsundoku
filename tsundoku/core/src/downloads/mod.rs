@@ -98,6 +98,19 @@ pub struct QueueItem {
     pub recovery: Recovery,
 }
 
+/// How much of a log the Queue's log viewer shows: its end.
+const LOG_VIEW_BYTES: u64 = 256 * 1024;
+
+/// The end of a download's log, as the Queue's log viewer shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DownloadLog {
+    pub text: String,
+    /// The log is longer: only its end is here.
+    pub cut: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -864,6 +877,13 @@ impl DownloadQueue {
     /// The item's log: yt-dlp's output for each of its runs.
     pub fn log_path(&self, id: i64) -> PathBuf {
         self.logs_folder.join(format!("{id}.log"))
+    }
+
+    /// The end of a download's log, for the Queue's log viewer: at most `LOG_VIEW_BYTES`, so a long one stays light.
+    pub fn log(&self, id: i64) -> Result<DownloadLog, DownloadError> {
+        crate::bug_report::read_end(&self.log_path(id), LOG_VIEW_BYTES)
+            .map(|(text, cut)| DownloadLog { text, cut })
+            .ok_or(DownloadError::NotFound)
     }
 
     /// Starts waiting items while there's room, in the queue's order: the order they were added, apart from those

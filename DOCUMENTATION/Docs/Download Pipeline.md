@@ -169,7 +169,7 @@ Every yt-dlp run goes through `core::process`: no console window, started suspen
 ## Logs
 
 - `logs\<id>.log` in the data folder: a line with the time and the full command, then yt-dlp's output, for each run of the item (Resume and Retry append).
-- Open Log opens it in the default text editor. Logs older than 30 days are deleted when the app starts.
+- Show Log shows its end under the row (`LogPanel`, `DownloadQueue::log`: at most 256 KiB, from the first whole line, through `bug_report::read_end`), read again every second while the download runs; its Open in Editor opens the file in the default text editor. Logs older than 30 days are deleted when the app starts.
 
 ## Events
 

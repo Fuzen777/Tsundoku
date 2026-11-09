@@ -13,6 +13,7 @@ import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
+import type { DownloadLog } from "./bindings/DownloadLog"
 import type { DownloadProgressEvent } from "./bindings/DownloadProgressEvent"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
 import type { FirstRunChoices } from "./bindings/FirstRunChoices"
@@ -64,6 +65,7 @@ export const queryKeys = {
   presetArguments: ["preset-arguments"],
   folderRules: ["folder-rules"],
   downloadDestination: ["download-destination"],
+  downloadLog: ["download-log"],
   rulePreset: ["rule-preset"],
   queue: ["queue"],
   pending: ["pending"],
@@ -777,6 +779,12 @@ export function forgetVideos(videoIds: number[]): Promise<number> {
 
 /** History's Move Files…: moves the videos' files that are still there into `folder`, keeping each download's
  * subfolders, and says how it went. */
+/** The end of a download's log, for the Queue's log viewer. */
+export function getDownloadLog(id: number): Promise<DownloadLog> {
+  if (!isTauri()) return Promise.resolve(standIns.downloadLog)
+  return invoke<DownloadLog>("download_log", { id })
+}
+
 export function moveHistoryFiles(videoIds: number[], folder: string): Promise<MovedFiles> {
   if (!isTauri()) return outsideTauri()
   return invoke<MovedFiles>("move_history_files", { videoIds, folder })

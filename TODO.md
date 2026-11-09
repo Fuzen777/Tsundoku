@@ -27,7 +27,7 @@ rules:
 
 - [x] Move already downloaded files
 
-- [ ] In app log + viewer so we avoid depending on external programs ? Need to make sure the app remains lightweight.
+- [x] In app log + viewer so we avoid depending on external programs ? Need to make sure the app remains lightweight.
 
 - [x] Pending : when "Video Download as" match batch, show "default" on individual entries.
 
