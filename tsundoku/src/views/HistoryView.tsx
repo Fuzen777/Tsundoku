@@ -16,9 +16,11 @@ import {
   forgetVideos,
   getHistoryIds,
   keptThumbnailUrl,
+  moveHistoryFiles,
   openDownload,
   openDownloadFile,
   openWebPage,
+  pickFolder,
   queryKeys,
   showDownloadFileInFolder,
   showDownloadInFolder,
@@ -29,6 +31,7 @@ import type { FileState } from "../bindings/FileState"
 import type { HistoryQuery } from "../bindings/HistoryQuery"
 import type { HistorySort } from "../bindings/HistorySort"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
+import type { MovedFiles } from "../bindings/MovedFiles"
 import type { PastDownload } from "../bindings/PastDownload"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
@@ -38,7 +41,7 @@ import { SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
-import { StatusMessage } from "../components/StatusMessage"
+import { StatusMessage, type StatusTone } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeHistoryError, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDay, formatDuration, joinDetails } from "../format"
@@ -176,6 +179,27 @@ export function HistoryView() {
     }
   }
 
+  const [moveNotice, setMoveNotice] = useState<MoveNotice | null>(null)
+  // Stable, since every row gets it and rows only draw again when what they show changes.
+  const moveFiles = useCallback(
+    async (ids: number[]) => {
+      const folder = await pickFolder(text.moveFilesTitle(ids.length))
+      if (!folder) return
+      setBusy(true)
+      setError(null)
+      setMoveNotice(null)
+      try {
+        setMoveNotice(movedFilesNotice(await moveHistoryFiles(ids, folder)))
+        await queryClient.invalidateQueries({ queryKey: queryKeys.history })
+      } catch (caught) {
+        setError(describeHistoryError(caught))
+      } finally {
+        setBusy(false)
+      }
+    },
+    [queryClient],
+  )
+
   const tickAll = (on: boolean) =>
     act(async () => {
       const ids = on ? await getHistoryIds(query) : []
@@ -224,6 +248,9 @@ export function HistoryView() {
     <>
       <Button size="sm" variant="ghost" disabled={busy} onClick={() => void forgetSelected()}>
         {text.forgetSelected}
+      </Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void moveFiles([...selected])}>
+        {text.moveSelected}
       </Button>
       <Button size="sm" variant="secondary" disabled={busy} onClick={() => void showSelected()}>
         {text.showSelectedInFolder}
@@ -368,6 +395,7 @@ export function HistoryView() {
             </label>
           )}
           {error && <StatusMessage tone="danger" {...error} />}
+          {moveNotice && <StatusMessage {...moveNotice} />}
           {total === 0 &&
             (isFiltered ? (
               <EmptyState icon={Search} title={text.noMatchesTitle} body={text.noMatchesBody} />
@@ -388,6 +416,7 @@ export function HistoryView() {
                 onToggleFiles={toggleFiles}
                 downloadsOpen={openDownloads.has(video.id)}
                 onToggleDownloads={toggleDownloads}
+                onMoveFiles={moveFiles}
               />
             </div>
           ))}
@@ -435,9 +464,28 @@ interface HistoryRowProps {
   /** Whether the list of the video's downloads is open. */
   downloadsOpen: boolean
   onToggleDownloads: (videoId: number) => void
+  /** Move Files…, for this video alone. */
+  onMoveFiles: (videoIds: number[]) => Promise<void>
 }
 
 /** A video in the history. Drawn again only when its own props change, not each time the list scrolls. */
+interface MoveNotice {
+  tone: StatusTone
+  message: string
+  detail?: string
+}
+
+/** What Move Files… did, as a status message: how many moved, then the first failure's file and reason. */
+function movedFilesNotice({ moved, missing, failed }: MovedFiles): MoveNotice {
+  const summary = text.movedFiles(moved, missing)
+  if (failed.length === 0) return { tone: moved > 0 ? "success" : "neutral", message: summary }
+  return {
+    tone: "danger",
+    message: `${text.moveFailed(failed.length)} ${summary}`,
+    detail: text.moveFailure(failed[0].path, failed[0].reason),
+  }
+}
+
 const HistoryRow = memo(function HistoryRow({
   video,
   selected,
@@ -446,6 +494,7 @@ const HistoryRow = memo(function HistoryRow({
   onToggleFiles,
   downloadsOpen,
   onToggleDownloads,
+  onMoveFiles,
 }: HistoryRowProps) {
   const { showLink } = useAppActions()
   const queryClient = useQueryClient()
@@ -542,6 +591,7 @@ const HistoryRow = memo(function HistoryRow({
           label={text.moreActions}
           items={[
             { label: text.downloadAgain, onSelect: () => showLink(video.url) },
+            { label: text.moveFiles, onSelect: () => void onMoveFiles([video.id]) },
             { label: text.forget, onSelect: forget, danger: true },
           ]}
         />

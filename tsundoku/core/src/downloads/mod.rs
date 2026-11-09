@@ -21,6 +21,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+pub(crate) use self::file_runner::free_name;
 pub use self::holds::{Hold, Recovery};
 use self::holds::{asked_to_slow_down, watch_holds};
 use self::room_check::Reserved;

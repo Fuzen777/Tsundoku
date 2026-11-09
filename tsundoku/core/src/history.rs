@@ -12,6 +12,7 @@ use ts_rs::TS;
 use crate::atomic_file::write_atomically;
 use crate::database::Database;
 use crate::metadata::{FileContents, PostContents, VideoInfo};
+use crate::relocate::{self, FailedMove, MovedFiles};
 use crate::rules::DownloadKind;
 use crate::thumbnails::{self, ThumbnailJob, ThumbnailSource};
 
@@ -666,6 +667,93 @@ impl History {
         } else {
             Err(HistoryError::FileMissing { path: file.path })
         }
+    }
+
+    /// History's Move Files…: moves into `target` every file the videos' downloads made that's still there, each
+    /// download's files keeping their places inside the folder that holds them all (`relocate`), and records where
+    /// they went. A file that can't be moved stays, and the rest still go.
+    pub fn move_files(
+        &self,
+        video_rows: &[i64],
+        target: &Path,
+    ) -> Result<MovedFiles, HistoryError> {
+        // Each file: its download, its position among a post's or a share's files (none for a video's file), its path.
+        let recorded: Vec<(i64, Option<i64>, String)> = {
+            let connection = self.database.lock();
+            let mut statement = connection.prepare(
+                "SELECT d.id, f.position, f.file_path
+                FROM downloads d JOIN download_files f ON f.download = d.id
+                WHERE d.video = ?1
+                UNION ALL
+                SELECT d.id, NULL, d.file_path FROM downloads d
+                WHERE d.video = ?1 AND NOT EXISTS (SELECT 1 FROM download_files f WHERE f.download = d.id)",
+            )?;
+            let mut recorded = Vec::new();
+            for video_row in video_rows {
+                let rows = statement.query_map([video_row], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+                })?;
+                for row in rows {
+                    recorded.push(row?);
+                }
+            }
+            recorded
+        };
+
+        let mut outcome = MovedFiles::default();
+        let mut moves = Vec::new();
+        let mut downloads: Vec<i64> = recorded.iter().map(|(download, _, _)| *download).collect();
+        downloads.dedup();
+        for download in downloads {
+            let files: Vec<_> = recorded
+                .iter()
+                .filter(|(of, _, _)| *of == download)
+                .collect();
+            let paths: Vec<PathBuf> = files
+                .iter()
+                .map(|(_, _, path)| PathBuf::from(path))
+                .collect();
+            let Some(from) = relocate::common_folder(&paths) else {
+                continue;
+            };
+            for ((_, position, old), path) in files.into_iter().zip(&paths) {
+                if !path.exists() {
+                    outcome.missing += 1;
+                    continue;
+                }
+                let destination = relocate::destination_of(path, &from, target);
+                if destination == *path {
+                    continue;
+                }
+                match relocate::move_file(path, &destination) {
+                    Ok(new) => {
+                        outcome.moved += 1;
+                        moves.push((download, *position, old.clone(), new.display().to_string()));
+                    }
+                    Err(error) => outcome.failed.push(FailedMove {
+                        path: old.clone(),
+                        reason: error.to_string(),
+                    }),
+                }
+            }
+        }
+
+        let mut connection = self.database.lock();
+        let transaction = connection.transaction()?;
+        for (download, position, old, new) in &moves {
+            if let Some(position) = position {
+                transaction.execute(
+                    "UPDATE download_files SET file_path = ?3 WHERE download = ?1 AND position = ?2",
+                    params![download, position, new],
+                )?;
+            }
+            transaction.execute(
+                "UPDATE downloads SET file_path = ?3 WHERE id = ?1 AND file_path = ?2",
+                params![download, old, new],
+            )?;
+        }
+        transaction.commit()?;
+        Ok(outcome)
     }
 
     /// Removes a video and its downloads from the history and from `archive.txt`, so it can be downloaded again.
@@ -2039,6 +2127,72 @@ mod tests {
         assert_eq!(between(Some(201), None), ["a", "c"]);
         assert_eq!(between(None, Some(300)), ["b"], "the end is left out");
         assert_eq!(between(Some(250), Some(350)), ["c"]);
+    }
+
+    #[test]
+    fn moves_the_files_of_videos_and_posts_and_records_where_they_went() {
+        let test = TestHistory::new();
+        let video_row = record_kind(&test, "clip", DownloadKind::Video, 1, false);
+        let missing_row = record_kind(&test, "gone", DownloadKind::Video, 2, true);
+
+        let post_folder = test.folder.path().join("instagram");
+        fs::create_dir_all(post_folder.join("Sub")).unwrap();
+        let first = post_folder.join("1.jpg");
+        let second = post_folder.join("Sub").join("2.jpg");
+        fs::write(&first, b"1").unwrap();
+        fs::write(&second, b"2").unwrap();
+        let mut saved = download("p", 3, 2);
+        saved.file_path = first.display().to_string();
+        saved.files = [&first, &second]
+            .map(|path| SavedFile {
+                path: path.display().to_string(),
+                size: Some(1),
+            })
+            .to_vec();
+        saved.kind = DownloadKind::Post;
+        let post = video("instagram", "Post1", "Post", "natgeo", 0.0);
+        test.history.record(&post, &saved).unwrap();
+        let post_row = test
+            .history
+            .search(&HistoryQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|found| found.video.video_id == "Post1")
+            .unwrap()
+            .id;
+
+        let target = test.folder.path().join("Archive");
+        let outcome = test
+            .history
+            .move_files(&[video_row, missing_row, post_row], &target)
+            .unwrap();
+        assert_eq!((outcome.moved, outcome.missing), (3, 1));
+        assert!(outcome.failed.is_empty());
+        assert!(target.join("clip.bin").exists());
+        assert!(target.join("1.jpg").exists());
+        assert!(
+            target.join("Sub").join("2.jpg").exists(),
+            "a subfolder comes along"
+        );
+        assert!(!first.exists());
+
+        let found = test.history.search(&HistoryQuery::default()).unwrap();
+        let clip = found.iter().find(|found| found.id == video_row).unwrap();
+        assert_eq!(
+            clip.last_download.file_path,
+            target.join("clip.bin").display().to_string()
+        );
+        assert!(clip.last_download.file_exists);
+        let post_download = found.iter().find(|found| found.id == post_row).unwrap();
+        let files = test
+            .history
+            .files_of(post_download.last_download.id)
+            .unwrap();
+        assert!(files.iter().all(|file| file.exists), "{files:?}");
+        assert_eq!(
+            post_download.last_download.file_path,
+            target.join("1.jpg").display().to_string()
+        );
     }
 
     #[test]

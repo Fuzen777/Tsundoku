@@ -16,6 +16,7 @@ use tsundoku_core::history::{
 use tsundoku_core::listing::{self, ListingKind};
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::preview::{LinkPreview, PreviewService};
+use tsundoku_core::relocate::MovedFiles;
 use tsundoku_core::thumbnails;
 use tsundoku_core::tools::ToolManager;
 
@@ -190,6 +191,18 @@ pub fn forget_videos(
     video_ids: Vec<i64>,
 ) -> Result<u32, HistoryError> {
     history.forget_all(&video_ids)
+}
+
+/// History's Move Files…: moves the videos' files into `folder`, off the async runtime's threads, since a move to
+/// another drive copies.
+#[tauri::command]
+pub async fn move_history_files(
+    history: State<'_, Arc<History>>,
+    video_ids: Vec<i64>,
+    folder: PathBuf,
+) -> Result<MovedFiles, HistoryError> {
+    let history = Arc::clone(&history);
+    blocking(move || history.move_files(&video_ids, &folder)).await
 }
 
 /// How many folders hold the videos' files that are still there, to ask before opening many.

@@ -274,6 +274,14 @@ export const strings = {
     select: "Select",
     selectedCount: (count: number) => `${count} selected`,
     forgetSelected: "Forget Selected",
+    moveFiles: "Move Files…",
+    moveSelected: "Move Selected…",
+    moveFilesTitle: (count: number) => (count === 1 ? "Move the Files To" : `Move the Files of ${count} Videos To`),
+    movedFiles: (moved: number, missing: number) =>
+      (moved === 0 ? "No file was left to move." : `Moved ${moved} ${moved === 1 ? "file" : "files"}.`) +
+      (missing === 0 ? "" : ` ${missing} ${missing === 1 ? "was" : "were"} missing already.`),
+    moveFailed: (count: number) => `${count} ${count === 1 ? "file" : "files"} couldn't be moved.`,
+    moveFailure: (path: string, reason: string) => `${path}: ${reason}`,
     showSelectedInFolder: "Show Selected in Folder",
     forgetManyTitle: (count: number) => (count === 1 ? "Forget 1 Video?" : `Forget ${count} Videos?`),
     forgetManyMessage:

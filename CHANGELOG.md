@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.72 · 2026-11-09
+
+### Added
+
+- **Move downloaded files**: in History, a video's ⋯ menu has Move Files…, and ticked rows Move Selected…: their files go to a folder you pick and the history follows them, so opening them and the duplicate check still work. A post's or a shared folder's files keep their subfolders, and a name already taken gets " (2)".
+
 ## 0.1.71 · 2026-11-09
 
 ### Added

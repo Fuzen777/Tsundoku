@@ -25,6 +25,7 @@ import type { HistoryPage } from "./bindings/HistoryPage"
 import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListArrangements } from "./bindings/ListArrangements"
 import type { ListingKind } from "./bindings/ListingKind"
+import type { MovedFiles } from "./bindings/MovedFiles"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
@@ -772,6 +773,13 @@ export function getHistoryIds(query: HistoryQuery): Promise<number[]> {
 export function forgetVideos(videoIds: number[]): Promise<number> {
   if (!isTauri()) return outsideTauri()
   return invoke<number>("forget_videos", { videoIds })
+}
+
+/** History's Move Files…: moves the videos' files that are still there into `folder`, keeping each download's
+ * subfolders, and says how it went. */
+export function moveHistoryFiles(videoIds: number[], folder: string): Promise<MovedFiles> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<MovedFiles>("move_history_files", { videoIds, folder })
 }
 
 /** How many folders hold the videos' files that are still there. */

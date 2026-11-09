@@ -25,7 +25,7 @@ rules:
 
 - [x] Per item destination override
 
-- [ ] Move already downloaded files
+- [x] Move already downloaded files
 
 - [ ] In app log + viewer so we avoid depending on external programs ? Need to make sure the app remains lightweight.
 

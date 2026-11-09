@@ -486,8 +486,8 @@ pub struct ListArrangements {
 }
 
 /// How one list is grouped and sorted. By default, ungrouped and oldest first, as the list is stored.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "camelCase", from = "StoredListArrangement")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ListArrangement {
     pub group: ListGroup,
@@ -532,6 +532,12 @@ enum StoredListGroup {
     Site,
     Rule,
     Status,
+}
+
+impl<'de> Deserialize<'de> for ListArrangement {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        StoredListArrangement::deserialize(deserializer).map(Self::from)
+    }
 }
 
 impl From<StoredListArrangement> for ListArrangement {

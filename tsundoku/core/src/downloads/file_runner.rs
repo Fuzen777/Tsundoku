@@ -298,7 +298,7 @@ fn place(part: &Path, destination: &Path) -> Result<PathBuf, DownloadError> {
 }
 
 /// `path`, or the first of "Name (2).ext", "Name (3).ext"… that isn't taken.
-fn free_name(path: &Path) -> PathBuf {
+pub(crate) fn free_name(path: &Path) -> PathBuf {
     if !path.exists() {
         return path.to_owned();
     }

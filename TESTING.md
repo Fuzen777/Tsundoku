@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.71 (2026-11-09).
+Up to date with 0.1.72 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -230,6 +230,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 **44. Only Existing Files** · 0.1.66
 - [ ] History: the checkbox is now a Files list. Rename a downloaded file → Only Missing Files shows it, Only Existing Files hides it and shows the rest; All Files shows both. The count follows, and Select All ticks only what the list shows.
+
+**50. Moving downloaded files** · 0.1.72
+- [ ] History → a video's ⋯ → Move Files… → pick a folder → its file moves there, "Moved 1 file." shows, and Open File and Show in Folder open it in its new place.
+- [ ] Tick several (a post and a shared folder among them) → Move Selected… → each post's files and each shared folder's subfolders arrive together; a name already in the folder gets " (2)". Rows whose file was missing count as "missing already".
+- [ ] Move to another drive (D: to C:, say) → the files are copied, then gone from where they were.
+- [ ] A file open in another app (a video playing) → "1 file couldn't be moved." with the file and Windows' reason; the others still move.
 
 **33. Thumbnails that don't go blank** · 0.1.60
 - [ ] History rows have pictures, older downloads included, which fill in within a minute or so; the data folder has a `thumbnails` folder of small JPEGs.
