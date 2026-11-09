@@ -2,6 +2,11 @@
  * Every piece of UI text, in English, kept here so translations can come later. Never write UI text in a component.
  * Labels are Title Case; sentences (descriptions, messages) are sentence case. See DESIGN.md → Labels and Casing.
  */
+/** "a", "a and b", "a, b and c". */
+function listOf(items: string[]): string {
+  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`
+}
+
 export const strings = {
   appName: "Tsundoku",
   appNameJapanese: "積ん読",
@@ -797,6 +802,13 @@ export const strings = {
     updatedTo: (version: string | null) => (version === null ? "Updated." : `Updated to version ${version}.`),
     installed: (version: string | null) => (version === null ? "Installed." : `Installed version ${version}.`),
     updateAvailable: (latest: string) => `Update available: ${latest}.`,
+    updateAll: "Update All",
+    updateAllHint: "Brings every tool Tsundoku keeps its own copy of up to its latest version. Copies you chose yourself are left as they are.",
+    updatingAll: "Updating the tools…",
+    nothingToUpdate: "None of the tools is Tsundoku's own copy, so there's nothing to update.",
+    allUpToDate: "Every tool is up to date.",
+    updatedTools: (names: string[], upToDate: number) =>
+      `Updated ${listOf(names)}.` + (upToDate === 0 ? "" : upToDate === 1 ? " The other one is up to date." : " The others are up to date."),
     channel: "Update Channel",
     channels: {
       stable: "Stable",

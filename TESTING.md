@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.64 (2026-11-09).
+Up to date with 0.1.65 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -236,6 +236,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Update Now while a post downloads → "Waiting for the downloads using it to finish…", then it updates once the download is done.
 
 ## Portable Copy and First Start
+
+**43. Update All** · 0.1.65
+- [ ] Settings → Tools → Update All: each tool's card shows its progress in turn, and the cards' own buttons wait meanwhile. Then it says "Every tool is up to date." or which tools it updated.
+- [ ] With one tool set to your own copy (Choose File…), Update All leaves it alone. Offline, each tool says why it couldn't update, and the rest still go through.
+- [ ] After Check for Updates on ffmpeg found an update, Update All installs it and the card's Update button goes back to Check for Updates.
 
 **40. Portable copy and the first-run setup** · 0.1.20, 0.1.22, 0.1.24, 0.1.25, 0.1.26
 - [ ] Run `Scripts\Build-Portable.cmd` while the portable copy runs → it quits that copy (never the installed one or a dev build), replaces it and starts it again.

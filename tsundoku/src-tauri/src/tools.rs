@@ -13,7 +13,7 @@ use tsundoku_core::settings::{SettingsStore, ToolCaches, UpdateChannel};
 use tsundoku_core::supported_sites::{self, SupportedSites};
 use tsundoku_core::tools::{
     DetectedTool, ToolDownload, ToolError, ToolId, ToolManager, ToolProgress, ToolStatus,
-    ToolUpdateCheck, ToolsOverview,
+    ToolUpdateCheck, ToolUpdateOutcome, ToolsOverview,
 };
 
 /// Sent with a `ToolProgress` while a tool is installed or updated.
@@ -157,6 +157,15 @@ pub fn cancel_tool_operation(tools: Tools<'_>, id: ToolId) {
 pub async fn update_yt_dlp(app: AppHandle, tools: Tools<'_>) -> Result<ToolStatus, ToolError> {
     let tools = Arc::clone(&tools);
     run_blocking(move || tools.update_yt_dlp(&progress_reporter(app))).await
+}
+
+#[tauri::command]
+pub async fn update_all_tools(
+    app: AppHandle,
+    tools: Tools<'_>,
+) -> Result<Vec<ToolUpdateOutcome>, ToolError> {
+    let tools = Arc::clone(&tools);
+    run_blocking(move || Ok(tools.update_all(&progress_reporter(app)))).await
 }
 
 #[tauri::command]

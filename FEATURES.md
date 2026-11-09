@@ -195,6 +195,7 @@ Tsundoku downloads with four free tools: yt-dlp, ffmpeg (with ffprobe), Deno, wh
 
 ### Settings → Tools
 
+- **Update All**: brings every tool that's Tsundoku's own copy up to its latest version in one go, one after the other, then says which it updated and why any couldn't be. Copies you chose yourself are left alone.
 - **Each tool's copy**: its version and path, and whether it's Tsundoku's copy or yours.
 - **Choose File…**: point a tool at any copy on this PC. Tsundoku checks it's the right program (and that ffprobe is beside ffmpeg).
 - **Use Tsundoku's Copy / Download**: switch from your copy to Tsundoku's own, or set up a tool that isn't.

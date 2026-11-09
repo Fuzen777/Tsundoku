@@ -259,6 +259,25 @@ pub struct ToolUpdateCheck {
     pub latest: String,
 }
 
+/// What Settings → Tools' Update All did to one of the app's own copies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum ToolUpdateOutcome {
+    /// A newer build replaced the copy.
+    Updated {
+        status: ToolStatus,
+    },
+    /// The copy was the latest build already.
+    UpToDate {
+        status: ToolStatus,
+    },
+    Failed {
+        id: ToolId,
+        error: ToolError,
+    },
+}
+
 /// Sent while a tool is installed or updated. The last one for an operation has no stage.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -522,6 +541,45 @@ impl ToolManager {
             };
         }
         changed
+    }
+
+    /// Settings → Tools' Update All: brings each of the app's own copies up to its latest build, one after the other
+    /// (yt-dlp through its own updater, the others by their release file's checksum). Copies the user picked are left
+    /// alone, and a tool that fails doesn't stop the rest.
+    pub fn update_all(&self, on_progress: &dyn Fn(ToolProgress)) -> Vec<ToolUpdateOutcome> {
+        self.update_all_from(&ReleaseHosts { manager: self }, on_progress)
+    }
+
+    fn update_all_from(
+        &self,
+        releases: &dyn Releases,
+        on_progress: &dyn Fn(ToolProgress),
+    ) -> Vec<ToolUpdateOutcome> {
+        let tools = self.settings.get().tools;
+        ToolId::ALL
+            .into_iter()
+            .filter(|&id| matches!(tools.get(id), Some(ToolSetup::Managed { .. })))
+            .map(|id| {
+                let result = if id == ToolId::YtDlp {
+                    let executable = locate::managed_executable(&self.tools_folder(), id);
+                    let before = read_version(id, &executable).ok();
+                    self.update_yt_dlp(on_progress).map(|status| ToolUpdate {
+                        changed: status.version != before,
+                        status,
+                    })
+                } else {
+                    self.update_to_latest(id, releases, on_progress)
+                };
+                match result {
+                    Ok(ToolUpdate {
+                        status,
+                        changed: true,
+                    }) => ToolUpdateOutcome::Updated { status },
+                    Ok(ToolUpdate { status, .. }) => ToolUpdateOutcome::UpToDate { status },
+                    Err(error) => ToolUpdateOutcome::Failed { id, error },
+                }
+            })
+            .collect()
     }
 
     /// Asks the release host whether a newer build than the app's copy exists. For ffmpeg and Deno, whose updates are
@@ -1207,6 +1265,56 @@ mod tests {
             Some(ToolError::InUse)
         );
         assert!(manager.update_due(ToolId::GalleryDl), "not recorded");
+    }
+
+    #[test]
+    fn update_all_goes_through_the_app_s_own_copies_and_carries_on_past_a_failure() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        set_managed(&manager, ToolId::Ffmpeg, "abc", None);
+        set_managed(&manager, ToolId::GalleryDl, "abc", None);
+        manager
+            .settings
+            .update(|settings| {
+                settings.tools.set(ToolId::YtDlp, None);
+                settings.tools.set(
+                    ToolId::Deno,
+                    Some(ToolSetup::External {
+                        path: "deno.exe".into(),
+                    }),
+                );
+            })
+            .unwrap();
+        let releases = FakeReleases::new(Ok("abc"), Ok(()));
+        let outcomes = manager.update_all_from(&releases, &|_| {});
+        let ids: Vec<_> = outcomes
+            .iter()
+            .map(|outcome| match outcome {
+                ToolUpdateOutcome::UpToDate { status } => status.id,
+                other => panic!("expected up to date, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            ids,
+            [ToolId::Ffmpeg, ToolId::GalleryDl],
+            "neither a missing tool nor the user's own copy"
+        );
+
+        let offline = FakeReleases::new(Ok("def"), Err(ToolError::RateLimited));
+        let outcomes = manager.update_all_from(&offline, &|_| {});
+        assert_eq!(
+            outcomes,
+            [
+                ToolUpdateOutcome::Failed {
+                    id: ToolId::Ffmpeg,
+                    error: ToolError::RateLimited
+                },
+                ToolUpdateOutcome::Failed {
+                    id: ToolId::GalleryDl,
+                    error: ToolError::RateLimited
+                },
+            ]
+        );
     }
 
     #[test]

@@ -8,6 +8,7 @@ import {
   pickProgram,
   setToolCaches,
   setYtDlpChannel,
+  updateAllTools,
   updateGalleryDl,
   updateYtDlp,
 } from "../../api"
@@ -15,6 +16,7 @@ import type { ToolId } from "../../bindings/ToolId"
 import type { ToolCaches } from "../../bindings/ToolCaches"
 import type { ToolSetupKind } from "../../bindings/ToolSetupKind"
 import type { ToolStatus } from "../../bindings/ToolStatus"
+import type { ToolUpdateOutcome } from "../../bindings/ToolUpdateOutcome"
 import type { ToolsOverview } from "../../bindings/ToolsOverview"
 import type { UpdateChannel } from "../../bindings/UpdateChannel"
 import { Button } from "../../components/Button"
@@ -48,15 +50,42 @@ const DAILY_UPDATES: Partial<Record<ToolId, () => Promise<ToolStatus>>> = {
   galleryDl: updateGalleryDl,
 }
 
-/** Settings → Tools: each tool's copy, version and updates, then where they keep their caches. */
+/** Settings → Tools: Update All, each tool's copy, version and updates, then where they keep their caches. */
 export function ToolsSection() {
   const overview = useToolsOverview()
+  const storeToolStatus = useStoreToolStatus()
+  const updateAll = useMutation({
+    mutationFn: updateAllTools,
+    onSuccess: (outcomes) => {
+      for (const outcome of outcomes) if (outcome.kind !== "failed") storeToolStatus(outcome.status)
+    },
+  })
   return (
     <Section title={strings.settings.tools}>
       {overview.data ? (
         <>
+          <Card className="flex flex-col gap-3 p-4">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <Button size="sm" loading={updateAll.isPending} onClick={() => updateAll.mutate()}>
+                {strings.settings.updateAll}
+              </Button>
+              <span className="text-xs text-fg-muted">{strings.settings.updateAllHint}</span>
+            </div>
+            {updateAll.isPending ? (
+              <p className="text-fg-muted">{strings.settings.updatingAll}</p>
+            ) : updateAll.isError ? (
+              <StatusMessage tone="danger" message={strings.errors.unexpected} detail={String(updateAll.error)} />
+            ) : (
+              updateAll.data && <UpdateAllResults outcomes={updateAll.data} />
+            )}
+          </Card>
           {overview.data.tools.map((status) => (
-            <ToolCard key={status.id} status={status} channel={overview.data.ytDlpChannel} />
+            <ToolCard
+              key={status.id}
+              status={status}
+              channel={overview.data.ytDlpChannel}
+              updatingAll={updateAll.isPending}
+            />
           ))}
           <CachesCard overview={overview.data} />
         </>
@@ -69,13 +98,40 @@ export function ToolsSection() {
   )
 }
 
+/** What Update All did: the tools it updated in one sentence, then each failure with its reason. */
+function UpdateAllResults({ outcomes }: { outcomes: ToolUpdateOutcome[] }) {
+  if (outcomes.length === 0) return <StatusMessage tone="neutral" message={strings.settings.nothingToUpdate} />
+  const updated = outcomes.flatMap((outcome) => (outcome.kind === "updated" ? [strings.tools.names[outcome.status.id]] : []))
+  const upToDate = outcomes.filter((outcome) => outcome.kind === "upToDate").length
+  const failures = outcomes.flatMap((outcome) => (outcome.kind === "failed" ? [outcome] : []))
+  return (
+    <>
+      {updated.length > 0 ? (
+        <StatusMessage tone="success" message={strings.settings.updatedTools(updated, upToDate)} />
+      ) : (
+        failures.length === 0 && <StatusMessage tone="success" message={strings.settings.allUpToDate} />
+      )}
+      {failures.map((failure) => (
+        <StatusMessage key={failure.id} tone="danger" {...describeToolError(failure.error, failure.id)} />
+      ))}
+    </>
+  )
+}
+
 interface Feedback {
   tone: StatusTone
   message: string
   detail?: string
 }
 
-function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChannel }) {
+interface ToolCardProps {
+  status: ToolStatus
+  channel: UpdateChannel
+  /** While Update All runs, each card's own actions wait. */
+  updatingAll: boolean
+}
+
+function ToolCard({ status, channel, updatingAll }: ToolCardProps) {
   const { id } = status
   const name = strings.tools.names[id]
   const updateDaily = DAILY_UPDATES[id]
@@ -83,8 +139,12 @@ function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChan
   const storeToolStatus = useStoreToolStatus()
   const storeYtDlpChannel = useStoreYtDlpChannel()
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  /** The latest release, once a check found it newer than Tsundoku's copy. */
-  const [availableUpdate, setAvailableUpdate] = useState<string | null>(null)
+  /** The latest release, once a check found it newer than Tsundoku's copy, with the version that copy had then. */
+  const [foundUpdate, setFoundUpdate] = useState<{ latest: string; forVersion: string | null } | null>(null)
+  // Forgotten once the copy changes, such as through Update All.
+  const availableUpdate = foundUpdate?.forVersion === status.version ? foundUpdate.latest : null
+  const setAvailableUpdate = (latest: string | null) =>
+    setFoundUpdate(latest === null ? null : { latest, forVersion: status.version })
 
   const showError = (error: unknown) => {
     if (!isCancelled(error)) setFeedback({ tone: "danger", ...describeToolError(error, id) })
@@ -154,7 +214,7 @@ function ToolCard({ status, channel }: { status: ToolStatus; channel: UpdateChan
     if (path) choose.mutate(path)
   }
 
-  const busy = stage !== undefined || install.isPending || update.isPending || check.isPending || choose.isPending
+  const busy = updatingAll || stage !== undefined || install.isPending || update.isPending || check.isPending || choose.isPending
   const isManaged = status.setup === "managed"
   const needsDownload = status.setup === null || (isManaged && status.problem !== null)
 

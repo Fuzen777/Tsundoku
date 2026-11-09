@@ -40,6 +40,7 @@ import type { ToolId } from "./bindings/ToolId"
 import type { ToolProgress } from "./bindings/ToolProgress"
 import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolUpdateCheck } from "./bindings/ToolUpdateCheck"
+import type { ToolUpdateOutcome } from "./bindings/ToolUpdateOutcome"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
@@ -222,6 +223,15 @@ export function updateYtDlp(): Promise<ToolStatus> {
 export function updateGalleryDl(): Promise<ToolStatus> {
   if (!isTauri()) return outsideTauri()
   return invoke<ToolStatus>("update_gallery_dl")
+}
+
+/**
+ * Settings → Tools' Update All: updates each of Tsundoku's own copies in turn, leaving the ones the user chose, and
+ * says what it did to each. Progress arrives through `onToolProgress`.
+ */
+export function updateAllTools(): Promise<ToolUpdateOutcome[]> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<ToolUpdateOutcome[]>("update_all_tools")
 }
 
 export function checkToolUpdate(id: ToolId): Promise<ToolUpdateCheck> {

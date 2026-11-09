@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.65 · 2026-11-09
+
+### Added
+
+- **Update All in Settings → Tools**: one button brings every tool that's Tsundoku's own copy up to its latest version, one after the other, instead of checking each one by hand. It then says which tools it updated, or that all are up to date, and why any couldn't be updated. Copies you chose yourself are left alone.
+
 ## 0.1.64 · 2026-11-09
 
 ### Fixed

@@ -292,6 +292,7 @@ pub fn run() {
             tools::update_yt_dlp,
             tools::update_gallery_dl,
             tools::check_tool_update,
+            tools::update_all_tools,
             tools::set_yt_dlp_channel,
             tools::supported_sites,
             history::fetch_preview,

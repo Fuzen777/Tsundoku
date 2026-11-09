@@ -18,10 +18,10 @@ rules:
 
 ## Priority
 
-- [ ] Tools ⇒ Check all for update
+- [x] Tools ⇒ Check all for update
 - [x] Fix default RMB ⇒ It still uses some kind of default that make no sense in our app.
 
-- [ ] Check and update all tools instead of one by one.
+- [x] Check and update all tools instead of one by one.
 
 - [ ] Per item destination override
 
