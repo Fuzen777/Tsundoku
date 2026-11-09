@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.76 · 2026-11-09
+
+### Added
+
+- **Test a link against the rules**: a field at the top of Rules reads a link and shows the folder its download would go to, the preset it would start as, and whether copied links of it download right away, each with the rule that decides it. Nothing is downloaded.
+
 ## 0.1.75 · 2026-11-09
 
 ### Added

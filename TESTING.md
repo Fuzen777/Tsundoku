@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.75 (2026-11-09).
+Up to date with 0.1.76 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -220,6 +220,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Rules → Add Rule: the buttons under the folder field put {site}, {uploader}, {title}, {id}, {kind}, {preset}, {year}, {month}, {date} and {added} at the cursor, and hovering one says what it becomes.
 - [ ] A folder like `{site}\{year}\{month}` shows filled in on the preview card.
 - [ ] A condition with Matches and a pattern that captures, such as title matches `^(\w+)`, with `{1}` in the folder → the captured text is in the folder. A pattern that isn't valid, such as `(`, is caught on Save with what's wrong.
+
+**53. Test a link against the rules** · 0.1.76
+- [ ] Rules → paste a YouTube link in Test a Link → Test: after "Reading the link…", its title, then Saves In (the folder and "· Rule N" or "· Download Folder"), Starts As (the preset with its rule, or "· The default preset") and Copied Links (Download right away or Wait in Pending with the rule, else "As Settings → Adding Links says"). Nothing is added to the queue.
+- [ ] Clicking a "Rule N" scrolls to that rule. Editing and saving a rule changes the answers without testing again.
+- [ ] An Instagram post shows "No preset" under Starts As; a channel link says to test one of its videos instead; a broken link shows why, as the preview card would.
+- Seen in the browser preview with stand-in data.
 
 **29. Rules that pick the preset** · 0.1.43
 - [ ] Add "When the site is SoundCloud → Start As Audio MP3" without a folder. A SoundCloud track's preview preselects Audio MP3 with "Rule N" beside it, which opens Rules; picking another preset on the card wins.

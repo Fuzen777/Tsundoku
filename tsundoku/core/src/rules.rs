@@ -146,6 +146,16 @@ pub struct RulePreset {
     pub rule: u32,
 }
 
+/// Whether copied and sent links start once read, and the rule that says so, for Rules' Test a Link.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RightAwayRule {
+    pub download_right_away: bool,
+    /// The rule, numbered from 1 as the Rules view lists them.
+    pub rule: u32,
+}
+
 /// Where a download goes, and what decided it, for the preview card.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -550,10 +560,18 @@ pub fn start_preset(
 /// Whether a link that Download Right Away covers starts once read, by the first rule that's on, says so and matches.
 /// `None` leaves it to Settings.
 pub fn download_right_away(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<bool> {
-    rules
-        .iter()
-        .filter(|rule| rule.enabled)
-        .find_map(|rule| rule.download_right_away.filter(|_| rule.matches(subject)))
+    right_away_rule(rules, subject).map(|decided| decided.download_right_away)
+}
+
+/// `download_right_away`, with the rule that decides it.
+pub fn right_away_rule(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<RightAwayRule> {
+    rules.iter().enumerate().find_map(|(index, rule)| {
+        let download_right_away = rule.download_right_away?;
+        (rule.enabled && rule.matches(subject)).then(|| RightAwayRule {
+            download_right_away,
+            rule: rule_number(index),
+        })
+    })
 }
 
 /// A rule's number, from 1, as the Rules view lists them.
@@ -1428,6 +1446,14 @@ mod tests {
             Some(false)
         );
         assert_eq!(download_right_away(&rules[..2], &subject), None, "Settings");
+        assert_eq!(
+            right_away_rule(&rules, &subject),
+            Some(RightAwayRule {
+                download_right_away: true,
+                rule: 3
+            }),
+            "numbered as listed, the rule turned off included"
+        );
     }
 
     #[test]

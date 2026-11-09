@@ -11,7 +11,9 @@ use tsundoku_core::downloads::{
 };
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
-use tsundoku_core::rules::{Destination, FolderRule, RuleError, RuleManager, RulePreset};
+use tsundoku_core::rules::{
+    self, Destination, FolderRule, RightAwayRule, RuleError, RuleManager, RulePreset, RuleSubject,
+};
 use tsundoku_core::settings::{DownloadSettings, ListArrangements, SettingsStore};
 
 use crate::queue_status::QueueStatus;
@@ -143,6 +145,23 @@ pub fn rule_preset(
     video: VideoInfo,
 ) -> Option<RulePreset> {
     manager.start_preset(&video, |id| presets.get(id).is_some())
+}
+
+/// Whether a rule makes copied and sent links of a video start once read, and which rule, for Rules' Test a Link:
+/// `None` when Settings' Download Right Away decides.
+#[tauri::command]
+pub fn rule_download_right_away(
+    manager: Rules<'_>,
+    presets: Presets<'_>,
+    video: VideoInfo,
+    preset_id: Option<String>,
+) -> Option<RightAwayRule> {
+    let preset = preset_id.and_then(|id| presets.get(&id));
+    let subject = RuleSubject {
+        video: &video,
+        preset: preset.as_ref(),
+    };
+    rules::right_away_rule(&manager.list(), &subject)
 }
 
 #[tauri::command]

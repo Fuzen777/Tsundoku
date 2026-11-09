@@ -33,6 +33,7 @@ import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
 import type { QueuePick } from "./bindings/QueuePick"
+import type { RightAwayRule } from "./bindings/RightAwayRule"
 import type { RulePreset } from "./bindings/RulePreset"
 import type { ShownError } from "./bindings/ShownError"
 import type { SupportedSites } from "./bindings/SupportedSites"
@@ -67,6 +68,7 @@ export const queryKeys = {
   downloadDestination: ["download-destination"],
   downloadLog: ["download-log"],
   rulePreset: ["rule-preset"],
+  ruleRightAway: ["rule-right-away"],
   queue: ["queue"],
   pending: ["pending"],
   listArrangements: ["list-arrangements"],
@@ -428,6 +430,13 @@ export function getDownloadDestination(video: VideoInfo, presetId: string | null
 export function getRulePreset(video: VideoInfo): Promise<RulePreset | null> {
   if (!isTauri()) return Promise.resolve(standIns.rulePreset(video))
   return invoke<RulePreset | null>("rule_preset", { video })
+}
+
+/** Whether a rule makes copied and sent links of a video start once read, and which rule: null when Settings' Download
+ * Right Away decides. `presetId` is the preset it would start with, none for a post or a file host's files. */
+export function getRuleRightAway(video: VideoInfo, presetId: string | null): Promise<RightAwayRule | null> {
+  if (!isTauri()) return Promise.resolve(standIns.ruleRightAway(video))
+  return invoke<RightAwayRule | null>("rule_download_right_away", { video, presetId })
 }
 
 /** Where downloads go when no folder is chosen: a Tsundoku folder in Downloads. */

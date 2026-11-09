@@ -25,6 +25,7 @@ import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { RightAwayRule } from "./bindings/RightAwayRule"
 import type { RulePreset } from "./bindings/RulePreset"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
@@ -467,6 +468,10 @@ export const standIns = {
     }
   },
   /** Rule 3's preset for a title with "zoo" in it, as the stand-in rules have it. */
+  ruleRightAway(video: VideoInfo): RightAwayRule | null {
+    // As the stand-in rules have it: rule 3 downloads videos with "zoo" in their title right away.
+    return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 3 } : null
+  },
   rulePreset(video: VideoInfo): RulePreset | null {
     if (video.post || video.files || !video.title.toLowerCase().includes("zoo")) return null
     return { presetId: "best-audio", rule: 3 }

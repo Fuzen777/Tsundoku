@@ -33,6 +33,7 @@ import {
   getPresetsOverview,
   getQueueItems,
   getRulePreset,
+  getRuleRightAway,
   getToolDownloads,
   getToolsNeedSetup,
   getToolsOverview,
@@ -201,6 +202,15 @@ export function useLeftOutFiles(video: VideoInfo, enabled: boolean) {
     queryKey: [...queryKeys.leftOutFiles, video.site, video.videoId],
     queryFn: () => getLeftOutFiles(video),
     enabled,
+  })
+}
+
+/** Whether a rule makes copied and sent links of a video start once read, and which rule: null when Settings decides. */
+export function useRuleRightAway(video: VideoInfo | null, presetId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.ruleRightAway, video?.site, video?.videoId, presetId],
+    queryFn: () => (video ? getRuleRightAway(video, presetId) : null),
+    enabled: enabled && video !== null,
   })
 }
 

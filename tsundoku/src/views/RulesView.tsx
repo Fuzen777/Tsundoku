@@ -19,6 +19,7 @@ import { useDefaultDownloadFolder, useDownloadOptions, useFolderRules, usePreset
 import { strings } from "../strings"
 import { useOpenDownloadFolder } from "../useOpenDownloadFolder"
 import { RuleEditor } from "./rules/RuleEditor"
+import { RuleTester } from "./rules/RuleTester"
 import { CATCH_ALL_RULE_ID, describeActions, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
 
 const text = strings.rules
@@ -64,6 +65,7 @@ export function RulesView() {
       // The preview card and Pending say which rule picks a download's folder and preset.
       void queryClient.invalidateQueries({ queryKey: queryKeys.downloadDestination })
       void queryClient.invalidateQueries({ queryKey: queryKeys.rulePreset })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ruleRightAway })
       return true
     } catch (caught) {
       setError(describeRuleError(caught))
@@ -164,6 +166,7 @@ export function RulesView() {
     >
       <div className="flex max-w-3xl flex-col gap-3">
         <p className="text-fg-secondary">{text.intro}</p>
+        <RuleTester />
         {error && !editing && <StatusMessage tone="danger" {...error} />}
         {shownRows}
         {rules.length === 0 && !editing && (
@@ -231,7 +234,7 @@ function RuleRow({
     ? [toggleItem]
     : [toggleItem, { label: text.delete, onSelect: onDelete, danger: true }]
   return (
-    <Card className="flex items-center gap-3 px-4 py-3">
+    <Card id={`rule-${number}`} className="flex scroll-mt-4 items-center gap-3 px-4 py-3">
       <span
         className={classes(
           "flex size-6 shrink-0 items-center justify-center rounded-full bg-input text-xs font-semibold tabular-nums",
