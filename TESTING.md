@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.69 (2026-11-09).
+Up to date with 0.1.70 (2026-11-09).
 
 ## Decisions Waiting on You
 
@@ -30,6 +30,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **2. RJ Library–inspired dark mode** · 0.1.34 · *needs your approval*
 - [ ] In Dark, the current view sits darker than the sidebar and title bar, with cards and fields lighter again, in plain grays. Main buttons (Add, Download, Start All), the selected choice of a switch and the sidebar's counts are deep indigo with white text; buttons confirming a deletion are dark red with white text. [Before and after](https://claude.ai/artifact/3DE2KntFCUKpBc8ofHyHjd) (browser shots, so without Mica).
 - [ ] Light mode looks exactly as it did.
+
+**48. Accent color** · 0.1.70
+- [ ] Settings → Appearance → Accent Color: picking Teal, Green, Amber, Rose or Purple recolors at once the primary buttons, the selected segments, the sidebar's counts and selection pill, checkboxes, progress bars and links. The picked swatch has a check.
+- [ ] Each one reads well in Light and in Dark (white text on filled buttons, links readable on the background). Restart → the accent is there from the first frame.
 
 **3. Icons for row actions** · 0.1.31
 - [ ] The actions on each row are icons in Pending, the Queue, Rules, Presets and under the preview card's "already downloaded" warning. Hovering each shows its name, even while it's greyed out.

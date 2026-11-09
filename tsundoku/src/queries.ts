@@ -59,7 +59,7 @@ import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
 import { describeDownloadError, type ErrorDescription } from "./errors"
-import { applyTheme } from "./theme"
+import { applyAppearance } from "./theme"
 
 /*
   React Query hooks over api.ts. The tool queries never go stale on their own: they change only through the app's
@@ -381,11 +381,11 @@ export function useSaveAppearanceOptions() {
     if (!options) return
     const changed = { ...options, ...changes }
     setError(null)
-    applyTheme(changed.theme)
+    applyAppearance(changed)
     try {
       queryClient.setQueryData(queryKeys.appearanceOptions, await saveAppearanceOptions(changed))
     } catch (caught) {
-      applyTheme(options.theme)
+      applyAppearance(options)
       setError(describeDownloadError(caught))
     }
   }

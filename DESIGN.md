@@ -38,6 +38,8 @@ Which side of `light-dark()` shows follows the theme picked in Settings → Appe
 | Text | `--color-fg`, `--color-fg-secondary`, `--color-fg-muted` | Primary text; supporting details; labels, empty states and placeholders |
 | Accent | `--color-accent`, `--color-accent-hover` | Ai-iro (藍色), Japanese indigo, for marks and text: focus outlines, the selected navigation item's pill, progress bars, links, checkboxes |
 | Accent fill | `--color-accent-fill`, `--color-accent-fill-hover`, `--color-on-accent` | A filled background with `--color-on-accent` text: primary buttons, the selected segment, count badges |
+
+Settings → Appearance → Accent Color swaps the four accent tokens for another hue (`[data-accent]` in `index.css`): Indigo, the one above and the default, then Teal, Green, Amber, Rose and Purple. Each keeps the same roles: a light shade for marks and text in dark mode, a deep one for fills under white text in both. Its picker is a row of 28 px round swatches, each filled with its own accent (the swatch carries `data-accent` itself), the selected one with a check and a secondary-colored outline 2 px off it.
 | Destructive | `--color-danger` | For text and icons: an error under a field, a destructive menu item, an error message's icon |
 | Danger fill | `--color-danger-fill`, `--color-danger-fill-hover`, `--color-on-danger` | The danger button, confirming a destructive action |
 | Attention | `--color-warning` | Warnings that don't block: the icon of the duplicate warning, and of Deno missing |

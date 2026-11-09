@@ -45,7 +45,7 @@ rules:
 - [x] Use Icons instead of Text where it makes sense (accept, reject…) with hover text.
 - [x] RJ-Library inspired dark mode
 - [ ] Light mode revamp that takes its roots from the dark mode above
-- [ ] Accent color picker
+- [x] Accent color picker
 
 ## Features
 

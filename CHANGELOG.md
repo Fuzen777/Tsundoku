@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.70 · 2026-11-09
+
+### Added
+
+- **Accent color**: Settings → Appearance → Accent Color recolors main buttons, selections, progress bars, links and the sidebar's counts: Indigo, as before, or Teal, Green, Amber, Rose or Purple, each with its own shade for light and dark mode.
+
 ## 0.1.69 · 2026-11-09
 
 ### Changed

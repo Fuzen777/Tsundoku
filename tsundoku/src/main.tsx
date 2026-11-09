@@ -13,7 +13,7 @@ import {
 } from "./api"
 import { trackQueue } from "./queueEvents"
 import { limitPageMenu } from "./shortcuts"
-import { applyTheme } from "./theme"
+import { applyAppearance } from "./theme"
 import { trackToolProgress } from "./toolProgress"
 import "./index.css"
 
@@ -29,7 +29,7 @@ const [appInfo, appearance, needsSetup] = await Promise.all([
 queryClient.setQueryData(queryKeys.appInfo, appInfo)
 queryClient.setQueryData(queryKeys.appearanceOptions, appearance)
 queryClient.setQueryData(queryKeys.toolsNeedSetup, needsSetup)
-applyTheme(appearance.theme)
+applyAppearance(appearance)
 // The setup opens on its choices when they're still to be made.
 if (needsSetup) queryClient.setQueryData(queryKeys.firstRunOptions, await getFirstRunOptions())
 document.documentElement.dataset.backdrop = appInfo.hasMicaBackdrop ? "mica" : "solid"

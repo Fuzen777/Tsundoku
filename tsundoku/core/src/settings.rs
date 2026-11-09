@@ -150,6 +150,23 @@ pub struct AppearanceSettings {
     /// Light or dark, or whichever Windows uses. The window (its title bar and Mica) and the UI's colors both follow
     /// it.
     pub theme: Theme,
+    /// The color of primary buttons, selections, progress bars and links.
+    pub accent: Accent,
+}
+
+/// Settings → Appearance's accent colors, each with a shade for light and one for dark (`index.css`, `data-accent`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum Accent {
+    /// Ai-iro, Japanese indigo: the one Tsundoku ships with.
+    #[default]
+    Indigo,
+    Teal,
+    Green,
+    Amber,
+    Rose,
+    Purple,
 }
 
 /// Whether Tsundoku is light or dark.

@@ -1,3 +1,5 @@
+import type { Accent } from "./bindings/Accent"
+import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { Theme } from "./bindings/Theme"
 
 /**
@@ -7,4 +9,15 @@ import type { Theme } from "./bindings/Theme"
  */
 export function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
+}
+
+/** Colors primary buttons, selections and links with the accent picked in Settings → Appearance (`data-accent`). */
+export function applyAccent(accent: Accent) {
+  document.documentElement.dataset.accent = accent
+}
+
+/** The theme and the accent, as Settings → Appearance has them. */
+export function applyAppearance({ theme, accent }: AppearanceSettings) {
+  applyTheme(theme)
+  applyAccent(accent)
 }

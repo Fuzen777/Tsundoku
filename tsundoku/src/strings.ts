@@ -897,6 +897,16 @@ export const strings = {
       dark: "Dark",
     },
     themeHint: "Auto follows Windows' light or dark mode.",
+    accent: "Accent Color",
+    accentHint: "For main buttons, selections, progress bars and links.",
+    accents: {
+      indigo: "Indigo",
+      teal: "Teal",
+      green: "Green",
+      amber: "Amber",
+      rose: "Rose",
+      purple: "Purple",
+    },
     keyboardShortcuts: "Keyboard Shortcuts",
     shortcutActions: {
       paste: "Adds the links you copied, from anywhere but a text field: one shows its preview, several go to Pending.",

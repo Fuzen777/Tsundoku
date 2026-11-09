@@ -60,6 +60,45 @@
   color-scheme: light dark;
 }
 
+/* Settings → Appearance's accents (data-accent, set on <html> by theme.ts, and on each of the picker's swatches). Indigo
+   repeats the values above, so a swatch shows it whichever accent the page has. */
+[data-accent="indigo"] {
+  --color-accent: light-dark(#165e83, #79b4da);
+  --color-accent-hover: light-dark(#124d6c, #93c3e3);
+  --color-accent-fill: light-dark(#165e83, #236e98);
+  --color-accent-fill-hover: light-dark(#124d6c, #2a7aa8);
+}
+[data-accent="teal"] {
+  --color-accent: light-dark(#0f6b6b, #5cc4c0);
+  --color-accent-hover: light-dark(#0b5757, #7ed3cf);
+  --color-accent-fill: light-dark(#0f6b6b, #167570);
+  --color-accent-fill-hover: light-dark(#0b5757, #1b8580);
+}
+[data-accent="green"] {
+  --color-accent: light-dark(#2e6b31, #8cc98f);
+  --color-accent-hover: light-dark(#245627, #a6d6a8);
+  --color-accent-fill: light-dark(#2e6b31, #2f7536);
+  --color-accent-fill-hover: light-dark(#245627, #36843e);
+}
+[data-accent="amber"] {
+  --color-accent: light-dark(#875400, #e0b062);
+  --color-accent-hover: light-dark(#6e4400, #e8c283);
+  --color-accent-fill: light-dark(#875400, #8f5c00);
+  --color-accent-fill-hover: light-dark(#6e4400, #9e6700);
+}
+[data-accent="rose"] {
+  --color-accent: light-dark(#a3324f, #ee8fa6);
+  --color-accent-hover: light-dark(#86283f, #f3aabb);
+  --color-accent-fill: light-dark(#a3324f, #a03652);
+  --color-accent-fill-hover: light-dark(#86283f, #b0405e);
+}
+[data-accent="purple"] {
+  --color-accent: light-dark(#5b3a9a, #b39ae6);
+  --color-accent-hover: light-dark(#4a2f7f, #c4b0ec);
+  --color-accent-fill: light-dark(#5b3a9a, #6243a8);
+  --color-accent-fill-hover: light-dark(#4a2f7f, #6d4db8);
+}
+
 /* Settings → Appearance (src/theme.ts): Light or Dark picks one side of every light-dark(); Auto keeps both, so the
    UI follows Windows. */
 :root[data-theme="light"] {

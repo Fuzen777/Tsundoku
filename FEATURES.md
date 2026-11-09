@@ -20,6 +20,7 @@ type: Features
 
 - **Mica**: Windows 11's backdrop shows through the window. Windows 10 gets a plain background.
 - **Light or dark**: the window follows Windows' light or dark mode, or the one picked in Settings → Appearance: its colors, title bar, Mica, scrollbars and menus all change at once. In dark mode the current view sits darker than the window around it, with cards and fields lighter again, in plain grays.
+- **Accent color**: Settings → Appearance → Accent Color picks the color of main buttons, selections, progress bars, links and the sidebar's counts: Indigo (to start with), Teal, Green, Amber, Rose or Purple, each with a shade for light mode and one for dark. It changes at once and is kept.
 - **Icons for row actions**: the actions on each row or card (Start, Remove, Stop, Resume, Retry, Cancel, Open File, Show in Folder, Edit, Delete…) are icons, and hovering one shows its name. A view's main actions (Add, Download, Start All, Clear Finished, Add Rule) keep their words.
 - **No browser menu**: right-clicking the window opens nothing, apart from a text field (Cut, Copy, Paste) or selected text (Copy), so the WebView's Back, Reload, Save As and Print never show.
 - **Remembered placement**: the window reopens at its last size and position, maximized if it was.

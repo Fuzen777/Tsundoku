@@ -1,3 +1,5 @@
+import { Check } from "lucide-react"
+import type { Accent } from "../../bindings/Accent"
 import type { Theme } from "../../bindings/Theme"
 import { Card } from "../../components/Card"
 import { Field } from "../../components/Field"
@@ -15,7 +17,9 @@ const THEME_OPTIONS = [
   { value: "dark", label: text.themes.dark },
 ] as const satisfies readonly { value: Theme; label: string }[]
 
-/** Settings → Appearance: light, dark, or Windows' theme, taken at once. */
+const ACCENTS: readonly Accent[] = ["indigo", "teal", "green", "amber", "rose", "purple"]
+
+/** Settings → Appearance: light, dark, or Windows' theme, and the accent color, each taken at once. */
 export function AppearanceSection() {
   const { options, save, error } = useSaveAppearanceOptions()
 
@@ -30,6 +34,33 @@ export function AppearanceSection() {
             disabled={!options}
             onChange={(theme) => void save({ theme })}
           />
+        </Field>
+        <Field label={text.accent} hint={text.accentHint}>
+          <div role="radiogroup" aria-label={text.accent} className="flex flex-wrap gap-2">
+            {ACCENTS.map((accent) => {
+              const selected = (options?.accent ?? "indigo") === accent
+              return (
+                <button
+                  key={accent}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={text.accents[accent]}
+                  title={text.accents[accent]}
+                  data-accent={accent}
+                  disabled={!options}
+                  onClick={() => {
+                    if (!selected) void save({ accent })
+                  }}
+                  className={`flex size-7 items-center justify-center rounded-full bg-accent-fill text-on-accent transition-transform hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-40 ${
+                    selected ? "outline-2 outline-offset-2 outline-fg-secondary" : ""
+                  }`}
+                >
+                  {selected && <Check size={14} aria-hidden />}
+                </button>
+              )
+            })}
+          </div>
         </Field>
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
