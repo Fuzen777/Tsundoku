@@ -114,6 +114,9 @@ describe("fixFor", () => {
 
 describe("file host errors", () => {
   it("names the host", () => {
+    expect(describePreviewError({ kind: "browserCheck", site: "MediaFire" }).message).toBe(
+      strings.preview.errors.browserCheck("MediaFire"),
+    )
     expect(describePreviewError({ kind: "linkIncomplete", site: "MEGA" }).message).toBe(
       strings.preview.errors.linkIncomplete("MEGA"),
     )

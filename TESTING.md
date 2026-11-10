@@ -139,6 +139,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] A MEGA link cut off before its key (the part after #) → a message saying so.
 - Claude downloaded real links of all four on your PC, so this is a quick look in the app.
 
+**67. MediaFire's browser check** · 0.1.93
+- [ ] Paste `https://www.mediafire.com/file/orecif6losbo2uw/file` → the card shows the file (933 MB). Download → it fails with "MediaFire wants a browser check before this download…" instead of "403 Forbidden".
+- [ ] Open that link in Firefox, click Download, cancel the download, then copy its link from the Downloads panel (`download….mediafire.com/…`) and add it to Tsundoku → it downloads, with progress, and the file is checked once it arrives.
+- [ ] Add that same copied link again a day later (its token has run out) → the browser check message again, not a file of a few KB.
+- Claude checked against MediaFire that the file's page now answers with the check and that the message shows (an expired copied link included); it couldn't get a working copied link itself, so the download from one isn't tried.
+
 ## Pending and the Queue
 
 **19. Group and sort** · 0.1.33

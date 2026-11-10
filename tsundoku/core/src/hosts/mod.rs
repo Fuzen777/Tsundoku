@@ -776,6 +776,7 @@ mod tests {
                     source: FileSource::MediaFire(mediafire::MediaFireFile {
                         quick_key: size.to_string(),
                         sha256: None,
+                        direct: None,
                     }),
                 })
                 .to_vec(),

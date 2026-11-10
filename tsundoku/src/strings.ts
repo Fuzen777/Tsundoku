@@ -557,6 +557,8 @@ export const strings = {
       passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
       linkIncomplete: (site: string) =>
         `This ${site} link is missing its key, or it's cut off. Copy the whole link again.`,
+      browserCheck: (site: string) =>
+        `${site} wants a browser check before this download. Open the link in your browser, click Download, then copy the link of the download it starts and add that instead.`,
       linkNotRecognized: (site: string) =>
         `This ${site} link isn't one Tsundoku recognizes. Try the link to the file or folder itself.`,
       network: "Couldn't reach the site. Check your connection, then try again.",

@@ -1,5 +1,8 @@
 //! MediaFire: links to a file or a folder. Its public API (`/api/1.4`) gives a file's name, size and SHA-256 and a
 //! folder's contents without signing in; the address a file downloads from is the Download button on its page.
+//! MediaFire may put that page behind Cloudflare's browser check, which Tsundoku doesn't try to pass: a link copied
+//! from the Download button (`download<n>.mediafire.com/…`), which the browser got past the check, is used as it is
+//! while it still leads to the file.
 
 use std::path::PathBuf;
 
@@ -11,8 +14,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::{
-    Address, FileCheck, FileSource, Host, RemoteFile, Share, check_cancel, network_error,
-    safe_name, status_error,
+    Address, Answer, FileCheck, FileSource, Host, Page, RemoteFile, Share, check_cancel,
+    code_error, network_error, probe, safe_name, status_error,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -27,11 +30,17 @@ pub struct MediaFireFile {
     pub quick_key: String,
     /// In lowercase hex, when MediaFire gives one (older files have an MD5 instead, which isn't checked).
     pub sha256: Option<String>,
+    /// The link itself, when it was the Download button's own (`download<n>.mediafire.com/<token>/<key>/<name>`).
+    pub direct: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MediaFireLink {
-    File(String),
+    /// A file's key, and the link when it's the Download button's own.
+    File {
+        key: String,
+        direct: Option<String>,
+    },
     Folder(String),
 }
 
@@ -42,7 +51,10 @@ pub(super) fn read(
     cancel: &CancelToken,
 ) -> Result<Share, PreviewError> {
     match parse_link(link).ok_or_else(|| Host::MediaFire.link_not_recognized())? {
-        MediaFireLink::File(quick_key) => {
+        MediaFireLink::File {
+            key: quick_key,
+            direct,
+        } => {
             let answer: FileInfoAnswer = api(
                 client,
                 "file/get_info.php",
@@ -61,7 +73,7 @@ pub(super) fn read(
                 url: link.to_owned(),
                 title: info.filename.clone(),
                 upload_date: info.created.get(..10).map(str::to_owned),
-                files: vec![info.into_remote(PathBuf::new())],
+                files: vec![info.into_remote(PathBuf::new(), direct)],
             })
         }
         MediaFireLink::Folder(folder_key) => {
@@ -96,22 +108,32 @@ pub(super) fn read(
     }
 }
 
-/// Reads the file's page for the address behind its Download button.
+/// The address the file downloads from: the link itself while it's the Download button's and still leads to the file
+/// (its token runs out), else the address behind the Download button on the file's page.
 pub(super) fn address(
     client: &Client,
     file: &MediaFireFile,
     cancel: &CancelToken,
 ) -> Result<Address, PreviewError> {
-    check_cancel(cancel)?;
-    let page = format!("{SITE}/file/{}", file.quick_key);
-    let response = client.get(&page).send().map_err(network_error)?;
-    if let Some(error) = status_error(Host::MediaFire, &response) {
-        return Err(error);
-    }
     let check = file
         .sha256
         .clone()
         .map_or(FileCheck::None, FileCheck::Sha256);
+    if let Some(direct) = &file.direct {
+        // Once its token has run out, the link leads back to the file's page, which is asked instead.
+        if let Ok(Answer::File(_)) = probe(client, direct, cancel) {
+            return Ok(Address {
+                url: direct.clone(),
+                check,
+            });
+        }
+    }
+    check_cancel(cancel)?;
+    let page = format!("{SITE}/file/{}", file.quick_key);
+    let response = client.get(&page).send().map_err(network_error)?;
+    if !response.status().is_success() {
+        return Err(page_error(&Page::read(response)));
+    }
     let is_page = response
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
@@ -124,11 +146,10 @@ pub(super) fn address(
             check,
         });
     }
-    let final_url = response.url().to_string();
-    let html = response.text().map_err(network_error)?;
-    match download_button(&html) {
+    let page = Page::read(response);
+    match download_button(&page.html) {
         Some(url) => Ok(Address { url, check }),
-        None => Err(page_error(&final_url, &html)),
+        None => Err(page_error(&page)),
     }
 }
 
@@ -153,13 +174,14 @@ struct FileInfo {
 }
 
 impl FileInfo {
-    fn into_remote(self, folder: PathBuf) -> RemoteFile {
+    fn into_remote(self, folder: PathBuf, direct: Option<String>) -> RemoteFile {
         RemoteFile {
             path: folder.join(safe_name(&self.filename)),
             size: self.size,
             source: FileSource::MediaFire(MediaFireFile {
                 sha256: sha256(&self.hash),
                 quick_key: self.quickkey,
+                direct,
             }),
         }
     }
@@ -213,7 +235,7 @@ impl ContentFile {
             created: String::new(),
             password_protected: String::new(),
         }
-        .into_remote(folder)
+        .into_remote(folder, None)
     }
 }
 
@@ -337,8 +359,8 @@ fn sha256(hash: &str) -> Option<String> {
 
 /// Reads a MediaFire link: "mediafire.com/file/<key>/<name>/file" (or /file_premium/, /download/, /view/, /i/?<key>),
 /// "mediafire.com/?<key>", "mediafire.com/folder/<key>/<name>", or the Download button's own link,
-/// "download<n>.mediafire.com/<token>/<key>/<name>", which browser add-ons copy. Its token runs out, so only the key
-/// is kept and the file is read as from its page.
+/// "download<n>.mediafire.com/<token>/<key>/<name>", which browser add-ons copy. Its token runs out, so the file is
+/// read by its key, and the link is kept to download from while it still works.
 fn parse_link(link: &str) -> Option<MediaFireLink> {
     let after_scheme = link.split_once("://").map_or(link, |(_, rest)| rest);
     let without_fragment = after_scheme.split('#').next().unwrap_or_default();
@@ -362,14 +384,21 @@ fn parse_link(link: &str) -> Option<MediaFireLink> {
         .and_then(|server| server.strip_prefix("download"))
         .is_some_and(|number| number.chars().all(|character| character.is_ascii_digit()));
     match segments.as_slice() {
-        [_token, key, ..] if is_download_server && is_key(key) => {
-            Some(MediaFireLink::File((*key).to_owned()))
-        }
+        [_token, key, ..] if is_download_server && is_key(key) => Some(MediaFireLink::File {
+            key: (*key).to_owned(),
+            direct: Some(format!("https://{after_scheme}")),
+        }),
         ["file" | "file_premium" | "download" | "view", key, ..] if is_key(key) => {
-            Some(MediaFireLink::File((*key).to_owned()))
+            Some(MediaFireLink::File {
+                key: (*key).to_owned(),
+                direct: None,
+            })
         }
         ["folder", key, ..] if is_key(key) => Some(MediaFireLink::Folder((*key).to_owned())),
-        [] | ["i"] if is_key(query) => Some(MediaFireLink::File(query.to_owned())),
+        [] | ["i"] if is_key(query) => Some(MediaFireLink::File {
+            key: query.to_owned(),
+            direct: None,
+        }),
         _ => None,
     }
 }
@@ -397,17 +426,20 @@ fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     Some(&tag[start..start + length])
 }
 
-/// Why a file's page has no Download button.
-fn page_error(final_url: &str, html: &str) -> PreviewError {
-    if final_url.contains("error.php") || html.contains("Something appears to be missing") {
+/// Why a file's page has no Download button, or answered with an error.
+fn page_error(page: &Page) -> PreviewError {
+    if page.url.contains("error.php") || page.html.contains("Something appears to be missing") {
         PreviewError::Unavailable {
             detail: "MediaFire says the file was removed".to_owned(),
         }
-    } else if html.contains("Just a moment...") || html.contains("_cf_chl_opt") {
-        // Cloudflare's check page. Its "challenge-platform" script is on every MediaFire page, so it isn't a sign.
-        PreviewError::Failed {
-            detail: "MediaFire asked for a browser check before the download".to_owned(),
+    } else if page.html.contains("Just a moment...") || page.html.contains("_cf_chl_opt") {
+        // Cloudflare's check page, answered with 403 (MediaFire sends some files' pages to "?action=check" for it).
+        // Its "challenge-platform" script is on every MediaFire page, so it isn't a sign.
+        PreviewError::BrowserCheck {
+            site: Host::MediaFire.name().to_owned(),
         }
+    } else if let Some(error) = code_error(Host::MediaFire, page.status) {
+        error
     } else {
         PreviewError::Failed {
             detail: "MediaFire's page has no Download button".to_owned(),
@@ -419,24 +451,31 @@ fn page_error(final_url: &str, html: &str) -> PreviewError {
 mod tests {
     use super::*;
 
+    fn file(key: &str) -> MediaFireLink {
+        MediaFireLink::File {
+            key: key.to_owned(),
+            direct: None,
+        }
+    }
+
     #[test]
     fn reads_file_and_folder_links() {
         for (link, expected) in [
             (
                 "https://www.mediafire.com/file/x7k2j9q4zbbwm1n/Pack_v2.zip/file",
-                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+                Some(file("x7k2j9q4zbbwm1n")),
             ),
             (
                 "https://www.mediafire.com/file_premium/x7k2j9q4zbbwm1n/Pack_v2.zip",
-                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+                Some(file("x7k2j9q4zbbwm1n")),
             ),
             (
                 "https://www.mediafire.com/download/x7k2j9q4zbbwm1n",
-                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+                Some(file("x7k2j9q4zbbwm1n")),
             ),
             (
                 "https://mediafire.com/?x7k2j9q4zbbwm1n",
-                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+                Some(file("x7k2j9q4zbbwm1n")),
             ),
             (
                 "https://www.mediafire.com/folder/ab12cd34ef56g/My_Folder",
@@ -444,11 +483,17 @@ mod tests {
             ),
             (
                 "https://download2390.mediafire.com/gf8b0u3kzm4gV2h1mR7wq0Xc_KdPj/x7k2j9q4zbbwm1n/Pack_v2.zip",
-                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+                Some(MediaFireLink::File {
+                    key: "x7k2j9q4zbbwm1n".to_owned(),
+                    direct: Some("https://download2390.mediafire.com/gf8b0u3kzm4gV2h1mR7wq0Xc_KdPj/x7k2j9q4zbbwm1n/Pack_v2.zip".to_owned()),
+                }),
             ),
             (
-                "https://DOWNLOAD1.MediaFire.com/abc/x7k2j9q4zbbwm1n/Pack%20v2.7z?a=1",
-                Some(MediaFireLink::File("x7k2j9q4zbbwm1n".to_owned())),
+                "http://DOWNLOAD1.MediaFire.com/abc/x7k2j9q4zbbwm1n/Pack%20v2.7z?a=1#top",
+                Some(MediaFireLink::File {
+                    key: "x7k2j9q4zbbwm1n".to_owned(),
+                    direct: Some("https://DOWNLOAD1.MediaFire.com/abc/x7k2j9q4zbbwm1n/Pack%20v2.7z?a=1#top".to_owned()),
+                }),
             ),
             ("https://download2390.mediafire.com/abc", None),
             (
@@ -485,22 +530,46 @@ mod tests {
         assert_eq!(download_button("<html><body>No button</body></html>"), None);
     }
 
+    fn page(url: &str, status: u16, html: &str) -> Page {
+        Page {
+            url: url.to_owned(),
+            status: reqwest::StatusCode::from_u16(status).unwrap(),
+            html: html.to_owned(),
+        }
+    }
+
     #[test]
     fn explains_a_page_without_a_button() {
         assert!(matches!(
-            page_error("https://www.mediafire.com/error.php?errno=320", ""),
+            page_error(&page(
+                "https://www.mediafire.com/error.php?errno=320",
+                200,
+                ""
+            )),
             PreviewError::Unavailable { .. }
         ));
+        // Some files' pages send a browser to "?action=check", which Cloudflare answers with 403 and its check.
+        assert_eq!(
+            page_error(&page(
+                "https://www.mediafire.com/file/x?action=check",
+                403,
+                "<title>Just a moment...</title><script>window._cf_chl_opt = {};</script>"
+            )),
+            PreviewError::BrowserCheck {
+                site: "MediaFire".to_owned()
+            }
+        );
         assert!(matches!(
-            page_error("https://www.mediafire.com/file/x", "<title>Just a moment...</title>"),
-            PreviewError::Failed { detail } if detail.contains("browser check")
+            page_error(&page("https://www.mediafire.com/file/x", 403, "Forbidden")),
+            PreviewError::Failed { detail } if detail == "MediaFire answered 403 Forbidden"
         ));
         // Every MediaFire page loads Cloudflare's challenge-platform script, check or not.
         assert!(matches!(
-            page_error(
+            page_error(&page(
                 "https://www.mediafire.com/file/x",
+                200,
                 "/cdn-cgi/challenge-platform/scripts/jsd/main.js"
-            ),
+            )),
             PreviewError::Failed { detail } if detail.contains("no Download button")
         ));
     }
@@ -513,7 +582,7 @@ mod tests {
             "hash": "0F343B0931126A20F133D67C2B018A3B1A7FCD4E1F7E6F1F4E4B9AB1E3F2C3D4"}, "result": "Success"}"#,
         )
         .unwrap();
-        let remote = file.file_info.into_remote(PathBuf::from("Folder"));
+        let remote = file.file_info.into_remote(PathBuf::from("Folder"), None);
         assert_eq!(remote.path, PathBuf::from("Folder").join("Pack v2.zip"));
         assert_eq!(remote.size, 12_345_678);
         assert_eq!(
@@ -523,6 +592,7 @@ mod tests {
                 sha256: Some(
                     "0f343b0931126a20f133d67c2b018a3b1a7fcd4e1f7e6f1f4e4b9ab1e3f2c3d4".to_owned()
                 ),
+                direct: None,
             })
         );
         assert_eq!(

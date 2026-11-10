@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.93 · 2026-11-10
+
+### Fixed
+
+- **MediaFire's browser check**: MediaFire now sends some files' pages to a browser check, so their downloads failed with "MediaFire answered 403 Forbidden". A link copied from the page's Download button (`download1234.mediafire.com/…`) is now downloaded from as it is, since your browser already passed the check, and the file's page is only asked once that link has run out. When the page asks for the check, the message says so and what to do: open the link in your browser, click Download, and add the link of the download it starts.
+
 ## 0.1.92 · 2026-11-10
 
 ### Changed

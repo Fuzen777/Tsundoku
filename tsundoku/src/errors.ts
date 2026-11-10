@@ -110,6 +110,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.passwordProtected(error.site) }
     case "linkIncomplete":
       return { message: text.linkIncomplete(error.site) }
+    case "browserCheck":
+      return { message: text.browserCheck(error.site) }
     case "linkNotRecognized":
       return { message: text.linkNotRecognized(error.site) }
     case "network":

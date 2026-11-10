@@ -175,6 +175,10 @@ pub enum PreviewError {
     /// A link missing part of itself, such as a MEGA link without its key, or with a key that doesn't open it.
     #[error("incomplete {site} link")]
     LinkIncomplete { site: String },
+    /// The host's page asks for a browser check (Cloudflare's), which Tsundoku doesn't try to pass. A link copied
+    /// from the page's Download button in a browser still works.
+    #[error("{site} asked for a browser check")]
+    BrowserCheck { site: String },
     /// A link on a file host that isn't to a file or folder Tsundoku can read, such as the host's home page or a
     /// form of link it doesn't know yet. Unlike `UnsupportedSite`, the clipboard watcher keeps it in Pending, so a
     /// file the user meant to download doesn't go missing.

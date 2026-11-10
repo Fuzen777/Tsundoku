@@ -10,7 +10,7 @@ export type PreviewError = { "kind": "invalidLink" } | { "kind": "playlist" } | 
 /**
  * The site's name, when it's one of `sites::SIGN_IN_SITES`.
  */
-site: string | null, cookies: SignInCookies, } | { "kind": "limitReached", site: string, detail: string, } | { "kind": "passwordProtected", site: string, } | { "kind": "linkIncomplete", site: string, } | { "kind": "linkNotRecognized", site: string, } | { "kind": "network", detail: string, } | { "kind": "tooManyRequests", detail: string, site: string | null, 
+site: string | null, cookies: SignInCookies, } | { "kind": "limitReached", site: string, detail: string, } | { "kind": "passwordProtected", site: string, } | { "kind": "linkIncomplete", site: string, } | { "kind": "browserCheck", site: string, } | { "kind": "linkNotRecognized", site: string, } | { "kind": "network", detail: string, } | { "kind": "tooManyRequests", detail: string, site: string | null, 
 /**
  * In milliseconds since 1970.
  */
