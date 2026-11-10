@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.94 · 2026-11-10
+
+### Changed
+
+- **AND/OR on the condition's row**: the AND/OR button now starts each condition's row instead of sitting on a row of its own between conditions.
+
 ## 0.1.93 · 2026-11-10
 
 ### Fixed

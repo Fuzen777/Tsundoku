@@ -227,8 +227,8 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
-**66. AND and OR per condition** · 0.1.92 (replaces 63)
-- [ ] Rules → Edit a rule with three conditions: site is YouTube, site is Vimeo, title contains zoo. Each gap has its own AND button (in capitals, with a tooltip). Click the first one only: it says OR, the second stays AND. Save → the sentence reads "When the site is YouTube OR the site is Vimeo AND the title contains “zoo”".
+**66. AND and OR per condition** · 0.1.92, 0.1.94 (replaces 63)
+- [ ] Rules → Edit a rule with three conditions: site is YouTube, site is Vimeo, title contains zoo. Each condition after the first starts with its own AND button, on its row, lined up with the first condition's fields (in capitals, with a tooltip). Click the first one only: it says OR, the second stays AND. Save → the sentence reads "When the site is YouTube OR the site is Vimeo AND the title contains “zoo”".
 - [ ] Test a Link with "Me at the zoo" (`jNQXAC9IVRw`) → that rule decides; with a YouTube video without "zoo" in its title → it doesn't.
 - [ ] Changing a condition's field keeps its AND/OR. A rule saved as Or in 0.1.89 or 0.1.90 shows OR in every gap.
 - Seen in the browser preview (each button switches on its own); not tried in the app.

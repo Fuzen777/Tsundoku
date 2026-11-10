@@ -1,4 +1,4 @@
-import { Fragment, useRef } from "react"
+import { useRef } from "react"
 import { CaseSensitive, Plus, X } from "lucide-react"
 import { pickFolder } from "../../api"
 import type { ConditionJoin } from "../../bindings/ConditionJoin"
@@ -107,24 +107,16 @@ export function RuleEditor({
         <Field label={text.when} hint={hasPattern ? `${text.whenHint} ${text.patternHint}` : text.whenHint}>
           <div className="flex flex-col gap-2">
             {draft.conditions.map((condition, index) => (
-              // Conditions have no ID of their own, and their inputs are controlled, so their place will do.
-              <Fragment key={index}>
-                {index > 0 && (
-                  <JoinButton
-                    join={condition.join}
-                    onToggle={() =>
-                      setCondition(index, { ...condition, join: condition.join === "all" ? "any" : "all" })
-                    }
-                  />
-                )}
-                <ConditionRow
-                  condition={condition}
-                  presets={presets}
-                  defaultPresetId={defaultPresetId}
-                  onChange={(changed) => setCondition(index, changed)}
-                  onRemove={() => update({ conditions: draft.conditions.filter((_, at) => at !== index) })}
-                />
-              </Fragment>
+              <ConditionRow
+                // Conditions have no ID of their own, and their inputs are controlled, so their place will do.
+                key={index}
+                condition={condition}
+                first={index === 0}
+                presets={presets}
+                defaultPresetId={defaultPresetId}
+                onChange={(changed) => setCondition(index, changed)}
+                onRemove={() => update({ conditions: draft.conditions.filter((_, at) => at !== index) })}
+              />
             ))}
             <div>
               <Button
@@ -185,16 +177,14 @@ export function RuleEditor({
   )
 }
 
-/** Between two conditions: AND or OR, how the one below joins the one above, which a click switches. */
+/** At the start of a condition's row, after the first: AND or OR, how it joins the one above, which a click switches. */
 function JoinButton({ join, onToggle }: { join: ConditionJoin; onToggle: () => void }) {
   return (
-    <div className="flex">
-      <Tooltip label={text.joinHint[join]}>
-        <Button size="sm" aria-label={text.joinHint[join]} className="min-w-12 justify-center" onClick={onToggle}>
-          {text.join[join]}
-        </Button>
-      </Tooltip>
-    </div>
+    <Tooltip label={text.joinHint[join]}>
+      <Button size="sm" aria-label={text.joinHint[join]} className="w-full justify-center" onClick={onToggle}>
+        {text.join[join]}
+      </Button>
+    </Tooltip>
   )
 }
 
@@ -248,6 +238,8 @@ function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
 
 interface ConditionRowProps {
   condition: RuleCondition
+  /** The first condition has no AND or OR before it. */
+  first: boolean
   presets: readonly Preset[]
   defaultPresetId: string
   onChange: (condition: RuleCondition) => void
@@ -270,12 +262,21 @@ function folderPlaceholders(conditions: readonly RuleCondition[]): {
 }
 
 /** What to check, how to compare it, and what to compare it to. Picking another field starts the condition over. */
-function ConditionRow({ condition, presets, defaultPresetId, onChange, onRemove }: ConditionRowProps) {
+function ConditionRow({ condition, first, presets, defaultPresetId, onChange, onRemove }: ConditionRowProps) {
   const { field, operator, value } = condition
   const setValue = (changed: string) => onChange({ ...condition, value: changed })
 
   return (
-    <div className="grid grid-cols-[8rem_9.5rem_minmax(0,1fr)_auto_auto] items-center gap-2">
+    <div className="grid grid-cols-[3.5rem_8rem_9.5rem_minmax(0,1fr)_auto_auto] items-center gap-2">
+      {first ? (
+        // Keeps the first condition lined up with the ones after it.
+        <span />
+      ) : (
+        <JoinButton
+          join={condition.join}
+          onToggle={() => onChange({ ...condition, join: condition.join === "all" ? "any" : "all" })}
+        />
+      )}
       <SelectInput
         aria-label={text.field}
         title={text.field}
