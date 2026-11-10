@@ -223,6 +223,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
+**59. Duplicate a rule** · 0.1.85
+- [ ] Rules → the copy icon (Duplicate) beside a rule's Edit opens the editor just below it, numbered one more, with the same conditions, folder, preset and Download Right Away. Change it, Save → both rules are there, the copy right after the original, and the rules below are numbered one further.
+- [ ] Duplicate, then Discard → nothing is added. Everything Else has no Duplicate, and its buttons line up with the other rows'.
+- Not tried in the app or the browser preview.
+
 **55. The light mode revamp** · 0.1.80
 - [ ] Settings → Appearance → Light: the current view sits in a light gray area, its cards are white, and fields, secondary buttons and hovered rows are a soft gray. With Mica, the sidebar and title bar keep Windows' tint around it.
 - [ ] Go through Queue, Pending, Watched, History, Presets, Rules and Settings: nothing is hard to read or lost against its background (dropdown lists, menus, the add bar, the selected segment, the undo toast).

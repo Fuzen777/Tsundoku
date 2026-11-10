@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Preset } from "../../bindings/Preset"
-import { canPickPreset, describeActions, newRule } from "./ruleLabels"
+import { canPickPreset, copyOfRule, describeActions, newRule } from "./ruleLabels"
 
 const audioMp3 = { id: "audio-mp3", name: "Audio MP3" } as Preset
 
@@ -30,5 +30,14 @@ describe("canPickPreset", () => {
     expect(canPickPreset([{ field: "site", operator: "is", value: "SoundCloud" }])).toBe(true)
     expect(canPickPreset([{ field: "kind", operator: "is", value: "audio" }])).toBe(false)
     expect(canPickPreset([{ field: "preset", operator: "isNot", value: "best-video" }])).toBe(false)
+  })
+})
+
+describe("copyOfRule", () => {
+  it("keeps everything but the ID, with conditions of its own", () => {
+    const rule = { ...newRule(), id: "rule-3", folder: "{site}", presetId: "audio-mp3", enabled: false }
+    const copy = copyOfRule(rule)
+    expect(copy).toEqual({ ...rule, id: "" })
+    expect(copy.conditions[0]).not.toBe(rule.conditions[0])
   })
 })

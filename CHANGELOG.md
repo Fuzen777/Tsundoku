@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.85 · 2026-11-10
+
+### Added
+
+- **Duplicate a rule**: each rule in Rules has a Duplicate button beside Edit, which opens a copy of the rule just below it, ready to change and save. The last rule (Everything Else) has none.
+
 ## 0.1.84 · 2026-11-10
 
 ### Changed

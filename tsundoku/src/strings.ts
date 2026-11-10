@@ -677,6 +677,7 @@ export const strings = {
     number: (number: number) => `Rule ${number}`,
     off: "Off",
     edit: "Edit",
+    duplicate: "Duplicate",
     moveUp: "Move Up",
     moveDown: "Move Down",
     moreActions: "More Actions",

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowDown, ArrowUp, FolderTree, Pencil, Plus } from "lucide-react"
+import { ArrowDown, ArrowUp, Copy, FolderTree, Pencil, Plus } from "lucide-react"
 import { confirmWithUser, queryKeys, saveFolderRules } from "../api"
 import type { FolderRule } from "../bindings/FolderRule"
 import type { Preset } from "../bindings/Preset"
@@ -20,12 +20,19 @@ import { strings } from "../strings"
 import { useOpenDownloadFolder } from "../useOpenDownloadFolder"
 import { RuleEditor } from "./rules/RuleEditor"
 import { RuleTester } from "./rules/RuleTester"
-import { CATCH_ALL_RULE_ID, describeActions, describeConditions, newRule, shownFolder } from "./rules/ruleLabels"
+import {
+  CATCH_ALL_RULE_ID,
+  copyOfRule,
+  describeActions,
+  describeConditions,
+  newRule,
+  shownFolder,
+} from "./rules/ruleLabels"
 
 const text = strings.rules
 
-/** The rule being edited: its place in the list (for a new one, where it will go: just above the catch-all), the
- * draft, and whether it's new. */
+/** The rule being edited: its place in the list (for a new one, where it will go: just above the catch-all, or just
+ * below the rule it duplicates), the draft, and whether it's new. */
 interface Editing {
   index: number
   draft: FolderRule
@@ -33,8 +40,9 @@ interface Editing {
 }
 
 /** The folder rules, in the order they're tried: each as a sentence with its folder. One rule is edited at a time,
- * as a draft until Save; moving, turning off and deleting save at once. The catch-all stays last: it can't be moved
- * or deleted, and new rules go above it. */
+ * as a draft until Save; moving, turning off and deleting save at once. Duplicate opens a copy as a new rule just
+ * below the original, saved like any new one. The catch-all stays last: it can't be moved, duplicated or deleted,
+ * and new rules go above it. */
 export function RulesView() {
   const queryClient = useQueryClient()
   const { navigate } = useAppActions()
@@ -144,6 +152,7 @@ export function RulesView() {
         canMoveUp={index > 0 && index < movableCount}
         canMoveDown={index < movableCount - 1}
         onEdit={() => startEditing(index, rule, false)}
+        onDuplicate={() => startEditing(index + 1, copyOfRule(rule), true)}
         onMove={(by) => move(index, by)}
         onToggle={() => toggle(index)}
         onDelete={() => void remove(index)}
@@ -206,13 +215,14 @@ interface RuleRowProps {
   canMoveUp: boolean
   canMoveDown: boolean
   onEdit: () => void
+  onDuplicate: () => void
   onMove: (by: -1 | 1) => void
   onToggle: () => void
   onDelete: () => void
 }
 
-/** A rule as a sentence, its folder and what else it does, with its number, moving, Edit and a menu. The catch-all
- * says it's always last, and can't be deleted. */
+/** A rule as a sentence, its folder and what else it does, with its number, moving, Edit, Duplicate and a menu. The
+ * catch-all says it's always last, and can't be duplicated or deleted. */
 function RuleRow({
   rule,
   number,
@@ -222,6 +232,7 @@ function RuleRow({
   canMoveUp,
   canMoveDown,
   onEdit,
+  onDuplicate,
   onMove,
   onToggle,
   onDelete,
@@ -273,6 +284,12 @@ function RuleRow({
           onClick={() => onMove(1)}
         />
         <IconButton label={text.edit} icon={Pencil} disabled={disabled} onClick={onEdit} />
+        {isCatchAll ? (
+          // Keeps the buttons lined up with the other rows'.
+          <span className="size-8" />
+        ) : (
+          <IconButton label={text.duplicate} icon={Copy} disabled={disabled} onClick={onDuplicate} />
+        )}
         {disabled ? (
           // Keeps the row's layout while the menu is hidden.
           <span className="size-8" />

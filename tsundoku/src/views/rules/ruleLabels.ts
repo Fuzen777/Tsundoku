@@ -98,6 +98,12 @@ export function newRule(): FolderRule {
   }
 }
 
+/** A copy of a rule to be saved as a new one: the same conditions and actions, with no ID, so the core gives it its
+ * own. */
+export function copyOfRule(rule: FolderRule): FolderRule {
+  return { ...rule, id: "", conditions: rule.conditions.map((condition) => ({ ...condition })) }
+}
+
 /** Whether a rule with these conditions may pick the preset: not when it checks the kind or the preset, which both
  * depend on it (`FolderRule::can_pick_preset` in the core). */
 export function canPickPreset(conditions: readonly RuleCondition[]): boolean {
