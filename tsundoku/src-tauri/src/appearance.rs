@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tsundoku_core::downloads::DownloadError;
 use tsundoku_core::settings::{AppearanceSettings, SettingsStore, Theme};
+#[cfg(windows)]
+use tsundoku_core::settings::{color_of_color_ref, color_ref_of};
 
 /// Gives the window the theme: Light or Dark, or `None` for Windows' own, which it then follows as it changes.
 pub fn apply_theme(window: &WebviewWindow, theme: Theme) -> tauri::Result<()> {
@@ -42,4 +44,61 @@ pub fn save_appearance_options(
         })?;
     }
     Ok(options)
+}
+
+/// Opens Windows' color picker over the window, on `initial`, and answers the color chosen as `#rrggbb`, or `None` when
+/// it was cancelled. WebView2 doesn't open a picker for a color input, so the custom accent's swatch asks here.
+#[tauri::command]
+pub async fn pick_color(app: AppHandle, initial: String) -> Option<String> {
+    #[cfg(windows)]
+    {
+        // A window handle isn't `Send`; the picker only needs its value to sit over the window.
+        let owner = app
+            .get_webview_window("main")
+            .and_then(|window| window.hwnd().ok())
+            .map(|hwnd| hwnd.0 as isize)
+            .unwrap_or_default();
+        tauri::async_runtime::spawn_blocking(move || windows_color_picker::pick(owner, &initial))
+            .await
+            .ok()
+            .flatten()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, initial);
+        None
+    }
+}
+
+#[cfg(windows)]
+mod windows_color_picker {
+    use std::sync::Mutex;
+
+    use windows_sys::Win32::UI::Controls::Dialogs::{
+        CC_FULLOPEN, CC_RGBINIT, CHOOSECOLORW, ChooseColorW,
+    };
+
+    use super::{color_of_color_ref, color_ref_of};
+
+    /// The picker's 16 custom colors, kept while the app runs, white to start with.
+    static CUSTOM_COLORS: Mutex<[u32; 16]> = Mutex::new([0x00ff_ffff; 16]);
+
+    /// Shows the picker, modal to `owner`, and blocks until it closes.
+    pub fn pick(owner: isize, initial: &str) -> Option<String> {
+        let mut custom_colors = CUSTOM_COLORS
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut dialog = CHOOSECOLORW {
+            lStructSize: size_of::<CHOOSECOLORW>() as u32,
+            hwndOwner: owner as _,
+            rgbResult: color_ref_of(initial).unwrap_or_default(),
+            lpCustColors: custom_colors.as_mut_ptr(),
+            Flags: CC_RGBINIT | CC_FULLOPEN,
+            ..Default::default()
+        };
+        // SAFETY: `dialog` is filled in as ChooseColorW expects, and `lpCustColors` points at 16 colors that stay
+        // locked until it returns.
+        let chosen = unsafe { ChooseColorW(&mut dialog) } != 0;
+        chosen.then(|| color_of_color_ref(dialog.rgbResult))
+    }
 }

@@ -32,3 +32,8 @@ tauri-plugin-autostart = "2.7.0"
 tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-notification = "2.8.0"
 tauri-plugin-deep-link = "2.6.3"
+
+# Windows' color picker, for Settings → Appearance's custom accent (appearance.rs): WebView2 doesn't open one for a
+# color input.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Controls_Dialogs"] }

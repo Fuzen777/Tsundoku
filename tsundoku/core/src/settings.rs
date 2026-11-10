@@ -187,6 +187,31 @@ impl AppearanceSettings {
     }
 }
 
+/// A `#rrggbb` color as Windows' `COLORREF` (`0x00bbggrr`), for its color picker; `None` when it isn't one.
+pub fn color_ref_of(color: &str) -> Option<u32> {
+    let digits = color.trim().strip_prefix('#')?;
+    if digits.len() != 6 || !digits.chars().all(|digit| digit.is_ascii_hexdigit()) {
+        return None;
+    }
+    let red_green_blue = u32::from_str_radix(digits, 16).ok()?;
+    let (red, green, blue) = (
+        red_green_blue >> 16,
+        (red_green_blue >> 8) & 0xff,
+        red_green_blue & 0xff,
+    );
+    Some(blue << 16 | green << 8 | red)
+}
+
+/// Windows' `COLORREF` (`0x00bbggrr`) as a `#rrggbb` color, in lowercase.
+pub fn color_of_color_ref(color_ref: u32) -> String {
+    let (red, green, blue) = (
+        color_ref & 0xff,
+        (color_ref >> 8) & 0xff,
+        (color_ref >> 16) & 0xff,
+    );
+    format!("#{red:02x}{green:02x}{blue:02x}")
+}
+
 /// Settings → Appearance's accent colors, each with a shade for light and one for dark (`index.css`, `data-accent`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -768,6 +793,18 @@ mod tests {
         assert_eq!(with("#12345"), DEFAULT_CUSTOM_ACCENT);
         assert_eq!(with("red"), DEFAULT_CUSTOM_ACCENT);
         assert_eq!(with("#12345g"), DEFAULT_CUSTOM_ACCENT);
+    }
+
+    #[test]
+    fn turns_colors_into_windows_color_refs_and_back() {
+        assert_eq!(color_ref_of("#165E83"), Some(0x00835e16));
+        assert_eq!(color_of_color_ref(0x00835e16), "#165e83");
+        assert_eq!(
+            color_of_color_ref(color_ref_of("#000000").unwrap()),
+            "#000000"
+        );
+        assert_eq!(color_ref_of("#12345"), None);
+        assert_eq!(color_ref_of("165e83"), None);
     }
 
     #[test]

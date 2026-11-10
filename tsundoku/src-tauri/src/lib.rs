@@ -412,6 +412,7 @@ pub fn run() {
             background::save_background_options,
             appearance::appearance_options,
             appearance::save_appearance_options,
+            appearance::pick_color,
             downloads::download_options,
             downloads::save_download_options,
         ])

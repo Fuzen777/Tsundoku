@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.81 · 2026-11-10
+
+### Fixed
+
+- **Pick a Color**: the last accent swatch now opens Windows' color picker in the app. It did nothing before.
+
 ## 0.1.80 · 2026-11-10
 
 ### Changed

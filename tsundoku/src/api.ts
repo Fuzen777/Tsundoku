@@ -694,6 +694,25 @@ export function saveAppearanceOptions(options: AppearanceSettings): Promise<Appe
   return invoke<AppearanceSettings>("save_appearance_options", { options })
 }
 
+/** Opens Windows' color picker on `initial` (`#rrggbb`) and resolves to the color chosen, or null when it was cancelled.
+ * WebView2 doesn't open a picker for a color input; in a browser, one does. */
+export function pickColor(initial: string): Promise<string | null> {
+  if (!isTauri()) return pickColorInBrowser(initial)
+  return invoke<string | null>("pick_color", { initial })
+}
+
+function pickColorInBrowser(initial: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input")
+    input.type = "color"
+    input.value = initial
+    // The native change event fires once a color is chosen; React-style input events fire while the picker is open.
+    input.addEventListener("change", () => resolve(input.value), { once: true })
+    input.addEventListener("cancel", () => resolve(null), { once: true })
+    input.click()
+  })
+}
+
 /** The watched channels, playlists and accounts, with their new and skipped items. `?empty` shows none. */
 export function getWatchedSources(): Promise<WatchedSource[]> {
   if (!isTauri()) return Promise.resolve(addressHas("empty") ? [] : standIns.watchedSources())

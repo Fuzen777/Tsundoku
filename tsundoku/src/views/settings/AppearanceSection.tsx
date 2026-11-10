@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react"
+import { useState } from "react"
 import { Check, Pipette } from "lucide-react"
 import type { Accent } from "../../bindings/Accent"
 import type { AppearanceSettings } from "../../bindings/AppearanceSettings"
 import type { Theme } from "../../bindings/Theme"
+import { pickColor } from "../../api"
 import { Card } from "../../components/Card"
 import { Field } from "../../components/Field"
 import { Section } from "../../components/Section"
@@ -75,7 +76,7 @@ export function AppearanceSection() {
 
 /**
  * The last swatch: any color, from Windows' color picker. It shows the color picked last; picking one, or clicking it
- * once it's the accent, opens the picker, and the color is saved once the picker closes on it.
+ * once it's the accent, opens the picker on that color, and the color is saved once the picker closes on it.
  */
 function CustomAccentSwatch({
   options,
@@ -84,48 +85,33 @@ function CustomAccentSwatch({
   options: AppearanceSettings | undefined
   onPick: (color: string) => void
 }) {
-  const input = useRef<HTMLInputElement>(null)
   const selected = options?.accent === "custom"
-  // React's onChange fires while the picker is open; the native change event fires once a color is chosen.
-  const picked = useRef(onPick)
-  useEffect(() => {
-    picked.current = onPick
-  })
-  useEffect(() => {
-    const element = input.current
-    if (!element) return
-    const chosen = () => picked.current(element.value)
-    element.addEventListener("change", chosen)
-    return () => element.removeEventListener("change", chosen)
-  }, [])
-  // The picker opens on the color picked last.
-  const customAccent = options?.customAccent
-  useEffect(() => {
-    if (input.current && customAccent) input.current.value = customAccent
-  }, [customAccent])
+  const [picking, setPicking] = useState(false)
+
+  const openPicker = async () => {
+    if (!options) return
+    setPicking(true)
+    try {
+      const color = await pickColor(options.customAccent)
+      if (color) onPick(color)
+    } finally {
+      setPicking(false)
+    }
+  }
 
   return (
-    <>
-      <button
-        type="button"
-        role="radio"
-        aria-checked={selected}
-        aria-label={text.accents.custom}
-        title={text.accents.custom}
-        data-accent="custom"
-        disabled={!options}
-        onClick={() => input.current?.click()}
-        className={`${SWATCH_CLASSES} ${selected ? SELECTED_SWATCH_CLASSES : ""}`}
-      >
-        {selected ? <Check size={14} aria-hidden /> : <Pipette size={14} aria-hidden />}
-      </button>
-      <input
-        ref={input}
-        type="color"
-        tabIndex={-1}
-        aria-hidden
-        className="sr-only"
-      />
-    </>
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={text.accents.custom}
+      title={text.accents.custom}
+      data-accent="custom"
+      disabled={!options || picking}
+      onClick={() => void openPicker()}
+      className={`${SWATCH_CLASSES} ${selected ? SELECTED_SWATCH_CLASSES : ""}`}
+    >
+      {selected ? <Check size={14} aria-hidden /> : <Pipette size={14} aria-hidden />}
+    </button>
   )
 }
