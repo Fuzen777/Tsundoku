@@ -104,6 +104,16 @@ export function copyOfRule(rule: FolderRule): FolderRule {
   return { ...rule, id: "", conditions: rule.conditions.map((condition) => ({ ...condition })) }
 }
 
+/** The rules with the one at `from` moved to just before the one at `before` (the list's length for the end), or
+ * `null` when that leaves it where it is. */
+export function movedRule(rules: readonly FolderRule[], from: number, before: number): FolderRule[] | null {
+  if (before === from || before === from + 1) return null
+  const list = [...rules]
+  const [rule] = list.splice(from, 1)
+  list.splice(before > from ? before - 1 : before, 0, rule)
+  return list
+}
+
 /** Whether a rule with these conditions may pick the preset: not when it checks the kind or the preset, which both
  * depend on it (`FolderRule::can_pick_preset` in the core). */
 export function canPickPreset(conditions: readonly RuleCondition[]): boolean {

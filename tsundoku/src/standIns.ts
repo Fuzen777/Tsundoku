@@ -425,6 +425,14 @@ export const standIns = {
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   folderRules: [
     {
+      id: "catch-all",
+      enabled: true,
+      conditions: [],
+      folder: "{site}",
+      presetId: null,
+      downloadRightAway: null,
+    },
+    {
       id: "rule-1",
       enabled: true,
       conditions: [
@@ -454,31 +462,23 @@ export const standIns = {
       presetId: "best-audio",
       downloadRightAway: true,
     },
-    {
-      id: "catch-all",
-      enabled: true,
-      conditions: [],
-      folder: "{site}",
-      presetId: null,
-      downloadRightAway: null,
-    },
   ] satisfies FolderRule[],
-  /** The last rule's folder for the video's site, as a new install has it. */
+  /** The first rule's folder for the video's site, as a new install has it. */
   destination(video: VideoInfo): Destination {
     return {
       folder: ["C:", "Users", "You", "Downloads", "Tsundoku", video.siteName].join("\\"),
-      source: { kind: "rule", number: 4 },
+      source: { kind: "rule", number: 1 },
     }
   },
   /** Rule 3's preset for a title with "zoo" in it, as the stand-in rules have it. */
   watchedSources: watchedStandIns,
   ruleRightAway(video: VideoInfo): RightAwayRule | null {
     // As the stand-in rules have it: rule 3 downloads videos with "zoo" in their title right away.
-    return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 3 } : null
+    return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 4 } : null
   },
   rulePreset(video: VideoInfo): RulePreset | null {
     if (video.post || video.files || !video.title.toLowerCase().includes("zoo")) return null
-    return { presetId: "best-audio", rule: 3 }
+    return { presetId: "best-audio", rule: 4 }
   },
   queueItems: [
     queueStandIn(1, "running", "Me at the zoo", {

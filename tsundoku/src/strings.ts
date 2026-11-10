@@ -678,6 +678,7 @@ export const strings = {
     off: "Off",
     edit: "Edit",
     duplicate: "Duplicate",
+    dragToMove: "Drag to Move",
     moveUp: "Move Up",
     moveDown: "Move Down",
     moreActions: "More Actions",

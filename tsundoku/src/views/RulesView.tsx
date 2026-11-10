@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react"
+import { useState, type DragEvent, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { ArrowDown, ArrowUp, Copy, FolderTree, Pencil, Plus } from "lucide-react"
+import { ArrowDown, ArrowUp, Copy, FolderTree, GripVertical, Pencil, Plus } from "lucide-react"
 import { confirmWithUser, queryKeys, saveFolderRules } from "../api"
 import type { FolderRule } from "../bindings/FolderRule"
 import type { Preset } from "../bindings/Preset"
@@ -11,6 +11,7 @@ import { IconButton } from "../components/IconButton"
 import { Menu, type MenuItem } from "../components/Menu"
 import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
+import { Tooltip } from "../components/Tooltip"
 import { classes } from "../components/styles"
 import { describeRuleError, type ErrorDescription } from "../errors"
 import { joinDetails } from "../format"
@@ -25,11 +26,15 @@ import {
   copyOfRule,
   describeActions,
   describeConditions,
+  movedRule,
   newRule,
   shownFolder,
 } from "./rules/ruleLabels"
 
 const text = strings.rules
+
+/** The type a dragged rule carries, so the window's drop of links ignores it (it takes text, links and files). */
+const RULE_DRAG_TYPE = "application/x-tsundoku-rule"
 
 /** The rule being edited: its place in the list (for a new one, where it will go: at the bottom, or just below the
  * rule it duplicates), the draft, and whether it's new. */
@@ -40,8 +45,8 @@ interface Editing {
 }
 
 /** The folder rules, where the last that matches decides: each as a sentence with its folder. One rule is edited at a
- * time, as a draft until Save; moving, turning off and deleting save at once. Duplicate opens a copy as a new rule
- * just below the original, saved like any new one. The catch-all stays first, so every other rule overrides it: it
+ * time, as a draft until Save; moving (with its arrows or by dragging its grip), turning off and deleting save at
+ * once. Duplicate opens a copy as a new rule just below the original, saved like any new one. The catch-all stays first, so every other rule overrides it: it
  * can't be moved, duplicated or deleted, and new rules go at the bottom. */
 export function RulesView() {
   const queryClient = useQueryClient()
@@ -53,6 +58,9 @@ export function RulesView() {
   const [editing, setEditing] = useState<Editing | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
+  // While a rule is dragged: its place, and where it would go (before the rule at `before`, or at the end).
+  const [dragged, setDragged] = useState<number | null>(null)
+  const [dropBefore, setDropBefore] = useState<number | null>(null)
   const openFolder = useOpenDownloadFolder()
 
   if (!rules) return <Page title={strings.nav.rules} />
@@ -87,12 +95,32 @@ export function RulesView() {
     setEditing({ index, draft: rule, isNew })
   }
 
-  function move(index: number, by: -1 | 1) {
-    if (!rules) return
-    const list = [...rules]
-    const [rule] = list.splice(index, 1)
-    list.splice(index + by, 0, rule)
-    void store(list)
+  function moveBefore(from: number, before: number) {
+    const list = rules && movedRule(rules, from, before)
+    if (list) void store(list)
+  }
+
+  function endDrag() {
+    setDragged(null)
+    setDropBefore(null)
+  }
+
+  /** Over a rule's row: the rule dragged would go before it, or after it past its middle, never above the catch-all. */
+  function dragOver(event: DragEvent<HTMLDivElement>, index: number) {
+    if (dragged === null) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+    const box = event.currentTarget.getBoundingClientRect()
+    const before = event.clientY > box.top + box.height / 2 ? index + 1 : index
+    setDropBefore(Math.max(before, firstMovable))
+  }
+
+  /** A drop anywhere in the list, rows and the gaps between them, puts the rule where the line shows. */
+  function drop(event: DragEvent<HTMLDivElement>) {
+    if (dragged === null) return
+    event.preventDefault()
+    if (dropBefore !== null) moveBefore(dragged, dropBefore)
+    endDrag()
   }
 
   function toggle(index: number) {
@@ -152,7 +180,24 @@ export function RulesView() {
         canMoveDown={index >= firstMovable && index < rules.length - 1}
         onEdit={() => startEditing(index, rule, false)}
         onDuplicate={() => startEditing(index + 1, copyOfRule(rule), true)}
-        onMove={(by) => move(index, by)}
+        onMove={(by) => moveBefore(index, by < 0 ? index - 1 : index + 2)}
+        draggable={!busy && index >= firstMovable}
+        dropMark={
+          dragged === null || dropBefore === null || movedRule(rules, dragged, dropBefore) === null
+            ? null
+            : dropBefore === index
+              ? "before"
+              : dropBefore === index + 1 && index === rules.length - 1
+                ? "after"
+                : null
+        }
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = "move"
+          event.dataTransfer.setData(RULE_DRAG_TYPE, rule.id)
+          setDragged(index)
+        }}
+        onDragEnd={endDrag}
+        onDragOver={(event) => dragOver(event, index)}
         onToggle={() => toggle(index)}
         onDelete={() => void remove(index)}
       />
@@ -172,7 +217,13 @@ export function RulesView() {
         </Button>
       }
     >
-      <div className="flex max-w-3xl flex-col gap-3">
+      <div
+        className="flex max-w-3xl flex-col gap-3"
+        onDragOver={(event) => {
+          if (dragged !== null) event.preventDefault()
+        }}
+        onDrop={drop}
+      >
         <p className="text-fg-secondary">{text.intro}</p>
         <RuleTester />
         {error && !editing && <StatusMessage tone="danger" {...error} />}
@@ -216,12 +267,20 @@ interface RuleRowProps {
   onEdit: () => void
   onDuplicate: () => void
   onMove: (by: -1 | 1) => void
+  /** Whether its grip can be dragged to move it. */
+  draggable: boolean
+  /** Where the rule being dragged would go, by this row. */
+  dropMark: "before" | "after" | null
+  onDragStart: (event: DragEvent<HTMLElement>) => void
+  onDragEnd: () => void
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void
   onToggle: () => void
   onDelete: () => void
 }
 
-/** A rule as a sentence, its folder and what else it does, with its number, moving, Edit, Duplicate and a menu. The
- * catch-all says it's always first, and can't be duplicated or deleted. */
+/** A rule as a sentence, its folder and what else it does, with a grip to drag it, its number, moving, Edit, Duplicate
+ * and a menu. The catch-all says it's always first, and can't be moved, duplicated or deleted. A line above or below
+ * shows where a dragged rule would go. */
 function RuleRow({
   rule,
   number,
@@ -233,6 +292,11 @@ function RuleRow({
   onEdit,
   onDuplicate,
   onMove,
+  draggable,
+  dropMark,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
   onToggle,
   onDelete,
 }: RuleRowProps) {
@@ -244,58 +308,95 @@ function RuleRow({
     ? [toggleItem]
     : [toggleItem, { label: text.delete, onSelect: onDelete, danger: true }]
   return (
-    <Card id={`rule-${number}`} className="flex scroll-mt-4 items-center gap-3 px-4 py-3">
-      <span
-        className={classes(
-          "flex size-6 shrink-0 items-center justify-center rounded-full bg-input text-xs font-semibold tabular-nums",
-          !rule.enabled && "text-fg-muted",
-        )}
-        title={text.number(number)}
-      >
-        {number}
-      </span>
-      <div className={classes("flex min-w-0 flex-1 flex-col gap-0.5", !rule.enabled && "opacity-60")}>
-        <p className="break-words">{sentence}</p>
-        {folder && (
-          <p className="truncate font-mono text-xs text-fg-secondary" title={folder}>
-            {folder}
-          </p>
-        )}
-        {actions.length > 0 && <p className="text-xs text-fg-secondary">{joinDetails(actions)}</p>}
-      </div>
-      {isCatchAll && (
+    <div data-rule-row className="relative" onDragOver={onDragOver}>
+      {dropMark && (
         <span
-          className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
-          title={text.alwaysFirstHint}
-        >
-          {text.alwaysFirst}
-        </span>
-      )}
-      {!rule.enabled && (
-        <span className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary">{text.off}</span>
-      )}
-      <div className="flex shrink-0 items-center gap-1">
-        <IconButton label={text.moveUp} icon={ArrowUp} disabled={disabled || !canMoveUp} onClick={() => onMove(-1)} />
-        <IconButton
-          label={text.moveDown}
-          icon={ArrowDown}
-          disabled={disabled || !canMoveDown}
-          onClick={() => onMove(1)}
+          className={classes(
+            "pointer-events-none absolute inset-x-0 h-0.5 rounded-full bg-accent",
+            dropMark === "before" ? "-top-[7px]" : "-bottom-[7px]",
+          )}
         />
-        <IconButton label={text.edit} icon={Pencil} disabled={disabled} onClick={onEdit} />
+      )}
+      <Card id={`rule-${number}`} className="flex scroll-mt-4 items-center gap-3 py-3 pr-4 pl-2">
         {isCatchAll ? (
-          // Keeps the buttons lined up with the other rows'.
-          <span className="size-8" />
+          <span className="w-4 shrink-0" />
         ) : (
-          <IconButton label={text.duplicate} icon={Copy} disabled={disabled} onClick={onDuplicate} />
+          <Tooltip label={text.dragToMove}>
+            <span
+              role="img"
+              aria-label={text.dragToMove}
+              draggable={draggable}
+              onDragStart={(event) => {
+                // Drags the whole row, held where the grip was taken.
+                const row = event.currentTarget.closest<HTMLElement>("[data-rule-row]")
+                if (row) {
+                  const box = row.getBoundingClientRect()
+                  event.dataTransfer.setDragImage(row, event.clientX - box.left, event.clientY - box.top)
+                }
+                onDragStart(event)
+              }}
+              onDragEnd={onDragEnd}
+              className={classes(
+                "flex w-4 shrink-0 justify-center text-fg-muted",
+                draggable ? "cursor-grab hover:text-fg-secondary active:cursor-grabbing" : "opacity-40",
+              )}
+            >
+              <GripVertical size={16} />
+            </span>
+          </Tooltip>
         )}
-        {disabled ? (
-          // Keeps the row's layout while the menu is hidden.
-          <span className="size-8" />
-        ) : (
-          <Menu label={text.moreActions} items={menuItems} />
+        <span
+          className={classes(
+            "flex size-6 shrink-0 items-center justify-center rounded-full bg-input text-xs font-semibold tabular-nums",
+            !rule.enabled && "text-fg-muted",
+          )}
+          title={text.number(number)}
+        >
+          {number}
+        </span>
+        <div className={classes("flex min-w-0 flex-1 flex-col gap-0.5", !rule.enabled && "opacity-60")}>
+          <p className="break-words">{sentence}</p>
+          {folder && (
+            <p className="truncate font-mono text-xs text-fg-secondary" title={folder}>
+              {folder}
+            </p>
+          )}
+          {actions.length > 0 && <p className="text-xs text-fg-secondary">{joinDetails(actions)}</p>}
+        </div>
+        {isCatchAll && (
+          <span
+            className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
+            title={text.alwaysFirstHint}
+          >
+            {text.alwaysFirst}
+          </span>
         )}
-      </div>
-    </Card>
+        {!rule.enabled && (
+          <span className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary">{text.off}</span>
+        )}
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton label={text.moveUp} icon={ArrowUp} disabled={disabled || !canMoveUp} onClick={() => onMove(-1)} />
+          <IconButton
+            label={text.moveDown}
+            icon={ArrowDown}
+            disabled={disabled || !canMoveDown}
+            onClick={() => onMove(1)}
+          />
+          <IconButton label={text.edit} icon={Pencil} disabled={disabled} onClick={onEdit} />
+          {isCatchAll ? (
+            // Keeps the buttons lined up with the other rows'.
+            <span className="size-8" />
+          ) : (
+            <IconButton label={text.duplicate} icon={Copy} disabled={disabled} onClick={onDuplicate} />
+          )}
+          {disabled ? (
+            // Keeps the row's layout while the menu is hidden.
+            <span className="size-8" />
+          ) : (
+            <Menu label={text.moreActions} items={menuItems} />
+          )}
+        </div>
+      </Card>
+    </div>
   )
 }

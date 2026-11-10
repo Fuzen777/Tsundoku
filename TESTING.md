@@ -223,6 +223,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
+**61. Drag rules into place** · 0.1.87
+- [ ] Rules → hover a rule's grip (left of its number): the cursor is a hand and "Drag to Move" shows. Drag it up or down: the whole row follows the pointer and a line shows where it will go. Dropping saves the new order at once, numbers follow, and the rule that decides changes accordingly.
+- [ ] Dragging above Everything Else puts the rule just under it; Everything Else has no grip. Dropping a rule where it already is changes nothing. While a rule is being edited, the grips are dimmed and don't drag.
+- [ ] Dragging a link from a browser onto the Rules view still opens it in the add bar, as anywhere else.
+- Seen in the browser preview with simulated drag events (the line shows, a drop saves); not dragged by hand.
+
 **60. The last matching rule wins** · 0.1.86
 - [ ] With rules from before (at least two of your own), open Rules after updating: Everything Else is first with "Always First", and your rules are in reverse order. Test a Link on a link two of them match gives the same folder and rule as before (now numbered from the other end).
 - [ ] Add Rule puts the new rule at the bottom. Two rules that match the same link: the lower one decides, and moving it up makes the other decide. Everything Else can't move, and the rule below it can't move up.

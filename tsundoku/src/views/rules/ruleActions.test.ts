@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Preset } from "../../bindings/Preset"
-import { canPickPreset, copyOfRule, describeActions, newRule } from "./ruleLabels"
+import { canPickPreset, copyOfRule, describeActions, movedRule, newRule } from "./ruleLabels"
 
 const audioMp3 = { id: "audio-mp3", name: "Audio MP3" } as Preset
 
@@ -39,5 +39,21 @@ describe("copyOfRule", () => {
     const copy = copyOfRule(rule)
     expect(copy).toEqual({ ...rule, id: "" })
     expect(copy.conditions[0]).not.toBe(rule.conditions[0])
+  })
+})
+
+describe("movedRule", () => {
+  const rules = ["a", "b", "c", "d"].map((id) => ({ ...newRule(), id }))
+  const ids = (list: readonly { id: string }[] | null) => list?.map((rule) => rule.id).join("")
+
+  it("moves a rule before another, up or down, or to the end", () => {
+    expect(ids(movedRule(rules, 3, 1))).toBe("adbc")
+    expect(ids(movedRule(rules, 1, 3))).toBe("acbd")
+    expect(ids(movedRule(rules, 0, 4))).toBe("bcda")
+  })
+
+  it("says when the rule stays where it is", () => {
+    expect(movedRule(rules, 2, 2)).toBeNull()
+    expect(movedRule(rules, 2, 3)).toBeNull()
   })
 })
