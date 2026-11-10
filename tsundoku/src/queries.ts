@@ -46,6 +46,7 @@ import {
   saveListArrangements,
 } from "./api"
 import { ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
+import { ruleLabel } from "./views/rules/ruleLabels"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
@@ -455,12 +456,16 @@ export function useDismissWhatsNew() {
   return { dismiss, error }
 }
 
-
 /** Groups a download by what picks its folder (`ruleGroup`), once the rules and the download folder are known. */
 export function useRuleGroupOf(enabled: boolean): ((destination: Destination) => GroupPlace) | null {
   const { data: rules } = useFolderRules()
   const { data: presets } = usePresets()
   if (!enabled || !rules || !presets) return null
-  const ruleFolders = rules.map((rule) => rule.folder)
-  return (destination) => ruleGroup(destination, ruleFolders, presets.defaultFolder)
+  return (destination) => ruleGroup(destination, rules, presets.defaultFolder)
+}
+
+/** What a rule is called by its number (`ruleLabel`): its name, else "Rule 3". */
+export function useRuleLabel(): (number: number) => string {
+  const { data: rules } = useFolderRules()
+  return (number) => ruleLabel(rules, number)
 }

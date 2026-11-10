@@ -426,6 +426,7 @@ export const standIns = {
   folderRules: [
     {
       id: "catch-all",
+      name: "",
       enabled: true,
       conditions: [],
       folder: "{site}",
@@ -435,6 +436,7 @@ export const standIns = {
     },
     {
       id: "rule-1",
+      name: "Nat Geo",
       enabled: true,
       conditions: [
         { field: "site", operator: "is", value: "Instagram", caseSensitive: false },
@@ -447,6 +449,7 @@ export const standIns = {
     },
     {
       id: "rule-2",
+      name: "",
       enabled: false,
       conditions: [
         { field: "kind", operator: "is", value: "audio", caseSensitive: false },
@@ -459,6 +462,7 @@ export const standIns = {
     },
     {
       id: "rule-3",
+      name: "",
       enabled: true,
       conditions: [{ field: "title", operator: "contains", value: "zoo", caseSensitive: false }],
       folder: "",

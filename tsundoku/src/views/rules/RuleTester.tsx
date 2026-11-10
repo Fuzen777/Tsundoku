@@ -11,7 +11,7 @@ import { StatusMessage } from "../../components/StatusMessage"
 import { describePreviewError, type ErrorDescription } from "../../errors"
 import { joinDetails } from "../../format"
 import { useAppActions } from "../../navigation"
-import { useDownloadDestination, usePresets, useRulePreset, useRuleRightAway } from "../../queries"
+import { useDownloadDestination, usePresets, useRuleLabel, useRulePreset, useRuleRightAway } from "../../queries"
 import { strings } from "../../strings"
 import { scrollWithin } from "../../scrollWithin"
 
@@ -88,6 +88,7 @@ function TrialOutcome({ video }: { video: VideoInfo }) {
   const ready = !hasPreset || (presetId !== null && !pickingPreset)
   const { data: destination } = useDownloadDestination(video, presetId, ready)
   const { data: rightAway } = useRuleRightAway(video, presetId, ready)
+  const ruleLabel = useRuleLabel()
   const presetName = presets?.presets.find((preset) => preset.id === presetId)?.name
   const ruleLink = (rule: number) => (
     <button
@@ -98,7 +99,7 @@ function TrialOutcome({ video }: { video: VideoInfo }) {
         if (row) scrollWithin(row, "center", "smooth")
       }}
     >
-      {strings.preview.destinationFrom(text.byRule(rule))}
+      {strings.preview.destinationFrom(text.byRule(ruleLabel(rule)))}
     </button>
   )
 

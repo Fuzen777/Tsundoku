@@ -42,6 +42,10 @@ pub struct FolderRule {
     /// Stays the same when the rule is edited or moved: "catch-all" for the rule every install starts with,
     /// "rule-<n>" for the others. Empty for a rule not saved yet; saving gives it one.
     pub id: String,
+    /// What the UI calls it instead of "Rule 3", or empty for its number. Trimmed when saved; missing in rules saved
+    /// before 0.1.91.
+    #[serde(default)]
+    pub name: String,
     /// A rule that's off is kept but skipped.
     pub enabled: bool,
     /// All must match, or any one with `join` set to `Any`. A rule without any matches every download.
@@ -282,6 +286,7 @@ pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
 pub fn catch_all_rule() -> FolderRule {
     FolderRule {
         id: CATCH_ALL_RULE_ID.to_owned(),
+        name: String::new(),
         enabled: true,
         conditions: Vec::new(),
         folder: format!("{{{SITE_PLACEHOLDER}}}"),
@@ -295,6 +300,7 @@ pub fn catch_all_rule() -> FolderRule {
 pub fn posts_folder_rule(folder: &str) -> FolderRule {
     FolderRule {
         id: "rule-1".to_owned(),
+        name: String::new(),
         enabled: true,
         conditions: vec![RuleCondition {
             field: RuleField::Kind,
@@ -816,6 +822,7 @@ impl RuleManager {
     pub fn save(&self, rules: Vec<FolderRule>) -> Result<Vec<FolderRule>, RuleError> {
         let mut rules = with_catch_all_first(rules);
         for (index, rule) in rules.iter_mut().enumerate() {
+            rule.name = rule.name.trim().to_owned();
             rule.folder = rule.folder.trim().to_owned();
             rule.preset_id = rule
                 .preset_id
@@ -925,6 +932,7 @@ mod tests {
     fn rule(conditions: Vec<RuleCondition>, folder: &str) -> FolderRule {
         FolderRule {
             id: String::new(),
+            name: String::new(),
             enabled: true,
             conditions,
             folder: folder.to_owned(),
@@ -1656,10 +1664,13 @@ mod tests {
         );
 
         let mut rules = manager.list();
-        rules.push(rule(
-            vec![condition(RuleField::Uploader, RuleOperator::Is, " natgeo ")],
-            r" D:\NatGeo ",
-        ));
+        rules.push(FolderRule {
+            name: " Nat Geo ".to_owned(),
+            ..rule(
+                vec![condition(RuleField::Uploader, RuleOperator::Is, " natgeo ")],
+                r" D:\NatGeo ",
+            )
+        });
         rules.insert(0, rule(Vec::new(), r"D:\Rest"));
         let saved = manager.save(rules).unwrap();
         let ids: Vec<&str> = saved.iter().map(|rule| rule.id.as_str()).collect();
@@ -1669,6 +1680,8 @@ mod tests {
             "the catch-all stays first"
         );
         assert_eq!(saved[2].folder, r"D:\NatGeo");
+        assert_eq!(saved[2].name, "Nat Geo");
+        assert_eq!(saved[1].name, "", "no name: the UI calls it by its number");
         assert_eq!(saved[2].conditions[0].value, "natgeo");
         assert_eq!(manager_in(&folder).list(), saved, "kept in settings.json");
 

@@ -323,7 +323,7 @@ export const strings = {
     },
     byStatus: "Status",
     byStatusHint: "Group by where each one stands first",
-    ruleGroup: (number: number, folder: string) => `Rule ${number} · ${folder}`,
+    ruleGroup: (rule: string, folder: string) => `${rule} · ${folder}`,
     presetFolderGroup: (folder: string) => `Preset's Folder · ${folder}`,
     downloadFolderGroup: (folder: string) => `Download Folder · ${folder}`,
     chosenFolderGroup: (folder: string) => `Picked Folder · ${folder}`,
@@ -515,7 +515,8 @@ export const strings = {
     savesIn: (folder: string) => `Saves in ${folder}`,
     destinationFrom: (source: string) => `· ${source}`,
     destinationSources: {
-      rule: (number: number) => `Rule ${number}`,
+      /** A rule's name, or "Rule 3" (`ruleLabel`). */
+      rule: (rule: string) => rule,
       preset: "Preset's Folder",
       downloadFolder: "Download Folder",
       chosen: "Picked for This One",
@@ -524,8 +525,8 @@ export const strings = {
     chooseFolderTitle: "Choose Where This Download Goes",
     usualFolder: "Use the Usual Folder",
     /** Beside the preset picker when a rule picked the preset, opening the rules. */
-    presetByRule: (number: number) => `Rule ${number}`,
-    presetByRuleHint: (number: number) => `Rule ${number} picks this preset`,
+    presetByRule: (rule: string) => rule,
+    presetByRuleHint: (rule: string) => `${rule} picks this preset`,
     inQueue: "This is already in the queue.",
     overwriteTitle: "Download Again?",
     overwriteMessage: (preset: string) =>
@@ -665,7 +666,7 @@ export const strings = {
       savesIn: "Saves In",
       startsAs: "Starts As",
       copiedLinks: "Copied Links",
-      byRule: (rule: number) => `Rule ${rule}`,
+      byRule: (rule: string) => rule,
       defaultPreset: "The default preset",
       noPreset: "No preset: a post or shared files are kept as they are.",
       rightAway: "Download right away",
@@ -675,6 +676,9 @@ export const strings = {
       nothingDownloaded: "Nothing is downloaded.",
     },
     number: (number: number) => `Rule ${number}`,
+    name: "Name",
+    nameHint: (number: number) =>
+      `Shown instead of “Rule ${number}” wherever the rule is named, such as beside a download's folder. Leave it empty to use its number.`,
     off: "Off",
     edit: "Edit",
     duplicate: "Duplicate",
@@ -807,7 +811,7 @@ export const strings = {
       quoted: (value: string) => `“${value}”`,
     },
     deleteTitle: "Delete Rule?",
-    deleteMessage: (number: number) => `Delete rule ${number}? Downloads already in the queue keep their folder.`,
+    deleteMessage: (rule: string) => `Delete ${rule}? Downloads already in the queue keep their folder.`,
     errors: {
       emptyFolder: (rule: number) => `Rule ${rule} needs a folder.`,
       noAction: (rule: number) =>

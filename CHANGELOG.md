@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.91 · 2026-11-10
+
+### Added
+
+- **Rule names**: a rule can have a name, set in its editor. It shows above the rule's sentence and, instead of "Rule 3", wherever the rule is mentioned: beside a download's folder on the preview card and in Pending, beside a preset a rule picked, in Test a Link, and in the Queue's and Pending's groups by rule. Rules without a name keep their number.
+
 ## 0.1.90 · 2026-11-10
 
 ### Added

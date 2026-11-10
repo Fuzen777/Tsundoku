@@ -2,6 +2,7 @@ import { Folder, FolderPen, Undo2 } from "lucide-react"
 import { pickFolder } from "../api"
 import type { Destination } from "../bindings/Destination"
 import { useAppActions } from "../navigation"
+import { useRuleLabel } from "../queries"
 import { strings } from "../strings"
 import { IconButton } from "./IconButton"
 import { classes } from "./styles"
@@ -34,13 +35,16 @@ export function DestinationLine({
   className,
 }: DestinationLineProps) {
   const { navigate } = useAppActions()
-  const shown: Destination | undefined = chosenFolder ? { folder: chosenFolder, source: { kind: "chosen" } } : destination
+  const ruleLabel = useRuleLabel()
+  const shown: Destination | undefined = chosenFolder
+    ? { folder: chosenFolder, source: { kind: "chosen" } }
+    : destination
   if (!shown) return <div className={className} />
   const { source } = shown
   const sources = strings.preview.destinationSources
   const from =
     source.kind === "rule"
-      ? ([sources.rule(source.number), "rules"] as const)
+      ? ([sources.rule(ruleLabel(source.number)), "rules"] as const)
       : source.kind === "preset"
         ? ([sources.preset, "presets"] as const)
         : source.kind === "downloadFolder"

@@ -89,7 +89,16 @@ export function RuleEditor({
 
   return (
     <Card className="flex flex-col gap-4 p-4">
-      <p className="font-semibold">{text.number(number)}</p>
+      <p className="font-semibold">{draft.name.trim() || text.number(number)}</p>
+      <Field label={text.name} hint={text.nameHint(number)} htmlFor="rule-name">
+        <TextInput
+          id="rule-name"
+          className="max-w-sm"
+          placeholder={text.number(number)}
+          value={draft.name}
+          onChange={(event) => update({ name: event.target.value })}
+        />
+      </Field>
       {isCatchAll ? (
         <Field label={text.when}>
           <p className="text-fg-secondary">{text.catchAllWhen}</p>

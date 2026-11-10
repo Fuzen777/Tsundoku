@@ -13,6 +13,11 @@ export type FolderRule = {
  */
 id: string, 
 /**
+ * What the UI calls it instead of "Rule 3", or empty for its number. Trimmed when saved; missing in rules saved
+ * before 0.1.91.
+ */
+name: string, 
+/**
  * A rule that's off is kept but skipped.
  */
 enabled: boolean, 

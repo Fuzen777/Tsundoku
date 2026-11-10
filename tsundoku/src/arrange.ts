@@ -1,7 +1,9 @@
 import type { Destination } from "./bindings/Destination"
+import type { FolderRule } from "./bindings/FolderRule"
 import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListSort } from "./bindings/ListSort"
 import { strings } from "./strings"
+import { ruleLabel } from "./views/rules/ruleLabels"
 
 /*
   Grouping and sorting the Pending and Queue views' lists, as each view's toolbar chose (ListArrangement, saved in
@@ -162,15 +164,17 @@ export const AFTER_GROUPS = 2_000_000
 
 /**
  * The group of a download by what picks its folder: the rule, with the part of its folder that doesn't change, then
- * the preset's own folder, then the download folder. `ruleFolders` are the rules' folders in their order.
+ * the preset's own folder, then the download folder. `rules` are the rules in their order, each named by its name or
+ * its number.
  */
-export function ruleGroup(destination: Destination, ruleFolders: readonly string[], downloadFolder: string): GroupPlace {
+export function ruleGroup(destination: Destination, rules: readonly FolderRule[], downloadFolder: string): GroupPlace {
   const { source } = destination
   switch (source.kind) {
     case "rule": {
-      const template = ruleFolders[source.number - 1]
+      const template = rules[source.number - 1]?.folder
       const folder = template ? fixedFolder(template, downloadFolder) : destination.folder
-      return { key: `rule:${source.number}`, label: strings.lists.ruleGroup(source.number, folder), rank: source.number }
+      const label = strings.lists.ruleGroup(ruleLabel(rules, source.number), folder)
+      return { key: `rule:${source.number}`, label, rank: source.number }
     }
     case "preset":
       return {

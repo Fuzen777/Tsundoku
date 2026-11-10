@@ -28,6 +28,7 @@ import {
   describeConditions,
   movedRule,
   newRule,
+  ruleLabel,
   shownFolder,
 } from "./rules/ruleLabels"
 
@@ -131,7 +132,7 @@ export function RulesView() {
   async function remove(index: number) {
     const confirmed = await confirmWithUser({
       title: text.deleteTitle,
-      message: text.deleteMessage(index + 1),
+      message: text.deleteMessage(ruleLabel(rules, index + 1)),
       confirmLabel: text.delete,
       cancelLabel: strings.dialogs.cancel,
     })
@@ -355,6 +356,7 @@ function RuleRow({
           {number}
         </span>
         <div className={classes("flex min-w-0 flex-1 flex-col gap-0.5", !rule.enabled && "opacity-60")}>
+          {rule.name.trim() && <p className="font-semibold break-words">{rule.name.trim()}</p>}
           <p className="break-words">{sentence}</p>
           {folder && (
             <p className="truncate font-mono text-xs text-fg-secondary" title={folder}>

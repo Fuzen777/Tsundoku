@@ -223,6 +223,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
+**65. Rule names** · 0.1.91
+- [ ] Rules → Edit a rule: a Name field under its heading, with "Rule N" as its placeholder. Type "Nat Geo", Save → the row shows "Nat Geo" above its sentence.
+- [ ] Paste a link the rule takes: the preview card's folder line says "· Nat Geo" instead of "· Rule N"; the same in Pending, and beside the preset when the rule picks it. Test a Link and the Queue's or Pending's Group By → Rule say "Nat Geo" too. Clicking it still opens Rules.
+- [ ] Clear the name and save → "Rule N" everywhere again. Deleting a named rule asks "Delete Nat Geo?".
+- Seen in the browser preview (the field and the row); not tried in the app.
+
 **64. Match case** · 0.1.90
 - [ ] Rules → Edit a rule: each condition on the site, uploader, title or link has an Aa button before ×, with "Match Case" as its tooltip; the kind and the preset have none. Click it: it lights up and its tooltip says "Ignore Case". Save → the sentence ends with "(matching case)".
 - [ ] A rule "title contains Zoo" with Match Case on: Test a Link with "Me at the zoo" (`jNQXAC9IVRw`) → the rule doesn't decide; turn Match Case off → it does. Same with a Matches pattern.

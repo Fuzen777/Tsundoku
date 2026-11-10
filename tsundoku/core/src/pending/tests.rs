@@ -567,6 +567,7 @@ fn add_rule(test: &Test, title: &str, actions: rules::FolderRule) {
 fn no_actions() -> rules::FolderRule {
     rules::FolderRule {
         id: String::new(),
+        name: String::new(),
         enabled: true,
         conditions: Vec::new(),
         folder: String::new(),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Preset } from "../../bindings/Preset"
-import { canPickPreset, copyOfRule, describeActions, movedRule, newRule } from "./ruleLabels"
+import { canPickPreset, copyOfRule, describeActions, movedRule, newRule, ruleLabel } from "./ruleLabels"
 
 const audioMp3 = { id: "audio-mp3", name: "Audio MP3" } as Preset
 
@@ -57,5 +57,17 @@ describe("movedRule", () => {
   it("says when the rule stays where it is", () => {
     expect(movedRule(rules, 2, 2)).toBeNull()
     expect(movedRule(rules, 2, 3)).toBeNull()
+  })
+})
+
+describe("ruleLabel", () => {
+  it("names a rule by its name, else by its number", () => {
+    const rules = [
+      { ...newRule(), name: "  " },
+      { ...newRule(), name: " Nat Geo " },
+    ]
+    expect(ruleLabel(rules, 1)).toBe("Rule 1")
+    expect(ruleLabel(rules, 2)).toBe("Nat Geo")
+    expect(ruleLabel(undefined, 3)).toBe("Rule 3")
   })
 })

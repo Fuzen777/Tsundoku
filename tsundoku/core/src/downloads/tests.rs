@@ -1596,6 +1596,7 @@ fn a_rule_picks_the_folder() {
         .update(|settings| {
             settings.rules.list.push(FolderRule {
                 id: "rule-1".to_owned(),
+                name: String::new(),
                 enabled: true,
                 conditions: vec![RuleCondition {
                     field: RuleField::Site,

@@ -91,6 +91,7 @@ export function newCondition(field: RuleField, defaultPresetId: string): RuleCon
 export function newRule(): FolderRule {
   return {
     id: "",
+    name: "",
     enabled: true,
     conditions: [newCondition("site", "")],
     join: "all",
@@ -98,6 +99,12 @@ export function newRule(): FolderRule {
     presetId: null,
     downloadRightAway: null,
   }
+}
+
+/** What a rule is called wherever it's named: its name, or "Rule 3" (its number, counting from 1) without one, or
+ * before the rules are read. */
+export function ruleLabel(rules: readonly FolderRule[] | undefined, number: number): string {
+  return rules?.[number - 1]?.name.trim() || text.number(number)
 }
 
 /** A copy of a rule to be saved as a new one: the same conditions and actions, with no ID, so the core gives it its
