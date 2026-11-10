@@ -11,7 +11,14 @@ const text = strings.settings
 export const DEFAULT_POST_FILE_NAME = "{account} {date} {post} {number}"
 
 /** What a post file's name can hold, in the order the Insert buttons offer them. */
-const POST_NAME_PLACEHOLDERS: readonly PostNamePlaceholder[] = ["account", "date", "post", "number", "site"]
+const POST_NAME_PLACEHOLDERS: readonly PostNamePlaceholder[] = [
+  "account",
+  "date",
+  "post",
+  "number",
+  "numberIfMany",
+  "site",
+]
 
 interface PostNameInputProps {
   id: string
@@ -19,6 +26,11 @@ interface PostNameInputProps {
   onChange: (value: string) => void
   /** The name the example shows while the field is empty: Settings' for a rule, the default for Settings. */
   emptyName: string
+  /** Shown in the field while it's empty. */
+  placeholder?: string
+  /** Buttons after the post's placeholders, such as a rule's `{1}`, with their hover text. */
+  extraPlaceholders?: readonly string[]
+  extraHints?: Readonly<Record<string, string>>
   disabled?: boolean
   onBlur?: () => void
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void
@@ -37,6 +49,9 @@ export function PostNameInput({
   value,
   onChange,
   emptyName,
+  placeholder,
+  extraPlaceholders = [],
+  extraHints = {},
   disabled,
   onBlur,
   onKeyDown,
@@ -53,6 +68,7 @@ export function PostNameInput({
           id={id}
           className="flex-1 font-mono"
           value={value}
+          placeholder={placeholder}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
           onBlur={onBlur}
@@ -63,8 +79,8 @@ export function PostNameInput({
       <PlaceholderButtons
         input={input}
         value={value}
-        placeholders={POST_NAME_PLACEHOLDERS}
-        hints={text.postNamePlaceholderHints}
+        placeholders={[...POST_NAME_PLACEHOLDERS, ...extraPlaceholders]}
+        hints={{ ...text.postNamePlaceholderHints, ...extraHints }}
         onChange={onChange}
       />
       <div className="flex items-center gap-3">

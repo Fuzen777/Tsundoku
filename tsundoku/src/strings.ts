@@ -740,7 +740,8 @@ export const strings = {
     saveInEmptyHint: "Leave it empty to let a rule above pick the folder.",
     fileName: "File Name",
     fileNameHint:
-      "How the files of matching posts are named, as in Settings → Posts of Images: it needs {post} and {number}, and the extension is added. Leave it empty to let a rule above name them, else Settings. Videos keep their preset's name.",
+      "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (MEGA, MediaFire, Google Drive, Dropbox) when it's a single file. {1}, {2}… are what the rule's Matches pattern captured in parentheses. A post's name gets {post} and {number} added when it lacks them, so no two files share a name; the extension is added, or kept for a shared file. Leave it empty to let a rule above name them, else Settings or the file's own name. Videos keep their preset's name.",
+    usingDefault: "Using Default",
     startAs: "Start As",
     startAsHint: "The preset matching videos start with, unless you pick another. Posts and shared files have none.",
     startAsUnavailable: "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",
@@ -1060,7 +1061,7 @@ export const strings = {
     posts: "Posts of Images",
     postFileName: "File Name",
     postFileNameHint:
-      "How each file of a post is named, before its extension. It needs {post} and {number}, so every file gets a name of its own. Files downloaded before keep their names.",
+      "How each file of a post is named, before its extension. It needs {post} and {number} (or {numberIfMany}, the number only when there are several files), so every file gets a name of its own. Files downloaded before keep their names.",
     postFileNameExample: "For example:",
     useDefaultName: "Use Default",
     postNamePlaceholderHints: {
@@ -1068,6 +1069,8 @@ export const strings = {
       date: "The day it was posted, such as 2026-11-04.",
       post: "The post's ID on its site.",
       number: "The file's place in the post: 1 for the first.",
+      numberIfMany:
+        "The file's place in the post, only when several of its files are downloaded: a post of one file, or one file picked from it, gets none.",
       site: "The site, such as Instagram or X.",
     },
     /** What the example under the field fills the placeholders with, and the extension it adds. */
@@ -1076,6 +1079,7 @@ export const strings = {
       date: "2026-11-04",
       post: "DfPQchkG1tg",
       number: "1",
+      numberIfMany: "1",
       site: "Instagram",
     },
     postNameSampleExtension: "jpg",

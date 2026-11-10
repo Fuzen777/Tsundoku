@@ -3,4 +3,4 @@
 /**
  * What a post file's name can hold besides text.
  */
-export type PostNamePlaceholder = "account" | "date" | "post" | "number" | "site";
+export type PostNamePlaceholder = "account" | "date" | "post" | "number" | "numberIfMany" | "site";

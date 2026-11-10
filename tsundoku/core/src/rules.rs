@@ -61,9 +61,10 @@ pub struct FolderRule {
     /// become the download's, and a folder that isn't a full path is inside the download folder. Empty rather than
     /// missing, so a version from before 0.1.35 still reads the rule.
     pub folder: String,
-    /// How the files of matching posts are named, as Settings → Posts of Images names them (`post_names`, with
-    /// `{account}`, `{date}`, `{post}`, `{number}` and `{site}`), or empty to leave it to the rules before it, then
-    /// Settings. Videos keep their preset's name. Missing in rules saved before 0.1.96.
+    /// How the files of matching posts, and a matching file host's link of one file, are named, as Settings → Posts
+    /// of Images names posts' (`post_names`, with `{account}`, `{date}`, `{post}`, `{number}` and `{site}`), plus `{1}`
+    /// to `{9}` from the rule's pattern; empty to leave it to the rules before it, then Settings or the file's own
+    /// name. Videos keep their preset's name. See `file_name`. Missing in rules saved before 0.1.96.
     #[serde(default)]
     pub file_name: String,
     /// The preset matching videos start with, by its ID, or `None` to leave it to the rules before it. A rule that
@@ -466,7 +467,7 @@ impl FolderRule {
             return Err(RuleError::NoAction { rule: number });
         }
         if !self.file_name.trim().is_empty()
-            && let Err(error) = post_names::check(&self.file_name)
+            && let Err(error) = post_names::check_text(&fill_captures(&self.file_name, None))
         {
             return Err(RuleError::FileName {
                 rule: number,
@@ -683,21 +684,53 @@ fn rule_number(index: usize) -> u32 {
     u32::try_from(index + 1).unwrap_or(u32::MAX)
 }
 
-/// How a post's files are named by the rules: the file name of the last rule that's on, names files and matches, as
-/// Settings → Posts of Images writes one, or `None` to leave it to Settings. Only posts are named so: a video keeps its
-/// preset's name, and a file host's files their own.
+/// How a download's files are named by the rules: the file name of the last rule that's on, names files and matches,
+/// with `{1}` to `{9}` filled in from its pattern, or `None` to leave it to Settings (a post) or the file's own name.
+/// A post's name is kept as Settings → Posts of Images writes one, with ` {post}` and ` {number}` added when it lacks
+/// them so no two files share a name, for `post_names::gallery_format`. A file host's link of one file gets its name
+/// filled in (`post_names::shared_file_name`), without the extension, which the file keeps. A video keeps its preset's
+/// name, and a shared folder's files their own.
 pub fn file_name(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<String> {
-    subject.video.post.as_ref()?;
-    rules
-        .iter()
-        .rev()
-        .find(|rule| {
-            rule.enabled
-                && !rule.is_catch_all()
-                && !rule.file_name.trim().is_empty()
-                && rule.matches(subject)
-        })
-        .map(|rule| rule.file_name.trim().to_owned())
+    let video = subject.video;
+    let is_post = video.post.is_some();
+    let is_one_file = video.files.as_ref().is_some_and(|files| files.count == 1);
+    if !is_post && !is_one_file {
+        return None;
+    }
+    let rule = rules.iter().rev().find(|rule| {
+        rule.enabled
+            && !rule.is_catch_all()
+            && !rule.file_name.trim().is_empty()
+            && rule.matches(subject)
+    })?;
+    let captured = rule.captured(subject);
+    let mut name = fill_captures(rule.file_name.trim(), captured.as_deref());
+    if !is_post {
+        return Some(post_names::shared_file_name(&name, video));
+    }
+    let lowered = name.to_lowercase();
+    if !lowered.contains("{post}") {
+        name.push_str(" {post}");
+    }
+    if !lowered.contains("{number}") && !lowered.contains("{numberifmany}") {
+        name.push_str(" {number}");
+    }
+    Some(name)
+}
+
+/// `{1}` to `{9}` in a file name replaced by what the rule's pattern captured (`captured`, whole match first), made safe
+/// for a file name and without braces, or by nothing when there's no such group.
+fn fill_captures(name: &str, captured: Option<&[Option<String>]>) -> String {
+    let mut filled = name.to_owned();
+    for group in 1..=9 {
+        let value = captured
+            .and_then(|groups| groups.get(group))
+            .and_then(Option::as_deref)
+            .map(|value| safe_folder_name(&value.replace(['{', '}'], ""), ""))
+            .unwrap_or_default();
+        filled = filled.replace(&format!("{{{group}}}"), &value);
+    }
+    filled
 }
 
 /// A rule's folder for one download added on `today`: its placeholders filled in, inside the download folder unless
@@ -1258,9 +1291,49 @@ mod tests {
             preset: None,
         };
         assert_eq!(
-            file_name(&rules, &file_subject),
-            None,
-            "a file host's files keep theirs"
+            file_name(&rules, &file_subject).as_deref(),
+            Some("MEGA AbCdEf12 1"),
+            "a file host's link of one file is named too"
+        );
+    }
+
+    #[test]
+    fn puts_what_a_pattern_captured_in_the_file_name() {
+        let rj = |field: RuleField| condition(field, RuleOperator::Matches, r"(RJ\d+)");
+        let named = |name: &str| FolderRule {
+            file_name: name.to_owned(),
+            ..rule(vec![rj(RuleField::Title)], "")
+        };
+        let shared = VideoInfo {
+            title: "SomefileRJ123456.rar".to_owned(),
+            ..mega_file()
+        };
+        let subject = RuleSubject {
+            video: &shared,
+            preset: None,
+        };
+        assert_eq!(
+            file_name(&[named("{1}")], &subject).as_deref(),
+            Some("RJ123456")
+        );
+        assert_eq!(
+            file_name(&[named("{site} {1} {2}")], &subject).as_deref(),
+            Some("MEGA RJ123456"),
+            "a group the pattern doesn't have is left out"
+        );
+
+        let post = VideoInfo {
+            title: "Voice work RJ01234".to_owned(),
+            ..tweet()
+        };
+        let post_subject = RuleSubject {
+            video: &post,
+            preset: None,
+        };
+        assert_eq!(
+            file_name(&[named("{account} {1}")], &post_subject).as_deref(),
+            Some("{account} RJ01234 {post} {number}"),
+            "a post's name gets the post and the number when it has neither"
         );
     }
 
@@ -1273,11 +1346,11 @@ mod tests {
             ..rule(Vec::new(), "")
         };
         assert_eq!(
-            manager.save(vec![named("{account} {number}")]),
+            manager.save(vec![named("{account} {title}")]),
             Err(RuleError::FileName {
                 rule: 2,
-                error: PostNameError::MissingPlaceholder {
-                    placeholder: crate::post_names::PostNamePlaceholder::Post
+                error: PostNameError::UnknownPlaceholder {
+                    name: "title".to_owned()
                 }
             })
         );
@@ -1285,10 +1358,10 @@ mod tests {
             manager.save(vec![named("{post}: {number}")]),
             Err(RuleError::FileName { rule: 2, .. })
         ));
-        let saved = manager.save(vec![named(" {post} {number} ")]).unwrap();
+        let saved = manager.save(vec![named(" {1} ")]).unwrap();
         assert_eq!(
-            saved[1].file_name, "{post} {number}",
-            "naming files is enough, trimmed"
+            saved[1].file_name, "{1}",
+            "naming files is enough, trimmed; a captured group and no post or number are fine"
         );
     }
 

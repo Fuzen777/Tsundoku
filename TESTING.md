@@ -227,11 +227,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
-**68. File names per rule** · 0.1.96, 0.1.97
-- [ ] Rules → Edit a rule: File Name under Save In looks like Settings → Posts of Images' (the same buttons and an example), and the example shows Settings' name while it's empty. Type `{account} {post} {number}`, Save → the row says "Names posts' files “{account} {post} {number}”". A name without {post} or {number}, or with `:`, is refused on Save with Settings' reason.
-- [ ] A rule for Instagram with such a name → a post's files are "natgeo DfPQchkG1tg 1.jpg", "… 2.jpg". Not tried: it needs a signed-in browser. A video the rule matches keeps its preset's name.
-- [ ] Clearing the name → new posts take Settings' name again; a post already in the queue keeps the name it had when added.
-- [ ] Settings → Posts of Images still saves on leaving the field, Use Default Name still shows, and "Saved." appears beside the example.
+**68. File names per rule** · 0.1.96, 0.1.97, 0.1.99
+- [ ] Rules → Edit a rule: File Name under Save In looks like Settings → Posts of Images' (the same buttons, {numberIfMany} included, and an example), shows "Using Default" while empty, and the example then shows Settings' name. With a Matches condition such as title matches `(RJ\d+)`, a {1} button follows. A name with `:` or an unknown placeholder is refused on Save.
+- [ ] A MEGA or MediaFire link to one file named like "SomefileRJ123456.rar", with that rule and the name `{1}` → it's saved as "RJ123456.rar". Not tried: the portable copy was running, so the app couldn't be started.
+- [ ] A rule for Instagram named `{account} {1}` → a post's files get the post's ID and number added. Not tried: it needs a signed-in browser.
+- [ ] Settings → Posts of Images with `{account} {post} {numberIfMany}`: a carousel's files are numbered, a single photo isn't. Not tried.
 
 **66. AND and OR per condition** · 0.1.92, 0.1.94 (replaces 63)
 - [ ] Rules → Edit a rule with three conditions: site is YouTube, site is Vimeo, title contains zoo. Each condition after the first starts with its own AND button, on its row, lined up with the first condition's fields (in capitals, with a tooltip). Click the first one only: it says OR, the second stays AND. Save → the sentence reads "When the site is YouTube OR the site is Vimeo AND the title contains “zoo”".

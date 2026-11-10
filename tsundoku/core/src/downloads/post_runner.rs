@@ -180,6 +180,7 @@ mod tests {
             cookies: Some("firefox:C:\\Profiles\\main".to_owned()),
             post: None,
             files: None,
+            shared_file_name: None,
         };
         let post = PostJob {
             gallery_dl: Some(PathBuf::from("gallery-dl.exe")),

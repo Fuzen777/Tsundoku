@@ -76,8 +76,8 @@ pub struct QueueItem {
     /// rules.
     #[serde(default)]
     pub folder_chosen: bool,
-    /// How a post's files are named by a rule when it was added (`rules::file_name`), or `None` for Settings' name and
-    /// for a video. The UI doesn't need it.
+    /// How a post's files, or a file host's one file, are named by a rule when it was added (`rules::file_name`), or
+    /// `None` for Settings' name or the file's own, and for a video. The UI doesn't need it.
     #[serde(skip)]
     #[ts(skip)]
     pub file_name: Option<String>,
@@ -854,7 +854,7 @@ impl DownloadQueue {
         first_error.map_or(Ok(restored), Err)
     }
 
-    /// How a post's files are named by the rules (`rules::file_name`), else `None` for Settings' name.
+    /// How a post's files, or a file host's one file, are named by the rules (`rules::file_name`).
     fn rule_file_name(&self, video: &VideoInfo) -> Option<String> {
         rules::file_name(
             &self.settings.get().rules.list,
@@ -1015,6 +1015,12 @@ impl DownloadQueue {
                 ),
             }),
             files: item.video.files,
+            shared_file_name: item
+                .video
+                .files
+                .is_some()
+                .then(|| item.file_name.clone())
+                .flatten(),
         }
     }
 

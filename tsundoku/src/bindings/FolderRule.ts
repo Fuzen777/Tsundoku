@@ -32,9 +32,10 @@ conditions: Array<RuleCondition>,
  */
 folder: string, 
 /**
- * How the files of matching posts are named, as Settings → Posts of Images names them (`post_names`, with
- * `{account}`, `{date}`, `{post}`, `{number}` and `{site}`), or empty to leave it to the rules before it, then
- * Settings. Videos keep their preset's name. Missing in rules saved before 0.1.96.
+ * How the files of matching posts, and a matching file host's link of one file, are named, as Settings → Posts
+ * of Images names posts' (`post_names`, with `{account}`, `{date}`, `{post}`, `{number}` and `{site}`), plus `{1}`
+ * to `{9}` from the rule's pattern; empty to leave it to the rules before it, then Settings or the file's own
+ * name. Videos keep their preset's name. See `file_name`. Missing in rules saved before 0.1.96.
  */
 fileName: string, 
 /**

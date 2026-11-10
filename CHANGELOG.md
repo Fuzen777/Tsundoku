@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.99 · 2026-11-10
+
+### Added
+
+- **Captured text in rule file names**: a rule's File Name can use {1}, {2}… for what its Matches pattern captured, as its folder can: with title matches `(RJ\d+)` and the name `{1}`, "SomefileRJ123456.rar" is saved as "RJ123456.rar". Rule file names now also apply to a shared file (MEGA, MediaFire, Google Drive, Dropbox) when it's a single file, which keeps its extension, and a post's name gets {post} and {number} added when it lacks them.
+- **{numberIfMany}**: a file name placeholder for the file's number only when several files of the post are downloaded, so a single photo gets no number. Settings → Posts of Images and rules both have it.
+- The empty File Name field of a rule says "Using Default".
+
 ## 0.1.98 · 2026-11-10
 
 ### Changed

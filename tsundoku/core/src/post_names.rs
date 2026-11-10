@@ -31,16 +31,19 @@ pub enum PostNamePlaceholder {
     Post,
     /// The file's place in the post, from 1.
     Number,
+    /// The file's place in the post when the download takes several of its files; nothing for one alone.
+    NumberIfMany,
     /// The site, as rules name it ("Instagram", "X").
     Site,
 }
 
 impl PostNamePlaceholder {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Account,
         Self::Date,
         Self::Post,
         Self::Number,
+        Self::NumberIfMany,
         Self::Site,
     ];
 
@@ -51,6 +54,7 @@ impl PostNamePlaceholder {
             Self::Date => "date",
             Self::Post => "post",
             Self::Number => "number",
+            Self::NumberIfMany => "numberIfMany",
             Self::Site => "site",
         }
     }
@@ -106,7 +110,10 @@ pub fn check(template: &str) -> Result<String, PostNameError> {
     }
     let parts = parse(template)?;
     for required in [PostNamePlaceholder::Post, PostNamePlaceholder::Number] {
-        if !parts.contains(&Part::Placeholder(required)) {
+        // A number only when there are several files is as good: one file alone needs none.
+        let numbered = required == PostNamePlaceholder::Number
+            && parts.contains(&Part::Placeholder(PostNamePlaceholder::NumberIfMany));
+        if !numbered && !parts.contains(&Part::Placeholder(required)) {
             return Err(PostNameError::MissingPlaceholder {
                 placeholder: required,
             });
@@ -147,6 +154,47 @@ fn parse(template: &str) -> Result<Vec<Part>, PostNameError> {
         parts.push(Part::Text(text));
     }
     Ok(parts)
+}
+
+/// Whether a rule's file name (`rules::FolderRule::file_name`, its `{1}` to `{9}` filled in) can be used: like `check`,
+/// without needing `{post}` and `{number}`, which a post's name gets added (`rules::file_name`) and a file host's one
+/// file doesn't need.
+pub fn check_text(template: &str) -> Result<(), PostNameError> {
+    if let Some(character) = template
+        .chars()
+        .find(|character| character.is_control() || FORBIDDEN_CHARACTERS.contains(*character))
+    {
+        return Err(PostNameError::ForbiddenCharacter {
+            character: character.to_string(),
+        });
+    }
+    parse(template).map(|_| ())
+}
+
+/// A file host's file named by a rule's `template` (as a post's name is written): the account (the uploader, else the
+/// site), the date it was uploaded (left out when unknown), the share's ID as `{post}`, 1 as `{number}` and the site,
+/// with spaces collapsed and made safe for a file name, without the extension. The file's title when nothing is left.
+pub fn shared_file_name(template: &str, video: &VideoInfo) -> String {
+    let site = rules::site_name(video);
+    let text: String = parse(template)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|part| match part {
+            Part::Text(text) => text,
+            Part::Placeholder(PostNamePlaceholder::Account) => {
+                video.uploader.clone().unwrap_or_else(|| site.clone())
+            }
+            Part::Placeholder(PostNamePlaceholder::Date) => {
+                video.upload_date.clone().unwrap_or_default()
+            }
+            Part::Placeholder(PostNamePlaceholder::Post) => video.video_id.clone(),
+            Part::Placeholder(PostNamePlaceholder::Number) => "1".to_owned(),
+            Part::Placeholder(PostNamePlaceholder::NumberIfMany) => String::new(),
+            Part::Placeholder(PostNamePlaceholder::Site) => site.clone(),
+        })
+        .collect();
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    rules::safe_folder_name(&collapsed, &rules::safe_folder_name(&video.title, "File"))
 }
 
 /// gallery-dl's `-f` format for the files of `post`, named by `template` (from `check`; one that doesn't pass falls
@@ -206,6 +254,10 @@ fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
         // A post's file without a number of its own (on a site that gives none) keeps the name it has on the site,
         // so no two files of the post share a name.
         PostNamePlaceholder::Number => Some(NUMBER_FIELD.to_owned()),
+        // Left out, with the text before it, for a post of one file or one file picked from it.
+        PostNamePlaceholder::NumberIfMany => {
+            (post.post_file_count().unwrap_or(1) > 1).then(|| NUMBER_FIELD.to_owned())
+        }
         PostNamePlaceholder::Account => {
             let fields: &[&str] = match post.site.as_str() {
                 "instagram" => &["username"],
@@ -358,6 +410,30 @@ mod tests {
         assert_eq!(
             gallery_format(DEFAULT_POST_FILE_NAME, &instagram()),
             "{username|'National Geographic'} 2026-11-04 DfPQchkG1tg {num|filename}.{extension}"
+        );
+    }
+
+    #[test]
+    fn numbers_files_only_when_there_are_several() {
+        let name = "{post} {numberIfMany}";
+        assert_eq!(
+            check(name).as_deref(),
+            Ok(name),
+            "it's as good as {{number}}"
+        );
+        assert_eq!(
+            gallery_format(name, &instagram()),
+            "DfPQchkG1tg {num|filename}.{extension}"
+        );
+        let mut single = instagram();
+        single.post = Some(crate::metadata::PostContents {
+            images: 1,
+            videos: 0,
+        });
+        assert_eq!(
+            gallery_format(name, &single),
+            "DfPQchkG1tg.{extension}",
+            "left out with its space"
         );
     }
 

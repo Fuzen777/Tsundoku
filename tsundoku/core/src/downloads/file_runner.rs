@@ -90,8 +90,13 @@ fn download(
     let rate = job.rate_limit.as_deref().and_then(bytes_per_second);
     let mut meter = Meter::new(share.total_bytes(), rate);
     let mut saved = Vec::new();
+    // A rule's name only for a share of one file, which might have become a folder since it was added.
+    let single_name = job
+        .shared_file_name
+        .as_deref()
+        .filter(|_| share.files.len() == 1);
     for (index, file) in share.files.iter().enumerate() {
-        let destination = job.folder.join(&file.path);
+        let destination = destination_of(&job.folder, &file.path, single_name);
         if fs::metadata(&destination)
             .is_ok_and(|metadata| metadata.is_file() && metadata.len() == file.size)
         {
@@ -297,6 +302,22 @@ fn place(part: &Path, destination: &Path) -> Result<PathBuf, DownloadError> {
     Ok(destination)
 }
 
+/// Where a share's file goes in the download's folder: its own path, or, named by a rule (`name`), that name with the
+/// file's own extension in the same subfolder.
+fn destination_of(folder: &Path, path: &Path, name: Option<&str>) -> PathBuf {
+    let own = folder.join(path);
+    match name {
+        Some(name) => {
+            let extension = path
+                .extension()
+                .map(|extension| format!(".{}", extension.to_string_lossy()))
+                .unwrap_or_default();
+            own.with_file_name(format!("{name}{extension}"))
+        }
+        None => own,
+    }
+}
+
 /// `path`, or the first of "Name (2).ext", "Name (3).ext"… that isn't taken.
 pub(crate) fn free_name(path: &Path) -> PathBuf {
     if !path.exists() {
@@ -452,6 +473,22 @@ mod tests {
         assert_eq!(free_name(&path), folder.path().join("Pack (2).zip"));
         fs::write(folder.path().join("Pack (2).zip"), "two").unwrap();
         assert_eq!(free_name(&path), folder.path().join("Pack (3).zip"));
+    }
+
+    #[test]
+    fn names_a_file_as_a_rule_says_keeping_its_extension() {
+        let folder = Path::new(r"D:\Files");
+        let path = Path::new("SomefileRJ123456.rar");
+        assert_eq!(destination_of(folder, path, None), folder.join(path));
+        assert_eq!(
+            destination_of(folder, path, Some("RJ123456")),
+            folder.join("RJ123456.rar")
+        );
+        assert_eq!(
+            destination_of(folder, Path::new("README"), Some("Notes")),
+            folder.join("Notes"),
+            "a file without an extension"
+        );
     }
 
     #[test]

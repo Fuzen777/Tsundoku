@@ -1666,3 +1666,47 @@ fn a_rule_names_a_posts_files_and_the_item_keeps_it() {
     assert_eq!(video.file_name, None, "a video keeps its preset's name");
     test.queue.cancel(video.id).unwrap();
 }
+
+#[test]
+fn a_rule_names_a_shared_file_with_what_its_pattern_captured() {
+    use crate::rules::{FolderRule, RuleCondition, RuleField, RuleOperator};
+
+    let test = Test::new();
+    test.settings
+        .update(|settings| {
+            settings.rules.list.push(FolderRule {
+                id: "rule-1".to_owned(),
+                file_name: "{1}".to_owned(),
+                conditions: vec![RuleCondition {
+                    field: RuleField::Title,
+                    operator: RuleOperator::Matches,
+                    value: r"(RJ\d+)".to_owned(),
+                    case_sensitive: false,
+                    join: crate::rules::ConditionJoin::All,
+                }],
+                ..crate::rules::catch_all_rule()
+            });
+        })
+        .unwrap();
+    let share = VideoInfo {
+        site: "mediafire".to_owned(),
+        site_name: "mediafire.com".to_owned(),
+        video_id: "abc123".to_owned(),
+        url: "https://www.mediafire.com/file/abc123".to_owned(),
+        title: "SomefileRJ123456.rar".to_owned(),
+        duration_seconds: None,
+        best_height: None,
+        files: Some(crate::metadata::FileContents {
+            count: 1,
+            bytes: 2048,
+        }),
+        ..video("abc123")
+    };
+    let id = test.queue.add_post(share).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    assert_eq!(
+        test.runner.job(id).shared_file_name.as_deref(),
+        Some("RJ123456")
+    );
+    test.queue.cancel(id).unwrap();
+}

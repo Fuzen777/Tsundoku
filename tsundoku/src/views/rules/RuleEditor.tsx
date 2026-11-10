@@ -80,6 +80,7 @@ export function RuleEditor({
   const settingsPostName = downloadOptions?.postFileName.trim() || DEFAULT_POST_FILE_NAME
   const isCatchAll = draft.id === CATCH_ALL_RULE_ID
   const { placeholders, hints: placeholderHints } = folderPlaceholders(draft.conditions)
+  const capturedPlaceholders = placeholders.filter((placeholder) => /^\d$/.test(placeholder))
   const hasPattern = draft.conditions.some((condition) => isPattern(condition.operator))
   const update = (changes: Partial<FolderRule>) => onChange({ ...draft, ...changes })
   const setCondition = (index: number, condition: RuleCondition) =>
@@ -168,6 +169,9 @@ export function RuleEditor({
             value={draft.fileName}
             onChange={(fileName) => update({ fileName })}
             emptyName={settingsPostName}
+            placeholder={text.usingDefault}
+            extraPlaceholders={capturedPlaceholders}
+            extraHints={placeholderHints}
           />
         </Field>
       )}

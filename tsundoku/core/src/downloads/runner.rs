@@ -48,6 +48,9 @@ pub struct JobSpec {
     pub post: Option<PostJob>,
     /// Set for a file host's link (`hosts`), which Tsundoku downloads itself.
     pub files: Option<FileContents>,
+    /// A file host's link of one file named by a rule (`rules::file_name`): its name without the extension, which the
+    /// file keeps.
+    pub shared_file_name: Option<String>,
 }
 
 /// What downloading a post takes beyond a video's needs.
@@ -349,6 +352,7 @@ mod tests {
             cookies: None,
             post: None,
             files: None,
+            shared_file_name: None,
         }
     }
 
