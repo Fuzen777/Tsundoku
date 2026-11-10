@@ -75,6 +75,7 @@ export function RuleEditor({
 }: RuleEditorProps) {
   const { data: supportedSites } = useSupportedSites()
   const folderInput = useRef<HTMLInputElement>(null)
+  const fileNameInput = useRef<HTMLInputElement>(null)
   const isCatchAll = draft.id === CATCH_ALL_RULE_ID
   const { placeholders, hints: placeholderHints } = folderPlaceholders(draft.conditions)
   const hasPattern = draft.conditions.some((condition) => isPattern(condition.operator))
@@ -158,6 +159,26 @@ export function RuleEditor({
           />
         </div>
       </Field>
+      {!isCatchAll && (
+        <Field label={text.fileName} hint={text.fileNameHint} htmlFor="rule-file-name">
+          <div className="flex flex-col gap-2">
+            <TextInput
+              ref={fileNameInput}
+              id="rule-file-name"
+              className="font-mono"
+              value={draft.fileName}
+              onChange={(event) => update({ fileName: event.target.value })}
+            />
+            <PlaceholderButtons
+              input={fileNameInput}
+              value={draft.fileName}
+              placeholders={[...placeholders, "number"]}
+              hints={placeholderHints}
+              onChange={(fileName) => update({ fileName })}
+            />
+          </div>
+        </Field>
+      )}
       {!isCatchAll && <RuleActions draft={draft} presets={presets} onChange={update} />}
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex justify-end gap-2">

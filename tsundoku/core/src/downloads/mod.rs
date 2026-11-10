@@ -76,6 +76,11 @@ pub struct QueueItem {
     /// rules.
     #[serde(default)]
     pub folder_chosen: bool,
+    /// How its files are named by a rule when it was added (`rules::file_name`), or `None` for the preset's name (a
+    /// video) or Settings' (a post). The UI doesn't need it.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub file_name: Option<String>,
     pub state: QueueState,
     /// Download Again with the same preset: replace the file made before.
     pub overwrite: bool,
@@ -443,10 +448,12 @@ impl DownloadQueue {
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
         let folder = chosen.unwrap_or_else(|| self.destination(&video, Some(&preset)).folder);
+        let file_name = self.rule_file_name(&video, Some(&preset));
         let mut item = QueueItem {
             id: 0,
             folder,
             folder_chosen,
+            file_name,
             video,
             preset: Some(preset),
             state: QueueState::Waiting,
@@ -531,10 +538,12 @@ impl DownloadQueue {
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
         let folder = chosen.unwrap_or_else(|| self.destination(&video, None).folder);
+        let file_name = self.rule_file_name(&video, None);
         let mut item = QueueItem {
             id: 0,
             folder,
             folder_chosen,
+            file_name,
             video,
             preset: None,
             state: QueueState::Waiting,
@@ -845,6 +854,14 @@ impl DownloadQueue {
         first_error.map_or(Ok(restored), Err)
     }
 
+    /// How a download of `video` with `preset` (`None` for a post) is named by the rules (`rules::file_name`).
+    fn rule_file_name(&self, video: &VideoInfo, preset: Option<&Preset>) -> Option<String> {
+        rules::file_name(
+            &self.settings.get().rules.list,
+            &RuleSubject { video, preset },
+        )
+    }
+
     /// Where a download of `video` would go, with `preset` (`None` for a post): the folder of the last rule that
     /// matches, else the preset's own folder, else the download folder. Adding uses it, and the preview card shows it.
     pub fn destination(&self, video: &VideoInfo, preset: Option<&Preset>) -> Destination {
@@ -970,7 +987,12 @@ impl DownloadQueue {
         JobSpec {
             id: item.id,
             url: item.video.url.clone(),
-            preset: item.preset.clone(),
+            preset: item.preset.clone().map(|mut preset| {
+                if let Some(name) = &item.file_name {
+                    preset.file_name = rules::yt_dlp_output(name);
+                }
+                preset
+            }),
             folder: PathBuf::from(&item.folder),
             temp_folder: temp_folder(item),
             log_path: self.log_path(item.id),
@@ -989,7 +1011,10 @@ impl DownloadQueue {
                     .post_file_count()
                     .unwrap_or(contents.images + contents.videos),
                 range: item.video.picked_post_files(),
-                file_name: post_names::gallery_format(&options.post_file_name, &item.video),
+                file_name: item.file_name.as_deref().map_or_else(
+                    || post_names::gallery_format(&options.post_file_name, &item.video),
+                    post_names::rule_format,
+                ),
             }),
             files: item.video.files,
         }

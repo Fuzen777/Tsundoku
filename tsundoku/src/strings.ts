@@ -726,6 +726,7 @@ export const strings = {
       month: "The month it was uploaded, from 01 to 12, or Unknown.",
       date: "The day it was uploaded, as 2026-11-06, or Unknown.",
       added: "The day you added it, as 2026-11-06.",
+      number: "A post's file's place in it: 1, 2, 3… Only in file names.",
     },
     capturedHint: (group: string) =>
       `The text the pattern captured in its parentheses number ${group}, counting from the left, or Unknown.`,
@@ -738,6 +739,9 @@ export const strings = {
     chooseFolder: "Choose Folder…",
     chooseFolderTitle: "Choose Where Matching Downloads Go",
     saveInEmptyHint: "Leave it empty to let a rule above pick the folder.",
+    fileName: "File Name",
+    fileNameHint:
+      "How matching downloads' files are named, with the same placeholders as the folder, and {number} for a post's files. Without {id}, the ID is added at the end, and a post's files get their number too, so no two files share a name. The extension is added. Leave it empty to let a rule above name them, else the preset (videos) or Settings → Posts of Images (posts). Shared files keep their own names.",
     startAs: "Start As",
     startAsHint: "The preset matching videos start with, unless you pick another. Posts and shared files have none.",
     startAsUnavailable: "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",
@@ -749,6 +753,7 @@ export const strings = {
     on: "On",
     /** What a rule does besides picking a folder, under its folder in the list. */
     actions: {
+      namesFiles: (name: string) => `Names files “${name}”`,
       startsAs: (preset: string) => `Starts as ${preset}`,
       presetDeleted: "Starts with the default preset, since the one it picked was deleted",
       rightAway: "Downloads right away",
@@ -817,11 +822,13 @@ export const strings = {
     errors: {
       emptyFolder: (rule: number) => `Rule ${rule} needs a folder.`,
       noAction: (rule: number) =>
-        `Rule ${rule} doesn't do anything yet. Pick a folder, a preset to start with or Download Right Away.`,
+        `Rule ${rule} doesn't do anything yet. Pick a folder, a file name, a preset to start with or Download Right Away.`,
       circularPreset: (rule: number) =>
         `Rule ${rule} checks the kind or the preset, so it can't pick the preset too. Remove that condition, or set Start As to Leave as Is.`,
       emptyValue: (rule: number) => `A condition of rule ${rule} is empty. Fill it in or remove it.`,
       invalidPattern: (rule: number) => `A pattern in rule ${rule} isn't a valid regular expression.`,
+      fileNameCharacter: (rule: number, character: string) =>
+        `Rule ${rule}'s file name can't have ${character}, which Windows refuses in a file name.`,
       storage: "Couldn't save the rules.",
     },
   },

@@ -94,6 +94,7 @@ export function newRule(): FolderRule {
     enabled: true,
     conditions: [newCondition("site", "")],
     folder: "",
+    fileName: "",
     presetId: null,
     downloadRightAway: null,
   }
@@ -132,6 +133,7 @@ export function canPickPreset(conditions: readonly RuleCondition[]): boolean {
 export function describeActions(rule: FolderRule, presets: readonly Preset[]): string[] {
   const actions = text.actions
   const phrases: string[] = []
+  if (rule.fileName.trim()) phrases.push(actions.namesFiles(rule.fileName.trim()))
   if (rule.presetId !== null) {
     const preset = presets.find((candidate) => candidate.id === rule.presetId)
     phrases.push(preset ? actions.startsAs(preset.name) : actions.presetDeleted)

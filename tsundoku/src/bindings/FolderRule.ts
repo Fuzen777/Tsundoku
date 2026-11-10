@@ -32,6 +32,12 @@ conditions: Array<RuleCondition>,
  */
 folder: string, 
 /**
+ * How matching downloads' files are named, with the folder's placeholders (and `{number}`, a post's file's place
+ * in it), or empty to leave it to the rules before it, then the preset (a video) or Settings (a post's files).
+ * See `file_name_on`. Missing in rules saved before 0.1.96.
+ */
+fileName: string, 
+/**
  * The preset matching videos start with, by its ID, or `None` to leave it to the rules before it. A rule that
  * checks the kind or the preset can't pick one (`can_pick_preset`), since both depend on the preset.
  */

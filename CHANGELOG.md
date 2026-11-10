@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.96 · 2026-11-10
+
+### Added
+
+- **File names per rule**: a rule can name its downloads' files, such as `{uploader} - {title}`, with the same placeholder buttons as its folder, plus {number} for a post's files. Without {id}, the ID is added at the end, so two files never share a name. Left empty, videos are named by their preset and posts by Settings → Posts of Images, as before. Shared files keep their own names.
+
 ## 0.1.95 · 2026-11-10
 
 ### Changed

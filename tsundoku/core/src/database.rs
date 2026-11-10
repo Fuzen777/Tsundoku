@@ -132,6 +132,8 @@ const MIGRATIONS: &[&str] = &[
         position INTEGER NOT NULL,
         PRIMARY KEY (source, site, item_id)
     );",
+    // 13: how a queue item's files are named by a rule (`rules::file_name`), or NULL for the preset's or Settings' name.
+    "ALTER TABLE queue_items ADD COLUMN file_name TEXT;",
 ];
 
 pub struct Database {

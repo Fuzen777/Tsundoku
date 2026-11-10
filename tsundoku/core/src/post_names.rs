@@ -12,6 +12,9 @@ use crate::rules;
 /// The account, the post's date, its ID and the file's place in it: "natgeo 2026-11-04 DfPQchkG1tg 1".
 pub const DEFAULT_POST_FILE_NAME: &str = "{account} {date} {post} {number}";
 
+/// gallery-dl's field for a file's place in its post, else its name on the site.
+const NUMBER_FIELD: &str = "{num|filename}";
+
 /// Characters Windows refuses in a file name, besides control characters. `\` and `/` would also make folders.
 const FORBIDDEN_CHARACTERS: &str = r#"<>:"/\|?*"#;
 
@@ -193,6 +196,15 @@ pub fn gallery_format(template: &str, post: &VideoInfo) -> String {
     format
 }
 
+/// gallery-dl's `-f` format for a post's files named by a rule (`rules::file_name`, already in gallery-dl's way of
+/// writing text): each `{number}` the file's place in the post, then the file's extension.
+pub fn rule_format(name: &str) -> String {
+    format!(
+        "{}.{{extension}}",
+        name.replace(rules::NUMBER_PLACEHOLDER, NUMBER_FIELD)
+    )
+}
+
 /// What a placeholder becomes in the format: the post's own value as text when the preview knows it, else the
 /// fields gallery-dl gives it under on the post's site, ending with a value that's always there.
 fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
@@ -202,7 +214,7 @@ fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
         PostNamePlaceholder::Site => Some(literal(&rules::site_name(post))),
         // A post's file without a number of its own (on a site that gives none) keeps the name it has on the site,
         // so no two files of the post share a name.
-        PostNamePlaceholder::Number => Some("{num|filename}".to_owned()),
+        PostNamePlaceholder::Number => Some(NUMBER_FIELD.to_owned()),
         PostNamePlaceholder::Account => {
             let fields: &[&str] = match post.site.as_str() {
                 "instagram" => &["username"],

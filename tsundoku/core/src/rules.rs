@@ -30,6 +30,12 @@ const POSTS_RULE_ID: &str = "posts";
 /// Replaced in a rule's folder by the download's site, such as "Instagram". The others are in `placeholder_value`.
 const SITE_PLACEHOLDER: &str = "site";
 
+/// Characters Windows refuses in a file name, besides control characters; `\` and `/` would also make folders.
+const FILE_NAME_FORBIDDEN: &str = r#"<>:"/\|?*"#;
+
+/// A post's file's place in it, in a rule's file name: kept as it is by `file_name_on`, for the runner to fill in.
+pub const NUMBER_PLACEHOLDER: &str = "{number}";
+
 /// The most characters a placeholder fills in, so a long title doesn't make a path longer than Windows takes.
 const LONGEST_PLACEHOLDER: usize = 80;
 
@@ -60,6 +66,11 @@ pub struct FolderRule {
     /// become the download's, and a folder that isn't a full path is inside the download folder. Empty rather than
     /// missing, so a version from before 0.1.35 still reads the rule.
     pub folder: String,
+    /// How matching downloads' files are named, with the folder's placeholders (and `{number}`, a post's file's place
+    /// in it), or empty to leave it to the rules before it, then the preset (a video) or Settings (a post's files).
+    /// See `file_name_on`. Missing in rules saved before 0.1.96.
+    #[serde(default)]
+    pub file_name: String,
     /// The preset matching videos start with, by its ID, or `None` to leave it to the rules before it. A rule that
     /// checks the kind or the preset can't pick one (`can_pick_preset`), since both depend on the preset.
     #[serde(default)]
@@ -225,6 +236,9 @@ pub enum RuleError {
     /// A condition with nothing to compare to.
     #[error("a condition of rule {rule} is empty")]
     EmptyValue { rule: u32 },
+    /// A file name with a character Windows refuses in one, or a separator, which would make a folder.
+    #[error("rule {rule}'s file name can't have {character}")]
+    FileNameCharacter { rule: u32, character: String },
     /// A condition's pattern that isn't a valid regular expression, and what's wrong with it.
     #[error("a pattern of rule {rule} isn't valid: {detail}")]
     InvalidPattern { rule: u32, detail: String },
@@ -274,6 +288,7 @@ pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
         Some(rule) => FolderRule {
             id: CATCH_ALL_RULE_ID.to_owned(),
             conditions: Vec::new(),
+            file_name: String::new(),
             preset_id: None,
             download_right_away: None,
             join: ConditionJoin::All,
@@ -297,6 +312,7 @@ pub fn catch_all_rule() -> FolderRule {
         enabled: true,
         conditions: Vec::new(),
         folder: format!("{{{SITE_PLACEHOLDER}}}"),
+        file_name: String::new(),
         preset_id: None,
         download_right_away: None,
         join: ConditionJoin::All,
@@ -320,6 +336,7 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
             .join(format!("{{{SITE_PLACEHOLDER}}}"))
             .display()
             .to_string(),
+        file_name: String::new(),
         preset_id: None,
         download_right_away: None,
         join: ConditionJoin::All,
@@ -446,8 +463,22 @@ impl FolderRule {
         if self.is_catch_all() && !self.picks_folder() {
             return Err(RuleError::EmptyFolder { rule: number });
         }
-        if !self.picks_folder() && self.preset_id.is_none() && self.download_right_away.is_none() {
+        if !self.picks_folder()
+            && self.file_name.trim().is_empty()
+            && self.preset_id.is_none()
+            && self.download_right_away.is_none()
+        {
             return Err(RuleError::NoAction { rule: number });
+        }
+        if let Some(character) = self
+            .file_name
+            .chars()
+            .find(|character| FILE_NAME_FORBIDDEN.contains(*character) || character.is_control())
+        {
+            return Err(RuleError::FileNameCharacter {
+                rule: number,
+                character: character.to_string(),
+            });
         }
         if self.preset_id.is_some() && !self.can_pick_preset() {
             return Err(RuleError::CircularPreset { rule: number });
@@ -659,6 +690,86 @@ fn rule_number(index: usize) -> u32 {
     u32::try_from(index + 1).unwrap_or(u32::MAX)
 }
 
+/// How a download's files are named by the rules: the file name of the last rule that's on, names files and matches,
+/// filled in for a download added today, or `None` to leave it to the preset or Settings. A file host's files keep
+/// their own names, so they get `None`. See `file_name_on`.
+pub fn file_name(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<String> {
+    file_name_on(rules, subject, &local_date())
+}
+
+/// `file_name` for a download added on `today`. The name is its placeholders filled in, with ` {id}` added when it
+/// has none and, for a post, ` {number}` too, so two files never share a name. The answer is in gallery-dl's way of
+/// writing text: braces from the filled-in values or the rule's own text are doubled, and `{number}` (a post's only)
+/// stays as it is; `yt_dlp_output` and `post_names::rule_format` turn it into each tool's.
+fn file_name_on(rules: &[FolderRule], subject: &RuleSubject<'_>, today: &str) -> Option<String> {
+    if subject.video.files.is_some() {
+        return None;
+    }
+    let rule = rules.iter().rev().find(|rule| {
+        rule.enabled
+            && !rule.is_catch_all()
+            && !rule.file_name.trim().is_empty()
+            && rule.matches(subject)
+    })?;
+    let is_post = subject.video.post.is_some();
+    let mut template = rule.file_name.trim().to_owned();
+    if split_at_placeholder(&template, "id").len() < 2 {
+        template.push_str(" {id}");
+    }
+    if is_post && split_at_placeholder(&template, "number").len() < 2 {
+        template.push(' ');
+        template.push_str(NUMBER_PLACEHOLDER);
+    }
+    let fill_in = FillIn {
+        captured: rule.captured(subject),
+        today,
+    };
+    let pieces: Vec<String> = split_at_placeholder(&template, "number")
+        .into_iter()
+        .map(|piece| {
+            fill_placeholders(piece, subject, &fill_in)
+                .replace('{', "{{")
+                .replace('}', "}}")
+        })
+        .collect();
+    Some(pieces.join(if is_post { NUMBER_PLACEHOLDER } else { "" }))
+}
+
+/// `text` cut at each `{name}`, in any case: one piece when it has none.
+fn split_at_placeholder<'a>(text: &'a str, name: &str) -> Vec<&'a str> {
+    let wanted = format!("{{{name}}}");
+    let mut pieces = Vec::new();
+    let mut start = 0;
+    let mut at = 0;
+    while let Some(found) = text[at..].find('{') {
+        let begin = at + found;
+        let end = begin + wanted.len();
+        if text
+            .get(begin..end)
+            .is_some_and(|candidate| candidate.eq_ignore_ascii_case(&wanted))
+        {
+            pieces.push(&text[start..begin]);
+            start = end;
+            at = end;
+        } else {
+            at = begin + 1;
+        }
+    }
+    pieces.push(&text[start..]);
+    pieces
+}
+
+/// A rule's file name (`file_name`) as yt-dlp's output template for a video: its braces back to single, `%` doubled so
+/// yt-dlp keeps it as it is, and the file's extension after it.
+pub fn yt_dlp_output(name: &str) -> String {
+    let text = name
+        .replace(NUMBER_PLACEHOLDER, "")
+        .replace("{{", "{")
+        .replace("}}", "}")
+        .replace('%', "%%");
+    format!("{}.%(ext)s", text.trim())
+}
+
 /// A rule's folder for one download added on `today`: its placeholders filled in, inside the download folder unless
 /// it's a full path.
 fn rule_folder(
@@ -848,6 +959,7 @@ impl RuleManager {
         for (index, rule) in rules.iter_mut().enumerate() {
             rule.name = rule.name.trim().to_owned();
             rule.folder = rule.folder.trim().to_owned();
+            rule.file_name = rule.file_name.trim().to_owned();
             rule.preset_id = rule
                 .preset_id
                 .take()
@@ -969,6 +1081,7 @@ mod tests {
             enabled: true,
             conditions,
             folder: folder.to_owned(),
+            file_name: String::new(),
             preset_id: None,
             download_right_away: None,
             join: ConditionJoin::All,
@@ -1170,6 +1283,111 @@ mod tests {
                 .unwrap()
                 .case_sensitive,
             "conditions from before ignore case"
+        );
+    }
+
+    #[test]
+    fn names_files_by_the_last_rule_that_does() {
+        let video = video();
+        let subject = RuleSubject {
+            video: &video,
+            preset: None,
+        };
+        let named = |name: &str| FolderRule {
+            file_name: name.to_owned(),
+            ..rule(Vec::new(), "")
+        };
+        let today = "2026-11-10";
+        assert_eq!(
+            file_name_on(&[catch_all_rule()], &subject, today),
+            None,
+            "no rule names it"
+        );
+        let rules = vec![
+            named("{uploader} - {title}"),
+            named("{title} [{id}]"),
+            rule(Vec::new(), r"D:\x"),
+        ];
+        assert_eq!(
+            file_name_on(&rules, &subject, today).as_deref(),
+            Some("Me at the zoo [jNQXAC9IVRw]"),
+            "the last one that names files"
+        );
+        assert_eq!(
+            file_name_on(&rules[..1], &subject, today).as_deref(),
+            Some("jawed - Me at the zoo jNQXAC9IVRw"),
+            "the ID is added when the name has none"
+        );
+        assert_eq!(
+            file_name_on(&[named("{added} {{x}} 100%")], &subject, today).as_deref(),
+            Some("2026-11-10 {{{{x}}}} 100% jNQXAC9IVRw"),
+            "braces doubled"
+        );
+        assert_eq!(
+            yt_dlp_output("2026-11-10 {{x}} 100% jNQXAC9IVRw"),
+            "2026-11-10 {x} 100%% jNQXAC9IVRw.%(ext)s"
+        );
+        assert_eq!(
+            file_name_on(
+                &[named("{title}")],
+                &RuleSubject {
+                    video: &mega_file(),
+                    preset: None
+                },
+                today
+            ),
+            None,
+            "a file host's files keep their names"
+        );
+    }
+
+    #[test]
+    fn numbers_a_posts_files() {
+        let post = tweet();
+        let subject = RuleSubject {
+            video: &post,
+            preset: None,
+        };
+        let named = |name: &str| FolderRule {
+            file_name: name.to_owned(),
+            ..rule(Vec::new(), "")
+        };
+        let today = "2026-11-10";
+        let id = &post.video_id;
+        assert_eq!(
+            file_name_on(&[named("{id} #{NUMBER}")], &subject, today),
+            Some(format!("{id} #{{number}}"))
+        );
+        assert_eq!(
+            file_name_on(&[named("{site}")], &subject, today),
+            Some(format!("X {id} {{number}}")),
+            "the ID and the number are added"
+        );
+    }
+
+    #[test]
+    fn refuses_a_file_name_windows_refuses() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        let named = FolderRule {
+            file_name: "{title}: {id}".to_owned(),
+            ..rule(Vec::new(), "")
+        };
+        assert_eq!(
+            manager.save(vec![named]),
+            Err(RuleError::FileNameCharacter {
+                rule: 2,
+                character: ":".to_owned()
+            })
+        );
+        let only_named = FolderRule {
+            file_name: " {title} ".to_owned(),
+            ..rule(Vec::new(), "")
+        };
+        let saved = manager.save(vec![only_named]).unwrap();
+        assert_eq!(
+            saved[1].file_name, "{title}",
+            "naming files is enough, trimmed"
         );
     }
 

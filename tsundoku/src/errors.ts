@@ -194,6 +194,8 @@ export function describeRuleError(error: unknown): ErrorDescription {
       return { message: text.emptyValue(error.rule) }
     case "invalidPattern":
       return { message: text.invalidPattern(error.rule), detail: error.detail }
+    case "fileNameCharacter":
+      return { message: text.fileNameCharacter(error.rule, error.character) }
     case "storage":
       return { message: text.storage, detail: error.detail }
   }

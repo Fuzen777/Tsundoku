@@ -13,6 +13,10 @@ describe("describeActions", () => {
     ])
   })
 
+  it("quotes the file name", () => {
+    expect(describeActions({ ...newRule(), fileName: " {title} " }, [audioMp3])).toEqual(["Names files “{title}”"])
+  })
+
   it("says nothing for a rule that only picks a folder", () => {
     expect(describeActions({ ...newRule(), folder: "D:\\Music" }, [audioMp3])).toEqual([])
   })
