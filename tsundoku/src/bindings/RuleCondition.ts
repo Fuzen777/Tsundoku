@@ -3,10 +3,15 @@ import type { RuleField } from "./RuleField";
 import type { RuleOperator } from "./RuleOperator";
 
 /**
- * One test of a download: its `field` compared to `value`, ignoring case.
+ * One test of a download: its `field` compared to `value`, ignoring case unless `case_sensitive`.
  */
 export type RuleCondition = { field: RuleField, operator: RuleOperator, 
 /**
  * For `Kind`, a `DownloadKind` ("post"); for `Preset`, a preset's ID.
  */
-value: string, };
+value: string, 
+/**
+ * Whether the text, or the pattern, must match letter case too. Off by default, and for conditions saved
+ * before 0.1.90. The kind and the preset ignore it.
+ */
+caseSensitive: boolean, };

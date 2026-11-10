@@ -27,9 +27,11 @@ describe("describeActions", () => {
 
 describe("canPickPreset", () => {
   it("refuses conditions on the kind or the preset", () => {
-    expect(canPickPreset([{ field: "site", operator: "is", value: "SoundCloud" }])).toBe(true)
-    expect(canPickPreset([{ field: "kind", operator: "is", value: "audio" }])).toBe(false)
-    expect(canPickPreset([{ field: "preset", operator: "isNot", value: "best-video" }])).toBe(false)
+    expect(canPickPreset([{ field: "site", operator: "is", value: "SoundCloud", caseSensitive: false }])).toBe(true)
+    expect(canPickPreset([{ field: "kind", operator: "is", value: "audio", caseSensitive: false }])).toBe(false)
+    expect(canPickPreset([{ field: "preset", operator: "isNot", value: "best-video", caseSensitive: false }])).toBe(
+      false,
+    )
   })
 })
 

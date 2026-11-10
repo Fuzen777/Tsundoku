@@ -697,6 +697,9 @@ export const strings = {
     joinHint: { all: "Every condition must match. Click to need only one.", any: "One condition is enough. Click to need them all." },
     addCondition: "Add Condition",
     removeCondition: "Remove Condition",
+    /** The letter-case switch on a condition, named by what a click does. */
+    matchCase: "Match Case",
+    ignoreCase: "Ignore Case",
     field: "What to Check",
     operator: "Comparison",
     value: "Value",
@@ -720,7 +723,7 @@ export const strings = {
     capturedHint: (group: string) =>
       `The text the pattern captured in its parentheses number ${group}, counting from the left, or Unknown.`,
     patternHint:
-      "Matches takes a regular expression, ignoring case, found anywhere in the text. Text it captures in parentheses can go in the folder as {1}, {2} and so on.",
+      "Matches takes a regular expression, ignoring case unless Match Case is on, found anywhere in the text. Text it captures in parentheses can go in the folder as {1}, {2} and so on.",
     alwaysFirst: "Always First",
     alwaysFirstHint:
       "Takes every download no rule below it takes, unless its preset has a folder of its own. Every other rule overrides it, and new rules go at the bottom.",
@@ -775,6 +778,7 @@ export const strings = {
     },
     sentence: {
       every: "Every download",
+      matchingCase: "(matching case)",
       everythingElse: "Everything else",
       when: (conditions: string[], join: "all" | "any") =>
         `When ${conditions.join(join === "any" ? " or " : " and ")}`,

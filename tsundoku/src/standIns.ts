@@ -437,8 +437,8 @@ export const standIns = {
       id: "rule-1",
       enabled: true,
       conditions: [
-        { field: "site", operator: "is", value: "Instagram" },
-        { field: "uploader", operator: "is", value: "natgeo" },
+        { field: "site", operator: "is", value: "Instagram", caseSensitive: false },
+        { field: "uploader", operator: "is", value: "natgeo", caseSensitive: false },
       ],
       folder: String.raw`D:\Hydrus\Import\{site}\{account}`,
       presetId: null,
@@ -449,8 +449,8 @@ export const standIns = {
       id: "rule-2",
       enabled: false,
       conditions: [
-        { field: "kind", operator: "is", value: "audio" },
-        { field: "title", operator: "contains", value: "podcast" },
+        { field: "kind", operator: "is", value: "audio", caseSensitive: false },
+        { field: "title", operator: "contains", value: "podcast", caseSensitive: false },
       ],
       folder: "Podcasts",
       presetId: null,
@@ -460,7 +460,7 @@ export const standIns = {
     {
       id: "rule-3",
       enabled: true,
-      conditions: [{ field: "title", operator: "contains", value: "zoo" }],
+      conditions: [{ field: "title", operator: "contains", value: "zoo", caseSensitive: false }],
       folder: "",
       presetId: "best-audio",
       downloadRightAway: true,

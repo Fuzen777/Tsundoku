@@ -223,6 +223,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
+**64. Match case** · 0.1.90
+- [ ] Rules → Edit a rule: each condition on the site, uploader, title or link has an Aa button before ×, with "Match Case" as its tooltip; the kind and the preset have none. Click it: it lights up and its tooltip says "Ignore Case". Save → the sentence ends with "(matching case)".
+- [ ] A rule "title contains Zoo" with Match Case on: Test a Link with "Me at the zoo" (`jNQXAC9IVRw`) → the rule doesn't decide; turn Match Case off → it does. Same with a Matches pattern.
+- [ ] Conditions saved before this version still ignore case.
+- Seen in the browser preview (the button switches); not tried in the app.
+
 **63. And or Or between conditions** · 0.1.89
 - [ ] Rules → Edit a rule, Add Condition: an And button appears between the two conditions, with a tooltip saying what a click does. Click it: every button between conditions says Or, and the hint under them says one condition is enough. Save → the rule's sentence reads "When … or …".
 - [ ] Test a Link with a link only one of an Or rule's conditions matches → that rule decides. Switch it back to And and save → it no longer does.

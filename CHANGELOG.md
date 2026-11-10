@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.90 · 2026-11-10
+
+### Added
+
+- **Match case**: each condition of a rule that compares text has a Match Case button (Aa) beside it. On, "Zoo" no longer matches "zoo", for Is, Contains and patterns alike, and the rule's sentence ends with "(matching case)". Off, as conditions you had stay, case is ignored as before.
+
 ## 0.1.89 · 2026-11-10
 
 ### Added

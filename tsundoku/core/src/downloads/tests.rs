@@ -1601,6 +1601,7 @@ fn a_rule_picks_the_folder() {
                     field: RuleField::Site,
                     operator: RuleOperator::Is,
                     value: "YouTube".to_owned(),
+                    case_sensitive: false,
                 }],
                 folder: by_uploader.join("{uploader}").display().to_string(),
                 preset_id: None,

@@ -1,5 +1,5 @@
 import { Fragment, useRef } from "react"
-import { Plus, X } from "lucide-react"
+import { CaseSensitive, Plus, X } from "lucide-react"
 import { pickFolder } from "../../api"
 import type { ConditionJoin } from "../../bindings/ConditionJoin"
 import type { FolderRule } from "../../bindings/FolderRule"
@@ -27,6 +27,7 @@ import {
   canPickPreset,
   capturedGroups,
   isPattern,
+  mindsCase,
   operatorsFor,
 } from "./ruleLabels"
 
@@ -266,7 +267,7 @@ function ConditionRow({ condition, presets, defaultPresetId, onChange, onRemove 
   const setValue = (changed: string) => onChange({ ...condition, value: changed })
 
   return (
-    <div className="grid grid-cols-[8rem_9.5rem_minmax(0,1fr)_auto] items-center gap-2">
+    <div className="grid grid-cols-[8rem_9.5rem_minmax(0,1fr)_auto_auto] items-center gap-2">
       <SelectInput
         aria-label={text.field}
         title={text.field}
@@ -315,6 +316,19 @@ function ConditionRow({ condition, presets, defaultPresetId, onChange, onRemove 
           placeholder={isPattern(operator) ? text.placeholders.pattern : text.placeholders[field]}
           value={value}
           onChange={(event) => setValue(event.target.value)}
+        />
+      )}
+      {field === "kind" || field === "preset" ? (
+        // Values picked from a list have no case to match.
+        <span className="size-8" />
+      ) : (
+        <IconButton
+          label={mindsCase(condition) ? text.ignoreCase : text.matchCase}
+          icon={CaseSensitive}
+          variant={mindsCase(condition) ? "secondary" : "ghost"}
+          className={mindsCase(condition) ? "text-accent" : undefined}
+          aria-pressed={mindsCase(condition)}
+          onClick={() => onChange({ ...condition, caseSensitive: !condition.caseSensitive })}
         />
       )}
       <IconButton label={text.removeCondition} icon={X} onClick={onRemove} />

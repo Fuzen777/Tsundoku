@@ -554,6 +554,7 @@ fn add_rule(test: &Test, title: &str, actions: rules::FolderRule) {
                         field: rules::RuleField::Title,
                         operator: rules::RuleOperator::Contains,
                         value: title.to_owned(),
+                        case_sensitive: false,
                     }],
                     ..actions
                 },

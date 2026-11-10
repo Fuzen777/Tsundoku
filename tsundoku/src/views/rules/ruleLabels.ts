@@ -75,15 +75,15 @@ function countGroups(pattern: string): number {
 export function newCondition(field: RuleField, defaultPresetId: string): RuleCondition {
   switch (field) {
     case "kind":
-      return { field, operator: "is", value: "video" }
+      return { field, operator: "is", value: "video", caseSensitive: false }
     case "preset":
-      return { field, operator: "is", value: defaultPresetId }
+      return { field, operator: "is", value: defaultPresetId, caseSensitive: false }
     case "title":
     case "link":
-      return { field, operator: "contains", value: "" }
+      return { field, operator: "contains", value: "", caseSensitive: false }
     case "site":
     case "uploader":
-      return { field, operator: "is", value: "" }
+      return { field, operator: "is", value: "", caseSensitive: false }
   }
 }
 
@@ -148,7 +148,18 @@ export function describeConditions(
   )
 }
 
-function describeCondition({ field, operator, value }: RuleCondition, presets: readonly Preset[]): string {
+function describeCondition(condition: RuleCondition, presets: readonly Preset[]): string {
+  const described = describeComparison(condition, presets)
+  return mindsCase(condition) ? `${described} ${text.sentence.matchingCase}` : described
+}
+
+/** Whether a condition compares letter case: when it asks to, on a field of text (`RuleCondition::minds_case` in the
+ * core). */
+export function mindsCase({ field, caseSensitive }: RuleCondition): boolean {
+  return caseSensitive && field !== "kind" && field !== "preset"
+}
+
+function describeComparison({ field, operator, value }: RuleCondition, presets: readonly Preset[]): string {
   const sentence = text.sentence
   if (field === "kind") {
     const kind = isDownloadKind(value) ? sentence.kinds[value] : value

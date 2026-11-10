@@ -76,7 +76,7 @@ pub enum ConditionJoin {
     Any,
 }
 
-/// One test of a download: its `field` compared to `value`, ignoring case.
+/// One test of a download: its `field` compared to `value`, ignoring case unless `case_sensitive`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -85,6 +85,10 @@ pub struct RuleCondition {
     pub operator: RuleOperator,
     /// For `Kind`, a `DownloadKind` ("post"); for `Preset`, a preset's ID.
     pub value: String,
+    /// Whether the text, or the pattern, must match letter case too. Off by default, and for conditions saved
+    /// before 0.1.90. The kind and the preset ignore it.
+    #[serde(default)]
+    pub case_sensitive: bool,
 }
 
 /// What a condition looks at.
@@ -296,6 +300,7 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
             field: RuleField::Kind,
             operator: RuleOperator::Is,
             value: DownloadKind::Post.as_str().to_owned(),
+            case_sensitive: false,
         }],
         folder: Path::new(folder)
             .join(format!("{{{SITE_PLACEHOLDER}}}"))
@@ -445,9 +450,17 @@ impl RuleCondition {
     /// nothing either way.
     pub fn matches(&self, subject: &RuleSubject<'_>) -> bool {
         let found = |test: &dyn Fn(&str) -> bool| subject.values(self.field).into_iter().any(test);
-        let wanted = self.value.trim().to_lowercase();
-        let is = |value: &str| value.to_lowercase() == wanted;
-        let contains = |value: &str| value.to_lowercase().contains(&wanted);
+        let case_sensitive = self.minds_case();
+        let folded = |text: &str| {
+            if case_sensitive {
+                text.to_owned()
+            } else {
+                text.to_lowercase()
+            }
+        };
+        let wanted = folded(self.value.trim());
+        let is = |value: &str| folded(value) == wanted;
+        let contains = |value: &str| folded(value).contains(&wanted);
         match self.operator {
             RuleOperator::Is => found(&is),
             RuleOperator::IsNot => !found(&is),
@@ -470,10 +483,16 @@ impl RuleCondition {
         )
     }
 
-    /// Its value as a pattern, ignoring case.
+    /// Whether it compares letter case: when it asks to, on a field of text (not the kind or the preset, whose values
+    /// are picked from a list).
+    fn minds_case(&self) -> bool {
+        self.case_sensitive && !matches!(self.field, RuleField::Kind | RuleField::Preset)
+    }
+
+    /// Its value as a pattern, ignoring case unless it minds it.
     fn pattern(&self) -> Result<Regex, regex::Error> {
         RegexBuilder::new(self.value.trim())
-            .case_insensitive(true)
+            .case_insensitive(!self.minds_case())
             .build()
     }
 
@@ -899,6 +918,7 @@ mod tests {
             field,
             operator,
             value: value.to_owned(),
+            case_sensitive: false,
         }
     }
 
@@ -1067,6 +1087,48 @@ mod tests {
                 folder: r"D:\YouTube".to_owned(),
                 source: DestinationSource::Rule { number: 2 },
             }
+        );
+    }
+
+    #[test]
+    fn minds_case_when_asked() {
+        let video = video();
+        let subject = RuleSubject {
+            video: &video,
+            preset: None,
+        };
+        let title = video.title.clone();
+        let exact = |operator: RuleOperator, value: &str| RuleCondition {
+            case_sensitive: true,
+            ..condition(RuleField::Title, operator, value)
+        };
+        assert!(exact(RuleOperator::Is, &title).matches(&subject));
+        assert!(!exact(RuleOperator::Is, &title.to_uppercase()).matches(&subject));
+        assert!(
+            condition(RuleField::Title, RuleOperator::Is, &title.to_uppercase()).matches(&subject)
+        );
+        assert!(!exact(RuleOperator::Contains, &title.to_uppercase()).matches(&subject));
+        assert!(exact(RuleOperator::DoesNotContain, &title.to_uppercase()).matches(&subject));
+        assert!(
+            !exact(
+                RuleOperator::Matches,
+                &format!("^{}$", title.to_uppercase())
+            )
+            .matches(&subject)
+        );
+        assert!(exact(RuleOperator::Matches, &format!("^{title}$")).matches(&subject));
+        let kind = RuleCondition {
+            case_sensitive: true,
+            ..condition(RuleField::Kind, RuleOperator::Is, "VIDEO")
+        };
+        assert!(kind.matches(&subject), "the kind ignores it");
+
+        let saved = r#"{ "field": "title", "operator": "is", "value": "x" }"#;
+        assert!(
+            !serde_json::from_str::<RuleCondition>(saved)
+                .unwrap()
+                .case_sensitive,
+            "conditions from before ignore case"
         );
     }
 
