@@ -23,11 +23,14 @@ interface SidebarProps {
   className?: string
 }
 
-/** The views, then Settings, with Settings' sections under it while it's open. Scrolls when they don't fit. */
+/**
+ * The views, with Settings at the bottom. While Settings is open, it moves up under the views to list its sections
+ * beneath it. Scrolls when they don't fit.
+ */
 export function Sidebar({ current, onSelect, counts = {}, settingsSection, onSelectSection, className }: SidebarProps) {
   const settingsOpen = current === settingsNavItem.id
   return (
-    <nav className={classes("flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-3", className)}>
+    <nav className={classes("flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-3 *:shrink-0", className)}>
       {mainNavItems.map((item) => (
         <NavButton
           key={item.id}
@@ -37,6 +40,7 @@ export function Sidebar({ current, onSelect, counts = {}, settingsSection, onSel
           onSelect={onSelect}
         />
       ))}
+      {!settingsOpen && <div className="flex-1" />}
       <NavButton item={settingsNavItem} selected={settingsOpen} onSelect={onSelect} />
       {settingsOpen && (
         <ul aria-label={strings.settings.jumpTo} className="flex flex-col gap-0.5">

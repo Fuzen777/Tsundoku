@@ -21,7 +21,7 @@ export const mainNavItems: readonly NavItem[] = [
   { id: "rules", label: strings.nav.rules, icon: FolderTree },
 ]
 
-/** Settings comes after the views, with its sections listed under it while it's open. */
+/** Settings sits at the bottom of the sidebar, and moves up under the views while it's open, its sections under it. */
 export const settingsNavItem: NavItem = {
   id: "settings",
   label: strings.nav.settings,

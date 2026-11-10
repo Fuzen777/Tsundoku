@@ -351,14 +351,9 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Settings and Upkeep
 
-**62. Settings' sections in the sidebar** · 0.1.88
-- [ ] Open Settings: it sits right under Rules, and its sections are listed under it (In the Background stands for Running in the Background). The pills at the top of Settings are gone. Other views don't show the list.
-- [ ] Click About, then Tools, then Downloads: Settings scrolls to each and the sidebar marks it. The window itself never moves: the add bar and the sidebar stay put, with no empty band at the bottom (it did before, worst with About).
-- [ ] Scroll Settings with the wheel: the mark follows the section at the top.
-- [ ] Make the window as short as it goes: the sidebar scrolls to reach About.
-- [ ] Rules → Test a Link → click the deciding rule's number: only the rules list scrolls.
-- [ ] Empty queue → Set Up beside the clipboard shortcut still opens Settings on that list, focused.
-- Seen in the browser preview (the window never scrolled there, before or after); not tried in the real app.
+**62. Settings' sections in the sidebar** · 0.1.88, 0.1.95
+- [ ] Open Settings and click About, then Tools, then Downloads in the sidebar: only Settings scrolls. The window itself never moves: the add bar and the sidebar stay put, with no empty band at the bottom (it did before, worst with About).
+- Checked in the browser preview: Settings sits at the bottom and moves up under Rules only while open, with its sections under it; the pills are gone; the mark follows the wheel; a short window scrolls the sidebar; Test a Link's rule number and the empty queue's Set Up still work. The window never scrolled in the browser, even before the fix, so only the real app can show it.
 
 
 **37. Settings → Pacing** · 0.1.27, 0.1.77

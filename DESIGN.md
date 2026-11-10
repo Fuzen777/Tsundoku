@@ -78,7 +78,7 @@ Dark mode follows RJ Library's dark theme:
 ## Layout
 
 1. The app name (積ん読 beside it) and the add bar run across the top.
-2. The sidebar is on the left: the views, then Settings. While Settings is open, its sections are listed under it: 13 px rows 28 px high, indented to the views' names, in muted text (`--color-fg` on hover, with the `--color-input` background), the section at the top of Settings in medium `--color-fg`. The sidebar scrolls on its own when they don't fit.
+2. The sidebar is on the left: the views at the top, Settings at the bottom. While Settings is open, it moves up under the views and its sections are listed under it: 13 px rows 28 px high, indented to the views' names, in muted text (`--color-fg` on hover, with the `--color-input` background), the section at the top of Settings in medium `--color-fg`. The sidebar scrolls on its own when they don't fit.
 3. The current view sits in the content layer (`--color-surface`, a line border on its top and left, rounded top-left corner).
 4. A view is a `Page`: its title, then content that scrolls on its own. Within it, a `Section` groups related content under a 14 px semibold title, and a `Card` raises one item (`--color-card`, a line border, 8 px corners).
 5. An empty list shows an `EmptyState`: a 40 px icon, a Title Case title and a one-sentence explanation. The empty Queue and Pending add the ways to add links under it (`WaysToAdd`): a `Card` at most 32 rem wide, one row per way, each a 16 px muted icon, its name, where it stands in 12 px secondary text, and one `sm` button (Paste, Choose File…, Turn On, Set Up or Change), or a check and On in the success color when there's nothing left to do. The queue lists the ways by hand first, Pending the ones that work on their own.
