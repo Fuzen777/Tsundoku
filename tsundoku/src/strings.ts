@@ -692,13 +692,14 @@ export const strings = {
     save: "Save",
     discard: "Discard",
     when: "When",
-    whenHint: {
-      all: "Every condition must match. A rule without any matches every download.",
-      any: "One condition matching is enough. A rule without any matches every download.",
+    whenHint:
+      "Conditions joined by OR are alternatives, of which one must match; AND joins those, and each must. So “site is X OR site is Bluesky AND title contains cat” takes a cat from either site. A rule without conditions matches every download.",
+    /** Between two conditions, in capitals as in the rules' sentences; a click switches it. */
+    join: { all: "AND", any: "OR" },
+    joinHint: {
+      all: "Both sides must match. Click for OR.",
+      any: "Either side is enough. Click for AND.",
     },
-    /** The button between two conditions, which switches the rule between them. */
-    join: { all: "And", any: "Or" },
-    joinHint: { all: "Every condition must match. Click to need only one.", any: "One condition is enough. Click to need them all." },
     addCondition: "Add Condition",
     removeCondition: "Remove Condition",
     /** The letter-case switch on a condition, named by what a click does. */
@@ -784,8 +785,7 @@ export const strings = {
       every: "Every download",
       matchingCase: "(matching case)",
       everythingElse: "Everything else",
-      when: (conditions: string[], join: "all" | "any") =>
-        `When ${conditions.join(join === "any" ? " or " : " and ")}`,
+      when: (conditions: string) => `When ${conditions}`,
       fields: {
         site: "the site",
         uploader: "the uploader",

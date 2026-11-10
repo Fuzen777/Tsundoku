@@ -48,11 +48,13 @@ pub struct FolderRule {
     pub name: String,
     /// A rule that's off is kept but skipped.
     pub enabled: bool,
-    /// All must match, or any one with `join` set to `Any`. A rule without any matches every download.
+    /// Each joined to the one before by its own `join`: conditions joined by OR are alternatives, and AND joins those
+    /// groups, so "A OR B AND C" is (A or B) and C. A rule without any matches every download.
     pub conditions: Vec<RuleCondition>,
-    /// How the conditions combine: all must match (And, the default, and how rules from before 0.1.88 read), or any
-    /// one (Or).
-    #[serde(default)]
+    /// How 0.1.89 and 0.1.90 joined every condition of the rule, read only: `with_catch_all_first` moves an OR onto
+    /// each condition, and it's never written again.
+    #[serde(default, skip_serializing)]
+    #[ts(skip)]
     pub join: ConditionJoin,
     /// Where matching downloads go, or empty to leave the folder to the rules before it. `{site}` and `{uploader}`
     /// become the download's, and a folder that isn't a full path is inside the download folder. Empty rather than
@@ -68,15 +70,15 @@ pub struct FolderRule {
     pub download_right_away: Option<bool>,
 }
 
-/// How a rule's conditions combine.
+/// How a condition joins the one before it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum ConditionJoin {
-    /// Every condition must match: "when the site is X and the uploader is natgeo".
+    /// AND: both must match, "when the site is X AND the uploader is natgeo".
     #[default]
     All,
-    /// One is enough: "when the site is X or the site is Bluesky".
+    /// OR: either is enough, "when the site is X OR the site is Bluesky".
     Any,
 }
 
@@ -93,6 +95,10 @@ pub struct RuleCondition {
     /// before 0.1.90. The kind and the preset ignore it.
     #[serde(default)]
     pub case_sensitive: bool,
+    /// How it joins the condition before it (AND unless set, and for conditions saved before 0.1.92); the first
+    /// condition's is ignored.
+    #[serde(default)]
+    pub join: ConditionJoin,
 }
 
 /// What a condition looks at.
@@ -262,6 +268,7 @@ impl Default for RulesSettings {
 pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
     let (found, mut rules): (Vec<_>, Vec<_>) = rules
         .into_iter()
+        .map(FolderRule::with_joins_on_conditions)
         .partition(|rule| rule.id == CATCH_ALL_RULE_ID || rule.id == POSTS_RULE_ID);
     let catch_all = match found.into_iter().next() {
         Some(rule) => FolderRule {
@@ -307,6 +314,7 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
             operator: RuleOperator::Is,
             value: DownloadKind::Post.as_str().to_owned(),
             case_sensitive: false,
+            join: ConditionJoin::All,
         }],
         folder: Path::new(folder)
             .join(format!("{{{SITE_PLACEHOLDER}}}"))
@@ -381,16 +389,32 @@ impl FolderRule {
         self.id == CATCH_ALL_RULE_ID
     }
 
-    /// Whether every condition matches the download, or any one for a rule whose `join` is `Any`. A rule without
-    /// conditions matches every download either way.
+    /// Whether the conditions match the download: OR binds first, so the conditions joined by OR form groups of which
+    /// one must match, and every group joined by AND must. A rule without conditions matches every download.
     pub fn matches(&self, subject: &RuleSubject<'_>) -> bool {
-        let mut conditions = self.conditions.iter();
-        match self.join {
-            ConditionJoin::All => conditions.all(|condition| condition.matches(subject)),
-            ConditionJoin::Any => {
-                self.conditions.is_empty() || conditions.any(|condition| condition.matches(subject))
+        let mut group_matched = true;
+        for (index, condition) in self.conditions.iter().enumerate() {
+            let starts_group = index == 0 || condition.join == ConditionJoin::All;
+            if starts_group {
+                if !group_matched {
+                    return false;
+                }
+                group_matched = false;
+            }
+            group_matched = group_matched || condition.matches(subject);
+        }
+        group_matched
+    }
+
+    /// The rule with 0.1.89's rule-wide OR moved onto each condition after the first, as it reads since.
+    fn with_joins_on_conditions(mut self) -> Self {
+        if self.join == ConditionJoin::Any {
+            for condition in self.conditions.iter_mut().skip(1) {
+                condition.join = ConditionJoin::Any;
             }
         }
+        self.join = ConditionJoin::All;
+        self
     }
 
     /// What `{1}` to `{9}` become in its folder: the groups of its first pattern that captures any, whole match
@@ -926,6 +950,15 @@ mod tests {
             operator,
             value: value.to_owned(),
             case_sensitive: false,
+            join: ConditionJoin::All,
+        }
+    }
+
+    /// A condition joined to the one before it by OR.
+    fn or(condition: RuleCondition) -> RuleCondition {
+        RuleCondition {
+            join: ConditionJoin::Any,
+            ..condition
         }
     }
 
@@ -1143,23 +1176,23 @@ mod tests {
     #[test]
     fn needs_one_condition_with_or() {
         let video = video();
-        let either = FolderRule {
-            join: ConditionJoin::Any,
-            ..rule(
-                vec![
-                    condition(RuleField::Site, RuleOperator::Is, "SoundCloud"),
-                    condition(RuleField::Site, RuleOperator::Is, "YouTube"),
-                ],
-                r"D:\Either",
-            )
-        };
+        let either = rule(
+            vec![
+                condition(RuleField::Site, RuleOperator::Is, "SoundCloud"),
+                or(condition(RuleField::Site, RuleOperator::Is, "YouTube")),
+            ],
+            r"D:\Either",
+        );
         let subject = RuleSubject {
             video: &video,
             preset: None,
         };
         assert!(either.matches(&subject));
         let neither = FolderRule {
-            conditions: vec![condition(RuleField::Site, RuleOperator::Is, "X")],
+            conditions: vec![
+                condition(RuleField::Site, RuleOperator::Is, "X"),
+                or(condition(RuleField::Site, RuleOperator::Is, "Bluesky")),
+            ],
             ..either.clone()
         };
         assert!(!neither.matches(&subject));
@@ -1172,12 +1205,62 @@ mod tests {
             "no conditions still match every download"
         );
 
-        let saved = r#"{ "id": "rule-1", "enabled": true, "folder": "D:\\x", "conditions": [] }"#;
+        let saved = r#"{ "field": "title", "operator": "is", "value": "x" }"#;
         assert_eq!(
-            serde_json::from_str::<FolderRule>(saved).unwrap().join,
+            serde_json::from_str::<RuleCondition>(saved).unwrap().join,
             ConditionJoin::All,
-            "rules from before read as And"
+            "conditions from before read as AND"
         );
+    }
+
+    #[test]
+    fn or_groups_bind_before_and() {
+        let video = video();
+        let subject = RuleSubject {
+            video: &video,
+            preset: None,
+        };
+        let site = |name: &str| condition(RuleField::Site, RuleOperator::Is, name);
+        let title = |text: &str| condition(RuleField::Title, RuleOperator::Contains, text);
+        let matches = |conditions: Vec<RuleCondition>| rule(conditions, r"D:\x").matches(&subject);
+        assert!(
+            matches(vec![site("SoundCloud"), or(site("YouTube")), title("zoo")]),
+            "(SoundCloud OR YouTube) AND zoo"
+        );
+        assert!(!matches(vec![
+            site("SoundCloud"),
+            or(site("YouTube")),
+            title("cats")
+        ]));
+        assert!(
+            !matches(vec![site("YouTube"), title("cats"), or(site("X"))]),
+            "YouTube AND (cats OR X), not (YouTube AND cats) OR X"
+        );
+        assert!(!matches(vec![site("X"), title("zoo"), or(site("YouTube"))]));
+        assert!(matches(vec![
+            site("YouTube"),
+            title("cats"),
+            or(title("zoo"))
+        ]));
+    }
+
+    #[test]
+    fn moves_a_rule_wide_or_onto_its_conditions() {
+        let saved = r#"{ "id": "rule-1", "enabled": true, "folder": "D:\\x", "join": "any", "conditions": [
+            { "field": "site", "operator": "is", "value": "X" },
+            { "field": "site", "operator": "is", "value": "Bluesky" }
+        ] }"#;
+        let read: FolderRule = serde_json::from_str(saved).unwrap();
+        let rules = with_catch_all_first(vec![read]);
+        let joins: Vec<ConditionJoin> = rules[1]
+            .conditions
+            .iter()
+            .map(|condition| condition.join)
+            .collect();
+        assert_eq!(joins, [ConditionJoin::All, ConditionJoin::Any]);
+        let written = serde_json::to_value(&rules[1]).unwrap();
+        assert!(written.get("join").is_none(), "never written again");
+        assert_eq!(written["conditions"][1]["join"], "any");
     }
 
     #[test]

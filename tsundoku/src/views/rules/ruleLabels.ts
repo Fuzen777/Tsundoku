@@ -1,4 +1,3 @@
-import type { ConditionJoin } from "../../bindings/ConditionJoin"
 import type { DownloadKind } from "../../bindings/DownloadKind"
 import type { FolderRule } from "../../bindings/FolderRule"
 import type { Preset } from "../../bindings/Preset"
@@ -75,15 +74,15 @@ function countGroups(pattern: string): number {
 export function newCondition(field: RuleField, defaultPresetId: string): RuleCondition {
   switch (field) {
     case "kind":
-      return { field, operator: "is", value: "video", caseSensitive: false }
+      return { field, operator: "is", value: "video", caseSensitive: false, join: "all" }
     case "preset":
-      return { field, operator: "is", value: defaultPresetId, caseSensitive: false }
+      return { field, operator: "is", value: defaultPresetId, caseSensitive: false, join: "all" }
     case "title":
     case "link":
-      return { field, operator: "contains", value: "", caseSensitive: false }
+      return { field, operator: "contains", value: "", caseSensitive: false, join: "all" }
     case "site":
     case "uploader":
-      return { field, operator: "is", value: "", caseSensitive: false }
+      return { field, operator: "is", value: "", caseSensitive: false, join: "all" }
   }
 }
 
@@ -94,7 +93,6 @@ export function newRule(): FolderRule {
     name: "",
     enabled: true,
     conditions: [newCondition("site", "")],
-    join: "all",
     folder: "",
     presetId: null,
     downloadRightAway: null,
@@ -142,16 +140,18 @@ export function describeActions(rule: FolderRule, presets: readonly Preset[]): s
   return phrases
 }
 
-/** A rule's conditions as a sentence: "When the site is Instagram and the uploader is “natgeo”". */
-export function describeConditions(
-  conditions: readonly RuleCondition[],
-  join: ConditionJoin,
-  presets: readonly Preset[],
-): string {
+/** A rule's conditions as a sentence, each after the AND or OR that joins it to the one before: "When the site is
+ * Instagram AND the uploader is “natgeo”". */
+export function describeConditions(conditions: readonly RuleCondition[], presets: readonly Preset[]): string {
   if (conditions.length === 0) return text.sentence.every
   return text.sentence.when(
-    conditions.map((condition) => describeCondition(condition, presets)),
-    join,
+    conditions
+      .map((condition, index) =>
+        index === 0
+          ? describeCondition(condition, presets)
+          : `${text.join[condition.join]} ${describeCondition(condition, presets)}`,
+      )
+      .join(" "),
   )
 }
 

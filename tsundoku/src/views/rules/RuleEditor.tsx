@@ -104,18 +104,17 @@ export function RuleEditor({
           <p className="text-fg-secondary">{text.catchAllWhen}</p>
         </Field>
       ) : (
-        <Field
-          label={text.when}
-          hint={hasPattern ? `${text.whenHint[draft.join]} ${text.patternHint}` : text.whenHint[draft.join]}
-        >
+        <Field label={text.when} hint={hasPattern ? `${text.whenHint} ${text.patternHint}` : text.whenHint}>
           <div className="flex flex-col gap-2">
             {draft.conditions.map((condition, index) => (
               // Conditions have no ID of their own, and their inputs are controlled, so their place will do.
               <Fragment key={index}>
                 {index > 0 && (
                   <JoinButton
-                    join={draft.join}
-                    onToggle={() => update({ join: draft.join === "all" ? "any" : "all" })}
+                    join={condition.join}
+                    onToggle={() =>
+                      setCondition(index, { ...condition, join: condition.join === "all" ? "any" : "all" })
+                    }
                   />
                 )}
                 <ConditionRow
@@ -186,7 +185,7 @@ export function RuleEditor({
   )
 }
 
-/** Between two conditions: And or Or, for the whole rule, which a click switches. */
+/** Between two conditions: AND or OR, how the one below joins the one above, which a click switches. */
 function JoinButton({ join, onToggle }: { join: ConditionJoin; onToggle: () => void }) {
   return (
     <div className="flex">
@@ -281,7 +280,9 @@ function ConditionRow({ condition, presets, defaultPresetId, onChange, onRemove 
         aria-label={text.field}
         title={text.field}
         value={field}
-        onChange={(event) => onChange(newCondition(event.target.value as RuleField, defaultPresetId))}
+        onChange={(event) =>
+          onChange({ ...newCondition(event.target.value as RuleField, defaultPresetId), join: condition.join })
+        }
       >
         {RULE_FIELDS.map((option) => (
           <option key={option} value={option}>

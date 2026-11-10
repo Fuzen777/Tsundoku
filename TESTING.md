@@ -223,6 +223,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
+**66. AND and OR per condition** · 0.1.92 (replaces 63)
+- [ ] Rules → Edit a rule with three conditions: site is YouTube, site is Vimeo, title contains zoo. Each gap has its own AND button (in capitals, with a tooltip). Click the first one only: it says OR, the second stays AND. Save → the sentence reads "When the site is YouTube OR the site is Vimeo AND the title contains “zoo”".
+- [ ] Test a Link with "Me at the zoo" (`jNQXAC9IVRw`) → that rule decides; with a YouTube video without "zoo" in its title → it doesn't.
+- [ ] Changing a condition's field keeps its AND/OR. A rule saved as Or in 0.1.89 or 0.1.90 shows OR in every gap.
+- Seen in the browser preview (each button switches on its own); not tried in the app.
+
 **65. Rule names** · 0.1.91
 - [ ] Rules → Edit a rule: a Name field under its heading, with "Rule N" as its placeholder. Type "Nat Geo", Save → the row shows "Nat Geo" above its sentence.
 - [ ] Paste a link the rule takes: the preview card's folder line says "· Nat Geo" instead of "· Rule N"; the same in Pending, and beside the preset when the rule picks it. Test a Link and the Queue's or Pending's Group By → Rule say "Nat Geo" too. Clicking it still opens Rules.
@@ -234,12 +240,6 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] A rule "title contains Zoo" with Match Case on: Test a Link with "Me at the zoo" (`jNQXAC9IVRw`) → the rule doesn't decide; turn Match Case off → it does. Same with a Matches pattern.
 - [ ] Conditions saved before this version still ignore case.
 - Seen in the browser preview (the button switches); not tried in the app.
-
-**63. And or Or between conditions** · 0.1.89
-- [ ] Rules → Edit a rule, Add Condition: an And button appears between the two conditions, with a tooltip saying what a click does. Click it: every button between conditions says Or, and the hint under them says one condition is enough. Save → the rule's sentence reads "When … or …".
-- [ ] Test a Link with a link only one of an Or rule's conditions matches → that rule decides. Switch it back to And and save → it no longer does.
-- [ ] Rules saved before this version still read "… and …" and behave as before.
-- Seen in the browser preview (the button switches, the hint follows); not tried in the app.
 
 **61. Drag rules into place** · 0.1.87
 - [ ] Rules → hover a rule's grip (left of its number): the cursor is a hand and "Drag to Move" shows. Drag it up or down: the whole row follows the pointer and a line shows where it will go. Dropping saves the new order at once, numbers follow, and the rule that decides changes accordingly.

@@ -302,7 +302,7 @@ function RuleRow({
   onDelete,
 }: RuleRowProps) {
   const isCatchAll = rule.id === CATCH_ALL_RULE_ID
-  const sentence = isCatchAll ? text.sentence.everythingElse : describeConditions(rule.conditions, rule.join, presets)
+  const sentence = isCatchAll ? text.sentence.everythingElse : describeConditions(rule.conditions, presets)
   const actions = describeActions(rule, presets)
   const toggleItem: MenuItem = { label: rule.enabled ? text.turnOff : text.turnOn, onSelect: onToggle }
   const menuItems: MenuItem[] = isCatchAll

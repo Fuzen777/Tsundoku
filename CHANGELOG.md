@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.92 · 2026-11-10
+
+### Changed
+
+- **AND and OR per condition**: each gap between two conditions has its own AND/OR button, in capitals, so one rule can mix them. Conditions joined by OR are alternatives and AND joins those: "site is X OR site is Bluesky AND title contains cat" takes a cat from either site. A rule set to Or in 0.1.89 keeps OR between all its conditions.
+
 ## 0.1.91 · 2026-11-10
 
 ### Added
