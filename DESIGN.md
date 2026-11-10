@@ -134,7 +134,8 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 - **An icon** for an action repeated on every row or card of a list, when a common icon says it plainly: starting, removing, stopping, resuming, retrying, cancelling, opening a file or a page, showing a folder, editing, moving, duplicating, deleting.
 - **Text** for a view's main and page-wide actions (Add, Download, Start All, Start Selected, Pause All, Resume All, Retry Failed, Clear Finished, Add Rule), Save and Discard, the fixes under a message (Update yt-dlp, Set Up Cookies), Settings, the first-run setup, and any action no icon says plainly (Set as Default, Choose Folder, Use Default Folder).
-- An icon-only button is an `IconButton` (`tsundoku/src/components/IconButton.tsx`): `ghost` by default, `secondary` for a row's main action. Its `label`, from `strings.ts`, is both its hover text and its `aria-label`, so the two never differ. The hover text sits on a wrapper, so a disabled one still says what it is.
+- An icon-only button is an `IconButton` (`tsundoku/src/components/IconButton.tsx`): `ghost` by default, `secondary` for a row's main action. Its `label`, from `strings.ts`, is both its tooltip and its `aria-label`, so the two never differ. The tooltip listens on a wrapper, so a disabled one still says what it is.
+- Any other control that shows only an icon or a color (the accent swatches) gets the same `Tooltip` (below) rather than a native `title`.
 - One action keeps one icon everywhere (lucide names):
 
 | Action | Icon |
@@ -173,6 +174,12 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 - `Menu`: a ghost icon button (three dots by default) opening a list of actions under it, right-aligned to the button, on `--color-bg` with a strong line border and a shadow. Escape or a click elsewhere closes it. A destructive item is in the danger color.
 - Its button is an `IconButton`, labeled with what it opens.
+
+### Tooltips
+
+- `Tooltip` (`tsundoku/src/components/Tooltip.tsx`) names an icon-only control: 12 px `--color-fg` text on `--color-bg`, a strong line border, 4 px corners and a shadow, like a small `Menu` list, so it follows both themes. It's drawn in a portal over everything, 6 px under the control, centered on it, kept 8 px from the window's edges, and over the control when there's no room below.
+- It shows after the pointer rests on the control for 500 ms, or when the keyboard's focus reaches it (not after a click). Within 300 ms of one closing, the next shows at once, so a row of icons reads quickly. A press, Escape, scrolling, resizing or leaving closes it; after a press it stays away until the pointer leaves.
+- Other hover texts (truncated titles and paths, the sidebar's shortcuts) stay native `title`s.
 
 ### Undo Toasts
 
@@ -255,4 +262,5 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 - Color changes use Tailwind's `transition-colors` (150 ms).
 - A progress bar's fill eases to each new value over 150 ms; its indeterminate slider loops every 1.4 s (`animate-indeterminate`, defined in `index.css`).
+- A tooltip fades in over 100 ms (`animate-tooltip-in`).
 - Nothing else animates yet.

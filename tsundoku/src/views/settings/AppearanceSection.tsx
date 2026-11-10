@@ -9,6 +9,7 @@ import { Field } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { SegmentedControl } from "../../components/SegmentedControl"
 import { StatusMessage } from "../../components/StatusMessage"
+import { Tooltip } from "../../components/Tooltip"
 import { useSaveAppearanceOptions } from "../../queries"
 import { strings } from "../../strings"
 
@@ -47,22 +48,22 @@ export function AppearanceSection() {
             {ACCENTS.map((accent) => {
               const selected = (options?.accent ?? "indigo") === accent
               return (
-                <button
-                  key={accent}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={text.accents[accent]}
-                  title={text.accents[accent]}
-                  data-accent={accent}
-                  disabled={!options}
-                  onClick={() => {
-                    if (!selected) void save({ accent })
-                  }}
-                  className={`${SWATCH_CLASSES} ${selected ? SELECTED_SWATCH_CLASSES : ""}`}
-                >
-                  {selected && <Check size={14} aria-hidden />}
-                </button>
+                <Tooltip key={accent} label={text.accents[accent]}>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={text.accents[accent]}
+                    data-accent={accent}
+                    disabled={!options}
+                    onClick={() => {
+                      if (!selected) void save({ accent })
+                    }}
+                    className={`${SWATCH_CLASSES} ${selected ? SELECTED_SWATCH_CLASSES : ""}`}
+                  >
+                    {selected && <Check size={14} aria-hidden />}
+                  </button>
+                </Tooltip>
               )
             })}
             <CustomAccentSwatch options={options} onPick={(customAccent) => void save({ accent: "custom", customAccent })} />
@@ -100,18 +101,19 @@ function CustomAccentSwatch({
   }
 
   return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      aria-label={text.accents.custom}
-      title={text.accents.custom}
-      data-accent="custom"
-      disabled={!options || picking}
-      onClick={() => void openPicker()}
-      className={`${SWATCH_CLASSES} ${selected ? SELECTED_SWATCH_CLASSES : ""}`}
-    >
-      {selected ? <Check size={14} aria-hidden /> : <Pipette size={14} aria-hidden />}
-    </button>
+    <Tooltip label={text.accents.custom}>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={selected}
+        aria-label={text.accents.custom}
+        data-accent="custom"
+        disabled={!options || picking}
+        onClick={() => void openPicker()}
+        className={`${SWATCH_CLASSES} ${selected ? SELECTED_SWATCH_CLASSES : ""}`}
+      >
+        {selected ? <Check size={14} aria-hidden /> : <Pipette size={14} aria-hidden />}
+      </button>
+    </Tooltip>
   )
 }

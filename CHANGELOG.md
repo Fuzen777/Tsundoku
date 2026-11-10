@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.83 · 2026-11-10
+
+### Changed
+
+- **Tooltips on icon buttons**: resting the pointer on an icon-only button (or reaching it with Tab) for half a second shows its name in a small box under it, styled for the light and dark themes, instead of Windows' plain hover text. Moving along a row of icons shows each name at once, and a click, Escape or scrolling closes it. The accent swatches in Settings → Appearance have them too.
+
 ## 0.1.82 · 2026-11-10
 
 ### Changed

@@ -37,6 +37,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Pick a Color opens Windows' color picker in the real app (it did nothing up to 0.1.80), over the window, starting on the custom color, with the full panel open. The window can't be clicked while it's open. Cancel → nothing changes. OK on a color → the app takes it at once. Add a color to Custom Colors, close, open it again → it's still there (until the app restarts). Not tried in the real app yet. (0.1.81)
 - [ ] Each one reads well in Light and in Dark (white text on filled buttons, links readable on the background). Restart → the accent is there from the first frame.
 
+**57. Tooltips on icon buttons** · 0.1.83
+- [ ] Rest the pointer on any icon button (a queue row's Stop, the sort direction, the preview card's ×) → after about half a second its name shows in a small box under it, matching the theme in Light and in Dark. Seen in the browser preview, not in the real app yet.
+- [ ] Slide along a row of icons → each name shows at once. Click one → its tooltip goes and doesn't come back until the pointer leaves. Escape or scrolling the list closes it.
+- [ ] A greyed-out icon button still shows its name. Tab onto an icon button → its name shows; clicking one with the mouse doesn't.
+- [ ] Near the window's right or bottom edge, the box stays inside the window (above the button at the bottom). Windows' own plain hover text no longer appears on icon buttons or the accent swatches.
+
 **3. Icons for row actions** · 0.1.31
 - [ ] The actions on each row are icons in Pending, the Queue, Rules, Presets and under the preview card's "already downloaded" warning. Hovering each shows its name, even while it's greyed out.
 - [ ] The preview card closes with its × at the top right, also while a link is being read and after it fails.

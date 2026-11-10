@@ -1,9 +1,10 @@
 import type { ButtonHTMLAttributes } from "react"
 import type { LucideIcon } from "lucide-react"
 import { Button, type ButtonVariant } from "./Button"
+import { Tooltip } from "./Tooltip"
 
 interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "title" | "aria-label"> {
-  /** What the button does: its hover text and, for screen readers, its name. */
+  /** What the button does: its tooltip and, for screen readers, its name. */
   label: string
   icon: LucideIcon
   variant?: ButtonVariant
@@ -11,15 +12,15 @@ interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
 }
 
 /**
- * A button that shows only an icon, with its label as hover text and aria-label. The hover text sits on a wrapper,
- * since a disabled button gets no hover of its own and would otherwise leave its icon unexplained.
+ * A button that shows only an icon, with its label as its tooltip and aria-label. The tooltip listens on a wrapper,
+ * so a disabled button still says what it is.
  */
 export function IconButton({ label, icon: Icon, variant = "ghost", ...rest }: IconButtonProps) {
   return (
-    <span title={label} className="inline-flex shrink-0">
+    <Tooltip label={label}>
       <Button size="icon" variant={variant} aria-label={label} {...rest}>
         <Icon size={16} />
       </Button>
-    </span>
+    </Tooltip>
   )
 }
