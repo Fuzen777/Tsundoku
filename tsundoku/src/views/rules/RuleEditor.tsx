@@ -12,11 +12,12 @@ import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
 import { IconButton } from "../../components/IconButton"
 import { PlaceholderButtons } from "../../components/PlaceholderButtons"
+import { DEFAULT_POST_FILE_NAME, PostNameInput } from "../../components/PostNameInput"
 import { StatusMessage } from "../../components/StatusMessage"
 import { SegmentedControl } from "../../components/SegmentedControl"
 import { Tooltip } from "../../components/Tooltip"
 import type { ErrorDescription } from "../../errors"
-import { useSupportedSites } from "../../queries"
+import { useDownloadOptions, useSupportedSites } from "../../queries"
 import { strings } from "../../strings"
 import {
   CATCH_ALL_RULE_ID,
@@ -75,7 +76,8 @@ export function RuleEditor({
 }: RuleEditorProps) {
   const { data: supportedSites } = useSupportedSites()
   const folderInput = useRef<HTMLInputElement>(null)
-  const fileNameInput = useRef<HTMLInputElement>(null)
+  const { data: downloadOptions } = useDownloadOptions()
+  const settingsPostName = downloadOptions?.postFileName.trim() || DEFAULT_POST_FILE_NAME
   const isCatchAll = draft.id === CATCH_ALL_RULE_ID
   const { placeholders, hints: placeholderHints } = folderPlaceholders(draft.conditions)
   const hasPattern = draft.conditions.some((condition) => isPattern(condition.operator))
@@ -161,22 +163,12 @@ export function RuleEditor({
       </Field>
       {!isCatchAll && (
         <Field label={text.fileName} hint={text.fileNameHint} htmlFor="rule-file-name">
-          <div className="flex flex-col gap-2">
-            <TextInput
-              ref={fileNameInput}
-              id="rule-file-name"
-              className="font-mono"
-              value={draft.fileName}
-              onChange={(event) => update({ fileName: event.target.value })}
-            />
-            <PlaceholderButtons
-              input={fileNameInput}
-              value={draft.fileName}
-              placeholders={[...placeholders, "number"]}
-              hints={placeholderHints}
-              onChange={(fileName) => update({ fileName })}
-            />
-          </div>
+          <PostNameInput
+            id="rule-file-name"
+            value={draft.fileName}
+            onChange={(fileName) => update({ fileName })}
+            emptyName={settingsPostName}
+          />
         </Field>
       )}
       {!isCatchAll && <RuleActions draft={draft} presets={presets} onChange={update} />}

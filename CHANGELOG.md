@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.97 · 2026-11-10
+
+### Changed
+
+- **Rule file names are posts' names**: a rule's File Name now works like Settings → Posts of Images, with the same placeholders ({account}, {date}, {post}, {number}, {site}), the same checks and an example of the name. Left empty, Settings' name is used. Videos keep their preset's name.
+
 ## 0.1.96 · 2026-11-10
 
 ### Added

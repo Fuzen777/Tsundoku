@@ -227,11 +227,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
-**68. File names per rule** · 0.1.96
-- [ ] Rules → Edit a rule matching YouTube: File Name sits under Save In, with the placeholder buttons (and {number}); clicking one puts it at the cursor. Type `{uploader} - {title}`, Save → the row says "Names files “{uploader} - {title}”". A `:` in it is refused on Save.
-- [ ] Download "Me at the zoo" (`jNQXAC9IVRw`) → the file is "jawed - Me at the zoo jNQXAC9IVRw.mp4" (or the preset's format). yt-dlp was checked to take the template outside the app; the queue wasn't tried.
-- [ ] A rule with a file name for Instagram, such as `{account} {title}` → a post's files are "natgeo <caption> <post ID> 1.jpg", "… 2.jpg". Not tried: it needs a signed-in browser.
-- [ ] Clearing the file name → new downloads take the preset's name again. A download already in the queue keeps the name it had when added.
+**68. File names per rule** · 0.1.96, 0.1.97
+- [ ] Rules → Edit a rule: File Name under Save In looks like Settings → Posts of Images' (the same buttons and an example), and the example shows Settings' name while it's empty. Type `{account} {post} {number}`, Save → the row says "Names posts' files “{account} {post} {number}”". A name without {post} or {number}, or with `:`, is refused on Save with Settings' reason.
+- [ ] A rule for Instagram with such a name → a post's files are "natgeo DfPQchkG1tg 1.jpg", "… 2.jpg". Not tried: it needs a signed-in browser. A video the rule matches keeps its preset's name.
+- [ ] Clearing the name → new posts take Settings' name again; a post already in the queue keeps the name it had when added.
+- [ ] Settings → Posts of Images still saves on leaving the field, Use Default Name still shows, and "Saved." appears beside the example.
 
 **66. AND and OR per condition** · 0.1.92, 0.1.94 (replaces 63)
 - [ ] Rules → Edit a rule with three conditions: site is YouTube, site is Vimeo, title contains zoo. Each condition after the first starts with its own AND button, on its row, lined up with the first condition's fields (in capitals, with a tooltip). Click the first one only: it says OR, the second stays AND. Save → the sentence reads "When the site is YouTube OR the site is Vimeo AND the title contains “zoo”".

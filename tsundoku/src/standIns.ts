@@ -443,7 +443,7 @@ export const standIns = {
         { field: "uploader", operator: "is", value: "natgeo", caseSensitive: false, join: "all" },
       ],
       folder: String.raw`D:\Hydrus\Import\{site}\{account}`,
-      fileName: "{account} {date} {title}",
+      fileName: "{account} {post} {number}",
       presetId: null,
       downloadRightAway: null,
     },

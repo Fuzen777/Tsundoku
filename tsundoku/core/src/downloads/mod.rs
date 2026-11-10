@@ -76,8 +76,8 @@ pub struct QueueItem {
     /// rules.
     #[serde(default)]
     pub folder_chosen: bool,
-    /// How its files are named by a rule when it was added (`rules::file_name`), or `None` for the preset's name (a
-    /// video) or Settings' (a post). The UI doesn't need it.
+    /// How a post's files are named by a rule when it was added (`rules::file_name`), or `None` for Settings' name and
+    /// for a video. The UI doesn't need it.
     #[serde(skip)]
     #[ts(skip)]
     pub file_name: Option<String>,
@@ -448,7 +448,7 @@ impl DownloadQueue {
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
         let folder = chosen.unwrap_or_else(|| self.destination(&video, Some(&preset)).folder);
-        let file_name = self.rule_file_name(&video, Some(&preset));
+        let file_name = None;
         let mut item = QueueItem {
             id: 0,
             folder,
@@ -538,7 +538,7 @@ impl DownloadQueue {
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
         let folder = chosen.unwrap_or_else(|| self.destination(&video, None).folder);
-        let file_name = self.rule_file_name(&video, None);
+        let file_name = self.rule_file_name(&video);
         let mut item = QueueItem {
             id: 0,
             folder,
@@ -854,11 +854,14 @@ impl DownloadQueue {
         first_error.map_or(Ok(restored), Err)
     }
 
-    /// How a download of `video` with `preset` (`None` for a post) is named by the rules (`rules::file_name`).
-    fn rule_file_name(&self, video: &VideoInfo, preset: Option<&Preset>) -> Option<String> {
+    /// How a post's files are named by the rules (`rules::file_name`), else `None` for Settings' name.
+    fn rule_file_name(&self, video: &VideoInfo) -> Option<String> {
         rules::file_name(
             &self.settings.get().rules.list,
-            &RuleSubject { video, preset },
+            &RuleSubject {
+                video,
+                preset: None,
+            },
         )
     }
 
@@ -987,12 +990,7 @@ impl DownloadQueue {
         JobSpec {
             id: item.id,
             url: item.video.url.clone(),
-            preset: item.preset.clone().map(|mut preset| {
-                if let Some(name) = &item.file_name {
-                    preset.file_name = rules::yt_dlp_output(name);
-                }
-                preset
-            }),
+            preset: item.preset.clone(),
             folder: PathBuf::from(&item.folder),
             temp_folder: temp_folder(item),
             log_path: self.log_path(item.id),
@@ -1011,9 +1009,9 @@ impl DownloadQueue {
                     .post_file_count()
                     .unwrap_or(contents.images + contents.videos),
                 range: item.video.picked_post_files(),
-                file_name: item.file_name.as_deref().map_or_else(
-                    || post_names::gallery_format(&options.post_file_name, &item.video),
-                    post_names::rule_format,
+                file_name: post_names::gallery_format(
+                    item.file_name.as_deref().unwrap_or(&options.post_file_name),
+                    &item.video,
                 ),
             }),
             files: item.video.files,

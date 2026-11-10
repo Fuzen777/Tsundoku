@@ -14,7 +14,9 @@ describe("describeActions", () => {
   })
 
   it("quotes the file name", () => {
-    expect(describeActions({ ...newRule(), fileName: " {title} " }, [audioMp3])).toEqual(["Names files “{title}”"])
+    expect(describeActions({ ...newRule(), fileName: " {post} {number} " }, [audioMp3])).toEqual([
+      "Names posts' files “{post} {number}”",
+    ])
   })
 
   it("says nothing for a rule that only picks a folder", () => {

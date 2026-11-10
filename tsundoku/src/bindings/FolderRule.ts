@@ -32,9 +32,9 @@ conditions: Array<RuleCondition>,
  */
 folder: string, 
 /**
- * How matching downloads' files are named, with the folder's placeholders (and `{number}`, a post's file's place
- * in it), or empty to leave it to the rules before it, then the preset (a video) or Settings (a post's files).
- * See `file_name_on`. Missing in rules saved before 0.1.96.
+ * How the files of matching posts are named, as Settings → Posts of Images names them (`post_names`, with
+ * `{account}`, `{date}`, `{post}`, `{number}` and `{site}`), or empty to leave it to the rules before it, then
+ * Settings. Videos keep their preset's name. Missing in rules saved before 0.1.96.
  */
 fileName: string, 
 /**

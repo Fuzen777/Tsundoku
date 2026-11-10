@@ -1,19 +1,17 @@
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { pickFolder, queryKeys, saveDownloadOptions, setDefaultPreset } from "../../api"
 import type { CookiesBrowser } from "../../bindings/CookiesBrowser"
 import type { DownloadSettings } from "../../bindings/DownloadSettings"
 import type { PauseRange } from "../../bindings/PauseRange"
-import type { PostNamePlaceholder } from "../../bindings/PostNamePlaceholder"
 import type { SitePauses } from "../../bindings/SitePauses"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
-import { PlaceholderButtons } from "../../components/PlaceholderButtons"
+import { DEFAULT_POST_FILE_NAME, PostNameInput } from "../../components/PostNameInput"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { describeDownloadError, describePresetError, type ErrorDescription } from "../../errors"
-import { fillPlaceholders } from "../../placeholders"
 import { useDefaultDownloadFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
 import { useOpenDownloadFolder } from "../../useOpenDownloadFolder"
@@ -22,12 +20,6 @@ const text = strings.settings
 
 /** The longest pause between a post's files, in seconds (`PauseRange::LONGEST` in the core). */
 const LONGEST_PAUSE = 600
-
-/** How posts' files are named unless Settings says otherwise (`post_names::DEFAULT_POST_FILE_NAME` in the core). */
-const DEFAULT_POST_FILE_NAME = "{account} {date} {post} {number}"
-
-/** What a post file's name can hold, in the order the Insert buttons offer them. */
-const POST_NAME_PLACEHOLDERS: readonly PostNamePlaceholder[] = ["account", "date", "post", "number", "site"]
 
 /** The most downloads that can run at once (`MAX_AT_ONCE` in the core). */
 const AT_ONCE_CHOICES = [1, 2, 3, 4, 5] as const
@@ -198,12 +190,10 @@ export function DownloadsSection() {
 /** Settings → Posts of Images: how the files of a post are named, with a live example under the field. */
 export function PostsSection() {
   const { options, save, error } = useSaveOptions()
-  const input = useRef<HTMLInputElement>(null)
   // The name is saved when the field is left or Enter is pressed, not at every key.
   const [name, setName] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const shownName = name ?? options?.postFileName ?? ""
-  const example = `${fillPlaceholders(shownName.trim() || DEFAULT_POST_FILE_NAME, text.postNameSamples)}.${text.postNameSampleExtension}`
 
   async function saveName(changed: string | null) {
     if (changed === null) return
@@ -227,21 +217,18 @@ export function PostsSection() {
           error={error?.message}
           htmlFor="settings-post-file-name"
         >
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <TextInput
-                ref={input}
-                id="settings-post-file-name"
-                className="flex-1 font-mono"
-                value={shownName}
-                disabled={!options}
-                onChange={(event) => edit(event.target.value)}
-                onBlur={() => void saveName(name)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void saveName(name)
-                }}
-              />
-              {shownName.trim() !== DEFAULT_POST_FILE_NAME && (
+          <PostNameInput
+            id="settings-post-file-name"
+            value={shownName}
+            onChange={edit}
+            emptyName={DEFAULT_POST_FILE_NAME}
+            disabled={!options}
+            onBlur={() => void saveName(name)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void saveName(name)
+            }}
+            besideField={
+              shownName.trim() !== DEFAULT_POST_FILE_NAME && (
                 <Button
                   variant="ghost"
                   disabled={!options}
@@ -251,22 +238,10 @@ export function PostsSection() {
                 >
                   {text.useDefaultName}
                 </Button>
-              )}
-            </div>
-            <PlaceholderButtons
-              input={input}
-              value={shownName}
-              placeholders={POST_NAME_PLACEHOLDERS}
-              hints={text.postNamePlaceholderHints}
-              onChange={edit}
-            />
-            <div className="flex items-center gap-3">
-              <p className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={example}>
-                {text.postFileNameExample} <span className="font-mono text-fg-secondary select-text">{example}</span>
-              </p>
-              {saved && <StatusMessage tone="success" message={text.saved} />}
-            </div>
-          </div>
+              )
+            }
+            besideExample={saved && <StatusMessage tone="success" message={text.saved} />}
+          />
         </Field>
       </Card>
     </Section>

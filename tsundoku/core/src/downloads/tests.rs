@@ -1629,7 +1629,7 @@ fn a_rule_picks_the_folder() {
 }
 
 #[test]
-fn a_rule_names_the_files_and_the_item_keeps_it() {
+fn a_rule_names_a_posts_files_and_the_item_keeps_it() {
     use crate::rules::FolderRule;
 
     let test = Test::new();
@@ -1637,17 +1637,18 @@ fn a_rule_names_the_files_and_the_item_keeps_it() {
         .update(|settings| {
             settings.rules.list.push(FolderRule {
                 id: "rule-1".to_owned(),
-                file_name: "{title} 100%".to_owned(),
+                file_name: "{site} {post} {number}".to_owned(),
                 ..crate::rules::catch_all_rule()
             });
         })
         .unwrap();
-    let item = test.queue.add(video("a"), "best-video", false).unwrap();
-    assert_eq!(item.file_name.as_deref(), Some("Video a 100% a"));
+    let item = test.queue.add_post(post("Named")).unwrap();
+    assert_eq!(item.file_name.as_deref(), Some("{site} {post} {number}"));
     let job = test.queue.job_for(&item);
-    assert_eq!(
-        job.preset.map(|preset| preset.file_name).as_deref(),
-        Some("Video a 100%% a.%(ext)s")
+    let format = job.post.map(|post| post.file_name).unwrap_or_default();
+    assert!(
+        format.ends_with(" Named {num|filename}.{extension}"),
+        "named by the rule: {format}"
     );
     let reopened = test.reopen();
     let kept = reopened
@@ -1656,18 +1657,12 @@ fn a_rule_names_the_files_and_the_item_keeps_it() {
         .find(|queued| queued.id == item.id);
     assert_eq!(
         kept.and_then(|queued| queued.file_name).as_deref(),
-        Some("Video a 100% a"),
+        Some("{site} {post} {number}"),
         "saved with the item"
     );
     test.queue.cancel(item.id).unwrap();
 
-    test.settings
-        .update(|settings| settings.rules.list[1].file_name = String::new())
-        .unwrap();
-    let unnamed = test.queue.add(video("b"), "best-video", false).unwrap();
-    assert_eq!(
-        unnamed.file_name, None,
-        "no rule names it: the preset's name"
-    );
-    test.queue.cancel(unnamed.id).unwrap();
+    let video = test.queue.add(video("a"), "best-video", false).unwrap();
+    assert_eq!(video.file_name, None, "a video keeps its preset's name");
+    test.queue.cancel(video.id).unwrap();
 }

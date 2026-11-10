@@ -196,15 +196,6 @@ pub fn gallery_format(template: &str, post: &VideoInfo) -> String {
     format
 }
 
-/// gallery-dl's `-f` format for a post's files named by a rule (`rules::file_name`, already in gallery-dl's way of
-/// writing text): each `{number}` the file's place in the post, then the file's extension.
-pub fn rule_format(name: &str) -> String {
-    format!(
-        "{}.{{extension}}",
-        name.replace(rules::NUMBER_PLACEHOLDER, NUMBER_FIELD)
-    )
-}
-
 /// What a placeholder becomes in the format: the post's own value as text when the preview knows it, else the
 /// fields gallery-dl gives it under on the post's site, ending with a value that's always there.
 fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
