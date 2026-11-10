@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.82 · 2026-11-10
+
+### Changed
+
+- **Words for everything you download**: History counts items rather than videos ("15 items"), and its Forget and Move Files dialogs, its empty page and the "already in the queue" messages no longer call every download a video, since posts of images and shared files are listed too.
+
 ## 0.1.81 · 2026-11-10
 
 ### Fixed

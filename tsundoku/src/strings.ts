@@ -202,7 +202,7 @@ export const strings = {
     errors: {
       folder: "Couldn't create the download folder.",
       noFile: "The download finished without saying which file it made.",
-      alreadyQueued: "This video is already in the queue.",
+      alreadyQueued: "This is already in the queue.",
       notFound: "This download isn't in the queue anymore.",
       wrongState: "That can't be done to this download right now.",
       damaged: (file: string) => `${file} arrived damaged and was deleted. Retry to download it again.`,
@@ -227,7 +227,7 @@ export const strings = {
   },
   history: {
     emptyTitle: "No Downloads Yet",
-    emptyBody: "Everything you download is listed here, so you never get the same video twice.",
+    emptyBody: "Everything you download is listed here, so you never download the same thing twice.",
     noMatchesTitle: "No Matches",
     noMatchesBody: "No download matches this search and these filters.",
     searchPlaceholder: "Search Titles and Uploaders",
@@ -245,7 +245,7 @@ export const strings = {
     },
     ascending: "Ascending",
     descending: "Descending",
-    videoCount: (count: number) => (count === 1 ? "1 video" : `${count} videos`),
+    itemCount: (count: number) => (count === 1 ? "1 item" : `${count} items`),
     downloadCount: (count: number) => `${count} Downloads`,
     fileCount: (count: number) => `${count} Files`,
     fileMissing: "File Missing",
@@ -255,7 +255,7 @@ export const strings = {
     openSourcePage: "Open Source Page",
     downloadAgain: "Download Again",
     forget: "Forget",
-    forgetTitle: "Forget This Video?",
+    forgetTitle: "Forget This Item?",
     forgetMessage: (title: string) =>
       `${title} will leave the history, so Tsundoku won't warn before it's downloaded again. Its files stay where they are.`,
     allKinds: "All Kinds",
@@ -288,14 +288,14 @@ export const strings = {
     forgetSelected: "Forget Selected",
     moveFiles: "Move Files…",
     moveSelected: "Move Selected…",
-    moveFilesTitle: (count: number) => (count === 1 ? "Move the Files To" : `Move the Files of ${count} Videos To`),
+    moveFilesTitle: (count: number) => (count === 1 ? "Move the Files To" : `Move the Files of ${count} Items To`),
     movedFiles: (moved: number, missing: number) =>
       (moved === 0 ? "No file was left to move." : `Moved ${moved} ${moved === 1 ? "file" : "files"}.`) +
       (missing === 0 ? "" : ` ${missing} ${missing === 1 ? "was" : "were"} missing already.`),
     moveFailed: (count: number) => `${count} ${count === 1 ? "file" : "files"} couldn't be moved.`,
     moveFailure: (path: string, reason: string) => `${path}: ${reason}`,
     showSelectedInFolder: "Show Selected in Folder",
-    forgetManyTitle: (count: number) => (count === 1 ? "Forget 1 Video?" : `Forget ${count} Videos?`),
+    forgetManyTitle: (count: number) => (count === 1 ? "Forget 1 Item?" : `Forget ${count} Items?`),
     forgetManyMessage:
       "They'll leave the history, so Tsundoku won't warn before they're downloaded again. Their files stay where they are.",
     openFoldersTitle: (count: number) => `Open ${count} Folders?`,
@@ -526,7 +526,7 @@ export const strings = {
     /** Beside the preset picker when a rule picked the preset, opening the rules. */
     presetByRule: (number: number) => `Rule ${number}`,
     presetByRuleHint: (number: number) => `Rule ${number} picks this preset`,
-    inQueue: "This video is already in the queue.",
+    inQueue: "This is already in the queue.",
     overwriteTitle: "Download Again?",
     overwriteMessage: (preset: string) =>
       `It was already downloaded with ${preset}, so the new file will replace the one made before.`,

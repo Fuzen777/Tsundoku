@@ -391,7 +391,7 @@ export function HistoryView() {
                 disabled={busy}
                 onChange={(event) => void tickAll(event.target.checked)}
               />
-              {joinDetails([text.videoCount(total), selected.size > 0 && text.selectedCount(selected.size)])}
+              {joinDetails([text.itemCount(total), selected.size > 0 && text.selectedCount(selected.size)])}
             </label>
           )}
           {error && <StatusMessage tone="danger" {...error} />}

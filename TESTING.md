@@ -272,6 +272,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Move to another drive (D: to C:, say) → the files are copied, then gone from where they were.
 - [ ] A file open in another app (a video playing) → "1 file couldn't be moved." with the file and Windows' reason; the others still move.
 
+**56. Items, not videos** · 0.1.82
+- [ ] History's count reads "1 item" or "15 items"; Forget on a row asks "Forget This Item?", Forget Selected "Forget 3 Items?", and Move Selected… "Move the Files of 3 Items To".
+- [ ] A link already in the queue says "This is already in the queue." on the preview card. Labels that really mean videos (Videos Start As, the Videos kind) are unchanged.
+
 **33. Thumbnails that don't go blank** · 0.1.60
 - [ ] History rows have pictures, older downloads included, which fill in within a minute or so; the data folder has a `thumbnails` folder of small JPEGs.
 - [ ] A day or more later, Instagram rows still have their pictures after Instagram's own links expire.
