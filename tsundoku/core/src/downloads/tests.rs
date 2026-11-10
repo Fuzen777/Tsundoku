@@ -1605,6 +1605,7 @@ fn a_rule_picks_the_folder() {
                 folder: by_uploader.join("{uploader}").display().to_string(),
                 preset_id: None,
                 download_right_away: None,
+                join: crate::rules::ConditionJoin::All,
             });
         })
         .unwrap();

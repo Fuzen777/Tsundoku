@@ -571,6 +571,7 @@ fn no_actions() -> rules::FolderRule {
         folder: String::new(),
         preset_id: None,
         download_right_away: None,
+        join: rules::ConditionJoin::All,
     }
 }
 

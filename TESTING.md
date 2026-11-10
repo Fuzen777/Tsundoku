@@ -223,6 +223,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
+**63. And or Or between conditions** · 0.1.89
+- [ ] Rules → Edit a rule, Add Condition: an And button appears between the two conditions, with a tooltip saying what a click does. Click it: every button between conditions says Or, and the hint under them says one condition is enough. Save → the rule's sentence reads "When … or …".
+- [ ] Test a Link with a link only one of an Or rule's conditions matches → that rule decides. Switch it back to And and save → it no longer does.
+- [ ] Rules saved before this version still read "… and …" and behave as before.
+- Seen in the browser preview (the button switches, the hint follows); not tried in the app.
+
 **61. Drag rules into place** · 0.1.87
 - [ ] Rules → hover a rule's grip (left of its number): the cursor is a hand and "Drag to Move" shows. Drag it up or down: the whole row follows the pointer and a line shows where it will go. Dropping saves the new order at once, numbers follow, and the rule that decides changes accordingly.
 - [ ] Dragging above Everything Else puts the rule just under it; Everything Else has no grip. Dropping a rule where it already is changes nothing. While a rule is being edited, the grips are dimmed and don't drag.

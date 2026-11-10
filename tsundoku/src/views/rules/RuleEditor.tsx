@@ -1,6 +1,7 @@
-import { useRef } from "react"
+import { Fragment, useRef } from "react"
 import { Plus, X } from "lucide-react"
 import { pickFolder } from "../../api"
+import type { ConditionJoin } from "../../bindings/ConditionJoin"
 import type { FolderRule } from "../../bindings/FolderRule"
 import type { Preset } from "../../bindings/Preset"
 import type { RuleCondition } from "../../bindings/RuleCondition"
@@ -13,6 +14,7 @@ import { IconButton } from "../../components/IconButton"
 import { PlaceholderButtons } from "../../components/PlaceholderButtons"
 import { StatusMessage } from "../../components/StatusMessage"
 import { SegmentedControl } from "../../components/SegmentedControl"
+import { Tooltip } from "../../components/Tooltip"
 import type { ErrorDescription } from "../../errors"
 import { useSupportedSites } from "../../queries"
 import { strings } from "../../strings"
@@ -92,18 +94,28 @@ export function RuleEditor({
           <p className="text-fg-secondary">{text.catchAllWhen}</p>
         </Field>
       ) : (
-        <Field label={text.when} hint={hasPattern ? `${text.whenHint} ${text.patternHint}` : text.whenHint}>
+        <Field
+          label={text.when}
+          hint={hasPattern ? `${text.whenHint[draft.join]} ${text.patternHint}` : text.whenHint[draft.join]}
+        >
           <div className="flex flex-col gap-2">
             {draft.conditions.map((condition, index) => (
-              <ConditionRow
-                // Conditions have no ID of their own, and their inputs are controlled, so their place will do.
-                key={index}
-                condition={condition}
-                presets={presets}
-                defaultPresetId={defaultPresetId}
-                onChange={(changed) => setCondition(index, changed)}
-                onRemove={() => update({ conditions: draft.conditions.filter((_, at) => at !== index) })}
-              />
+              // Conditions have no ID of their own, and their inputs are controlled, so their place will do.
+              <Fragment key={index}>
+                {index > 0 && (
+                  <JoinButton
+                    join={draft.join}
+                    onToggle={() => update({ join: draft.join === "all" ? "any" : "all" })}
+                  />
+                )}
+                <ConditionRow
+                  condition={condition}
+                  presets={presets}
+                  defaultPresetId={defaultPresetId}
+                  onChange={(changed) => setCondition(index, changed)}
+                  onRemove={() => update({ conditions: draft.conditions.filter((_, at) => at !== index) })}
+                />
+              </Fragment>
             ))}
             <div>
               <Button
@@ -120,7 +132,9 @@ export function RuleEditor({
       )}
       <Field
         label={text.saveIn}
-        hint={isCatchAll ? text.saveInHint(downloadFolder) : `${text.saveInHint(downloadFolder)} ${text.saveInEmptyHint}`}
+        hint={
+          isCatchAll ? text.saveInHint(downloadFolder) : `${text.saveInHint(downloadFolder)} ${text.saveInEmptyHint}`
+        }
         htmlFor="rule-folder"
       >
         <div className="flex flex-col gap-2">
@@ -162,6 +176,19 @@ export function RuleEditor({
   )
 }
 
+/** Between two conditions: And or Or, for the whole rule, which a click switches. */
+function JoinButton({ join, onToggle }: { join: ConditionJoin; onToggle: () => void }) {
+  return (
+    <div className="flex">
+      <Tooltip label={text.joinHint[join]}>
+        <Button size="sm" aria-label={text.joinHint[join]} className="min-w-12 justify-center" onClick={onToggle}>
+          {text.join[join]}
+        </Button>
+      </Tooltip>
+    </div>
+  )
+}
+
 interface RuleActionsProps {
   draft: FolderRule
   presets: readonly Preset[]
@@ -173,8 +200,7 @@ interface RuleActionsProps {
 function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
   const presetAllowed = canPickPreset(draft.conditions)
   const presetMissing = draft.presetId !== null && !presets.some((preset) => preset.id === draft.presetId)
-  const rightAway: RightAwayChoice =
-    draft.downloadRightAway === null ? "unset" : draft.downloadRightAway ? "on" : "off"
+  const rightAway: RightAwayChoice = draft.downloadRightAway === null ? "unset" : draft.downloadRightAway ? "on" : "off"
   return (
     <>
       <Field
@@ -227,7 +253,10 @@ function folderPlaceholders(conditions: readonly RuleCondition[]): {
   const groups = Array.from({ length: capturedGroups(conditions) }, (_, index) => String(index + 1))
   return {
     placeholders: [...FOLDER_PLACEHOLDERS, ...groups],
-    hints: { ...text.placeholderHints, ...Object.fromEntries(groups.map((group) => [group, text.capturedHint(group)])) },
+    hints: {
+      ...text.placeholderHints,
+      ...Object.fromEntries(groups.map((group) => [group, text.capturedHint(group)])),
+    },
   }
 }
 

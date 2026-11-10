@@ -431,6 +431,7 @@ export const standIns = {
       folder: "{site}",
       presetId: null,
       downloadRightAway: null,
+      join: "all",
     },
     {
       id: "rule-1",
@@ -442,6 +443,7 @@ export const standIns = {
       folder: String.raw`D:\Hydrus\Import\{site}\{account}`,
       presetId: null,
       downloadRightAway: null,
+      join: "all",
     },
     {
       id: "rule-2",
@@ -453,6 +455,7 @@ export const standIns = {
       folder: "Podcasts",
       presetId: null,
       downloadRightAway: null,
+      join: "all",
     },
     {
       id: "rule-3",
@@ -461,6 +464,7 @@ export const standIns = {
       folder: "",
       presetId: "best-audio",
       downloadRightAway: true,
+      join: "all",
     },
   ] satisfies FolderRule[],
   /** The first rule's folder for the video's site, as a new install has it. */

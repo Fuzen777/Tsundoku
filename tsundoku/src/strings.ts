@@ -688,7 +688,13 @@ export const strings = {
     save: "Save",
     discard: "Discard",
     when: "When",
-    whenHint: "Every condition must match. A rule without any matches every download.",
+    whenHint: {
+      all: "Every condition must match. A rule without any matches every download.",
+      any: "One condition matching is enough. A rule without any matches every download.",
+    },
+    /** The button between two conditions, which switches the rule between them. */
+    join: { all: "And", any: "Or" },
+    joinHint: { all: "Every condition must match. Click to need only one.", any: "One condition is enough. Click to need them all." },
     addCondition: "Add Condition",
     removeCondition: "Remove Condition",
     field: "What to Check",
@@ -770,7 +776,8 @@ export const strings = {
     sentence: {
       every: "Every download",
       everythingElse: "Everything else",
-      when: (conditions: string[]) => `When ${conditions.join(" and ")}`,
+      when: (conditions: string[], join: "all" | "any") =>
+        `When ${conditions.join(join === "any" ? " or " : " and ")}`,
       fields: {
         site: "the site",
         uploader: "the uploader",

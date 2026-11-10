@@ -1,3 +1,4 @@
+import type { ConditionJoin } from "../../bindings/ConditionJoin"
 import type { DownloadKind } from "../../bindings/DownloadKind"
 import type { FolderRule } from "../../bindings/FolderRule"
 import type { Preset } from "../../bindings/Preset"
@@ -92,6 +93,7 @@ export function newRule(): FolderRule {
     id: "",
     enabled: true,
     conditions: [newCondition("site", "")],
+    join: "all",
     folder: "",
     presetId: null,
     downloadRightAway: null,
@@ -134,9 +136,16 @@ export function describeActions(rule: FolderRule, presets: readonly Preset[]): s
 }
 
 /** A rule's conditions as a sentence: "When the site is Instagram and the uploader is “natgeo”". */
-export function describeConditions(conditions: readonly RuleCondition[], presets: readonly Preset[]): string {
+export function describeConditions(
+  conditions: readonly RuleCondition[],
+  join: ConditionJoin,
+  presets: readonly Preset[],
+): string {
   if (conditions.length === 0) return text.sentence.every
-  return text.sentence.when(conditions.map((condition) => describeCondition(condition, presets)))
+  return text.sentence.when(
+    conditions.map((condition) => describeCondition(condition, presets)),
+    join,
+  )
 }
 
 function describeCondition({ field, operator, value }: RuleCondition, presets: readonly Preset[]): string {

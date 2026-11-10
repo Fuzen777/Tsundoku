@@ -19,9 +19,18 @@ describe("capturedGroups", () => {
 
 describe("describeConditions", () => {
   it("quotes a pattern, even for the site", () => {
-    expect(describeConditions([{ field: "site", operator: "matches", value: "^x$" }], [])).toBe(
+    expect(describeConditions([{ field: "site", operator: "matches", value: "^x$" }], "all", [])).toBe(
       "When the site matches “^x$”",
     )
+  })
+
+  it("joins conditions with and, or with or", () => {
+    const sites: RuleCondition[] = [
+      { field: "site", operator: "is", value: "X" },
+      { field: "site", operator: "is", value: "Bluesky" },
+    ]
+    expect(describeConditions(sites, "all", [])).toBe("When the site is X and the site is Bluesky")
+    expect(describeConditions(sites, "any", [])).toBe("When the site is X or the site is Bluesky")
   })
 })
 

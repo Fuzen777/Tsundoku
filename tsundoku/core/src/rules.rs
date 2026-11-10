@@ -44,8 +44,12 @@ pub struct FolderRule {
     pub id: String,
     /// A rule that's off is kept but skipped.
     pub enabled: bool,
-    /// All must match. A rule without any matches every download.
+    /// All must match, or any one with `join` set to `Any`. A rule without any matches every download.
     pub conditions: Vec<RuleCondition>,
+    /// How the conditions combine: all must match (And, the default, and how rules from before 0.1.88 read), or any
+    /// one (Or).
+    #[serde(default)]
+    pub join: ConditionJoin,
     /// Where matching downloads go, or empty to leave the folder to the rules before it. `{site}` and `{uploader}`
     /// become the download's, and a folder that isn't a full path is inside the download folder. Empty rather than
     /// missing, so a version from before 0.1.35 still reads the rule.
@@ -58,6 +62,18 @@ pub struct FolderRule {
     /// browser) start once read, or `None` to leave it to the rules before it, then Settings.
     #[serde(default)]
     pub download_right_away: Option<bool>,
+}
+
+/// How a rule's conditions combine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ConditionJoin {
+    /// Every condition must match: "when the site is X and the uploader is natgeo".
+    #[default]
+    All,
+    /// One is enough: "when the site is X or the site is Bluesky".
+    Any,
 }
 
 /// One test of a download: its `field` compared to `value`, ignoring case.
@@ -245,6 +261,7 @@ pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
             conditions: Vec::new(),
             preset_id: None,
             download_right_away: None,
+            join: ConditionJoin::All,
             ..rule
         },
         None => FolderRule {
@@ -266,6 +283,7 @@ pub fn catch_all_rule() -> FolderRule {
         folder: format!("{{{SITE_PLACEHOLDER}}}"),
         preset_id: None,
         download_right_away: None,
+        join: ConditionJoin::All,
     }
 }
 
@@ -285,6 +303,7 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
             .to_string(),
         preset_id: None,
         download_right_away: None,
+        join: ConditionJoin::All,
     }
 }
 
@@ -351,15 +370,20 @@ impl FolderRule {
         self.id == CATCH_ALL_RULE_ID
     }
 
-    /// Whether every condition matches the download.
+    /// Whether every condition matches the download, or any one for a rule whose `join` is `Any`. A rule without
+    /// conditions matches every download either way.
     pub fn matches(&self, subject: &RuleSubject<'_>) -> bool {
-        self.conditions
-            .iter()
-            .all(|condition| condition.matches(subject))
+        let mut conditions = self.conditions.iter();
+        match self.join {
+            ConditionJoin::All => conditions.all(|condition| condition.matches(subject)),
+            ConditionJoin::Any => {
+                self.conditions.is_empty() || conditions.any(|condition| condition.matches(subject))
+            }
+        }
     }
 
     /// What `{1}` to `{9}` become in its folder: the groups of its first pattern that captures any, whole match
-    /// first. `None` when it has no such pattern.
+    /// first. `None` when it has no such pattern, or when that pattern didn't match (one Or left out).
     fn captured(&self, subject: &RuleSubject<'_>) -> Option<Vec<Option<String>>> {
         self.conditions
             .iter()
@@ -886,6 +910,7 @@ mod tests {
             folder: folder.to_owned(),
             preset_id: None,
             download_right_away: None,
+            join: ConditionJoin::All,
         }
     }
 
@@ -1042,6 +1067,46 @@ mod tests {
                 folder: r"D:\YouTube".to_owned(),
                 source: DestinationSource::Rule { number: 2 },
             }
+        );
+    }
+
+    #[test]
+    fn needs_one_condition_with_or() {
+        let video = video();
+        let either = FolderRule {
+            join: ConditionJoin::Any,
+            ..rule(
+                vec![
+                    condition(RuleField::Site, RuleOperator::Is, "SoundCloud"),
+                    condition(RuleField::Site, RuleOperator::Is, "YouTube"),
+                ],
+                r"D:\Either",
+            )
+        };
+        let subject = RuleSubject {
+            video: &video,
+            preset: None,
+        };
+        assert!(either.matches(&subject));
+        let neither = FolderRule {
+            conditions: vec![condition(RuleField::Site, RuleOperator::Is, "X")],
+            ..either.clone()
+        };
+        assert!(!neither.matches(&subject));
+        let without = FolderRule {
+            conditions: Vec::new(),
+            ..either
+        };
+        assert!(
+            without.matches(&subject),
+            "no conditions still match every download"
+        );
+
+        let saved = r#"{ "id": "rule-1", "enabled": true, "folder": "D:\\x", "conditions": [] }"#;
+        assert_eq!(
+            serde_json::from_str::<FolderRule>(saved).unwrap().join,
+            ConditionJoin::All,
+            "rules from before read as And"
         );
     }
 
