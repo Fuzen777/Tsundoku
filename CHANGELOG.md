@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.84 · 2026-11-10
+
+### Changed
+
+- **Presets save as you edit**: a change in the preset editor is saved a moment after you stop typing or clicking, with "Saving…" and "Saved." under the fields, so the Save and Discard buttons are gone. Opening another preset, adding one or leaving the Presets view saves first; only edits that can't be saved (an empty name, a refused argument) say why, and ask before they're dropped. Set as Default, Duplicate, Reset and Delete no longer wait for a save.
+
 ## 0.1.83 · 2026-11-10
 
 ### Changed

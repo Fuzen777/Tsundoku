@@ -2,7 +2,6 @@ import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { Plus, RotateCcw } from "lucide-react"
 import { addPreset, confirmWithUser, queryKeys, resetPreset } from "../api"
-import type { Preset } from "../bindings/Preset"
 import { Button } from "../components/Button"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
@@ -13,44 +12,46 @@ import { usePresets, useStorePresets } from "../queries"
 import { strings } from "../strings"
 import { PresetEditor } from "./presets/PresetEditor"
 import { presetSummary } from "./presets/presetLabels"
+import { usePresetDraft } from "./presets/usePresetDraft"
 
-/** The preset list, and the editor for the one selected. Edits stay a draft until Save. */
+/** The preset list, and the editor for the one selected. Edits save on their own once they pause. */
 export function PresetsView() {
   const { data: overview } = usePresets()
   const queryClient = useQueryClient()
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [draft, setDraft] = useState<Preset | null>(null)
+  const { draft, saveState, saveError, change, save, discard } = usePresetDraft()
   const storePresets = useStorePresets()
   const [listError, setListError] = useState<ErrorDescription | null>(null)
 
   if (!overview) return <Page title={strings.nav.presets} />
   const selected = overview.presets.find((preset) => preset.id === selectedId) ?? overview.presets[0]
-  const isDirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(selected)
+
+  /** Saves the open preset's edits before another opens, or asks to drop them when they can't be saved. */
+  async function leaveOpenPreset() {
+    if (await save()) return true
+    return confirmWithUser({
+      title: strings.presets.discardTitle,
+      message: strings.presets.discardMessage(selected.name),
+      confirmLabel: strings.presets.discardConfirm,
+      cancelLabel: strings.dialogs.cancel,
+    })
+  }
 
   async function select(id: string) {
     if (id === selected.id) return
-    if (
-      isDirty &&
-      !(await confirmWithUser({
-        title: strings.presets.discardTitle,
-        message: strings.presets.discardMessage(selected.name),
-        confirmLabel: strings.presets.discardConfirm,
-        cancelLabel: strings.dialogs.cancel,
-      }))
-    ) {
-      return
-    }
-    setDraft(null)
+    if (!(await leaveOpenPreset())) return
+    discard()
     setSelectedId(id)
   }
 
-  /** Adds a preset, or puts back a deleted built-in, then opens it. Not while the open one has unsaved changes. */
+  /** Adds a preset, or puts back a deleted built-in, then opens it. */
   async function addThenSelect(add: () => Promise<string>) {
     setListError(null)
+    if (!(await leaveOpenPreset())) return
     try {
       const id = await add()
       void queryClient.invalidateQueries({ queryKey: queryKeys.presets })
-      setDraft(null)
+      discard()
       setSelectedId(id)
     } catch (error) {
       setListError(describePresetError(error))
@@ -94,11 +95,11 @@ export function PresetsView() {
             )
           })}
           <div className="mt-2 flex items-center gap-1">
-            <Button size="sm" disabled={isDirty} onClick={() => void addNew()}>
+            <Button size="sm" onClick={() => void addNew()}>
               <Plus className="size-4" aria-hidden />
               {strings.presets.add}
             </Button>
-            {overview.removedBuiltIns.length > 0 && !isDirty && (
+            {overview.removedBuiltIns.length > 0 && (
               <Menu
                 label={strings.presets.restoreBuiltIn}
                 icon={RotateCcw}
@@ -115,12 +116,14 @@ export function PresetsView() {
           key={selected.id}
           saved={selected}
           draft={draft ?? selected}
-          isDirty={isDirty}
           overview={overview}
-          onChange={setDraft}
-          onSaved={() => setDraft(null)}
+          saveState={saveState}
+          saveError={saveError}
+          onChange={change}
+          onSaveNow={save}
+          onDiscard={discard}
           onSelect={(id) => {
-            setDraft(null)
+            discard()
             setSelectedId(id)
             void queryClient.invalidateQueries({ queryKey: queryKeys.presets })
           }}

@@ -572,8 +572,6 @@ export const strings = {
     duplicate: "Duplicate",
     delete: "Delete",
     reset: "Reset",
-    save: "Save",
-    discard: "Discard",
     copyName: (name: string) => `${name} (Copy)`,
     add: "Add Preset",
     newName: "New Preset",
@@ -581,6 +579,7 @@ export const strings = {
     restoreItem: (name: string) => `Put Back ${name}`,
     moveUp: "Move Up",
     moveDown: "Move Down",
+    saving: "Saving…",
     saved: "Saved.",
     summary: {
       video: (quality: string, container: string) => `Video · ${quality} · ${container}`,
@@ -636,7 +635,7 @@ export const strings = {
     deleteTitle: "Delete Preset?",
     deleteMessage: (name: string) => `Delete ${name}? Downloads made with it stay in the history.`,
     discardTitle: "Discard Changes?",
-    discardMessage: (name: string) => `${name} has changes that aren't saved.`,
+    discardMessage: (name: string) => `${name} has changes that couldn't be saved. Discard them?`,
     discardConfirm: "Discard",
     errors: {
       emptyName: "Give the preset a name.",

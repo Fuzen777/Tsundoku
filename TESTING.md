@@ -215,7 +215,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 ## Presets
 
 **46. Adding, moving and deleting presets** · 0.1.68
-- [ ] Presets → Add Preset → "New Preset" appears at the end of the list, set up as Best Video, and opens. Rename it and Save.
+- [ ] Presets → Add Preset → "New Preset" appears at the end of the list, set up as Best Video, and opens. Rename it.
 - [ ] Move Up and Move Down move the open preset; Move Up is greyed out right under the default, Move Down at the end. The default has neither, and no Delete.
 - [ ] Set as Default on another preset → it jumps to the top with the Default badge, and the previous default can now be moved and deleted.
 - [ ] Delete a built-in such as Best Audio (after making another the default if it was) → a ↺ button appears beside Add Preset; its menu's Put Back Best Audio adds it again as it ships.
@@ -281,6 +281,13 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **56. Items, not videos** · 0.1.82
 - [ ] History's count reads "1 item" or "15 items"; Forget on a row asks "Forget This Item?", Forget Selected "Forget 3 Items?", and Move Selected… "Move the Files of 3 Items To".
 - [ ] A link already in the queue says "This is already in the queue." on the preview card. Labels that really mean videos (Videos Start As, the Videos kind) are unchanged.
+
+**58. Presets save as you edit** · 0.1.84
+- [ ] Presets → change a preset's quality or rename it → "Saving…" then "Saved." under the fields, with no Save or Discard button; the list's summary follows, and the change is still there after restarting Tsundoku. Not tried in the real app yet.
+- [ ] Type in File Name, then click another preset at once → the edit is kept (open the first preset again to see it).
+- [ ] Empty the name → "Give the preset a name." shows; click another preset → "Discard Changes?" asks, and Discard leaves the name as it was saved.
+- [ ] Type a refused extra argument (`-o x`) → only the field's own message shows, not a second one under the fields.
+- [ ] Rename a preset, then Duplicate it at once → the copy is named after the new name with " (Copy)".
 
 **33. Thumbnails that don't go blank** · 0.1.60
 - [ ] History rows have pictures, older downloads included, which fill in within a minute or so; the data folder has a `thumbnails` folder of small JPEGs.

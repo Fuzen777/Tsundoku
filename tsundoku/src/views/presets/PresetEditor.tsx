@@ -7,7 +7,6 @@ import {
   movePreset,
   pickFolder,
   resetPreset,
-  savePreset,
   setDefaultPreset,
 } from "../../api"
 import type { AudioFormat } from "../../bindings/AudioFormat"
@@ -24,6 +23,7 @@ import { StatusMessage } from "../../components/StatusMessage"
 import { describePresetError, type ErrorDescription } from "../../errors"
 import { usePresetArguments, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
+import type { PresetSaveState } from "./usePresetDraft"
 import { argumentsLine, AUDIO_FORMATS, heightLabel, VIDEO_CONTAINERS, VIDEO_HEIGHTS } from "./presetLabels"
 
 const fields = strings.presets.fields
@@ -43,21 +43,34 @@ const SPONSOR_BLOCK_OPTIONS = (["off", "mark", "remove"] as const).map((value) =
 interface PresetEditorProps {
   /** The preset as saved. */
   saved: Preset
-  /** The preset as edited. */
+  /** The preset as edited, saved on its own once edits pause. */
   draft: Preset
-  isDirty: boolean
   overview: PresetsOverview
+  saveState: PresetSaveState
+  /** Why the last save failed, until one works. */
+  saveError: ErrorDescription | null
   onChange: (draft: Preset) => void
-  onSaved: () => void
+  /** Saves the waiting edits at once, resolving to whether it worked. */
+  onSaveNow: () => Promise<boolean>
+  /** Drops the waiting edits. */
+  onDiscard: () => void
   /** Another preset should be selected: a copy just made, or the first after a delete. */
   onSelect: (id: string) => void
 }
 
-export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSaved, onSelect }: PresetEditorProps) {
+export function PresetEditor({
+  saved,
+  draft,
+  overview,
+  saveState,
+  saveError,
+  onChange,
+  onSaveNow,
+  onDiscard,
+  onSelect,
+}: PresetEditorProps) {
   const storePresets = useStorePresets()
   const args = usePresetArguments(draft)
-  const [saving, setSaving] = useState(false)
-  const [justSaved, setJustSaved] = useState(false)
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const isBuiltIn = overview.builtInIds.includes(saved.id)
   const isDefault = overview.defaultId === saved.id
@@ -68,10 +81,7 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
   const { output } = draft
   const defaultFolder = overview.defaultFolder
 
-  const update = (changes: Partial<Preset>) => {
-    setJustSaved(false)
-    onChange({ ...draft, ...changes })
-  }
+  const update = (changes: Partial<Preset>) => onChange({ ...draft, ...changes })
 
   async function run(action: () => Promise<void>) {
     setActionError(null)
@@ -82,31 +92,23 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
     }
   }
 
-  const save = () =>
-    run(async () => {
-      setSaving(true)
-      try {
-        storePresets(await savePreset(draft))
-        onSaved()
-        setJustSaved(true)
-      } finally {
-        setSaving(false)
-      }
-    })
   const setAsDefault = () =>
     run(async () => {
       storePresets(await setDefaultPreset(saved.id))
     })
+  // A copy is of the preset as saved, so the edits are saved first.
   const duplicate = () =>
-    run(async () => onSelect((await duplicatePreset(saved.id, strings.presets.copyName(saved.name))).id))
+    run(async () => {
+      if (await onSaveNow()) onSelect((await duplicatePreset(saved.id, strings.presets.copyName(draft.name))).id)
+    })
   const moveTo = (to: number) =>
     run(async () => {
       storePresets(await movePreset(saved.id, to))
     })
   const reset = () =>
     run(async () => {
+      onDiscard()
       storePresets(await resetPreset(saved.id))
-      onSaved()
     })
   const remove = () =>
     run(async () => {
@@ -117,6 +119,7 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
         cancelLabel: strings.dialogs.cancel,
       })
       if (!confirmed) return
+      onDiscard()
       const updated = await deletePreset(saved.id)
       storePresets(updated)
       onSelect(updated.presets[0].id)
@@ -129,9 +132,8 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
   return (
     <Card className="flex flex-col gap-5 p-5">
       <div className="flex flex-wrap items-center justify-end gap-1">
-        {/* Not while there are unsaved changes, which these would leave behind. */}
         {!isDefault && (
-          <Button size="sm" disabled={isDirty} onClick={() => void setAsDefault()}>
+          <Button size="sm" onClick={() => void setAsDefault()}>
             {strings.presets.setAsDefault}
           </Button>
         )}
@@ -151,12 +153,12 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
             />
           </>
         )}
-        <IconButton label={strings.presets.duplicate} icon={Copy} disabled={isDirty} onClick={() => void duplicate()} />
+        <IconButton label={strings.presets.duplicate} icon={Copy} onClick={() => void duplicate()} />
         {isBuiltIn && (
-          <IconButton label={strings.presets.reset} icon={RotateCcw} disabled={isDirty} onClick={() => void reset()} />
+          <IconButton label={strings.presets.reset} icon={RotateCcw} onClick={() => void reset()} />
         )}
         {!isDefault && (
-          <IconButton label={strings.presets.delete} icon={Trash2} disabled={isDirty} onClick={() => void remove()} />
+          <IconButton label={strings.presets.delete} icon={Trash2} onClick={() => void remove()} />
         )}
       </div>
 
@@ -305,22 +307,13 @@ export function PresetEditor({ saved, draft, isDirty, overview, onChange, onSave
       </Field>
 
       {actionError && <StatusMessage tone="danger" {...actionError} />}
-      <div className="flex items-center justify-end gap-2">
-        {justSaved && !isDirty && <StatusMessage tone="success" message={strings.presets.saved} />}
-        {isDirty && (
-          <Button variant="ghost" onClick={() => onChange(saved)}>
-            {strings.presets.discard}
-          </Button>
-        )}
-        <Button
-          variant="primary"
-          loading={saving}
-          disabled={!isDirty || argumentsError !== undefined}
-          onClick={() => void save()}
-        >
-          {strings.presets.save}
-        </Button>
-      </div>
+      {/* An argument the core refuses is already said under its field. */}
+      {saveError && argumentsError === undefined && <StatusMessage tone="danger" {...saveError} />}
+      {saveState !== "idle" && (
+        <p className="text-right text-xs text-fg-muted" role="status">
+          {saveState === "saving" ? strings.presets.saving : strings.presets.saved}
+        </p>
+      )}
     </Card>
   )
 }
