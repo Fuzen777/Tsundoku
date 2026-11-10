@@ -13,6 +13,7 @@ import { joinDetails } from "../../format"
 import { useAppActions } from "../../navigation"
 import { useDownloadDestination, usePresets, useRulePreset, useRuleRightAway } from "../../queries"
 import { strings } from "../../strings"
+import { scrollWithin } from "../../scrollWithin"
 
 const text = strings.rules.tester
 
@@ -92,7 +93,10 @@ function TrialOutcome({ video }: { video: VideoInfo }) {
     <button
       type="button"
       className="rounded-sm text-fg-muted transition-colors hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
-      onClick={() => document.getElementById(`rule-${rule}`)?.scrollIntoView({ block: "center", behavior: "smooth" })}
+      onClick={() => {
+        const row = document.getElementById(`rule-${rule}`)
+        if (row) scrollWithin(row, "center", "smooth")
+      }}
     >
       {strings.preview.destinationFrom(text.byRule(rule))}
     </button>

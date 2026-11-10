@@ -1,12 +1,13 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { openDataFolder } from "../api"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { Page } from "../components/Page"
 import { Section } from "../components/Section"
 import { StatusMessage } from "../components/StatusMessage"
-import type { SettingsTarget } from "../navigation"
+import { isSettingsSection, SETTINGS_SECTIONS, type SettingsSectionId, type SettingsTarget } from "../navigation"
 import { useAppInfo, useAppUpdate } from "../queries"
+import { scrollWithin } from "../scrollWithin"
 import { strings } from "../strings"
 import { AddingSection } from "./settings/AddingSection"
 import { AppearanceSection } from "./settings/AppearanceSection"
@@ -17,56 +18,99 @@ import { ShortcutsSection } from "./settings/ShortcutsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { ToolsSection } from "./settings/ToolsSection"
 
-/** `place`: where another view sent the user, such as the clipboard shortcut from the empty queue's Set Up. */
-export function SettingsView({ place = null }: { place?: SettingsTarget | null }) {
+/**
+ * `place`: where Settings was asked to open, a section from the sidebar or a control another view sent the user to (the
+ * clipboard shortcut from the empty queue's Set Up). `onSectionShown` hears which section is at the top as it scrolls,
+ * for the sidebar to mark.
+ */
+export function SettingsView({
+  place = null,
+  onSectionShown,
+}: {
+  place?: SettingsTarget | null
+  onSectionShown?: (section: SettingsSectionId) => void
+}) {
+  const scrollArea = useRef<HTMLDivElement>(null)
+  // The section the sidebar last asked for: marked, rather than the one at the top, until the user scrolls themselves,
+  // since the end of the page can keep it from reaching the top (Tools or About under a short window).
+  const asked = useRef<SettingsSectionId | null>(null)
+  const markShownSection = useCallback(() => {
+    const area = scrollArea.current
+    if (!area) return
+    if (asked.current) return onSectionShown?.(asked.current)
+    const areaBox = area.getBoundingClientRect()
+    const topOf = (id: string) => document.getElementById(id)?.getBoundingClientRect().top ?? Infinity
+    // The last section whose heading has reached the top, else the first.
+    let shown: SettingsSectionId = SETTINGS_SECTIONS[0].id
+    for (const { id } of SETTINGS_SECTIONS) if (topOf(id) <= areaBox.top + SECTION_REACHED_TOP) shown = id
+    onSectionShown?.(shown)
+  }, [onSectionShown])
+
   useEffect(() => {
     if (!place) return
     const target = document.getElementById(place.place)
-    target?.scrollIntoView({ block: "center" })
+    if (!target) return
+    if (isSettingsSection(place.place)) {
+      asked.current = place.place
+      scrollWithin(target, "start", "smooth")
+      markShownSection()
+      return
+    }
+    scrollWithin(target, "center")
     // The control itself (the clipboard shortcut's list), or the place's first button.
-    const control = target?.matches("select, button") ? target : target?.querySelector<HTMLElement>("select, button")
+    const control = target.matches("select, button") ? target : target.querySelector<HTMLElement>("select, button")
     control?.focus({ preventScroll: true })
-  }, [place])
+  }, [place, markShownSection])
+
+  useEffect(markShownSection, [markShownSection])
+
+  // Scrolling by hand (the wheel, a drag on the scrollbar, the keyboard) goes back to marking the section at the top.
+  useEffect(() => {
+    const area = scrollArea.current
+    if (!area) return
+    const scrolledByHand = () => {
+      asked.current = null
+    }
+    const inputs = ["wheel", "pointerdown", "keydown", "touchstart"] as const
+    for (const input of inputs) area.addEventListener(input, scrolledByHand, { passive: true })
+    return () => {
+      for (const input of inputs) area.removeEventListener(input, scrolledByHand)
+    }
+  }, [])
 
   return (
-    <Page title={strings.nav.settings}>
+    <Page title={strings.nav.settings} scrollRef={scrollArea} onScroll={markShownSection}>
       <div className="flex max-w-3xl flex-col gap-6">
-        <nav aria-label={strings.settings.jumpTo} className="-mt-1 flex flex-wrap gap-1.5">
-          {SETTINGS_SECTIONS.map(({ id, title }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => document.getElementById(id)?.scrollIntoView({ block: "start", behavior: "smooth" })}
-              className="rounded-full border border-line px-2.5 py-0.5 text-xs font-medium text-fg-secondary transition-colors hover:border-line-strong hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
-            >
-              {title}
-            </button>
-          ))}
-        </nav>
-        {SETTINGS_SECTIONS.map(({ id, Content }) => (
-          <div key={id} id={id} className="scroll-mt-4">
-            <Content />
-          </div>
-        ))}
+        {SETTINGS_SECTIONS.map(({ id }) => {
+          const Content = SECTION_CONTENTS[id]
+          return (
+            <div key={id} id={id} className="scroll-mt-4">
+              <Content />
+            </div>
+          )
+        })}
       </div>
     </Page>
   )
 }
 
-/** Settings' sections in order, with the title each jump link at the top shows (the section's own heading). */
-const SETTINGS_SECTIONS: readonly { id: string; title: string; Content: () => ReactNode }[] = [
-  { id: "settings-downloads", title: strings.settings.downloads, Content: DownloadsSection },
-  { id: "settings-adding", title: strings.settings.adding, Content: AddingSection },
-  { id: "settings-background", title: strings.settings.background, Content: BackgroundSection },
-  { id: "settings-appearance", title: strings.settings.appearance, Content: AppearanceSection },
-  { id: "settings-shortcuts", title: strings.settings.keyboardShortcuts, Content: ShortcutsSection },
-  { id: "settings-posts", title: strings.settings.posts, Content: PostsSection },
-  { id: "settings-pacing", title: strings.settings.pacing, Content: PacingSection },
-  { id: "settings-cookies", title: strings.settings.cookies, Content: CookiesSection },
-  { id: "settings-sites", title: strings.settings.sites.title, Content: SupportedSitesSection },
-  { id: "settings-tools", title: strings.settings.tools, Content: ToolsSection },
-  { id: "settings-about", title: strings.settings.about, Content: AboutSection },
-]
+/** How far below the top of the scrolling area a section's heading counts as having reached it, in pixels. */
+const SECTION_REACHED_TOP = 48
+
+/** What each of Settings' sections shows; their order and titles are `SETTINGS_SECTIONS`'. */
+const SECTION_CONTENTS: Record<SettingsSectionId, () => ReactNode> = {
+  "settings-downloads": DownloadsSection,
+  "settings-adding": AddingSection,
+  "settings-background": BackgroundSection,
+  "settings-appearance": AppearanceSection,
+  "settings-shortcuts": ShortcutsSection,
+  "settings-posts": PostsSection,
+  "settings-pacing": PacingSection,
+  "settings-cookies": CookiesSection,
+  "settings-sites": SupportedSitesSection,
+  "settings-tools": ToolsSection,
+  "settings-about": AboutSection,
+}
 
 /**
  * The version and Check for Updates, then the data folder and Open Folder. A newer release shows as the banner under

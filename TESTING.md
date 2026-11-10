@@ -329,6 +329,16 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Settings and Upkeep
 
+**62. Settings' sections in the sidebar** · 0.1.88
+- [ ] Open Settings: it sits right under Rules, and its sections are listed under it (In the Background stands for Running in the Background). The pills at the top of Settings are gone. Other views don't show the list.
+- [ ] Click About, then Tools, then Downloads: Settings scrolls to each and the sidebar marks it. The window itself never moves: the add bar and the sidebar stay put, with no empty band at the bottom (it did before, worst with About).
+- [ ] Scroll Settings with the wheel: the mark follows the section at the top.
+- [ ] Make the window as short as it goes: the sidebar scrolls to reach About.
+- [ ] Rules → Test a Link → click the deciding rule's number: only the rules list scrolls.
+- [ ] Empty queue → Set Up beside the clipboard shortcut still opens Settings on that list, focused.
+- Seen in the browser preview (the window never scrolled there, before or after); not tried in the real app.
+
+
 **37. Settings → Pacing** · 0.1.27, 0.1.77
 - [ ] The card is called Pacing: Instagram's Pause Between Files (5 to 10 seconds for a new copy; a range you saved stays) and the Hourly Limit, then X, Pixiv and Tumblr with empty fields (None).
 - [ ] Give X 3 to 6 seconds, then download an X post with several images → its log shows gallery-dl sleeping between files, and a second X post waits until the first is done while a YouTube video starts. Empty both fields → X posts download at once again.

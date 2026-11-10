@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.88 · 2026-11-10
+
+### Changed
+
+- **Settings' sections in the sidebar**: Settings now comes right after Rules in the sidebar, and while it's open its sections are listed under it, in place of the row of pills at the top of Settings. The section you're looking at is marked as you scroll. The sidebar scrolls when the window is too short for it.
+
+### Fixed
+
+- **Jumping to a section moved the whole window**: going to a section of Settings near the end, such as About, pushed the whole window up, leaving an empty band at the bottom. Only Settings scrolls now, and the same goes for Test a Link's rule number in Rules.
+
 ## 0.1.87 · 2026-11-10
 
 ### Added

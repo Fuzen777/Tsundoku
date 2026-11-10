@@ -21,8 +21,29 @@ export const mainNavItems: readonly NavItem[] = [
   { id: "rules", label: strings.nav.rules, icon: FolderTree },
 ]
 
-/** Settings sits apart, at the bottom of the sidebar. */
-export const settingsNavItem: NavItem = { id: "settings", label: strings.nav.settings, icon: Settings }
+/** Settings comes after the views, with its sections listed under it while it's open. */
+export const settingsNavItem: NavItem = {
+  id: "settings",
+  label: strings.nav.settings,
+  icon: Settings,
+}
+
+/** Settings' sections in order, as the sidebar lists them under Settings: each one's heading, or a shorter name. */
+export const SETTINGS_SECTIONS = [
+  { id: "settings-downloads", title: strings.settings.downloads },
+  { id: "settings-adding", title: strings.settings.adding },
+  { id: "settings-background", title: strings.settings.backgroundShort },
+  { id: "settings-appearance", title: strings.settings.appearance },
+  { id: "settings-shortcuts", title: strings.settings.keyboardShortcuts },
+  { id: "settings-posts", title: strings.settings.posts },
+  { id: "settings-pacing", title: strings.settings.pacing },
+  { id: "settings-cookies", title: strings.settings.cookies },
+  { id: "settings-sites", title: strings.settings.sites.title },
+  { id: "settings-tools", title: strings.settings.tools },
+  { id: "settings-about", title: strings.settings.about },
+] as const
+
+export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"]
 
 /** Places in Settings that another view sends the user to, as the IDs of their elements. */
 export const SETTINGS_PLACES = {
@@ -31,7 +52,12 @@ export const SETTINGS_PLACES = {
   sendButtons: "settings-send-buttons",
 } as const
 
-export type SettingsPlace = (typeof SETTINGS_PLACES)[keyof typeof SETTINGS_PLACES]
+export type SettingsPlace = (typeof SETTINGS_PLACES)[keyof typeof SETTINGS_PLACES] | SettingsSectionId
+
+/** Whether a place is one of Settings' sections, which opens at its top, rather than a control in one. */
+export function isSettingsSection(place: SettingsPlace): place is SettingsSectionId {
+  return SETTINGS_SECTIONS.some((section) => section.id === place)
+}
 
 /** A place Settings was asked to open at: a new object each time, so asking again scrolls there again. */
 export interface SettingsTarget {
@@ -40,7 +66,7 @@ export interface SettingsTarget {
 
 /** What any view can ask of the app around it. */
 export interface AppActions {
-  /** Opens a view; Settings at a place in it, when one is given. */
+  /** Opens a view; Settings at a place in it (a section or a control), when one is given. */
   navigate: (view: ViewId, place?: SettingsPlace) => void
   /** Puts a link in the add bar and fetches its preview, as a dropped link is. */
   showLink: (link: string) => void
@@ -61,4 +87,3 @@ export const AppActionsContext = createContext<AppActions>({
 export function useAppActions(): AppActions {
   return useContext(AppActionsContext)
 }
-

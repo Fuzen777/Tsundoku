@@ -12,7 +12,13 @@ import { UpdateBanner } from "./components/UpdateBanner"
 import { WhatsNewCard } from "./components/WhatsNewCard"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { ASK_BEFORE_ADDING_OVER, checkingTime, type LinkFilesRead, readLinkFiles } from "./linkFiles"
-import { AppActionsContext, type SettingsPlace, type SettingsTarget, type ViewId } from "./navigation"
+import {
+  AppActionsContext,
+  type SettingsPlace,
+  type SettingsSectionId,
+  type SettingsTarget,
+  type ViewId,
+} from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
 import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup, useWatchedSources } from "./queries"
 import { useAppShortcuts, useWindowPaste } from "./shortcuts"
@@ -145,6 +151,8 @@ export function App() {
   // Where Settings opens, when another view sends the user to a place in it. A new object each time, so going to the
   // same place again scrolls there again.
   const [settingsPlace, setSettingsPlace] = useState<SettingsTarget | null>(null)
+  // The section at the top of Settings, which the sidebar marks among those it lists under Settings.
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId | null>(null)
   const navigate = useCallback((to: ViewId, place?: SettingsPlace) => {
     setView(to)
     setSettingsPlace(place ? { place } : null)
@@ -166,18 +174,19 @@ export function App() {
       <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)]">
         <AppTitle />
         <div className="flex items-center py-3 pr-4">
-          <AddBar
-            link={link}
-            onLinkChange={setLink}
-            onSubmit={() => void addText(link)}
-            inputRef={addBarInput}
-          />
+          <AddBar link={link} onLinkChange={setLink} onSubmit={() => void addText(link)} inputRef={addBarInput} />
         </div>
         <Sidebar
           className="col-start-1 row-span-2 row-start-2"
           current={view}
-          counts={{ queue: unfinished, pending: shownPendingLinks(pending).length, watched: newlyWatched }}
+          counts={{
+            queue: unfinished,
+            pending: shownPendingLinks(pending).length,
+            watched: newlyWatched,
+          }}
           onSelect={setView}
+          settingsSection={settingsSection}
+          onSelectSection={(section) => navigate("settings", section)}
         />
         {/* Hidden while it has nothing to show, so the row takes no room. */}
         <div className="col-start-2 row-start-2 flex flex-col gap-3 pr-4 pb-3 empty:hidden">
@@ -220,7 +229,7 @@ export function App() {
         <main className="relative col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
           {/* Outside the views, so an offer to undo stays when another view is opened. */}
           <UndoToastProvider>
-            <CurrentView view={view} settingsPlace={settingsPlace} />
+            <CurrentView view={view} settingsPlace={settingsPlace} onSettingsSectionShown={setSettingsSection} />
           </UndoToastProvider>
         </main>
       </div>
@@ -228,7 +237,13 @@ export function App() {
   )
 }
 
-function CurrentView({ view, settingsPlace }: { view: ViewId; settingsPlace: SettingsTarget | null }) {
+interface CurrentViewProps {
+  view: ViewId
+  settingsPlace: SettingsTarget | null
+  onSettingsSectionShown: (section: SettingsSectionId) => void
+}
+
+function CurrentView({ view, settingsPlace, onSettingsSectionShown }: CurrentViewProps) {
   switch (view) {
     case "queue":
       return <QueueView />
@@ -243,6 +258,6 @@ function CurrentView({ view, settingsPlace }: { view: ViewId; settingsPlace: Set
     case "rules":
       return <RulesView />
     case "settings":
-      return <SettingsView place={settingsPlace} />
+      return <SettingsView place={settingsPlace} onSectionShown={onSettingsSectionShown} />
   }
 }

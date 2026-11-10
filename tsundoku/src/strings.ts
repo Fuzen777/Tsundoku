@@ -990,6 +990,8 @@ export const strings = {
     notifyFinishedHint:
       "While Tsundoku's window isn't in front: once every download started has ended, with how many finished and how many failed.",
     background: "Running in the Background",
+    /** Its name in the sidebar's list of sections, where the full one doesn't fit. */
+    backgroundShort: "In the Background",
     keepInTray: "Keep Running in the Tray",
     keepInTrayHint:
       "Closing the window leaves Tsundoku in the notification area, still downloading and watching the clipboard. Click its icon to open it, or right-click for Watch Clipboard, Start All Pending and Quit.",

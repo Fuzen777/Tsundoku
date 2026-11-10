@@ -34,7 +34,7 @@ type: Features
 
 ## Navigation
 
-- **Sidebar**: Queue, Pending, History, Presets and Rules at the top, Settings at the bottom.
+- **Sidebar**: Queue, Pending, Watched, History, Presets and Rules, then Settings. It scrolls when the window is too short for it.
 - **Keyboard shortcuts**, listed in Settings → Keyboard Shortcuts and shown in each control's hover text ("Queue (Ctrl+1)"):
   - **Ctrl+V** anywhere in the window but a text field adds the links you copied, as if pasted in the add bar and added: one link shows its preview, several go to Pending.
   - **Ctrl+L** goes to the add bar, with its text selected.
@@ -176,7 +176,7 @@ type: Features
 
 ## Settings
 
-- **Jump to a section**: a row of links at the top of Settings, one per section (Downloads, Adding Links… About), scrolls straight to it.
+- **Jump to a section**: while Settings is open, the sidebar lists its sections under it (Downloads, Adding Links… About); clicking one scrolls straight to it, and the one at the top is marked as you scroll.
 - **Download Folder**: the folder downloads go in, each site's in a folder of its own by the first rule, unless another rule or the preset picks another folder: picked at the first-run setup, a Tsundoku folder in Downloads by default, with Choose Folder…, Open Folder (which opens it in File Explorer, making it first if nothing was downloaded yet) and Use Default. Rules' folders that aren't full paths go inside it. A portable copy's Downloads folder beside it is saved without the copy's own folder, so it follows the copy to another drive.
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
