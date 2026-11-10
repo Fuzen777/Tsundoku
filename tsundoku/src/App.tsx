@@ -14,7 +14,7 @@ import { describeDownloadError, type ErrorDescription } from "./errors"
 import { ASK_BEFORE_ADDING_OVER, checkingTime, type LinkFilesRead, readLinkFiles } from "./linkFiles"
 import { AppActionsContext, type SettingsPlace, type SettingsTarget, type ViewId } from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
-import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup } from "./queries"
+import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup, useWatchedSources } from "./queries"
 import { useAppShortcuts, useWindowPaste } from "./shortcuts"
 import { strings } from "./strings"
 import { type Drop, useLinkDrop, usePreview } from "./usePreview"
@@ -25,6 +25,7 @@ import { QueueView } from "./views/QueueView"
 import { RulesView } from "./views/RulesView"
 import { SettingsView } from "./views/SettingsView"
 import { SetupView } from "./views/SetupView"
+import { WatchedView } from "./views/WatchedView"
 
 export function App() {
   const [view, setView] = useState<ViewId>("queue")
@@ -37,6 +38,8 @@ export function App() {
   const { show: showPreview, close: closePreview } = preview
   const { data: queue = [] } = useQueue()
   const { data: pending = [] } = usePendingLinks()
+  const { data: watched = [] } = useWatchedSources()
+  const newlyWatched = watched.reduce((count, source) => count + source.newItems.length, 0)
   const unfinished = queue.filter((item) => item.state !== "done").length
 
   const { data: appInfo } = useAppInfo()
@@ -129,7 +132,7 @@ export function App() {
   useLinkDrop(takeDrop)
 
   // Ctrl+V outside a text field adds what was copied as if pasted in the add bar and submitted; Ctrl+L goes to the
-  // add bar, and Ctrl+1 to Ctrl+6 to the sidebar's views. Not during the first-run setup.
+  // add bar, and Ctrl+1 to Ctrl+7 to the sidebar's views. Not during the first-run setup.
   const addBarInput = useRef<HTMLInputElement>(null)
   const shortcutsOn = needsSetup === false
   useWindowPaste(takeText, shortcutsOn)
@@ -173,7 +176,7 @@ export function App() {
         <Sidebar
           className="col-start-1 row-span-2 row-start-2"
           current={view}
-          counts={{ queue: unfinished, pending: shownPendingLinks(pending).length }}
+          counts={{ queue: unfinished, pending: shownPendingLinks(pending).length, watched: newlyWatched }}
           onSelect={setView}
         />
         {/* Hidden while it has nothing to show, so the row takes no room. */}
@@ -231,6 +234,8 @@ function CurrentView({ view, settingsPlace }: { view: ViewId; settingsPlace: Set
       return <QueueView />
     case "pending":
       return <PendingView />
+    case "watched":
+      return <WatchedView />
     case "history":
       return <HistoryView />
     case "presets":

@@ -1,5 +1,7 @@
 import type { ListedItem } from "./bindings/ListedItem"
+import type { Listing } from "./bindings/Listing"
 import type { QueuePick } from "./bindings/QueuePick"
+import { strings } from "./strings"
 
 /*
   What the picker of a channel, playlist or account ticks, and what Download Selected queues. Items are told apart by
@@ -81,4 +83,10 @@ export function picksFor(
     })
   }
   return picks
+}
+
+/** What a listing's items are called: an account's posts, YouTube's videos, anything else's items. */
+export function nounOf(listing: Pick<Listing, "kind" | "siteName">): keyof typeof strings.picker.nouns {
+  if (listing.kind === "account") return "post"
+  return listing.kind === "channel" || listing.siteName === "youtube.com" ? "video" : "item"
 }

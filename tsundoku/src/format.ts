@@ -54,6 +54,16 @@ export function formatRoughAge(isoDate: string, locale?: string, now = Date.now(
   return relative.format(-Math.round(days / 365), "year")
 }
 
+/** How long ago a moment given in seconds since 1970 was, in the reader's language: "5 minutes ago", "yesterday". */
+export function formatTimeAgo(secondsSinceEpoch: number, locale?: string, now = Date.now()): string {
+  const seconds = Math.max(0, Math.round(now / 1000 - secondsSinceEpoch))
+  const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
+  if (seconds < 60) return relative.format(0, "second")
+  if (seconds < 3600) return relative.format(-Math.floor(seconds / 60), "minute")
+  if (seconds < 86_400) return relative.format(-Math.floor(seconds / 3600), "hour")
+  return relative.format(-Math.floor(seconds / 86_400), "day")
+}
+
 /** A moment's day in the reader's time zone as a file name has it, so files sort by it: "2026-11-06". */
 export function formatFileDate(moment: Date): string {
   return [moment.getFullYear(), moment.getMonth() + 1, moment.getDate()]

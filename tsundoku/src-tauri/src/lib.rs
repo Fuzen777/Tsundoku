@@ -9,6 +9,7 @@ mod pending;
 mod queue_status;
 mod report;
 mod tools;
+mod watched;
 mod whats_new;
 
 use std::error::Error;
@@ -34,6 +35,7 @@ use tsundoku_core::rules::RuleManager;
 use tsundoku_core::settings::SettingsStore;
 use tsundoku_core::thumbnails::{FfmpegMaker, Thumbnails};
 use tsundoku_core::tools::ToolManager;
+use tsundoku_core::watched::{WatchedServices, WatchedSources};
 
 /// How long the hidden main window waits for the UI to show it before showing itself, so a UI that fails to start
 /// still leaves a window on screen.
@@ -168,6 +170,20 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
             status: queue_status,
         }),
     })?;
+    let watched_sources = WatchedSources::open(WatchedServices {
+        database: Arc::clone(&database),
+        history: Arc::clone(&history),
+        queue: Arc::clone(&queue),
+        presets: Arc::clone(&presets),
+        settings: Arc::clone(&settings),
+        reader: Arc::new(ToolReader {
+            tools: Arc::clone(&tools),
+            settings: Arc::clone(&settings),
+        }),
+        listener: Arc::new(watched::EventListener {
+            app: app.handle().clone(),
+        }),
+    });
     let pending = PendingLinks::open(PendingServices {
         database,
         history: Arc::clone(&history),
@@ -195,6 +211,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(rules);
     app.manage(queue);
     app.manage(pending);
+    app.manage(watched_sources);
     app.manage(Arc::new(PreviewService::new()));
     background::start(app.handle(), &settings);
     app.manage(settings);
@@ -368,6 +385,13 @@ pub fn run() {
             downloads::list_arrangements,
             downloads::save_list_arrangements,
             pending::pending_links,
+            watched::watched_sources,
+            watched::add_watched_source,
+            watched::edit_watched_source,
+            watched::remove_watched_source,
+            watched::check_watched_source,
+            watched::download_watched_items,
+            watched::skip_watched_items,
             pending::links_in_text,
             pending::check_link_file,
             pending::links_in_link_file,

@@ -4,7 +4,7 @@ import { strings } from "./strings"
 
 /**
  * The window's keyboard shortcuts: Ctrl+V anywhere outside a text field adds what was copied, Ctrl+L goes to the add
- * bar, Ctrl+1 to Ctrl+6 open the sidebar's views in its order, and Delete removes the links ticked in Pending. Each
+ * bar, Ctrl+1 to Ctrl+7 open the sidebar's views in its order, and Delete removes the links ticked in Pending. Each
  * needs Ctrl alone or no modifier, so none is one of the clipboard shortcuts Settings offers (Ctrl+Alt+V and the
  * like), which Windows takes before the window sees them anyway.
  */
@@ -93,7 +93,7 @@ interface ShortcutActions {
   navigate: (view: ViewId) => void
 }
 
-/** Ctrl+L and Ctrl+1 to Ctrl+6, wherever the focus is. The WebView does nothing of its own with them. */
+/** Ctrl+L and Ctrl+1 to Ctrl+7, wherever the focus is. The WebView does nothing of its own with them. */
 export function useAppShortcuts(actions: ShortcutActions, enabled: boolean) {
   const pressed = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented) return

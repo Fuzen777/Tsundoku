@@ -38,7 +38,7 @@ type: Features
 - **Keyboard shortcuts**, listed in Settings → Keyboard Shortcuts and shown in each control's hover text ("Queue (Ctrl+1)"):
   - **Ctrl+V** anywhere in the window but a text field adds the links you copied, as if pasted in the add bar and added: one link shows its preview, several go to Pending.
   - **Ctrl+L** goes to the add bar, with its text selected.
-  - **Ctrl+1 to Ctrl+6** open Queue, Pending, History, Presets, Rules and Settings, in the sidebar's order. Digits go by the key's place, so they work on an AZERTY keyboard too.
+  - **Ctrl+1 to Ctrl+7** open Queue, Pending, Watched, History, Presets, Rules and Settings, in the sidebar's order. Digits go by the key's place, so they work on an AZERTY keyboard too.
   - **Delete** in Pending removes the ticked links, as Remove Selected does, unless you're typing in a field.
   - None of them is one of the Clipboard Shortcut's choices, which work from any app.
 - **About**: Settings shows the app's version, and "Portable" for a portable copy.
@@ -75,6 +75,15 @@ type: Features
 - **New ones ticked**: items not downloaded yet start ticked. One the history has is greyed, unticked and marked Downloaded (hovering says when and with which preset), and can be ticked to download it again; one in the queue is greyed and marked In Queue. The box at the top ticks every item or none, and counts the ticked ones.
 - **Download Selected**: queues each ticked item as its own download, as if its link had been pasted, so rules, presets, Instagram's pauses, the history and `archive.txt` treat it as any other. Videos start with the preset a rule picks for them, else the one in Videos Start As (the default one to start with); posts need no preset. Downloading again with the preset used before asks first, since the new files replace the old ones.
 - **In Pending**: a channel, playlist or account link pasted with others waits in Pending with a message to paste it in the add bar to pick from it; a copied one leaves without a word, as before.
+
+## Watched
+
+- **Watch a channel, playlist or account**: the list a channel, playlist or Instagram account opens in the preview card has Watch, which asks what counts as new now (nothing, only what it posts from now on; its latest 30 or another number; or everything listed), Save In and Videos Start As, then keeps it in the Watched view, between Pending and History in the sidebar. What the history or the queue already has never counts as new.
+- **One card per source**: its picture, name, kind and site, "Checked 2 hours ago · 3 new", where its downloads go and the preset videos start as. Check Now reads it again in the background, one source at a time and keeping to a site's slow-down wait; a check that fails says why on the card, with the fix the preview card would offer. Edit changes Save In and Videos Start As; the ⋯ menu has Stop Watching, which asks first.
+- **What's new**: a check keeps only what the source, the history and the queue don't know, reading a channel's or an account's newest items until it reaches three known ones in a row (so pinned posts don't stop it early), and a playlist whole. New items show on the card, ticked unless they were downloaded since; Download Selected queues the ticked ones and skips the rest, which never come back as new, and Skip All skips them all. The sidebar counts the new items.
+- **Skipped Before**: folded under the new items, each skipped item greyed with Download, in case you change your mind.
+- **Save In** beats every rule, with the rules' placeholders ({site}, {uploader}…); a folder that isn't a full path goes inside the download folder. Empty, the rules decide. Videos Start As picks the preset; left as it is, a rule's preset, else the default, is used.
+- Checks run when you press Check Now, for now: a schedule, notifications and Download Right Away per source come next.
 
 ## Pending
 

@@ -6,6 +6,7 @@ import {
   onDownloadProgress,
   onPendingChanged,
   onQueueChanged,
+  onWatchedChanged,
   queryKeys,
 } from "./api"
 import type { DownloadProgress } from "./bindings/DownloadProgress"
@@ -27,8 +28,9 @@ export function trackQueue(queryClient: QueryClient): void {
   let doneIds = new Set<number>()
   void onQueueChanged((items) => {
     queryClient.setQueryData(queryKeys.queue, items)
-    // A pending link may now be downloaded already or queued.
+    // A pending link or a watched item may now be downloaded already or queued.
     void queryClient.invalidateQueries({ queryKey: queryKeys.pending })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.watched })
     // A download that finished is in the history now. Only then is the history read again, since an open History
     // reads every page it has shown.
     const done = new Set(items.filter((item) => item.state === "done").map((item) => item.id))
@@ -49,6 +51,7 @@ export function trackQueue(queryClient: QueryClient): void {
     }
   })
   void onPendingChanged((links) => queryClient.setQueryData(queryKeys.pending, links))
+  void onWatchedChanged((sources) => queryClient.setQueryData(queryKeys.watched, sources))
   void onDownloadProgress(({ id, progress: value }) => progress.set(id, value))
   void onCloseRequested(async () => {
     // Read again each time: the tray's setting may have changed since the window opened.

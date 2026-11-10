@@ -1,9 +1,9 @@
 import { createContext, useContext } from "react"
-import { FolderTree, History, Inbox, ListVideo, Settings, SlidersHorizontal, type LucideIcon } from "lucide-react"
+import { Eye, FolderTree, History, Inbox, ListVideo, Settings, SlidersHorizontal, type LucideIcon } from "lucide-react"
 import type { LinkFilesRead } from "./linkFiles"
 import { strings } from "./strings"
 
-export type ViewId = "queue" | "pending" | "history" | "presets" | "rules" | "settings"
+export type ViewId = "queue" | "pending" | "watched" | "history" | "presets" | "rules" | "settings"
 
 export interface NavItem {
   id: ViewId
@@ -15,6 +15,7 @@ export interface NavItem {
 export const mainNavItems: readonly NavItem[] = [
   { id: "queue", label: strings.nav.queue, icon: ListVideo },
   { id: "pending", label: strings.nav.pending, icon: Inbox },
+  { id: "watched", label: strings.nav.watched, icon: Eye },
   { id: "history", label: strings.nav.history, icon: History },
   { id: "presets", label: strings.nav.presets, icon: SlidersHorizontal },
   { id: "rules", label: strings.nav.rules, icon: FolderTree },

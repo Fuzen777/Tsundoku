@@ -29,6 +29,9 @@ import type { ListingKind } from "./bindings/ListingKind"
 import type { MovedFiles } from "./bindings/MovedFiles"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
+import type { ItemKey } from "./bindings/ItemKey"
+import type { NewWatchedSource } from "./bindings/NewWatchedSource"
+import type { WatchedSource } from "./bindings/WatchedSource"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
@@ -71,6 +74,7 @@ export const queryKeys = {
   ruleRightAway: ["rule-right-away"],
   queue: ["queue"],
   pending: ["pending"],
+  watched: ["watched"],
   listArrangements: ["list-arrangements"],
   history: ["history"],
   historyFilters: ["history-filters"],
@@ -97,6 +101,7 @@ const QUEUE_CHANGED_EVENT = "queue-changed"
 const DOWNLOAD_PROGRESS_EVENT = "download-progress"
 /** Sent by the core with every pending link when they change. */
 const PENDING_CHANGED_EVENT = "pending-changed"
+const WATCHED_CHANGED_EVENT = "watched-changed"
 /** Sent by the app with the options when how links get added changes, such as from the tray's Watch Clipboard. */
 const ADDING_OPTIONS_CHANGED_EVENT = "adding-options-changed"
 
@@ -687,6 +692,52 @@ export function getAppearanceOptions(): Promise<AppearanceSettings> {
 export function saveAppearanceOptions(options: AppearanceSettings): Promise<AppearanceSettings> {
   if (!isTauri()) return outsideTauri()
   return invoke<AppearanceSettings>("save_appearance_options", { options })
+}
+
+/** The watched channels, playlists and accounts, with their new and skipped items. `?empty` shows none. */
+export function getWatchedSources(): Promise<WatchedSource[]> {
+  if (!isTauri()) return Promise.resolve(addressHas("empty") ? [] : standIns.watchedSources())
+  return invoke<WatchedSource[]>("watched_sources")
+}
+
+/** Watch, from the preview card's picker. Resolves to the new source's ID. */
+export function addWatchedSource(source: NewWatchedSource): Promise<number> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<number>("add_watched_source", { source })
+}
+
+/** A source's Save In and Videos Start As, each null for the rules' and the default. */
+export async function editWatchedSource(id: number, folder: string | null, presetId: string | null): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("edit_watched_source", { id, folder, presetId })
+}
+
+export async function removeWatchedSource(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("remove_watched_source", { id })
+}
+
+/** Check Now: runs in the background; the source's `checking` says when it's done. */
+export async function checkWatchedSource(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("check_watched_source", { id })
+}
+
+/** Queues these items of a source; with `skipRest`, its other new items are skipped. Resolves to how many were queued. */
+export function downloadWatchedItems(id: number, items: ItemKey[], skipRest: boolean): Promise<number> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<number>("download_watched_items", { id, items, skipRest })
+}
+
+/** Skip All: every new item of the source is skipped. */
+export async function skipWatchedItems(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("skip_watched_items", { id })
+}
+
+export function onWatchedChanged(handler: (sources: WatchedSource[]) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<WatchedSource[]>(WATCHED_CHANGED_EVENT, (event) => handler(event.payload))
 }
 
 export function onPendingChanged(handler: (links: PendingLink[]) => void): Promise<UnlistenFn> {

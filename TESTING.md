@@ -4,7 +4,7 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.78 (2026-11-09).
+Up to date with 0.1.79 (2026-11-10).
 
 ## Decisions Waiting on You
 
@@ -215,6 +215,14 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] The preview card's, Pending's and the rules' preset lists follow the new order.
 
 ## Rules
+
+**54. Watched channels, playlists and accounts** · 0.1.79
+- [ ] Paste `https://www.youtube.com/@jawed` → the list has Watch on the left. Watch → What Counts as New Now (Nothing yet, Its latest [30] videos, Everything listed here), Save In with Choose Folder…, Videos Start As → Watch → the card closes and Watched opens, with jawed's card and its new items (the latest ones you asked for, minus what you downloaded before). The sidebar counts them.
+- [ ] Untick one, Download Selected → the ticked ones are in the queue, saved in the source's Save In folder if it has one (whatever the rules say), and the unticked one is under Skipped Before, where Download queues it.
+- [ ] Check Now → "Checking…", then "Checked just now · Nothing new". On an account you're signed out of, the card shows the sign-in message with its fixes.
+- [ ] Edit changes Save In and Videos Start As; ⋯ → Stop Watching asks, then removes the card. Restart → the sources, their new and skipped items are still there.
+- [ ] Ctrl+3 opens Watched, Ctrl+7 Settings.
+- Seen in the browser preview with stand-in data.
 
 **28. Placeholders and patterns** · 0.1.19, 0.1.44
 - [ ] Rules → Add Rule: the buttons under the folder field put {site}, {uploader}, {title}, {id}, {kind}, {preset}, {year}, {month}, {date} and {added} at the cursor, and hovering one says what it becomes.

@@ -31,6 +31,8 @@ import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { VideoInfo } from "./bindings/VideoInfo"
+import type { WatchedItem } from "./bindings/WatchedItem"
+import type { WatchedSource } from "./bindings/WatchedSource"
 import type { VideoPreview } from "./bindings/VideoPreview"
 
 const previewStandIn: VideoPreview = {
@@ -469,6 +471,7 @@ export const standIns = {
     }
   },
   /** Rule 3's preset for a title with "zoo" in it, as the stand-in rules have it. */
+  watchedSources: watchedStandIns,
   ruleRightAway(video: VideoInfo): RightAwayRule | null {
     // As the stand-in rules have it: rule 3 downloads videos with "zoo" in their title right away.
     return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 3 } : null
@@ -625,6 +628,51 @@ export const standIns = {
 
 /** A listing with a downloaded item and a queued one: 60 for a channel or an account, 300 for a playlist, to check a
  * long list. */
+/** Two watched sources: a channel with new and skipped videos, and an account whose last check failed. */
+function watchedStandIns(): WatchedSource[] {
+  const toItem = (item: ListedItem, index: number): WatchedItem => ({
+    ...item,
+    firstSeenAt: Math.floor(Date.now() / 1000) - index * 3600,
+  })
+  const channel = listingStandIn("channel")
+  const account = listingStandIn("account")
+  const now = Math.floor(Date.now() / 1000)
+  return [
+    {
+      id: 1,
+      url: channel.url,
+      kind: "channel",
+      name: channel.title,
+      siteName: channel.siteName,
+      thumbnailUrl: channel.thumbnailUrl,
+      folder: "D:\\Videos\\{uploader}",
+      presetId: "best-audio",
+      addedAt: now - 7 * 86_400,
+      lastCheckedAt: now - 2 * 3600,
+      lastError: null,
+      checking: false,
+      newItems: channel.items.slice(0, 3).map(toItem),
+      skippedItems: channel.items.slice(5, 7).map(toItem),
+    },
+    {
+      id: 2,
+      url: "https://www.instagram.com/someaccount/posts/",
+      kind: "account",
+      name: account.title,
+      siteName: account.siteName,
+      thumbnailUrl: account.thumbnailUrl,
+      folder: null,
+      presetId: null,
+      addedAt: now - 2 * 86_400,
+      lastCheckedAt: now - 600,
+      lastError: { kind: "signInRequired", detail: "login required", site: "Instagram", cookies: "notSignedIn" },
+      checking: false,
+      newItems: [],
+      skippedItems: [],
+    },
+  ]
+}
+
 function listingStandIn(kind: ListingKind): Listing {
   const posts = kind === "account"
   const count = kind === "playlist" ? 300 : 60

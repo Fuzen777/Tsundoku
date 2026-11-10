@@ -105,6 +105,33 @@ const MIGRATIONS: &[&str] = &[
     // none), and whether a queue item's folder was picked so.
     "ALTER TABLE pending_links ADD COLUMN folder TEXT;
     ALTER TABLE queue_items ADD COLUMN folder_chosen INTEGER NOT NULL DEFAULT 0;",
+    // 12: watched channels, playlists and accounts (watched/store.rs), and every item each has met, with its state:
+    // new, skipped, queued or seen. The last error and each item's video are JSON. AUTOINCREMENT, so a removed source's
+    // ID is never given to another while the UI may still name it.
+    "CREATE TABLE watched_sources (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL UNIQUE,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        site_name TEXT NOT NULL,
+        thumbnail_url TEXT,
+        folder TEXT,
+        preset TEXT,
+        added_at INTEGER NOT NULL,
+        last_checked_at INTEGER,
+        last_error TEXT
+    );
+    CREATE TABLE watched_items (
+        source INTEGER NOT NULL REFERENCES watched_sources (id) ON DELETE CASCADE,
+        site TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        video TEXT NOT NULL,
+        approximate_date TEXT,
+        state TEXT NOT NULL,
+        first_seen_at INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        PRIMARY KEY (source, site, item_id)
+    );",
 ];
 
 pub struct Database {

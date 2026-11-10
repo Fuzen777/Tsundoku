@@ -124,6 +124,17 @@ impl LinkReader for ToolReader {
     }
 }
 
+impl crate::watched::ListingReader for ToolReader {
+    /// A watched source's listing, read as the preview card reads it; anything else is refused as not listable.
+    fn read(&self, url: &str, cancel: &CancelToken) -> Result<Listing, PreviewError> {
+        let cookies_choice = self.settings.get().downloads.cookies_browser;
+        match read_for_preview(&self.tools, cookies_choice, url, cancel)? {
+            Found::Listing(listing) => Ok(listing),
+            Found::One(_) => Err(listing::not_listable(url)),
+        }
+    }
+}
+
 /// The preview card's content for what a link turned out to be: a video or post with whether the history or the queue
 /// has it, or a listing with each of its items marked so.
 fn preview_of(

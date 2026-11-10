@@ -58,7 +58,7 @@ rules:
 ### Playlists and Channels
 
 - [x] **Playlist entry picker.** Pasting a YouTube channel or playlist, or an Instagram account, lists its items in the preview card, with the ones already downloaded greyed out and unticked, and queues the ticked ones. Phase 1 of Watched Links. Downloads don't read `archive.txt` (`--download-archive`), which would block Download Again.
-- [ ] **Watched Links** (was Channel subscriptions). Phases 2 to 4: a Watched tab of channels, playlists and accounts, checked on a schedule, queuing only what's new (`listing::before_known_ground`, which stops past the pinned posts), with a folder of their own and notifications. Shorts and past live streams, and X accounts, come with them.
+- [ ] **Watched Links** (was Channel subscriptions). Phase 2, the Watched tab with Check Now, is in 0.1.79. Phases 3 and 4: checked on a schedule, queuing only what's new (`listing::before_known_ground`, which stops past the pinned posts), with a folder of their own and notifications. Shorts and past live streams, and X accounts, come with them.
 
 ### File Hosts
 

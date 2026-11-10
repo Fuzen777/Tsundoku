@@ -17,6 +17,7 @@ import {
   isKnown,
   isQueued,
   itemKey,
+  nounOf,
   picksFor,
   selectedItems,
   selectEvery,
@@ -32,6 +33,7 @@ import { IconButton } from "./IconButton"
 import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
 import { Thumbnail } from "./Thumbnail"
+import { WatchForm } from "./WatchForm"
 
 interface ListingPickerProps {
   listing: Listing
@@ -53,6 +55,7 @@ export function ListingPicker({ listing, onClose, onAdded }: ListingPickerProps)
   const [chosenId, setChosenId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
+  const [watching, setWatching] = useState(false)
   const presetId = chosenId ?? presets?.defaultId ?? null
 
   const picked = selectedItems(items, selection)
@@ -144,58 +147,70 @@ export function ListingPicker({ listing, onClose, onAdded }: ListingPickerProps)
               />
             ))}
           </ul>
-          <div className="flex flex-col items-end gap-2">
-            {error && <StatusMessage tone="danger" {...error} />}
-            <div className="flex w-full items-center justify-end gap-2">
-              {hasVideos && (
-                <label
-                  className="flex items-center gap-2 text-fg-secondary"
-                  title={strings.picker.videosStartAsHint}
+          {watching ? (
+            <WatchForm listing={listing} onCancel={() => setWatching(false)} onWatched={onClose} />
+          ) : (
+            <div className="flex flex-col items-end gap-2">
+              {error && <StatusMessage tone="danger" {...error} />}
+              <div className="flex w-full items-center justify-end gap-2">
+                <Button
+                  className="mr-auto"
+                  disabled={adding}
+                  title={strings.watched.watchHint}
+                  onClick={() => setWatching(true)}
                 >
-                  {strings.picker.videosStartAs}
-                  <SelectInput
-                    value={presetId ?? ""}
-                    disabled={!presets || adding}
-                    onChange={(event) => setChosenId(event.target.value)}
+                  {strings.watched.watch}
+                </Button>
+                {hasVideos && (
+                  <label
+                    className="flex items-center gap-2 text-fg-secondary"
+                    title={strings.picker.videosStartAsHint}
                   >
-                    {presets?.presets.map((preset) => (
-                      <option key={preset.id} value={preset.id}>
-                        {preset.name}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </label>
-              )}
-              <Button
-                variant="primary"
-                loading={adding}
-                disabled={!picks || picks.length === 0}
-                onClick={() => void download()}
-              >
-                {strings.picker.downloadSelected(picked.length)}
-              </Button>
+                    {strings.picker.videosStartAs}
+                    <SelectInput
+                      value={presetId ?? ""}
+                      disabled={!presets || adding}
+                      onChange={(event) => setChosenId(event.target.value)}
+                    >
+                      {presets?.presets.map((preset) => (
+                        <option key={preset.id} value={preset.id}>
+                          {preset.name}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </label>
+                )}
+                <Button
+                  variant="primary"
+                  loading={adding}
+                  disabled={!picks || picks.length === 0}
+                  onClick={() => void download()}
+                >
+                  {strings.picker.downloadSelected(picked.length)}
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </>
   )
 }
 
-/** What a listing's items are called: an account's posts, YouTube's videos, anything else's items. */
-function nounOf(listing: Listing): keyof typeof strings.picker.nouns {
-  if (listing.kind === "account") return "post"
-  return listing.kind === "channel" || listing.siteName === "youtube.com" ? "video" : "item"
-}
-
-/** A channel's or an account's picture, round, or a playlist's first thumbnail. */
-function ListingPicture({ listing }: { listing: Listing }) {
+/** A channel's or an account's picture, round, or a playlist's first thumbnail; `small` for a watched source's card. */
+export function ListingPicture({
+  listing,
+  small = false,
+}: {
+  listing: Pick<Listing, "kind" | "thumbnailUrl">
+  small?: boolean
+}) {
   const [failed, setFailed] = useState(false)
   if (listing.kind === "playlist") {
-    return <Thumbnail key={listing.thumbnailUrl} url={listing.thumbnailUrl} className="w-44" />
+    return <Thumbnail key={listing.thumbnailUrl} url={listing.thumbnailUrl} className={small ? "w-24" : "w-44"} />
   }
   return (
-    <div className="size-24 shrink-0 overflow-hidden rounded-full bg-input">
+    <div className={classes("shrink-0 overflow-hidden rounded-full bg-input", small ? "size-14" : "size-24")}>
       {listing.thumbnailUrl && !failed && (
         <img
           src={listing.thumbnailUrl}
@@ -223,7 +238,7 @@ interface ListedRowProps {
  * or the queue has it, with Downloaded or In Queue. Rows off screen aren't laid out (`content-visibility`), so a
  * playlist of hundreds scrolls smoothly.
  */
-function ListedRow({ item, showUploader, selected, disabled, onSelect }: ListedRowProps) {
+export function ListedRow({ item, showUploader, selected, disabled, onSelect }: ListedRowProps) {
   const { video, lastDownload } = item
   const known = isKnown(item)
   const queued = isQueued(item)

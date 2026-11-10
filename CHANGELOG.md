@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.79 · 2026-11-10
+
+### Added
+
+- **Watched**: a new view between Pending and History for channels, playlists and accounts you want to follow. Watch, on the list a channel, playlist or account opens, asks what counts as new now (nothing yet, the latest few, or everything listed), where its downloads go (beating every rule) and the preset its videos start as. Check Now lists only what's new since; Download Selected queues the ticked items and skips the rest, which never come back, and Skipped Before keeps them downloadable. Checks are by hand for now.
+
+### Changed
+
+- **Shortcuts**: with Watched in the sidebar, Ctrl+3 opens it, and History, Presets, Rules and Settings move to Ctrl+4 to Ctrl+7.
+
 ## 0.1.78 · 2026-11-09
 
 ### Changed

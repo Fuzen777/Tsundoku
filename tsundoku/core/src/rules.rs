@@ -599,6 +599,22 @@ fn rule_folder(
     }
 }
 
+/// A folder with the rules' placeholders filled in for one download added today, inside the download folder unless it's
+/// a full path: a watched source's Save In. `{1}` to `{9}` stay as they are, having no pattern.
+pub fn filled_folder(template: &str, subject: &RuleSubject<'_>, download_folder: &Path) -> PathBuf {
+    let today = local_date();
+    let fill_in = FillIn {
+        captured: None,
+        today: &today,
+    };
+    let folder = PathBuf::from(fill_placeholders(template.trim(), subject, &fill_in));
+    if folder.is_absolute() {
+        folder
+    } else {
+        download_folder.join(folder)
+    }
+}
+
 /// What a rule's folder takes for one download besides the download itself.
 struct FillIn<'a> {
     /// The groups of the rule's first pattern that captures any (`FolderRule::captured`).

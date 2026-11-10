@@ -7,10 +7,11 @@ function press(key: string, code: string, modifiers: Partial<KeyPress> = {}): Ke
 
 describe("the window's shortcuts", () => {
   it("opens the sidebar's views with Ctrl and a digit, in its order, Settings last", () => {
-    expect(SHORTCUT_VIEWS).toEqual(["queue", "pending", "history", "presets", "rules", "settings"])
+    expect(SHORTCUT_VIEWS).toEqual(["queue", "pending", "watched", "history", "presets", "rules", "settings"])
     expect(shortcutFor(press("1", "Digit1", { ctrlKey: true }))).toEqual({ kind: "view", view: "queue" })
-    expect(shortcutFor(press("6", "Numpad6", { ctrlKey: true }))).toEqual({ kind: "view", view: "settings" })
-    expect(shortcutFor(press("7", "Digit7", { ctrlKey: true }))).toBeNull()
+    expect(shortcutFor(press("3", "Digit3", { ctrlKey: true }))).toEqual({ kind: "view", view: "watched" })
+    expect(shortcutFor(press("7", "Numpad7", { ctrlKey: true }))).toEqual({ kind: "view", view: "settings" })
+    expect(shortcutFor(press("8", "Digit8", { ctrlKey: true }))).toBeNull()
     expect(viewKeys("pending")).toBe("Ctrl+2")
   })
 

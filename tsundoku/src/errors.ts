@@ -9,6 +9,7 @@ import type { RuleError } from "./bindings/RuleError"
 import type { SignInCookies } from "./bindings/SignInCookies"
 import type { ToolError } from "./bindings/ToolError"
 import type { ToolId } from "./bindings/ToolId"
+import type { WatchedError } from "./bindings/WatchedError"
 import { formatBytes, formatClockTime } from "./format"
 import { strings } from "./strings"
 
@@ -228,6 +229,21 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.shortcutTaken(error.keys) }
     case "unexpected":
       return { message: strings.errors.unexpected, detail: error.detail }
+  }
+}
+
+export function describeWatchedError(error: unknown): ErrorDescription {
+  if (!isCoreError<WatchedError>(error)) return unexpected(error)
+  const text = strings.watched.errors
+  switch (error.kind) {
+    case "notFound":
+      return { message: text.notFound }
+    case "alreadyWatched":
+      return { message: text.alreadyWatched }
+    case "queue":
+      return describeDownloadError(error.error)
+    case "storage":
+      return { message: text.storage, detail: error.detail }
   }
 }
 

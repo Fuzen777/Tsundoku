@@ -33,6 +33,7 @@ import {
   getPresetsOverview,
   getQueueItems,
   getRulePreset,
+  getWatchedSources,
   getRuleRightAway,
   getToolDownloads,
   getToolsNeedSetup,
@@ -212,6 +213,11 @@ export function useRuleRightAway(video: VideoInfo | null, presetId: string | nul
     queryFn: () => (video ? getRuleRightAway(video, presetId) : null),
     enabled: enabled && video !== null,
   })
+}
+
+/** The watched sources, kept current by `watched-changed`. */
+export function useWatchedSources() {
+  return useQuery({ queryKey: queryKeys.watched, queryFn: getWatchedSources, staleTime: Infinity })
 }
 
 /** The preset a rule picks for a video, and which rule: null when none does. Not asked for a post or a file host's
