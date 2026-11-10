@@ -31,18 +31,18 @@ import {
 
 const text = strings.rules
 
-/** The rule being edited: its place in the list (for a new one, where it will go: just above the catch-all, or just
- * below the rule it duplicates), the draft, and whether it's new. */
+/** The rule being edited: its place in the list (for a new one, where it will go: at the bottom, or just below the
+ * rule it duplicates), the draft, and whether it's new. */
 interface Editing {
   index: number
   draft: FolderRule
   isNew: boolean
 }
 
-/** The folder rules, in the order they're tried: each as a sentence with its folder. One rule is edited at a time,
- * as a draft until Save; moving, turning off and deleting save at once. Duplicate opens a copy as a new rule just
- * below the original, saved like any new one. The catch-all stays last: it can't be moved, duplicated or deleted,
- * and new rules go above it. */
+/** The folder rules, where the last that matches decides: each as a sentence with its folder. One rule is edited at a
+ * time, as a draft until Save; moving, turning off and deleting save at once. Duplicate opens a copy as a new rule
+ * just below the original, saved like any new one. The catch-all stays first, so every other rule overrides it: it
+ * can't be moved, duplicated or deleted, and new rules go at the bottom. */
 export function RulesView() {
   const queryClient = useQueryClient()
   const { navigate } = useAppActions()
@@ -59,9 +59,8 @@ export function RulesView() {
   const presets = presetsOverview?.presets ?? []
   const downloadFolder = options?.folder ?? defaultFolder ?? ""
   const busy = saving || editing !== null
-  // The core keeps the catch-all last, so rules above it are the ones that move.
-  const catchAllIndex = rules.findIndex((rule) => rule.id === CATCH_ALL_RULE_ID)
-  const movableCount = catchAllIndex === -1 ? rules.length : catchAllIndex
+  // The core keeps the catch-all first, so rules below it are the ones that move.
+  const firstMovable = rules[0]?.id === CATCH_ALL_RULE_ID ? 1 : 0
   // A new rule shows where it will go, so the rules after it are numbered one further.
   const numberOf = (index: number) => index + 1 + (editing?.isNew && index >= editing.index ? 1 : 0)
 
@@ -149,8 +148,8 @@ export function RulesView() {
         presets={presets}
         folder={rule.folder ? shownFolder(rule.folder, downloadFolder) : null}
         disabled={busy}
-        canMoveUp={index > 0 && index < movableCount}
-        canMoveDown={index < movableCount - 1}
+        canMoveUp={index > firstMovable}
+        canMoveDown={index >= firstMovable && index < rules.length - 1}
         onEdit={() => startEditing(index, rule, false)}
         onDuplicate={() => startEditing(index + 1, copyOfRule(rule), true)}
         onMove={(by) => move(index, by)}
@@ -167,7 +166,7 @@ export function RulesView() {
     <Page
       title={strings.nav.rules}
       actions={
-        <Button size="sm" disabled={busy} onClick={() => startEditing(movableCount, newRule(), true)}>
+        <Button size="sm" disabled={busy} onClick={() => startEditing(rules.length, newRule(), true)}>
           <Plus size={14} />
           {text.addRule}
         </Button>
@@ -222,7 +221,7 @@ interface RuleRowProps {
 }
 
 /** A rule as a sentence, its folder and what else it does, with its number, moving, Edit, Duplicate and a menu. The
- * catch-all says it's always last, and can't be duplicated or deleted. */
+ * catch-all says it's always first, and can't be duplicated or deleted. */
 function RuleRow({
   rule,
   number,
@@ -267,9 +266,9 @@ function RuleRow({
       {isCatchAll && (
         <span
           className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
-          title={text.alwaysLastHint}
+          title={text.alwaysFirstHint}
         >
-          {text.alwaysLast}
+          {text.alwaysFirst}
         </span>
       )}
       {!rule.enabled && (

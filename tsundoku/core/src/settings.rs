@@ -12,7 +12,7 @@ use crate::atomic_file::write_atomically;
 use crate::data_folder;
 use crate::post_names;
 use crate::presets::PresetsSettings;
-use crate::rules::{RulesSettings, catch_all_rule, posts_folder_rule, with_catch_all_last};
+use crate::rules::{RulesSettings, catch_all_rule, posts_folder_rule, with_catch_all_first};
 use crate::sites::{self, PacedSite};
 use crate::sync::lock;
 use crate::tools::ToolId;
@@ -38,8 +38,9 @@ pub struct Settings {
 
 impl Settings {
     /// Reads `settings.json`. A file from before folder rules (0.1.10 and older) gets a rule for posts in the posts
-    /// folder it chose, if it chose one, above the catch-all. The catch-all is put last, where it has been since 0.1.19,
-    /// and the posts rule before 0.1.30 becomes it. A backup's settings are read the same way.
+    /// folder it chose, if it chose one, below the catch-all. Rules from before 0.1.86, where the first matching rule
+    /// decided and the catch-all was last, are reversed, so the last one decides what the first did. The catch-all is
+    /// put first, and the posts rule before 0.1.30 becomes it. A backup's settings are read the same way.
     pub(crate) fn from_json(contents: &[u8]) -> Option<Self> {
         let mut settings: Self = serde_json::from_slice(contents).ok()?;
         let earlier: BeforeRules = serde_json::from_slice(contents).unwrap_or_default();
@@ -51,9 +52,14 @@ impl Settings {
                 .map(str::trim)
                 .filter(|folder| !folder.is_empty())
         {
-            settings.rules.list = vec![posts_folder_rule(posts_folder), catch_all_rule()];
+            settings.rules.list = vec![catch_all_rule(), posts_folder_rule(posts_folder)];
+            settings.rules.last_wins = true;
         }
-        settings.rules.list = with_catch_all_last(std::mem::take(&mut settings.rules.list));
+        if !settings.rules.last_wins {
+            settings.rules.list.reverse();
+            settings.rules.last_wins = true;
+        }
+        settings.rules.list = with_catch_all_first(std::mem::take(&mut settings.rules.list));
         Some(settings)
     }
 }
@@ -990,7 +996,7 @@ mod tests {
         let settings = store_in(&folder).get();
         assert_eq!(
             settings.rules.list,
-            vec![posts_folder_rule(r"D:\Posts"), catch_all_rule()]
+            vec![catch_all_rule(), posts_folder_rule(r"D:\Posts")]
         );
         assert_eq!(settings.downloads.at_once, 3);
 
@@ -1025,12 +1031,49 @@ mod tests {
             .collect();
         assert_eq!(
             ids,
-            ["rule-1", "catch-all"],
-            "the posts rule becomes the catch-all, last"
+            ["catch-all", "rule-1"],
+            "the posts rule becomes the catch-all, first"
         );
 
         fs::write(folder.path().join("settings.json"), "{}").unwrap();
         assert_eq!(store_in(&folder).get().rules.list, vec![catch_all_rule()]);
+    }
+
+    #[test]
+    fn reverses_rules_from_before_the_last_one_won() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "rules": { "list": [
+                { "id": "rule-1", "enabled": true, "conditions": [], "folder": "First" },
+                { "id": "rule-2", "enabled": true, "conditions": [], "folder": "Second" },
+                { "id": "catch-all", "enabled": true, "conditions": [], "folder": "{site}" }
+            ] } }"#,
+        )
+        .unwrap();
+        let store = store_in(&folder);
+        let rules = store.get().rules;
+        let ids: Vec<&str> = rules.list.iter().map(|rule| rule.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["catch-all", "rule-2", "rule-1"],
+            "rule-1 decided first, so it's last"
+        );
+        assert!(rules.last_wins);
+
+        store.update(|_| {}).unwrap();
+        let ids: Vec<String> = store_in(&folder)
+            .get()
+            .rules
+            .list
+            .into_iter()
+            .map(|rule| rule.id)
+            .collect();
+        assert_eq!(
+            ids,
+            ["catch-all", "rule-2", "rule-1"],
+            "saved in the new order, so it isn't reversed again"
+        );
     }
 
     #[test]

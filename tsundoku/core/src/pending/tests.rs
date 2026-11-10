@@ -541,7 +541,7 @@ fn a_link_started_before_it_is_read_joins_the_queue_once_read() {
     wait_until("it leaves", || test.link(FIRST).is_none());
 }
 
-/// A rule above the catch-all that matches titles containing `title` and does `actions` (a preset, Download Right
+/// A rule below the catch-all that matches titles containing `title` and does `actions` (a preset, Download Right
 /// Away) without picking a folder.
 fn add_rule(test: &Test, title: &str, actions: rules::FolderRule) {
     test.settings

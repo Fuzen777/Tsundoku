@@ -1,9 +1,9 @@
 //! Rules: how a download goes, picked from what it is ("when the site is Instagram and the uploader is natgeo, save in
 //! D:\Hydrus\natgeo"; "when the site is SoundCloud, start as Audio MP3"). A rule does up to three things: picks the
-//! folder, the preset a video starts with, and whether a copied or sent link downloads right away. For each, the first
-//! rule that's on, does it and matches decides, so one rule can pick the preset and a later one the folder. With no
-//! rule picking the folder, the preset's own folder, then the catch-all (the last rule, which takes everything else),
-//! then the download folder; with none picking the preset, the one picked by hand or the default; with none picking
+//! folder, the preset a video starts with, and whether a copied or sent link downloads right away. For each, the last
+//! rule that's on, does it and matches decides (the bottom-most in the Rules view), so one rule can pick the preset and
+//! an earlier one the folder. With no rule picking the folder, the preset's own folder, then the catch-all (the first
+//! rule, which takes everything else), then the download folder; with none picking the preset, the one picked by hand or the default; with none picking
 //! Download Right Away, Settings. Kept in `settings.json`, edited in the Rules view.
 
 use std::path::{Path, PathBuf};
@@ -20,8 +20,8 @@ use crate::settings::{SettingsError, SettingsStore};
 use crate::sites;
 
 /// The ID of the catch-all, the rule every install starts with: every download the other rules don't take goes in a
-/// folder for its site. It's always the last rule, has no conditions, and comes after a preset's own folder. It can be
-/// edited or turned off but not deleted.
+/// folder for its site. It's always the first rule, so every other rule overrides it, has no conditions, and comes
+/// after a preset's own folder. It can be edited or turned off but not deleted.
 pub const CATCH_ALL_RULE_ID: &str = "catch-all";
 
 /// The catch-all's ID from 0.1.11 to 0.1.29, when it was the posts rule and took only posts of images.
@@ -46,16 +46,16 @@ pub struct FolderRule {
     pub enabled: bool,
     /// All must match. A rule without any matches every download.
     pub conditions: Vec<RuleCondition>,
-    /// Where matching downloads go, or empty to leave the folder to the rules after it. `{site}` and `{uploader}`
+    /// Where matching downloads go, or empty to leave the folder to the rules before it. `{site}` and `{uploader}`
     /// become the download's, and a folder that isn't a full path is inside the download folder. Empty rather than
     /// missing, so a version from before 0.1.35 still reads the rule.
     pub folder: String,
-    /// The preset matching videos start with, by its ID, or `None` to leave it to the rules after it. A rule that
+    /// The preset matching videos start with, by its ID, or `None` to leave it to the rules before it. A rule that
     /// checks the kind or the preset can't pick one (`can_pick_preset`), since both depend on the preset.
     #[serde(default)]
     pub preset_id: Option<String>,
     /// Whether matching links that Download Right Away covers (copied, or sent with the clipboard shortcut or from a
-    /// browser) start once read, or `None` to leave it to the rules after it, then Settings.
+    /// browser) start once read, or `None` to leave it to the rules before it, then Settings.
     #[serde(default)]
     pub download_right_away: Option<bool>,
 }
@@ -210,26 +210,32 @@ impl From<SettingsError> for RuleError {
     }
 }
 
-/// The rules in `settings.json`, in the order they're tried.
+/// The rules in `settings.json`, in the Rules view's order: the last one that matches decides.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct RulesSettings {
     pub list: Vec<FolderRule>,
+    /// Whether `list` is in the order of 0.1.86 and later, where the last matching rule decides and the catch-all is
+    /// first. Missing (false) in a file from before, whose first matching rule decided with the catch-all last: reading
+    /// it reverses the list (`Settings::from_json`), so every rule keeps deciding what it did.
+    #[serde(default)]
+    pub last_wins: bool,
 }
 
 impl Default for RulesSettings {
     fn default() -> Self {
         Self {
             list: vec![catch_all_rule()],
+            last_wins: true,
         }
     }
 }
 
-/// The rules with the catch-all last, where it always is, without conditions, since it takes everything, and picking
+/// The rules with the catch-all first, where it always is, without conditions, since it takes everything, and picking
 /// only a folder. The posts rule of 0.1.11 to 0.1.29 ("kind is post → {site}") becomes it, keeping its folder and
 /// whether it's on. A list without either (the posts rule could be deleted in 0.1.11 to 0.1.18) gets it back turned
 /// off, so where downloads go doesn't change.
-pub fn with_catch_all_last(rules: Vec<FolderRule>) -> Vec<FolderRule> {
+pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
     let (found, mut rules): (Vec<_>, Vec<_>) = rules
         .into_iter()
         .partition(|rule| rule.id == CATCH_ALL_RULE_ID || rule.id == POSTS_RULE_ID);
@@ -246,7 +252,7 @@ pub fn with_catch_all_last(rules: Vec<FolderRule>) -> Vec<FolderRule> {
             ..catch_all_rule()
         },
     };
-    rules.push(catch_all);
+    rules.insert(0, catch_all);
     rules
 }
 
@@ -475,7 +481,7 @@ fn pattern_problem(error: &regex::Error) -> String {
         .map_or_else(|| message.clone(), str::to_owned)
 }
 
-/// Where a download goes: the folder of the first rule that's on, picks one and matches, else the preset's own folder,
+/// Where a download goes: the folder of the last rule that's on, picks one and matches, else the preset's own folder,
 /// else the catch-all's when it's on, else the download folder.
 pub fn destination(
     rules: &[FolderRule],
@@ -496,6 +502,7 @@ fn destination_on(
         rules
             .iter()
             .enumerate()
+            .rev()
             .find(|(_, rule)| {
                 rule.enabled
                     && rule.is_catch_all() == catch_all
@@ -532,7 +539,7 @@ fn destination_on(
     }
 }
 
-/// The preset a video starts with by the rules: that of the first rule that's on, picks a preset that still exists
+/// The preset a video starts with by the rules: that of the last rule that's on, picks a preset that still exists
 /// (`exists`), may pick one and matches. `None` when no rule picks one, and for a post or a file host's files, which
 /// have no preset.
 pub fn start_preset(
@@ -547,7 +554,7 @@ pub fn start_preset(
         video,
         preset: None,
     };
-    rules.iter().enumerate().find_map(|(index, rule)| {
+    rules.iter().enumerate().rev().find_map(|(index, rule)| {
         let preset_id = rule.preset_id.as_deref()?;
         (rule.enabled && rule.can_pick_preset() && exists(preset_id) && rule.matches(&subject))
             .then(|| RulePreset {
@@ -557,7 +564,7 @@ pub fn start_preset(
     })
 }
 
-/// Whether a link that Download Right Away covers starts once read, by the first rule that's on, says so and matches.
+/// Whether a link that Download Right Away covers starts once read, by the last rule that's on, says so and matches.
 /// `None` leaves it to Settings.
 pub fn download_right_away(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<bool> {
     right_away_rule(rules, subject).map(|decided| decided.download_right_away)
@@ -565,7 +572,7 @@ pub fn download_right_away(rules: &[FolderRule], subject: &RuleSubject<'_>) -> O
 
 /// `download_right_away`, with the rule that decides it.
 pub fn right_away_rule(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<RightAwayRule> {
-    rules.iter().enumerate().find_map(|(index, rule)| {
+    rules.iter().enumerate().rev().find_map(|(index, rule)| {
         let download_right_away = rule.download_right_away?;
         (rule.enabled && rule.matches(subject)).then(|| RightAwayRule {
             download_right_away,
@@ -761,10 +768,10 @@ impl RuleManager {
         start_preset(&self.list(), video, exists)
     }
 
-    /// Replaces every rule, in this order but with the catch-all last, after checking each. Folders, presets and
+    /// Replaces every rule, in this order but with the catch-all first, after checking each. Folders, presets and
     /// values are trimmed (a blank preset is none), and a rule not saved before (an empty ID) gets one.
     pub fn save(&self, rules: Vec<FolderRule>) -> Result<Vec<FolderRule>, RuleError> {
-        let mut rules = with_catch_all_last(rules);
+        let mut rules = with_catch_all_first(rules);
         for (index, rule) in rules.iter_mut().enumerate() {
             rule.folder = rule.folder.trim().to_owned();
             rule.preset_id = rule
@@ -788,8 +795,10 @@ impl RuleManager {
                 rule.id = format!("rule-{last_number}");
             }
         }
-        self.settings
-            .update(|settings| settings.rules.list = rules.clone())?;
+        self.settings.update(|settings| {
+            settings.rules.list = rules.clone();
+            settings.rules.last_wins = true;
+        })?;
         Ok(rules)
     }
 }
@@ -1013,25 +1022,25 @@ mod tests {
     }
 
     #[test]
-    fn the_first_rule_that_is_on_and_matches_decides() {
+    fn the_last_rule_that_is_on_and_matches_decides() {
         let video = video();
         let youtube = || vec![condition(RuleField::Site, RuleOperator::Is, "YouTube")];
         let mut off = rule(youtube(), r"D:\Off");
         off.enabled = false;
         let rules = vec![
-            off,
+            rule(youtube(), r"D:\Earlier"),
+            rule(youtube(), r"D:\YouTube"),
             rule(
                 vec![condition(RuleField::Title, RuleOperator::Contains, "cat")],
                 r"D:\Cats",
             ),
-            rule(youtube(), r"D:\YouTube"),
-            rule(youtube(), r"D:\Later"),
+            off,
         ];
         assert_eq!(
             folder_of(&rules, &video, None),
             Destination {
                 folder: r"D:\YouTube".to_owned(),
-                source: DestinationSource::Rule { number: 3 },
+                source: DestinationSource::Rule { number: 2 },
             }
         );
     }
@@ -1275,17 +1284,17 @@ mod tests {
         let video = video();
         let mut mine = preset("best-video");
         let rules = vec![
+            catch_all_rule(),
             rule(
                 vec![condition(RuleField::Kind, RuleOperator::Is, "post")],
                 r"D:\Posts",
             ),
-            catch_all_rule(),
         ];
         assert_eq!(
             folder_of(&rules, &video, Some(&mine)),
             Destination {
                 folder: r"D:\Tsundoku\YouTube".to_owned(),
-                source: DestinationSource::Rule { number: 2 },
+                source: DestinationSource::Rule { number: 1 },
             },
             "a video no rule takes"
         );
@@ -1314,14 +1323,14 @@ mod tests {
     }
 
     #[test]
-    fn a_rule_without_a_folder_leaves_it_to_the_next() {
+    fn a_rule_without_a_folder_leaves_it_to_the_one_before() {
         let track = soundcloud_track();
         let audio = preset("audio-mp3");
         let soundcloud = || vec![condition(RuleField::Site, RuleOperator::Is, "SoundCloud")];
         let rules = vec![
-            preset_rule(soundcloud(), "audio-mp3"),
-            rule(soundcloud(), r"D:\Music"),
             catch_all_rule(),
+            rule(soundcloud(), r"D:\Music"),
+            preset_rule(soundcloud(), "audio-mp3"),
         ];
         assert_eq!(
             folder_of(&rules, &track, Some(&audio)),
@@ -1330,7 +1339,7 @@ mod tests {
                 source: DestinationSource::Rule { number: 2 },
             }
         );
-        let only_preset = vec![preset_rule(soundcloud(), "audio-mp3"), catch_all_rule()];
+        let only_preset = vec![catch_all_rule(), preset_rule(soundcloud(), "audio-mp3")];
         assert_eq!(
             folder_of(&only_preset, &track, Some(&audio)).folder,
             r"D:\Tsundoku\soundcloud",
@@ -1339,17 +1348,13 @@ mod tests {
     }
 
     #[test]
-    fn the_first_rule_that_picks_a_preset_and_matches_decides() {
+    fn the_last_rule_that_picks_a_preset_and_matches_decides() {
         let track = soundcloud_track();
         let mut off = preset_rule(Vec::new(), "best-video");
         off.enabled = false;
         let rules = vec![
-            off,
-            rule(Vec::new(), r"D:\All"),
-            preset_rule(
-                vec![condition(RuleField::Site, RuleOperator::Is, "YouTube")],
-                "1080p-mp4",
-            ),
+            catch_all_rule(),
+            preset_rule(Vec::new(), "best-audio"),
             preset_rule(
                 vec![condition(
                     RuleField::Site,
@@ -1358,19 +1363,23 @@ mod tests {
                 )],
                 "audio-mp3",
             ),
-            preset_rule(Vec::new(), "best-audio"),
-            catch_all_rule(),
+            preset_rule(
+                vec![condition(RuleField::Site, RuleOperator::Is, "YouTube")],
+                "1080p-mp4",
+            ),
+            rule(Vec::new(), r"D:\All"),
+            off,
         ];
         assert_eq!(
             start_preset(&rules, &track, any_preset),
             Some(RulePreset {
                 preset_id: "audio-mp3".to_owned(),
-                rule: 4,
+                rule: 3,
             })
         );
         assert_eq!(
             start_preset(&rules, &video(), any_preset).map(|pick| pick.rule),
-            Some(3)
+            Some(4)
         );
         assert_eq!(
             start_preset(&[rule(Vec::new(), r"D:\All")], &track, any_preset),
@@ -1428,7 +1437,7 @@ mod tests {
     }
 
     #[test]
-    fn the_first_rule_that_says_decides_download_right_away() {
+    fn the_last_rule_that_says_decides_download_right_away() {
         let track = soundcloud_track();
         let audio = preset("audio-mp3");
         let subject = RuleSubject {
@@ -1442,13 +1451,13 @@ mod tests {
         let mut off = right_away(false, Vec::new());
         off.enabled = false;
         let rules = vec![
-            off,
-            rule(Vec::new(), r"D:\All"),
+            right_away(false, Vec::new()),
             right_away(
                 true,
                 vec![condition(RuleField::Kind, RuleOperator::Is, "audio")],
             ),
-            right_away(false, Vec::new()),
+            rule(Vec::new(), r"D:\All"),
+            off,
         ];
         assert_eq!(download_right_away(&rules, &subject), Some(true));
         assert_eq!(
@@ -1461,12 +1470,12 @@ mod tests {
             ),
             Some(false)
         );
-        assert_eq!(download_right_away(&rules[..2], &subject), None, "Settings");
+        assert_eq!(download_right_away(&rules[2..], &subject), None, "Settings");
         assert_eq!(
             right_away_rule(&rules, &subject),
             Some(RightAwayRule {
                 download_right_away: true,
-                rule: 3
+                rule: 2
             }),
             "numbered as listed, the rule turned off included"
         );
@@ -1520,49 +1529,46 @@ mod tests {
         );
 
         let mut rules = manager.list();
-        rules.insert(
-            0,
-            rule(
-                vec![condition(RuleField::Uploader, RuleOperator::Is, " natgeo ")],
-                r" D:\NatGeo ",
-            ),
-        );
-        rules.push(rule(Vec::new(), r"D:\Rest"));
+        rules.push(rule(
+            vec![condition(RuleField::Uploader, RuleOperator::Is, " natgeo ")],
+            r" D:\NatGeo ",
+        ));
+        rules.insert(0, rule(Vec::new(), r"D:\Rest"));
         let saved = manager.save(rules).unwrap();
         let ids: Vec<&str> = saved.iter().map(|rule| rule.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["rule-1", "rule-2", "catch-all"],
-            "the catch-all stays last"
+            ["catch-all", "rule-1", "rule-2"],
+            "the catch-all stays first"
         );
-        assert_eq!(saved[0].folder, r"D:\NatGeo");
-        assert_eq!(saved[0].conditions[0].value, "natgeo");
+        assert_eq!(saved[2].folder, r"D:\NatGeo");
+        assert_eq!(saved[2].conditions[0].value, "natgeo");
         assert_eq!(manager_in(&folder).list(), saved, "kept in settings.json");
 
         let mut next = saved.clone();
-        next.remove(0);
+        next.remove(1);
         next.push(rule(Vec::new(), r"D:\More"));
-        assert_eq!(manager.save(next).unwrap()[1].id, "rule-3");
+        assert_eq!(manager.save(next).unwrap()[2].id, "rule-3");
     }
 
     #[test]
-    fn keeps_the_catch_all_last_and_never_loses_it() {
+    fn keeps_the_catch_all_first_and_never_loses_it() {
         let folder = tempfile::tempdir().unwrap();
         let manager = manager_in(&folder);
         let mut first = rule(Vec::new(), r"D:\First");
         first.id = "rule-1".to_owned();
-        let moved = manager.save(vec![catch_all_rule(), first.clone()]).unwrap();
-        assert_eq!(moved, vec![first.clone(), catch_all_rule()]);
+        let moved = manager.save(vec![first.clone(), catch_all_rule()]).unwrap();
+        assert_eq!(moved, vec![catch_all_rule(), first.clone()]);
 
         let without = manager.save(vec![first.clone()]).unwrap();
         assert_eq!(
             without,
             vec![
-                first.clone(),
                 FolderRule {
                     enabled: false,
                     ..catch_all_rule()
-                }
+                },
+                first.clone(),
             ],
             "it comes back, turned off"
         );
@@ -1600,14 +1606,14 @@ mod tests {
         let mut first = rule(Vec::new(), r"D:\First");
         first.id = "rule-1".to_owned();
         assert_eq!(
-            with_catch_all_last(vec![posts, first.clone()]),
+            with_catch_all_first(vec![first.clone(), posts]),
             vec![
-                first,
                 FolderRule {
                     id: CATCH_ALL_RULE_ID.to_owned(),
                     enabled: false,
                     ..rule(Vec::new(), r"D:\Hydrus\{site}")
-                }
+                },
+                first,
             ],
             "it keeps its folder and whether it's on"
         );
@@ -1620,8 +1626,8 @@ mod tests {
         let nothing = vec![catch_all_rule(), rule(Vec::new(), "  ")];
         assert_eq!(
             manager.save(nothing),
-            Err(RuleError::NoAction { rule: 1 }),
-            "numbered as saved, with the catch-all last"
+            Err(RuleError::NoAction { rule: 2 }),
+            "numbered as saved, with the catch-all first"
         );
         let blank_preset = vec![FolderRule {
             preset_id: Some(" ".to_owned()),
@@ -1629,7 +1635,7 @@ mod tests {
         }];
         assert_eq!(
             manager.save(blank_preset),
-            Err(RuleError::NoAction { rule: 1 })
+            Err(RuleError::NoAction { rule: 2 })
         );
         let catch_all = vec![FolderRule {
             folder: " ".to_owned(),
@@ -1646,7 +1652,7 @@ mod tests {
         assert_eq!(
             manager.save(broken),
             Err(RuleError::InvalidPattern {
-                rule: 1,
+                rule: 2,
                 detail: "unclosed group".to_owned()
             })
         );
@@ -1654,14 +1660,14 @@ mod tests {
             vec![condition(RuleField::Title, RuleOperator::Contains, " ")],
             r"D:\x",
         )];
-        assert_eq!(manager.save(empty), Err(RuleError::EmptyValue { rule: 1 }));
+        assert_eq!(manager.save(empty), Err(RuleError::EmptyValue { rule: 2 }));
         let circular = vec![preset_rule(
             vec![condition(RuleField::Kind, RuleOperator::Is, "audio")],
             "audio-mp3",
         )];
         assert_eq!(
             manager.save(circular),
-            Err(RuleError::CircularPreset { rule: 1 })
+            Err(RuleError::CircularPreset { rule: 2 })
         );
         assert_eq!(manager.list(), vec![catch_all_rule()], "nothing saved");
     }
@@ -1673,23 +1679,23 @@ mod tests {
         let soundcloud = || vec![condition(RuleField::Site, RuleOperator::Is, "SoundCloud")];
         let saved = manager
             .save(vec![
+                catch_all_rule(),
                 preset_rule(soundcloud(), " audio-mp3 "),
                 FolderRule {
                     download_right_away: Some(false),
                     ..rule(soundcloud(), " ")
                 },
-                catch_all_rule(),
             ])
             .unwrap();
-        assert_eq!(saved[0].preset_id.as_deref(), Some("audio-mp3"));
-        assert_eq!(saved[1].folder, "");
-        assert_eq!(saved[1].download_right_away, Some(false));
+        assert_eq!(saved[1].preset_id.as_deref(), Some("audio-mp3"));
+        assert_eq!(saved[2].folder, "");
+        assert_eq!(saved[2].download_right_away, Some(false));
         assert_eq!(manager_in(&folder).list(), saved, "kept in settings.json");
         assert_eq!(
             manager
                 .start_preset(&soundcloud_track(), any_preset)
                 .map(|pick| pick.rule),
-            Some(1)
+            Some(2)
         );
     }
 }

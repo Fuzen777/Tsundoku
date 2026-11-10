@@ -223,6 +223,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Rules
 
+**60. The last matching rule wins** · 0.1.86
+- [ ] With rules from before (at least two of your own), open Rules after updating: Everything Else is first with "Always First", and your rules are in reverse order. Test a Link on a link two of them match gives the same folder and rule as before (now numbered from the other end).
+- [ ] Add Rule puts the new rule at the bottom. Two rules that match the same link: the lower one decides, and moving it up makes the other decide. Everything Else can't move, and the rule below it can't move up.
+- [ ] Restart: the order stays, and isn't turned upside down again.
+- Not tried in the app or the browser preview.
+
 **59. Duplicate a rule** · 0.1.85
 - [ ] Rules → the copy icon (Duplicate) beside a rule's Edit opens the editor just below it, numbered one more, with the same conditions, folder, preset and Download Right Away. Change it, Save → both rules are there, the copy right after the original, and the rules below are numbered one further.
 - [ ] Duplicate, then Discard → nothing is added. Everything Else has no Duplicate, and its buttons line up with the other rows'.

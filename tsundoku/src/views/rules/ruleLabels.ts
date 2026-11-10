@@ -8,7 +8,7 @@ import { strings } from "../../strings"
 
 const text = strings.rules
 
-/** The rule every install starts with, always last, which takes every download no other rule does
+/** The rule every install starts with, always first, which takes every download no other rule does
  * (`rules::CATCH_ALL_RULE_ID` in the core). */
 export const CATCH_ALL_RULE_ID = "catch-all"
 

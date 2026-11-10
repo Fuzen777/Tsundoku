@@ -845,7 +845,7 @@ impl DownloadQueue {
         first_error.map_or(Ok(restored), Err)
     }
 
-    /// Where a download of `video` would go, with `preset` (`None` for a post): the folder of the first rule that
+    /// Where a download of `video` would go, with `preset` (`None` for a post): the folder of the last rule that
     /// matches, else the preset's own folder, else the download folder. Adding uses it, and the preview card shows it.
     pub fn destination(&self, video: &VideoInfo, preset: Option<&Preset>) -> Destination {
         let settings = self.settings.get();

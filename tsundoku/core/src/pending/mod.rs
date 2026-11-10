@@ -662,7 +662,7 @@ impl PendingLinks {
         .or_else(|| self.presets.get(&self.presets.overview().default_id))
     }
 
-    /// Whether a copied or sent link starts once read: what the first rule that says so for it gives, else Settings.
+    /// Whether a copied or sent link starts once read: what the last rule that says so for it gives, else Settings.
     /// A video counts with the preset it would start with.
     fn downloads_right_away(&self, entry: &Entry, video: &VideoInfo) -> bool {
         let settings = self.settings.get();

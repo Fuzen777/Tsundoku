@@ -650,7 +650,7 @@ export const strings = {
   },
   rules: {
     intro:
-      "Rules pick where downloads go, the preset videos start with, and whether copied links download right away. For each, the first rule that matches and picks it decides. A preset with a folder of its own comes before the last rule, which takes everything else.",
+      "Rules pick where downloads go, the preset videos start with, and whether copied links download right away. For each, the last rule that matches and picks it decides, so a rule overrides those above it. A preset with a folder of its own comes before the first rule, which takes everything else.",
     addRule: "Add Rule",
     emptyTitle: "No Rules",
     emptyBody:
@@ -714,13 +714,13 @@ export const strings = {
       `The text the pattern captured in its parentheses number ${group}, counting from the left, or Unknown.`,
     patternHint:
       "Matches takes a regular expression, ignoring case, found anywhere in the text. Text it captures in parentheses can go in the folder as {1}, {2} and so on.",
-    alwaysLast: "Always Last",
-    alwaysLastHint:
-      "Takes every download no rule above it takes, unless its preset has a folder of its own. New rules go above it.",
-    catchAllWhen: "Every download no rule above takes, unless its preset has a folder of its own.",
+    alwaysFirst: "Always First",
+    alwaysFirstHint:
+      "Takes every download no rule below it takes, unless its preset has a folder of its own. Every other rule overrides it, and new rules go at the bottom.",
+    catchAllWhen: "Every download no rule below takes, unless its preset has a folder of its own.",
     chooseFolder: "Choose Folder…",
     chooseFolderTitle: "Choose Where Matching Downloads Go",
-    saveInEmptyHint: "Leave it empty to let a rule below pick the folder.",
+    saveInEmptyHint: "Leave it empty to let a rule above pick the folder.",
     startAs: "Start As",
     startAsHint: "The preset matching videos start with, unless you pick another. Posts and shared files have none.",
     startAsUnavailable: "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",

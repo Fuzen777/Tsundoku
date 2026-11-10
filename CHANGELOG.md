@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.86 · 2026-11-10
+
+### Changed
+
+- **The last matching rule wins**: in Rules, the bottom-most rule that matches a download now decides its folder, preset and Download Right Away, so a rule overrides the ones above it. Everything Else moves to the top ("Always First"), and new rules go at the bottom. Rules you had are turned upside down once, so each still decides what it did.
+
 ## 0.1.85 · 2026-11-10
 
 ### Added

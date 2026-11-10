@@ -1594,26 +1594,23 @@ fn a_rule_picks_the_folder() {
     let by_uploader = test.folder.path().join("by-uploader");
     test.settings
         .update(|settings| {
-            settings.rules.list.insert(
-                0,
-                FolderRule {
-                    id: "rule-1".to_owned(),
-                    enabled: true,
-                    conditions: vec![RuleCondition {
-                        field: RuleField::Site,
-                        operator: RuleOperator::Is,
-                        value: "YouTube".to_owned(),
-                    }],
-                    folder: by_uploader.join("{uploader}").display().to_string(),
-                    preset_id: None,
-                    download_right_away: None,
-                },
-            );
+            settings.rules.list.push(FolderRule {
+                id: "rule-1".to_owned(),
+                enabled: true,
+                conditions: vec![RuleCondition {
+                    field: RuleField::Site,
+                    operator: RuleOperator::Is,
+                    value: "YouTube".to_owned(),
+                }],
+                folder: by_uploader.join("{uploader}").display().to_string(),
+                preset_id: None,
+                download_right_away: None,
+            });
         })
         .unwrap();
     let preset = test.queue.presets.get("best-video");
     let destination = test.queue.destination(&video("a"), preset.as_ref());
-    assert_eq!(destination.source, DestinationSource::Rule { number: 1 });
+    assert_eq!(destination.source, DestinationSource::Rule { number: 2 });
     let item = test.queue.add(video("a"), "best-video", false).unwrap();
     assert_eq!(
         item.folder,

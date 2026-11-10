@@ -30,7 +30,7 @@ import {
 
 const text = strings.rules
 
-/** A rule's Download Right Away: unset follows the rules below it, then Settings. */
+/** A rule's Download Right Away: unset follows the rules above it, then Settings. */
 type RightAwayChoice = "unset" | "on" | "off"
 
 const RIGHT_AWAY_CHOICES: readonly { value: RightAwayChoice; label: string }[] = [

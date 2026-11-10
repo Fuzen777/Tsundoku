@@ -20,18 +20,18 @@ enabled: boolean,
  */
 conditions: Array<RuleCondition>, 
 /**
- * Where matching downloads go, or empty to leave the folder to the rules after it. `{site}` and `{uploader}`
+ * Where matching downloads go, or empty to leave the folder to the rules before it. `{site}` and `{uploader}`
  * become the download's, and a folder that isn't a full path is inside the download folder. Empty rather than
  * missing, so a version from before 0.1.35 still reads the rule.
  */
 folder: string, 
 /**
- * The preset matching videos start with, by its ID, or `None` to leave it to the rules after it. A rule that
+ * The preset matching videos start with, by its ID, or `None` to leave it to the rules before it. A rule that
  * checks the kind or the preset can't pick one (`can_pick_preset`), since both depend on the preset.
  */
 presetId: string | null, 
 /**
  * Whether matching links that Download Right Away covers (copied, or sent with the clipboard shortcut or from a
- * browser) start once read, or `None` to leave it to the rules after it, then Settings.
+ * browser) start once read, or `None` to leave it to the rules before it, then Settings.
  */
 downloadRightAway: boolean | null, };
