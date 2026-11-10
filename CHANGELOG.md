@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.98 · 2026-11-10
+
+### Changed
+
+- **Settings slides up the sidebar**: opening Settings slides it up under Rules, with its sections fading in, and leaving it slides it back down, instead of jumping. It stays still when Windows is set to show fewer animations.
+
 ## 0.1.97 · 2026-11-10
 
 ### Changed

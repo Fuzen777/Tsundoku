@@ -34,7 +34,7 @@ type: Features
 
 ## Navigation
 
-- **Sidebar**: Queue, Pending, Watched, History, Presets and Rules at the top, Settings at the bottom. While Settings is open, it moves up under Rules with its sections listed below it. The sidebar scrolls when the window is too short for it.
+- **Sidebar**: Queue, Pending, Watched, History, Presets and Rules at the top, Settings at the bottom. While Settings is open, it slides up under Rules with its sections listed below it. The sidebar scrolls when the window is too short for it.
 - **Keyboard shortcuts**, listed in Settings → Keyboard Shortcuts and shown in each control's hover text ("Queue (Ctrl+1)"):
   - **Ctrl+V** anywhere in the window but a text field adds the links you copied, as if pasted in the add bar and added: one link shows its preview, several go to Pending.
   - **Ctrl+L** goes to the add bar, with its text selected.

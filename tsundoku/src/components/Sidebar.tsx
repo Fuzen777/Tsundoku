@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, type RefObject } from "react"
 import {
   mainNavItems,
   SETTINGS_SECTIONS,
@@ -25,12 +26,19 @@ interface SidebarProps {
 
 /**
  * The views, with Settings at the bottom. While Settings is open, it moves up under the views to list its sections
- * beneath it. Scrolls when they don't fit.
+ * beneath it, sliding there and back. Scrolls when they don't fit.
  */
 export function Sidebar({ current, onSelect, counts = {}, settingsSection, onSelectSection, className }: SidebarProps) {
   const settingsOpen = current === settingsNavItem.id
+  const sidebar = useRef<HTMLElement>(null)
+  const settingsGroup = useRef<HTMLDivElement>(null)
+  const sectionList = useRef<HTMLUListElement>(null)
+  useSettingsSlide(settingsOpen, sidebar, settingsGroup, sectionList)
   return (
-    <nav className={classes("flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-3 *:shrink-0", className)}>
+    <nav
+      ref={sidebar}
+      className={classes("relative flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-3 *:shrink-0", className)}
+    >
       {mainNavItems.map((item) => (
         <NavButton
           key={item.id}
@@ -41,18 +49,63 @@ export function Sidebar({ current, onSelect, counts = {}, settingsSection, onSel
         />
       ))}
       {!settingsOpen && <div className="flex-1" />}
-      <NavButton item={settingsNavItem} selected={settingsOpen} onSelect={onSelect} />
-      {settingsOpen && (
-        <ul aria-label={strings.settings.jumpTo} className="flex flex-col gap-0.5">
-          {SETTINGS_SECTIONS.map(({ id, title }) => (
-            <li key={id}>
-              <SectionButton title={title} shown={id === settingsSection} onSelect={() => onSelectSection(id)} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <div ref={settingsGroup} className="flex flex-col gap-1">
+        <NavButton item={settingsNavItem} selected={settingsOpen} onSelect={onSelect} />
+        {settingsOpen && (
+          <ul ref={sectionList} aria-label={strings.settings.jumpTo} className="flex flex-col gap-0.5">
+            {SETTINGS_SECTIONS.map(({ id, title }) => (
+              <li key={id}>
+                <SectionButton title={title} shown={id === settingsSection} onSelect={() => onSelectSection(id)} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </nav>
   )
+}
+
+/** How long Settings takes to slide up or down the sidebar, in milliseconds. */
+const SETTINGS_SLIDE_MS = 250
+
+/**
+ * Slides Settings (and its sections) from where it was to where it is now when it opens or closes, rather than letting
+ * it jump: its place is followed while the sidebar's size changes, then, once it has moved, it's drawn back at the old
+ * place and eased to the new one, while its sections fade in. Nothing moves when Windows asks for less motion.
+ */
+function useSettingsSlide(
+  settingsOpen: boolean,
+  sidebar: RefObject<HTMLElement | null>,
+  settingsGroup: RefObject<HTMLDivElement | null>,
+  sectionList: RefObject<HTMLUListElement | null>,
+) {
+  const lastTop = useRef<number | null>(null)
+
+  // Where Settings sits as the window is resized, so a slide starts from where it really was.
+  useLayoutEffect(() => {
+    const nav = sidebar.current
+    if (!nav) return
+    const observer = new ResizeObserver(() => {
+      if (settingsGroup.current) lastTop.current = settingsGroup.current.offsetTop
+    })
+    observer.observe(nav)
+    return () => observer.disconnect()
+  }, [sidebar, settingsGroup])
+
+  useLayoutEffect(() => {
+    const group = settingsGroup.current
+    if (!group) return
+    const top = group.offsetTop
+    const from = lastTop.current
+    lastTop.current = top
+    if (from === null || from === top || matchMedia("(prefers-reduced-motion: reduce)").matches) return
+    const easing = "cubic-bezier(0.2, 0, 0, 1)"
+    group.animate([{ transform: `translateY(${from - top}px)` }, { transform: "none" }], {
+      duration: SETTINGS_SLIDE_MS,
+      easing,
+    })
+    sectionList.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SETTINGS_SLIDE_MS, easing: "ease-out" })
+  }, [settingsOpen, settingsGroup, sectionList])
 }
 
 interface NavButtonProps {

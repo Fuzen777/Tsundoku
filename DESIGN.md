@@ -263,4 +263,5 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 - Color changes use Tailwind's `transition-colors` (150 ms).
 - A progress bar's fill eases to each new value over 150 ms; its indeterminate slider loops every 1.4 s (`animate-indeterminate`, defined in `index.css`).
 - A tooltip fades in over 100 ms (`animate-tooltip-in`).
+- Settings slides up or down the sidebar when it opens or closes, over 250 ms (`cubic-bezier(0.2, 0, 0, 1)`), its sections fading in over the same time (`useSettingsSlide` in `Sidebar.tsx`). Not when Windows asks for fewer animations (`prefers-reduced-motion`).
 - Nothing else animates yet.
