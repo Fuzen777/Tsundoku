@@ -11,20 +11,21 @@
 
   /* Window background, only painted without Mica (Windows 10) */
   --color-bg: light-dark(#f3f3f3, #202020);
-  /* The content area and panels: raised over the backdrop in light mode, sunk below it in dark mode (DESIGN.md → Dark Mode) */
-  --color-surface: light-dark(rgb(255 255 255 / 0.6), rgb(0 0 0 / 0.45));
-  /* Cards, one step above the content area */
-  --color-card: light-dark(rgb(255 255 255 / 0.75), rgb(255 255 255 / 0.04));
-  /* Inputs, secondary buttons, hovered and selected rows */
-  --color-input: light-dark(rgb(255 255 255 / 0.85), rgb(255 255 255 / 0.075));
-  --color-input-hover: light-dark(rgb(250 250 250 / 0.95), rgb(255 255 255 / 0.11));
+  /* The content area and panels: sunk below the window in both themes, a light gray well in light mode
+     (DESIGN.md → Light Mode, Dark Mode) */
+  --color-surface: light-dark(rgb(0 0 0 / 0.035), rgb(0 0 0 / 0.45));
+  /* Cards, one step above the content area: nearly white in light mode */
+  --color-card: light-dark(rgb(255 255 255 / 0.85), rgb(255 255 255 / 0.04));
+  /* Inputs, secondary buttons, hovered and selected rows: a gray step on a card in light mode */
+  --color-input: light-dark(rgb(0 0 0 / 0.045), rgb(255 255 255 / 0.075));
+  --color-input-hover: light-dark(rgb(0 0 0 / 0.075), rgb(255 255 255 / 0.11));
   /* Borders and dividers */
-  --color-line: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.14));
-  --color-line-strong: light-dark(rgb(0 0 0 / 0.18), rgb(255 255 255 / 0.24));
+  --color-line: light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.14));
+  --color-line-strong: light-dark(rgb(0 0 0 / 0.2), rgb(255 255 255 / 0.24));
   /* Text: primary, secondary (supporting details), muted (labels, empty states, placeholders) */
   --color-fg: light-dark(#1b1b1b, #f2f2f2);
-  --color-fg-secondary: light-dark(#5d5d5d, #a3a3a3);
-  --color-fg-muted: light-dark(#8b8b8b, #808080);
+  --color-fg-secondary: light-dark(#575757, #a3a3a3);
+  --color-fg-muted: light-dark(#767676, #808080);
   /* Accent, ai-iro (藍色, Japanese indigo), for marks and text: focus outlines, the selected navigation item's pill,
      progress bars, links, checkboxes */
   --color-accent: light-dark(#165e83, #79b4da);

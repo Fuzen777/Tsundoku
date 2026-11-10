@@ -5,7 +5,7 @@ type: Agent Instructions
 
 ## Guiding Principles
 
-- **A Windows 11 app.** Mica backdrop, Segoe UI Variable, a sidebar and a content layer with a rounded top-left corner, as in Windows' own Settings app: raised above the window in light mode, sunk below it in dark mode, as in RJ Library. It follows Windows' light or dark theme, unless Settings → Appearance picks one.
+- **A Windows 11 app.** Mica backdrop, Segoe UI Variable, a sidebar and a content layer with a rounded top-left corner, as in Windows' own Settings app, sunk below the window with lighter cards on it in both themes, as in RJ Library. It follows Windows' light or dark theme, unless Settings → Appearance picks one.
 - **Quiet chrome, clear state.** The app recedes; what is downloading, finished, failed or already owned is what stands out.
 - **Consistency over cleverness.** Repeated patterns (buttons, rows, empty states) look and behave the same everywhere.
 
@@ -31,7 +31,7 @@ Which side of `light-dark()` shows follows the theme picked in Settings → Appe
 | Role | Token | Usage |
 | --- | --- | --- |
 | Window background | `--color-bg` | Painted only without Mica (Windows 10) |
-| Content layer | `--color-surface` | The content area, panels: raised above the window in light mode, sunk below it in dark mode |
+| Content layer | `--color-surface` | The content area, panels: sunk below the window in both themes |
 | Card | `--color-card` | Cards, one step above the content area |
 | Interactive background | `--color-input`, `--color-input-hover` | Inputs, secondary buttons, hovered and selected rows, icon tiles |
 | Borders | `--color-line`, `--color-line-strong` | Dividers and outlines; strong for emphasis |
@@ -52,6 +52,16 @@ Settings → Appearance → Accent Color swaps the four accent tokens for anothe
 
 > [!tip]
 > When one color would serve two distinct roles, add a token rather than sharing one.
+
+### Light Mode
+
+Since 0.1.80, light mode follows the dark mode's layers:
+
+1. Neutral grays with no tint: black or white at an opacity, and gray text.
+2. The content area (`--color-surface`, black at 3.5%) is a light gray well below the window, and cards are nearly white on it (white at 85%).
+3. Inputs, secondary buttons and hovered rows are a gray step (black at 4.5%, 7.5% hovered), so they show on a white card as on the gray content.
+4. Lines are black at 10% (20% for `--color-line-strong`); secondary text is `#575757` and muted text `#767676`, which still reads on white.
+5. Filled buttons, the selected segment and count badges are the deep accent with white text, as in dark mode.
 
 ### Dark Mode
 

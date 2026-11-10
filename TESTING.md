@@ -4,11 +4,11 @@ What to check by hand in the real app. Every change here passed `Scripts\Check.c
 
 Tick a box once it works. When something is off, tell Claude in the Tsundoku project with the item's number and what you saw.
 
-Up to date with 0.1.79 (2026-11-10).
+Up to date with 0.1.80 (2026-11-10).
 
 ## Decisions Waiting on You
 
-Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7CP6hgzwFj) page, with everything else waiting on your call: the new dark mode (item 2), links from dropped files (item 11) and waits after a restart (items 26 and 27) among them. Pick a suggested answer or write your own there; threads read the answers from the page.
+Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7CP6hgzwFj) page, with everything else waiting on your call. Pick a suggested answer or write your own there; threads read the answers from the page.
 
 ## Before You Start
 
@@ -215,6 +215,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] The preview card's, Pending's and the rules' preset lists follow the new order.
 
 ## Rules
+
+**55. The light mode revamp** · 0.1.80
+- [ ] Settings → Appearance → Light: the current view sits in a light gray area, its cards are white, and fields, secondary buttons and hovered rows are a soft gray. With Mica, the sidebar and title bar keep Windows' tint around it.
+- [ ] Go through Queue, Pending, Watched, History, Presets, Rules and Settings: nothing is hard to read or lost against its background (dropdown lists, menus, the add bar, the selected segment, the undo toast).
+- Seen in the browser preview without Mica.
 
 **54. Watched channels, playlists and accounts** · 0.1.79
 - [ ] Paste `https://www.youtube.com/@jawed` → the list has Watch on the left. Watch → What Counts as New Now (Nothing yet, Its latest [30] videos, Everything listed here), Save In with Choose Folder…, Videos Start As → Watch → the card closes and Watched opens, with jawed's card and its new items (the latest ones you asked for, minus what you downloaded before). The sidebar counts them.
