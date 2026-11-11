@@ -139,11 +139,9 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] A MEGA link cut off before its key (the part after #) → a message saying so.
 - Claude downloaded real links of all four on your PC, so this is a quick look in the app.
 
-**69. OneDrive** · 0.1.100
-- [ ] Paste `https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSwRyDwk1Ru0Q?e=4BvzLn` (a small PDF) → its name, date and size on the card; Download → it arrives in the download folder's OneDrive folder.
-- [ ] Paste `https://1drv.ms/f/s!AhIXJn_J-blW00SqrairNetmeVu4` (a folder with the subfolders coco and mpii) → the card counts the files of both subfolders, not only the top level.
-- [ ] Paste `https://1drv.ms/f/c/2d90e71fb9eb254f/EnMm8c2mP_FPv6lwt1jy01YB6bQhoPQ25vtzAhycYisERw?e=DiI2Ab` (a newer folder link) → "3 files, 2.6 GB".
-- Claude read a single file and that last folder's top level through OneDrive's API while building it; this PC's safety check stopped its later requests, so subfolders, the onedrive.live.com link forms and a real download weren't tried.
+**69. OneDrive** · 0.1.100, 0.1.105
+- [ ] Paste `https://1drv.ms/f/c/2d90e71fb9eb254f/EnMm8c2mP_FPv6lwt1jy01YB6bQhoPQ25vtzAhycYisERw?e=DiI2Ab` → "3 files, 2.6 GB" on the card (no need to download it), then `https://1drv.ms/f/s!AhIXJn_J-blW00SqrairNetmeVu4` → a message that this folder has folders inside it, which Tsundoku can't read yet.
+- Claude read these and two dozen other public links through Tsundoku's code (short links old and new, the onedrive.live.com address they lead to, and the redir, cid, embed and download forms), and downloaded a shared file and a folder's file with their SHA-1 checked. What's left is how the card shows them.
 
 **67. MediaFire's check** · 0.1.93, 0.1.103
 - [ ] Queue: add `https://www.mediafire.com/file/orecif6losbo2uw/file` (890 MB). If its row says "MediaFire wants to check you're a person…", click Open Check → a "MediaFire Check" window shows MediaFire's page. If Cloudflare asks to verify you're human, do it, then click Download → the window closes, nothing lands in your Downloads folder, and the download continues in Tsundoku with progress, then is checked. (If the row just downloads, MediaFire didn't ask Tsundoku for the check this time; try another file of yours that does.)

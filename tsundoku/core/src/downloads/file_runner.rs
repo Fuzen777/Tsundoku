@@ -632,3 +632,124 @@ mod tests {
         assert_eq!(progress.eta, None, "no speed yet");
     }
 }
+
+/// Live checks against OneDrive, run by hand when its API changes: `cargo test -p tsundoku-core --lib onedrive_live --
+/// --ignored --nocapture --test-threads 1`, with `ONEDRIVE_LINKS` (separated by spaces) to read other links. They need the
+/// network, and the links are public ones that may go away.
+#[cfg(test)]
+mod onedrive_live {
+    use super::*;
+
+    const LINKS: [&str; 3] = [
+        "https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSwRyDwk1Ru0Q?e=4BvzLn",
+        "https://1drv.ms/f/s!AhIXJn_J-blW00SqrairNetmeVu4",
+        "https://1drv.ms/f/c/2d90e71fb9eb254f/EnMm8c2mP_FPv6lwt1jy01YB6bQhoPQ25vtzAhycYisERw?e=DiI2Ab",
+    ];
+
+    #[test]
+    #[ignore = "needs the network"]
+    fn onedrive_live_reads_each_link() {
+        for link in std::env::var("ONEDRIVE_LINKS")
+            .map(|links| {
+                links
+                    .split_whitespace()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|_| LINKS.map(str::to_owned).to_vec())
+        {
+            match hosts::read(&link, &CancelToken::new()) {
+                Ok(share) => {
+                    println!(
+                        "{link}\n  id {} · {:?} · {} files · {} bytes",
+                        share.id,
+                        share.title,
+                        share.files.len(),
+                        share.total_bytes()
+                    );
+                    let nested = share
+                        .files
+                        .iter()
+                        .filter(|file| file.path.components().count() > 2)
+                        .count();
+                    println!("  in subfolders: {nested}");
+                    for file in share.files.iter().take(6) {
+                        println!("  {} ({} bytes)", file.path.display(), file.size);
+                    }
+                }
+                Err(error) => println!("{link}\n  failed: {error:?}"),
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "needs the network"]
+    fn onedrive_live_downloads_a_folders_file() {
+        // A shared folder of 331 images, listed over two pages.
+        let link = "https://1drv.ms/f/s!AittnGm6vRKLwiL55f7f0xdpuD9_";
+        let client = hosts::client().unwrap();
+        let share = hosts::read(link, &CancelToken::new()).unwrap();
+        let file = &share.files[0];
+        let address = file.source.address(&client, &CancelToken::new()).unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let part = folder.path().join("0.part");
+        let mut meter = Meter::new(file.size, None);
+        fetch(
+            &client,
+            Host::OneDrive,
+            &address,
+            file,
+            &part,
+            &CancelToken::new(),
+            &mut meter,
+            &mut None,
+            &mut |_| {},
+        )
+        .ok()
+        .unwrap();
+        println!(
+            "{} · {} bytes · checked: {}",
+            file.path.display(),
+            fs::metadata(&part).unwrap().len(),
+            matches!(check(&address.check, &part, &CancelToken::new()), Ok(true))
+        );
+    }
+
+    #[test]
+    #[ignore = "needs the network"]
+    fn onedrive_live_downloads_a_file() {
+        let folder = tempfile::tempdir().unwrap();
+        let job = JobSpec {
+            id: 1,
+            url: LINKS[0].to_owned(),
+            preset: None,
+            folder: folder.path().join("OneDrive"),
+            temp_folder: folder.path().join("OneDrive").join(".tsundoku-1"),
+            log_path: folder.path().join("1.log"),
+            overwrite: false,
+            yt_dlp: None,
+            ffmpeg: None,
+            deno: None,
+            caches: None,
+            rate_limit: None,
+            cookies: None,
+            post: None,
+            files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
+            shared_file_name: None,
+            caught_links: Vec::new(),
+        };
+        let outcome = run(&job, &CancelToken::new(), &mut |_| {});
+        println!("{outcome:?}");
+        println!("{}", fs::read_to_string(&job.log_path).unwrap_or_default());
+        let JobOutcome::Finished { files, .. } = outcome else {
+            panic!("didn't finish");
+        };
+        for file in files {
+            println!(
+                "{} · {} bytes",
+                file.display(),
+                fs::metadata(&file).unwrap().len()
+            );
+        }
+    }
+}

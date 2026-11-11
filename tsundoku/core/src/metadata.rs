@@ -184,6 +184,10 @@ pub enum PreviewError {
     /// file the user meant to download doesn't go missing.
     #[error("{site} link Tsundoku doesn't recognize")]
     LinkNotRecognized { site: String },
+    /// A shared folder with folders inside it, whose contents the host doesn't give Tsundoku (OneDrive's anonymous
+    /// reading stops at the shared folder's own level).
+    #[error("{site} folder with subfolders Tsundoku can't read")]
+    NestedFolders { site: String },
     #[error("network error: {detail}")]
     Network { detail: String },
     /// The site answered "too many requests" (HTTP 429): its downloads and reads wait a while (`site_limits`). The

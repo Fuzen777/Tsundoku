@@ -114,6 +114,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.browserCheck(error.site) }
     case "linkNotRecognized":
       return { message: text.linkNotRecognized(error.site) }
+    case "nestedFolders":
+      return { message: text.nestedFolders(error.site) }
     case "network":
       return { message: text.network, detail: error.detail }
     case "tooManyRequests":

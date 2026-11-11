@@ -53,6 +53,17 @@ const SHORT_DOMAINS: [&str; 2] = ["1drv.ms", "sdrv.ms"];
 
 /// The token every request is sent with, and when it was asked for.
 static TOKEN: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+/// The last shared folder listed for its files' download addresses, so a folder's downloads don't each list it again.
+static LISTING: Mutex<Option<Listing>> = Mutex::new(None);
+/// How long a listing's addresses are used before listing the folder again. They last about an hour.
+const LISTING_LIFETIME: Duration = Duration::from_secs(10 * 60);
+
+/// A shared folder's own files, as its listing gave them.
+struct Listing {
+    share: String,
+    since: Instant,
+    files: Vec<Item>,
+}
 
 /// A file to download from OneDrive.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,13 +112,18 @@ pub(super) fn read(
     })
 }
 
-/// Asks OneDrive where a file downloads from now, and its SHA-1 to check it by.
+/// Asks OneDrive where a file downloads from now, and its SHA-1 to check it by: the shared file's own answer, or for
+/// a file in a shared folder, the folder's listing, since OneDrive answers "item not found" when asked for an item
+/// inside a shared folder by its ID.
 pub(super) fn address(
     client: &Client,
     file: &OneDriveFile,
     cancel: &CancelToken,
 ) -> Result<Address, PreviewError> {
-    let item: Item = get(client, &item_url(&file.share, file.item.as_deref()), cancel)?;
+    let item: Item = match file.item.as_deref() {
+        None => get(client, &item_url(&file.share, None), cancel)?,
+        Some(id) => listed_file(&file.share, id, &mut |url| get(client, url, cancel))?,
+    };
     let url = item
         .download_url
         .filter(|url| url.starts_with("https://"))
@@ -127,6 +143,40 @@ pub(super) fn address(
     Ok(Address { url, check })
 }
 
+/// A file of a shared folder as the folder's listing gives it now, from the last listing while it's recent.
+fn listed_file(
+    share: &str,
+    id: &str,
+    list: &mut dyn FnMut(&str) -> Result<Children, PreviewError>,
+) -> Result<Item, PreviewError> {
+    let recent =
+        |listing: &Listing| listing.share == share && listing.since.elapsed() < LISTING_LIFETIME;
+    if let Ok(held) = LISTING.lock()
+        && let Some(listing) = held.as_ref().filter(|listing| recent(listing))
+        && let Some(item) = listing.files.iter().find(|item| item.id == id)
+    {
+        return Ok(item.clone());
+    }
+    let mut files = Vec::new();
+    let mut next = Some(children_url(share, None));
+    while let Some(url) = next.take() {
+        let page = list(&url)?;
+        files.extend(page.value.into_iter().filter(|item| item.file.is_some()));
+        next = page.next.filter(|next| is_own_page(next, share));
+    }
+    let found = files.iter().find(|item| item.id == id).cloned();
+    if let Ok(mut held) = LISTING.lock() {
+        *held = Some(Listing {
+            share: share.to_owned(),
+            since: Instant::now(),
+            files,
+        });
+    }
+    found.ok_or_else(|| PreviewError::Unavailable {
+        detail: "the file is no longer in the shared OneDrive folder".to_owned(),
+    })
+}
+
 /// Every file in a shared folder and its subfolders, under the folder's own name, each subfolder listed once.
 /// `list` reads one page of a folder's contents from its address.
 fn folder_files(
@@ -139,13 +189,23 @@ fn folder_files(
     let mut seen = HashSet::from([root.id.clone()]);
     let mut pending = vec![(children_url(share, None), top)];
     while let Some((first_page, path)) = pending.pop() {
+        let in_subfolder = first_page != children_url(share, None);
         let mut next = Some(first_page);
         while let Some(url) = next.take() {
-            let page = list(&url)?;
+            let page = list(&url).map_err(|error| match error {
+                // OneDrive answers "item not found" for anything below the shared folder's own level.
+                PreviewError::Unavailable { .. } if in_subfolder => PreviewError::NestedFolders {
+                    site: Host::OneDrive.name().to_owned(),
+                },
+                error => error,
+            })?;
             for child in page.value {
                 let child_path = path.join(safe_name(&child.name));
-                if child.folder.is_some() {
-                    if seen.insert(child.id.clone()) {
+                if let Some(facet) = &child.folder {
+                    // An empty subfolder (OneNote's recycle bin, often) has nothing to list.
+                    let empty =
+                        facet.get("childCount").and_then(serde_json::Value::as_u64) == Some(0);
+                    if !empty && seen.insert(child.id.clone()) {
                         pending.push((children_url(share, Some(&child.id)), child_path));
                     }
                 } else if child.file.is_some() {
@@ -161,8 +221,9 @@ fn folder_files(
                 // Anything else (a OneNote notebook) has no file to download.
             }
             next = match page.next {
-                // The next page is only asked of the same API, so the token never goes elsewhere.
-                Some(next) if next.starts_with(&format!("{API}/")) => Some(next),
+                // The next page is only asked of the same API, about the same shared link, so the token never goes
+                // elsewhere.
+                Some(next) if is_own_page(&next, share) => Some(next),
                 Some(next) => {
                     return Err(PreviewError::Failed {
                         detail: format!("OneDrive's list continued somewhere unexpected: {next}"),
@@ -174,6 +235,19 @@ fn folder_files(
     }
     files.sort_by(|first, second| first.path.cmp(&second.path));
     Ok(files)
+}
+
+/// Whether `next`, the address of a list's next page, is on OneDrive's API and about the shared link: it may name the
+/// share's owner first ("my.microsoftpersonalcontent.com/personal/<id>/_api/v2.0/shares('u!…')/…").
+fn is_own_page(next: &str, share: &str) -> bool {
+    let Ok(url) = Url::parse(next) else {
+        return false;
+    };
+    let api = Url::parse(API).ok();
+    url.scheme() == "https"
+        && url.host_str() == api.as_ref().and_then(Url::host_str)
+        && url.path().contains("/_api/v2.0/")
+        && url.path().contains(share)
 }
 
 /// The shared item itself, or an item inside a shared folder.
@@ -202,7 +276,7 @@ fn path_part(id: &str) -> String {
         .collect()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Item {
     id: String,
     name: String,
@@ -220,13 +294,13 @@ struct Item {
     download_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct FileFacet {
     #[serde(default)]
     hashes: Option<Hashes>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct Hashes {
     #[serde(rename = "sha1Hash", default)]
     sha1: Option<String>,
@@ -335,6 +409,11 @@ fn api_error(status: StatusCode, body: &str) -> PreviewError {
         (false, false) => format!("OneDrive answered {status}: {code} ({message})"),
     };
     match (status.as_u16(), code.as_str()) {
+        (_, "accessDenied") if message.contains("Password is required") => {
+            PreviewError::PasswordProtected {
+                site: Host::OneDrive.name().to_owned(),
+            }
+        }
         (_, "itemNotFound") | (404 | 410, _) => PreviewError::Unavailable {
             detail: format!("{detail}: deleted, or no longer shared"),
         },
@@ -645,6 +724,106 @@ mod tests {
         })
         .unwrap_err();
         assert!(matches!(error, PreviewError::Failed { .. }), "{error:?}");
+
+        // A big folder's next page names the share's owner first, as OneDrive gave it for a folder of 760 images.
+        let share = "u!aHR0cHM6Ly8xZHJ2Lm1zL2YvcyFBaXR0bkdtNnZSS0x3aUw1NWY3ZjB4ZHB1RDlf";
+        let owners_page = format!(
+            "https://my.microsoftpersonalcontent.com/personal/8b12bdba699c6d2b/_api/v2.0/shares(%27{share}%27)/driveitem/children?%24skiptoken=UGFnZWQ9VFJVRQ"
+        );
+        assert!(is_own_page(&owners_page, share));
+        assert!(is_own_page(
+            &format!("{API}/shares/{share}/driveitem/children?$skiptoken=2"),
+            share
+        ));
+        assert!(
+            !is_own_page(&owners_page, "u!another"),
+            "another share's list"
+        );
+        assert!(!is_own_page(
+            &owners_page.replace("my.microsoftpersonalcontent.com", "example.com"),
+            share
+        ));
+        assert!(!is_own_page(&owners_page.replace("https:", "http:"), share));
+
+        let mut asked = Vec::new();
+        let files = folder_files(share, &root, &mut |url| {
+            asked.push(url.to_owned());
+            Ok(if asked.len() == 1 {
+                page(&[file("A!1", "1.bmp", 1)], Some(&owners_page))
+            } else {
+                page(&[file("A!2", "2.bmp", 2)], None)
+            })
+        })
+        .unwrap();
+        assert_eq!(files.len(), 2);
+        assert_eq!(asked[1], owners_page);
+    }
+
+    #[test]
+    fn finds_a_folders_file_in_the_folders_list() {
+        let share = "u!listed";
+        let asked = std::cell::Cell::new(0);
+        let mut list = |url: &str| {
+            asked.set(asked.get() + 1);
+            assert!(url.starts_with(&children_url(share, None)), "{url}");
+            Ok(if url == children_url(share, None) {
+                page(
+                    &[folder("F!9", "Sub"), file("F!1", "a.zip", 1)],
+                    Some(&format!(
+                        "{API}/shares/{share}/driveitem/children?$skiptoken=2"
+                    )),
+                )
+            } else {
+                page(&[file("F!2", "b.zip", 2)], None)
+            })
+        };
+        let second = listed_file(share, "F!2", &mut list).unwrap();
+        assert_eq!(
+            second.download_url.as_deref(),
+            Some("https://example.com/F!2")
+        );
+        let first = listed_file(share, "F!1", &mut list).unwrap();
+        assert_eq!(first.name, "a.zip");
+        assert_eq!(
+            asked.get(),
+            2,
+            "the second file comes from the same listing"
+        );
+        assert!(matches!(
+            listed_file(share, "F!404", &mut list),
+            Err(PreviewError::Unavailable { .. })
+        ));
+    }
+
+    #[test]
+    fn says_so_when_it_cant_read_a_subfolder() {
+        let root: Item = serde_json::from_str(&folder("ROOT!1", "Pack")).unwrap();
+        let error = folder_files("u!abc", &root, &mut |url| {
+            if url == children_url("u!abc", None) {
+                Ok(page(
+                    &[
+                        folder("ROOT!2", "coco"),
+                        r#"{"id": "ROOT!3", "name": "OneNote_RecycleBin", "folder": {"childCount": 0}}"#
+                            .to_owned(),
+                    ],
+                    None,
+                ))
+            } else if url == children_url("u!abc", Some("ROOT!3")) {
+                panic!("an empty subfolder isn't listed")
+            } else {
+                Err(api_error(
+                    StatusCode::NOT_FOUND,
+                    r#"{"error": {"code": "itemNotFound", "message": "Item not found"}}"#,
+                ))
+            }
+        })
+        .unwrap_err();
+        assert_eq!(
+            error,
+            PreviewError::NestedFolders {
+                site: "OneDrive".to_owned()
+            }
+        );
     }
 
     #[test]
@@ -663,6 +842,15 @@ mod tests {
             PreviewError::Unavailable { detail } if detail.contains("private")
         ));
         assert!(matches!(error(401, "{}"), PreviewError::Unavailable { .. }));
+        assert_eq!(
+            error(
+                403,
+                r#"{"error": {"code": "accessDenied", "message": "Password is required to access this share."}}"#
+            ),
+            PreviewError::PasswordProtected {
+                site: "OneDrive".to_owned()
+            }
+        );
         assert!(matches!(
             error(429, &answer("activityLimitReached")),
             PreviewError::LimitReached { site, .. } if site == "OneDrive"

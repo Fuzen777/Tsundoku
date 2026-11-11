@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.105 · 2026-11-11
+
+### Fixed
+
+- **OneDrive folders**: their files download now; every file of a shared folder failed as "deleted" before. A folder of more than 200 files is read whole instead of failing after its first part.
+- A OneDrive link that needs a password says so, rather than that it's private or turned off.
+- A OneDrive folder with folders inside it says Tsundoku can't read those yet, rather than that it was deleted. OneDrive doesn't give Tsundoku their contents; empty ones are passed over.
+
 ## 0.1.104 · 2026-11-11
 
 ### Added
