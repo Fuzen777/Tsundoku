@@ -27,4 +27,4 @@ drive: string, free: number, needed: number, others: number,
 /**
  * In milliseconds since 1970.
  */
-until: number, } | { "kind": "browserCheck", site: string, files: number, };
+until: number, } | { "kind": "browserCheck", site: string, files: number, } | { "kind": "windowDownload", site: string, };

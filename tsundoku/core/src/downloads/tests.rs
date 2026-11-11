@@ -1902,6 +1902,115 @@ fn a_download_behind_a_check_waits_for_a_person_and_continues_with_what_the_wind
     test.cancel_all();
 }
 
+/// A Workupload file read through the check window, whose download the window saves itself.
+fn workupload_check() -> crate::hosts::check::BrowserCheck {
+    let page = crate::hosts::check::CheckPage::of(&crate::hosts::FileSource::Windowed(
+        crate::hosts::windowed::WindowedFile {
+            host: crate::hosts::Host::Workupload,
+            id: "abcdefgh".to_owned(),
+            page: "https://workupload.com/file/abcdefgh".to_owned(),
+            direct: None,
+            saved: None,
+        },
+    ))
+    .unwrap();
+    assert!(page.saves_in_window());
+    crate::hosts::check::BrowserCheck {
+        site: "Workupload".to_owned(),
+        pages: vec![page],
+    }
+}
+
+impl Test {
+    /// Adds a Workupload link, and waits until its run is told it needs the check.
+    fn held_for_window(&self) -> i64 {
+        let file = VideoInfo {
+            site: "workupload".to_owned(),
+            site_name: "workupload.com".to_owned(),
+            url: "https://workupload.com/file/abcdefgh".to_owned(),
+            duration_seconds: None,
+            best_height: None,
+            files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
+            ..video("abcdefgh")
+        };
+        let id = self.queue.add_post(file).unwrap().id;
+        wait_until("it runs", || self.times_started(id) == 1);
+        self.runner
+            .complete(id, JobOutcome::NeedsCheck(workupload_check()));
+        wait_until("it waits for the check", || {
+            self.queue.check_for(id).is_ok()
+        });
+        id
+    }
+}
+
+#[test]
+fn a_file_the_window_saves_is_handed_to_its_download() {
+    let test = Test::new();
+    let id = test.held_for_window();
+    let folder = test.queue.window_download_started(id).unwrap();
+    assert!(
+        folder.is_dir(),
+        "the window saves into the temporary folder"
+    );
+    assert_eq!(
+        test.held(id),
+        Hold::WindowDownload {
+            site: "Workupload".to_owned()
+        }
+    );
+    let saved = folder.join("Sample.png");
+    std::fs::write(&saved, "png").unwrap();
+    let link = crate::hosts::windowed::saved_link("abcdefgh", &saved);
+    test.queue.passed_check(id, vec![link.clone()]).unwrap();
+    wait_until("it runs again", || test.times_started(id) == 2);
+    assert_eq!(test.runner.last_job(id).caught_links, [link]);
+    test.cancel_all();
+}
+
+#[test]
+fn a_window_download_that_stops_fails_its_download_and_leaves_nothing() {
+    let test = Test::new();
+    let id = test.held_for_window();
+    let folder = test.queue.window_download_started(id).unwrap();
+    std::fs::write(folder.join("Sample.png.crdownload"), "half").unwrap();
+    test.queue.window_download_stopped(id);
+    assert_eq!(test.state(id), Some(QueueState::Failed));
+    assert_eq!(
+        test.item(id).error,
+        Some(DownloadError::WindowDownloadStopped {
+            site: "Workupload".to_owned()
+        })
+    );
+    assert!(!folder.exists(), "what the window left is deleted");
+    assert_eq!(
+        test.queue.check_for(id),
+        Err(DownloadError::WrongState),
+        "the window's watch sees it no longer waits, and closes"
+    );
+    test.queue.retry(id).unwrap();
+    wait_until("Retry runs it again", || test.times_started(id) == 2);
+    test.cancel_all();
+}
+
+#[test]
+fn removing_a_download_while_the_window_saves_it_cleans_up() {
+    let test = Test::new();
+    let id = test.held_for_window();
+    let folder = test.queue.window_download_started(id).unwrap();
+    std::fs::write(folder.join("Sample.png.crdownload"), "half").unwrap();
+    test.queue.cancel(id).unwrap();
+    assert!(!folder.exists());
+    assert_eq!(
+        test.queue.check_for(id),
+        Err(DownloadError::NotFound),
+        "the window's watch sees it's gone, and closes"
+    );
+    // The window's own end of the download comes too late to change anything.
+    test.queue.window_download_stopped(id);
+    assert_eq!(test.state(id), None);
+}
+
 #[test]
 fn a_pasted_download_link_gets_a_waiting_download_past_its_check() {
     let test = Test::new();

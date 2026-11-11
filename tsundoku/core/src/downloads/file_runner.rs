@@ -104,6 +104,7 @@ fn download(
     let client = hosts::client_for(host)?;
     let mut share = host.read(&client, &job.url, cancel)?;
     share.use_caught_links(&job.caught_links);
+    share.resolve_caught(&client, cancel)?;
     write_log(
         log,
         &format!("{} files, {} bytes", share.files.len(), share.total_bytes()),
@@ -121,8 +122,10 @@ fn download(
         .filter(|_| share.files.len() == 1);
     for (index, file) in share.files.iter().enumerate() {
         let destination = destination_of(&job.folder, &file.path, single_name);
-        if fs::metadata(&destination)
-            .is_ok_and(|metadata| metadata.is_file() && metadata.len() == file.size)
+        let size_known = file.size > 0 || !matches!(file.source, hosts::FileSource::Windowed(_));
+        if size_known
+            && fs::metadata(&destination)
+                .is_ok_and(|metadata| metadata.is_file() && metadata.len() == file.size)
         {
             write_log(
                 log,
@@ -130,6 +133,27 @@ fn download(
             );
             meter.skip(file.size);
             saved.push(destination);
+            continue;
+        }
+        // A file the check window saved (a host whose download runs in the window) only has to be moved into place.
+        if let hosts::FileSource::Windowed(hosts::windowed::WindowedFile {
+            saved: Some(window_file),
+            ..
+        }) = &file.source
+        {
+            write_log(
+                log,
+                &format!(
+                    "{}: saved in the check window, {} bytes",
+                    file.path.display(),
+                    file.size
+                ),
+            );
+            meter.skip(file.size);
+            if index + 1 == share.files.len() {
+                on_progress(DownloadProgress::at(DownloadStage::Finishing));
+            }
+            saved.push(place(window_file, &destination)?);
             continue;
         }
         let part = job.temp_folder.join(format!("{index}.part"));

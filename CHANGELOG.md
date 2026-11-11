@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.122 · 2026-11-12
+
+### Added
+
+- **Workupload**: pasting a Workupload link (workupload.com/file/…) shows its ID and "Size unknown", since Workupload checks for a browser before it shows anything. The download waits for you to open its check: click Download on its page, and the check window saves the file itself, then hides; the download moves the file into place and takes its name.
+- **Downloads in the check window**: for a site whose file only downloads in the browser that passed its check, the check window saves the file, and the row says so meanwhile. Stopping or removing the download, or closing the window, stops it and deletes what had arrived, and the row says so.
+
 ## 0.1.121 · 2026-11-12
 
 ### Added

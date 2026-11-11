@@ -198,6 +198,8 @@ export const strings = {
         files > 1
           ? `${site} wants to check you're a person before ${files} of these files. They wait here until you open the check and start each one's download on ${site}'s page.`
           : `${site} wants to check you're a person before this download. It waits here until you open the check and start the download on ${site}'s page.`,
+      windowDownload: (site: string) =>
+        `Downloading in ${site}'s check window, which saves the file itself. Stopping this download stops it.`,
     },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>
@@ -212,6 +214,8 @@ export const strings = {
       notFound: "This download isn't in the queue anymore.",
       wrongState: "That can't be done to this download right now.",
       damaged: (file: string) => `${file} arrived damaged and was deleted. Retry to download it again.`,
+      windowDownloadStopped: (site: string) =>
+        `The download in ${site}'s check window stopped before the file arrived. Retry to open the check again.`,
       storage: "Couldn't save the queue or the history.",
       logMissing: "This download has no log yet.",
       invalidRateLimit: "Use a number of bytes per second, with K, M or G after it if you like, such as 500K or 2M.",
@@ -513,7 +517,8 @@ export const strings = {
       return parts.join(", ")
     },
     /** A file host's link: one file's size, or a shared folder's file count and size. */
-    fileContents: (count: number, size: string) => (count === 1 ? size : `${count} files, ${size}`),
+    fileContents: (count: number, size: string | null) =>
+      size === null ? (count === 1 ? "Size unknown" : `${count} files`) : count === 1 ? size : `${count} files, ${size}`,
     alreadyDownloaded: (date: string, preset: string) =>
       preset ? `Already downloaded on ${date} with ${preset}.` : `Already downloaded on ${date}.`,
     openFile: "Open File",

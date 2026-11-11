@@ -203,6 +203,9 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Waiting and Retrying
 
+**71. Downloads in the check window** · 0.1.122
+- [ ] Workupload, with a file big enough to take a few seconds: Open Check → Download on Workupload's page → the window hides and the row says it's downloading in the check window. Stop the row meanwhile → it fails saying the download in the check window stopped, and its folder holds no partial file; Retry → it waits for Open Check again. Claude saw the whole download go through once with your click (file intact, row named after it); stopping midway was only tried in the queue's tests.
+
 **70. 1fichier** · 0.1.114
 - [ ] Paste a 1fichier file link → the card shows its name and size → Download. The row says Counting Down with the time left for about a minute, then downloads the file. Right after, add another 1fichier link (or Retry this one once it's removed) → it waits in the queue with "1fichier's download limit is used up. Continuing at …", a few hours on. Claude read the link, a deleted one and the wait through Tsundoku's code, and did the countdown and got the download link by hand, but couldn't run the whole download in the app: 1fichier then makes this connection wait 4 hours.
 

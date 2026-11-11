@@ -4,6 +4,8 @@
 //! (`hosts::check`), which waits for them. The queue works each waiting item's hold out whenever it schedules, and a
 //! thread schedules again once one ends.
 
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Weak;
 use std::thread;
 use std::time::Duration;
@@ -51,6 +53,9 @@ pub struct Recovery {
     /// The pages its last run found behind a check only a person can pass: it waits for them (`Hold::BrowserCheck`)
     /// until the check window or a pasted link gets past them, or Resume or Retry tries afresh.
     pub(super) check: Option<BrowserCheck>,
+    /// The check window is saving the file of a page of `check` (its site's name): it waits for that
+    /// (`Hold::WindowDownload`), and fails if the window's download stops (`window_download_stopped`).
+    window_download: Option<String>,
 }
 
 impl Recovery {
@@ -158,6 +163,9 @@ pub enum Hold {
     /// The site put `files` of its files behind a check only a person can pass (Cloudflare's browser check on
     /// MediaFire): it waits, without end, until the person opens the check (`check_for`), or tries afresh.
     BrowserCheck { site: String, files: u32 },
+    /// The person started the download on the site's page in the check window, which saves the file itself (a host
+    /// whose download works only in the window's own session); the download then moves it into place.
+    WindowDownload { site: String },
 }
 
 impl Hold {
@@ -169,7 +177,7 @@ impl Hold {
             | Self::Retry { until, .. }
             | Self::LimitReached { until, .. } => *until,
             Self::NotEnoughRoom { until, .. } => *until,
-            Self::BrowserCheck { .. } => i64::MAX,
+            Self::BrowserCheck { .. } | Self::WindowDownload { .. } => i64::MAX,
         }
     }
 }
@@ -292,6 +300,49 @@ impl DownloadQueue {
         Some(item)
     }
 
+    /// Where the check window saves the file of a download that waits for its check: the download's temporary folder,
+    /// made if it isn't there. The download waits for the window meanwhile (`Hold::WindowDownload`).
+    pub fn window_download_started(&self, id: i64) -> Result<PathBuf, DownloadError> {
+        let folder = {
+            let mut state = lock(&self.state);
+            let item = super::find(&mut state.items, id)?;
+            let Some(check) = &item.recovery.check else {
+                return Err(DownloadError::WrongState);
+            };
+            if item.state != QueueState::Waiting {
+                return Err(DownloadError::WrongState);
+            }
+            item.recovery.window_download = Some(check.site.clone());
+            super::temp_folder(item)
+        };
+        fs::create_dir_all(&folder).map_err(|error| DownloadError::Folder {
+            path: folder.display().to_string(),
+            detail: error.to_string(),
+        })?;
+        self.schedule();
+        Ok(folder)
+    }
+
+    /// The check window's download stopped before the file arrived: the download fails, saying so, and what the
+    /// window left is deleted. Retry opens the check again.
+    pub fn window_download_stopped(&self, id: i64) {
+        {
+            let mut state = lock(&self.state);
+            let Ok(item) = super::find(&mut state.items, id) else {
+                return;
+            };
+            let Some(site) = item.recovery.window_download.take() else {
+                return;
+            };
+            super::remove_folder(&super::temp_folder(item));
+            item.recovery.check = None;
+            item.state = QueueState::Failed;
+            item.error = Some(DownloadError::WindowDownloadStopped { site });
+            let _ = self.store.update(item);
+        }
+        self.schedule();
+    }
+
     /// Whether a download waits for a check that `link` gets past (`pass_check_with`).
     pub(super) fn check_takes(&self, link: &str) -> bool {
         lock(&self.state)
@@ -304,6 +355,9 @@ impl DownloadQueue {
     /// connection or finding the site's download limit used up, its site's wait after a "too many requests", or the
     /// hourly limit on a paced site's files leaving no room for its files (a post's, or one for a video).
     fn hold_for(&self, item: &QueueItem, options: &DownloadSettings, now: i64) -> Option<Hold> {
+        if let Some(site) = &item.recovery.window_download {
+            return Some(Hold::WindowDownload { site: site.clone() });
+        }
         if let Some(check) = &item.recovery.check {
             return Some(Hold::BrowserCheck {
                 site: check.site.clone(),
@@ -372,6 +426,8 @@ fn waits_for_check_on(item: &QueueItem, link: &str) -> bool {
 /// Gives a download the addresses caught past its check, and drops the pages they get past; once none is left, it no
 /// longer waits for the check.
 fn take_links(item: &mut QueueItem, links: Vec<String>) {
+    // A file the window saved has arrived.
+    item.recovery.window_download = None;
     if let Some(check) = &mut item.recovery.check {
         for link in &links {
             check.passed(link);

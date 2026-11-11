@@ -227,6 +227,8 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.notFound }
     case "damaged":
       return { message: text.damaged(error.file) }
+    case "windowDownloadStopped":
+      return { message: text.windowDownloadStopped(error.site) }
     case "wrongState":
       return { message: text.wrongState }
     case "storage":

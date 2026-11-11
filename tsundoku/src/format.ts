@@ -80,7 +80,8 @@ export function joinDetails(parts: readonly (string | null | undefined | false)[
  * Null for a video. */
 export function formatContents({ post, files }: { post: PostContents | null; files: FileContents | null }): string | null {
   if (post) return strings.preview.postContents(post.images, post.videos, post.others)
-  if (files) return strings.preview.fileContents(files.count, formatBytes(files.bytes))
+  // A host read through the check window gives its size only once the check is passed.
+  if (files) return strings.preview.fileContents(files.count, files.bytes > 0 ? formatBytes(files.bytes) : null)
   return null
 }
 

@@ -4,6 +4,7 @@
 //! download on the page, the window catches that download's address, which the download then uses as the file's
 //! direct link (MediaFire's `MediaFireFile::direct`).
 
+use super::windowed::{self, WindowDownload};
 use super::{FileSource, Host, Page, Share};
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -41,6 +42,12 @@ impl CheckPage {
                 host: Host::YandexDisk,
                 file_id: file.name.clone(),
             }),
+            // The link's own page, behind its check.
+            FileSource::Windowed(file) => Some(Self {
+                url: file.page.clone(),
+                host: file.host,
+                file_id: file.id.clone(),
+            }),
             FileSource::Mega(_)
             | FileSource::GoogleDrive(_)
             | FileSource::Dropbox(_)
@@ -68,7 +75,27 @@ impl CheckPage {
     /// Whether `download`, the address of a download a page started, is this page's file: anything else (another
     /// file, an advert's download) is left alone.
     pub fn takes(&self, download: &str) -> bool {
-        caught_file(self.host, download).is_some_and(|id| id == self.file_id)
+        if let Some((id, _)) = windowed::saved_file(download) {
+            return id == self.file_id;
+        }
+        match &self.host.facts().window {
+            Some(window) => (window.takes)(download, &self.file_id),
+            None => caught_file(self.host, download).is_some_and(|id| id == self.file_id),
+        }
+    }
+
+    /// Whether the window saves the page's file itself rather than catching its address (`WindowDownload`).
+    pub fn saves_in_window(&self) -> bool {
+        self.host
+            .facts()
+            .window
+            .as_ref()
+            .is_some_and(|window| window.download == WindowDownload::SaveInWindow)
+    }
+
+    /// The link that hands the download the file the window saved from this page.
+    pub fn saved_link(&self, path: &std::path::Path) -> String {
+        windowed::saved_link(&self.file_id, path)
     }
 }
 
@@ -106,7 +133,8 @@ fn caught_file(host: Host, download: &str) -> Option<String> {
         | Host::FilesFm
         | Host::UploadEe
         | Host::TransferNow
-        | Host::Filemail => None,
+        | Host::Filemail
+        | Host::Workupload => None,
     }
 }
 
@@ -115,6 +143,15 @@ impl Share {
     /// still leads to the file. A later link for a file replaces an earlier one.
     pub fn use_caught_links(&mut self, links: &[String]) {
         for file in &mut self.files {
+            if let FileSource::Windowed(file) = &mut file.source {
+                if let Some(link) = links.iter().rev().find(|link| file.takes(link)) {
+                    match windowed::saved_file(link) {
+                        Some((_, path)) => file.saved = Some(path.to_path_buf()),
+                        None => file.direct = Some(link.clone()),
+                    }
+                }
+                continue;
+            }
             let (key, direct) = match &mut file.source {
                 FileSource::MediaFire(file) => (file.quick_key.clone(), &mut file.direct),
                 FileSource::YandexDisk(file) => (file.name.clone(), &mut file.direct),

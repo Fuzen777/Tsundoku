@@ -242,6 +242,10 @@ pub enum DownloadError {
     /// downloads it again.
     #[error("{file} arrived damaged")]
     Damaged { file: String },
+    /// The file the check window was saving (a host whose download runs in the window) didn't arrive: the window was
+    /// closed, the download stopped, or the site ended it.
+    #[error("the download in {site}'s check window stopped")]
+    WindowDownloadStopped { site: String },
     /// The action doesn't fit the item's state, such as Retry on one that didn't fail.
     #[error("not possible in this state")]
     WrongState,
@@ -1154,6 +1158,7 @@ impl DownloadQueue {
                     item.error = Some(error);
                 }
                 (_, JobOutcome::Finished { files, format }) => {
+                    name_after_its_file(&mut item.video, &files);
                     let preset = item
                         .preset
                         .as_ref()
@@ -1284,7 +1289,7 @@ fn find(items: &mut [QueueItem], id: i64) -> Result<&mut QueueItem, DownloadErro
 }
 
 /// Where an item's partial files go: a folder of its own in the destination folder, so moving the finished file is a
-/// rename on the same drive.
+/// rename on the same drive. The check window saves a file there too, for a host whose download runs in it.
 fn temp_folder(item: &QueueItem) -> PathBuf {
     Path::new(&item.folder).join(format!(".tsundoku-{}", item.id))
 }
@@ -1320,6 +1325,23 @@ fn seconds_since_epoch() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| elapsed.as_secs() as i64)
+}
+
+/// A file host's link read through the check window is named after the link until its file is known: once it's
+/// downloaded, it takes its file's name (`hosts::windowed`).
+fn name_after_its_file(video: &mut VideoInfo, files: &[PathBuf]) {
+    if video.files.is_some()
+        && video.title == video.video_id
+        && let [file] = files
+        && let Some(name) = file.file_name().and_then(|name| name.to_str())
+    {
+        video.title = name.to_owned();
+        if let Some(contents) = &mut video.files
+            && contents.bytes == 0
+        {
+            contents.bytes = fs::metadata(file).map_or(0, |metadata| metadata.len());
+        }
+    }
 }
 
 #[cfg(test)]

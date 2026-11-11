@@ -25,6 +25,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: None,
+    window: None,
 };
 
 /// A file to download from upload.ee.

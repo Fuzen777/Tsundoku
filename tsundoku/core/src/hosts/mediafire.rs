@@ -30,6 +30,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     // Its download addresses are probed with their own pages in mind (`page_error` below); a download's page says
     // no more than its status.
     page_error: None,
+    window: None,
 };
 
 const SITE: &str = "https://www.mediafire.com";

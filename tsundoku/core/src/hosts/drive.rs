@@ -29,6 +29,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: Some(page_error),
+    window: None,
 };
 
 const DOWNLOAD: &str = "https://drive.usercontent.google.com/download";

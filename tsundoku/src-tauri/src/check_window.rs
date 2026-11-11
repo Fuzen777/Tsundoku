@@ -10,13 +10,22 @@
 //! stopped before a byte is saved), and gives the address to the download, which then downloads the file from it.
 //! With several files behind the check, it shows each one's page in turn.
 //!
+//! A host whose file's address works only in the window's own browser session (Workupload's) is saved by the window
+//! itself instead (`CheckPage::saves_in_window`): once the person starts the download on the page, the window saves the
+//! file into the download's temporary folder and hides, the download waits for it (`Hold::WindowDownload`), then moves
+//! it into place. Closing the window, or stopping or removing the download, stops it, and what it left is deleted.
+//!
 //! The page stays on the site: an advert can't take the window elsewhere. A window the page opens (MediaFire's
 //! Download button may open the file in one, sending the page to an advert) is a hidden one that never loads
 //! anything: the file's address is caught from it the same way.
 
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
+use std::time::Duration;
 
 use tauri::webview::{
     DownloadEvent, NewWindowFeatures, NewWindowResponse, PermissionKind, PermissionResponse,
@@ -59,6 +68,8 @@ struct Visit {
     /// How many pages it had.
     total: usize,
     caught: Vec<String>,
+    /// The page whose file the window is saving itself, and where.
+    saving: Option<(CheckPage, PathBuf)>,
 }
 
 impl Visit {
@@ -70,6 +81,7 @@ impl Visit {
             home: check.pages.first()?.clone(),
             left: check.pages,
             caught: Vec::new(),
+            saving: None,
         })
     }
 
@@ -105,6 +117,9 @@ fn open(app: &AppHandle, item: Option<i64>, check: BrowserCheck) -> Result<(), S
         bring_forward(window);
         return Ok(());
     }
+    if current.as_ref().is_some_and(|visit| visit.saving.is_some()) {
+        return Err("the check window is still saving another download".to_owned());
+    }
     let no_page = || "the check has no page to open".to_owned();
     let visit = Visit::new(item, check).ok_or_else(no_page)?;
     let (url, title) = visit.shown().ok_or_else(no_page)?;
@@ -139,15 +154,29 @@ fn build(app: &AppHandle, url: Url, title: &str) -> tauri::Result<()> {
         .center()
         .data_directory(profile)
         // The page's file is caught as the page goes to it, so it's never fetched.
-        .on_navigation(move |url| !take(&guard, url.as_str()) && stays_on_site(&guard, url))
-        // A download that starts anyway stops before a byte is saved, and is caught if it's the page's file.
-        .on_download(move |_, event| {
-            if let DownloadEvent::Requested { url, .. } = event
-                && !take(&catcher, url.as_str())
-            {
-                development::log(&format!("stopped a download: {url}"));
+        .on_navigation(move |url| {
+            note_address(&guard, "went to", url.as_str());
+            !take(&guard, url.as_str()) && stays_on_site(&guard, url)
+        })
+        // A download that starts anyway stops before a byte is saved, and is caught if it's the page's file, unless
+        // the window saves the page's file itself.
+        .on_download(move |_, event| match event {
+            DownloadEvent::Requested { url, destination } => {
+                note_address(&catcher, "started a download from", url.as_str());
+                if let Some(path) = save_in_window(&catcher, url.as_str(), destination) {
+                    *destination = path;
+                    return true;
+                }
+                if !take(&catcher, url.as_str()) {
+                    development::log(&format!("stopped a download: {url}"));
+                }
+                false
             }
-            false
+            DownloadEvent::Finished { path, success, .. } => {
+                window_download_finished(&catcher, path, success);
+                false
+            }
+            _ => false,
         })
         .on_permission_request(|_, kind| permission(kind))
         .on_new_window(move |_, features| open_catcher(&opener, features));
@@ -199,6 +228,7 @@ fn open_catcher(app: &AppHandle, features: NewWindowFeatures) -> NewWindowRespon
             if url.scheme() == "about" {
                 return true;
             }
+            note_address(&catcher, "a window it opened went to", url.as_str());
             if !take(&catcher, url.as_str()) {
                 development::log(&format!("closed a window opened on {url}"));
             }
@@ -262,12 +292,26 @@ fn take(app: &AppHandle, address: &str) -> bool {
     let Some(visit) = current.as_mut() else {
         return false;
     };
-    let Some(index) = visit.left.iter().position(|page| page.takes(address)) else {
+    let Some(index) = visit
+        .left
+        .iter()
+        .position(|page| !page.saves_in_window() && page.takes(address))
+    else {
         return false;
     };
     development::log(&format!("caught: {address}"));
     visit.left.remove(index);
     visit.caught.push(address.to_owned());
+    move_on(app, current);
+    true
+}
+
+/// After a page's file was caught or saved: the window shows the next page, or closes once none is left, giving the
+/// download what it caught.
+fn move_on(app: &AppHandle, mut current: MutexGuard<'_, Option<Visit>>) {
+    let Some(visit) = current.as_mut() else {
+        return;
+    };
     let next = visit.shown();
     let finished = if next.is_none() { current.take() } else { None };
     drop(current);
@@ -289,7 +333,99 @@ fn take(app: &AppHandle, address: &str) -> bool {
             hand_over(&app, visit);
         }
     });
-    true
+}
+
+/// Where the window saves `download` itself, if it's the file of the page shown and its host's download runs in the
+/// window (`CheckPage::saves_in_window`): the download's temporary folder, under the name the site gives it. The window
+/// then hides, and a watch closes it, stopping the download, once the download is stopped or removed.
+fn save_in_window(app: &AppHandle, download: &str, suggested: &Path) -> Option<PathBuf> {
+    let state = app.state::<CheckWindow>();
+    let (id, page) = {
+        let current = state.lock();
+        let visit = current.as_ref()?;
+        let page = visit.left.first()?;
+        if visit.saving.is_some() || !page.saves_in_window() || !page.takes(download) {
+            return None;
+        }
+        (visit.item?, page.clone())
+    };
+    let folder = app
+        .state::<Arc<DownloadQueue>>()
+        .window_download_started(id)
+        .ok()?;
+    let name = suggested
+        .file_name()
+        .map_or_else(|| "download".into(), std::ffi::OsStr::to_os_string);
+    let path = folder.join(name);
+    let _ = std::fs::remove_file(&path);
+    state.lock().as_mut()?.saving = Some((page, path.clone()));
+    development::log(&format!("saving {download} to {}", path.display()));
+    let app = app.clone();
+    thread::spawn(move || {
+        if let Some(window) = app.get_webview_window(LABEL) {
+            let _ = window.hide();
+        }
+        watch_window_download(&app, id);
+    });
+    Some(path)
+}
+
+/// While the window saves a download's file: closes the window, which stops the download, once the download no longer
+/// waits for it (stopped, removed).
+fn watch_window_download(app: &AppHandle, id: i64) {
+    loop {
+        thread::sleep(Duration::from_secs(1));
+        let saving = app
+            .state::<CheckWindow>()
+            .lock()
+            .as_ref()
+            .is_some_and(|visit| visit.item == Some(id) && visit.saving.is_some());
+        if !saving {
+            return;
+        }
+        if app.state::<Arc<DownloadQueue>>().check_for(id).is_err() {
+            development::log("the download was stopped: closing the window");
+            if let Some(window) = app.get_webview_window(LABEL) {
+                let _ = window.destroy();
+            }
+            return;
+        }
+    }
+}
+
+/// The window's own download ended: the download gets the file, or fails and loses what was left.
+fn window_download_finished(app: &AppHandle, path: Option<PathBuf>, success: bool) {
+    let state = app.state::<CheckWindow>();
+    let mut current = state.lock();
+    let Some(visit) = current.as_mut() else {
+        return;
+    };
+    let Some((page, planned)) = visit.saving.take() else {
+        return;
+    };
+    let saved = path.unwrap_or(planned);
+    if success && saved.is_file() {
+        development::log(&format!("saved {}", saved.display()));
+        let link = page.saved_link(&saved);
+        visit.left.retain(|left| !left.takes(&link));
+        visit.caught.push(link);
+        move_on(app, current);
+        return;
+    }
+    development::log("the window's download stopped");
+    let item = visit.item;
+    current.take();
+    drop(current);
+    if let Some(id) = item {
+        app.state::<Arc<DownloadQueue>>()
+            .window_download_stopped(id);
+    }
+    let app = app.clone();
+    thread::spawn(move || {
+        if let Some(window) = app.get_webview_window(LABEL) {
+            let _ = window.destroy();
+        }
+    });
 }
 
 /// The window closed, by the person or once done: the download gets what was caught, so it downloads those files and
@@ -297,7 +433,33 @@ fn take(app: &AppHandle, address: &str) -> bool {
 fn closed(app: &AppHandle) {
     let visit = app.state::<CheckWindow>().lock().take();
     if let Some(visit) = visit {
+        // Closed while saving a file: its download stops with the window.
+        if visit.saving.is_some()
+            && let Some(id) = visit.item
+        {
+            app.state::<Arc<DownloadQueue>>()
+                .window_download_stopped(id);
+        }
         hand_over(app, visit);
+    }
+}
+
+/// Writes an address the window or a window its page opened went to (or started a download from) in the log of the
+/// download the window is for, so a check whose file's address isn't caught yet (a new host's) still shows where the
+/// page went once the person clicks Download. Addresses only, never what a page holds.
+fn note_address(app: &AppHandle, what: &str, address: &str) {
+    development::log(&format!("{what} {address}"));
+    let item = app
+        .state::<CheckWindow>()
+        .lock()
+        .as_ref()
+        .and_then(|visit| visit.item);
+    if let Some(id) = item {
+        let path = app.state::<Arc<DownloadQueue>>().log_path(id);
+        // Best effort: a log that can't be written loses the line.
+        if let Ok(mut log) = OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(log, "check window: {what} {address}");
+        }
     }
 }
 

@@ -28,6 +28,8 @@ export function describeHold(hold: Hold): string {
         : strings.queue.holds.notEnoughRoom(hold.drive, formatBytes(hold.free), formatBytes(hold.needed))
     case "browserCheck":
       return strings.queue.holds.browserCheck(hold.site, hold.files)
+    case "windowDownload":
+      return strings.queue.holds.windowDownload(hold.site)
   }
 }
 
@@ -37,6 +39,7 @@ export function holdEnd(hold: Hold): number | null {
   switch (hold.kind) {
     case "notEnoughRoom":
     case "browserCheck":
+    case "windowDownload":
       return null
     default:
       return hold.until

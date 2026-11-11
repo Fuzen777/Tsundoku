@@ -39,6 +39,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: None,
+    window: None,
 };
 
 /// Where an anonymous token comes from, for the app ID of OneDrive's own web page.

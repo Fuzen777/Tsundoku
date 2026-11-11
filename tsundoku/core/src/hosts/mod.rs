@@ -20,6 +20,8 @@ pub mod swisstransfer;
 pub mod transfernow;
 pub mod uploadee;
 pub mod wetransfer;
+pub mod windowed;
+pub mod workupload;
 pub mod yandex;
 
 use std::io::Read;
@@ -72,6 +74,7 @@ pub enum Host {
     UploadEe,
     TransferNow,
     Filemail,
+    Workupload,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -93,10 +96,12 @@ pub(crate) struct HostFacts {
     pub read: fn(&Client, &str, &CancelToken) -> Result<Share, PreviewError>,
     /// Why it answered with a page instead of a file, when its pages say more than their status.
     pub page_error: Option<fn(&Page) -> PreviewError>,
+    /// For a host whose link's own page is behind a check: how the check window reads its links (`windowed`).
+    pub window: Option<windowed::WindowFacts>,
 }
 
 impl Host {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -114,6 +119,7 @@ impl Host {
         Self::UploadEe,
         Self::TransferNow,
         Self::Filemail,
+        Self::Workupload,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -130,6 +136,7 @@ impl Host {
             Self::UploadEe => &uploadee::FACTS,
             Self::TransferNow => &transfernow::FACTS,
             Self::Filemail => &filemail::FACTS,
+            Self::Workupload => &workupload::FACTS,
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,
@@ -212,7 +219,13 @@ impl Host {
         link: &str,
         cancel: &CancelToken,
     ) -> Result<Share, PreviewError> {
-        let share = (self.facts().read)(client, link, cancel)?;
+        let share = match (self.facts().read)(client, link, cancel) {
+            // A host read through the check window: what the link names, until the window gives the rest.
+            Err(PreviewError::BrowserCheck { site }) => {
+                windowed::share(self, link).ok_or(PreviewError::BrowserCheck { site })?
+            }
+            read => read?,
+        };
         if share.files.is_empty() {
             return Err(PreviewError::NoVideo {
                 detail: format!("the {} folder is empty", self.name()),
@@ -297,6 +310,8 @@ pub enum FileSource {
     UploadEe(uploadee::UploadEeFile),
     TransferNow(transfernow::TransferNowFile),
     Filemail(filemail::FilemailFile),
+    /// A file only the check window can give (`windowed`).
+    Windowed(windowed::WindowedFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -351,6 +366,7 @@ impl FileSource {
             Self::UploadEe(file) => uploadee::address(client, file, cancel),
             Self::TransferNow(file) => transfernow::address(client, file, cancel),
             Self::Filemail(file) => filemail::address(client, file, cancel),
+            Self::Windowed(file) => windowed::address(file),
         }
     }
 

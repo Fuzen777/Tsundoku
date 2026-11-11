@@ -31,6 +31,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: None,
+    window: None,
 };
 
 const SITE: &str = "https://archive.org";
