@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.114 · 2026-11-11
+
+### Added
+
+- **1fichier**: pasting a 1fichier file link (1fichier.com/?…) shows its name and size, with Download, as a free download without an account. Tsundoku waits out 1fichier's countdown before the file (the row says Counting Down, with the time left), and when 1fichier makes free downloads wait between each other, which can be a few hours, the download waits in the queue and says when it goes on. A file with a password, one its owner keeps for 1fichier's subscribers and a deleted one say so.
+
 ## 0.1.113 · 2026-11-11
 
 ### Added

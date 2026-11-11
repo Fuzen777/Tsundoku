@@ -29,6 +29,8 @@ const BUFFER_SIZE: usize = 256 * 1024;
 const CONNECT_RETRIES: u32 = 2;
 /// How often progress is reported.
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(500);
+/// How often a host's countdown looks whether the download was stopped.
+const COUNTDOWN_TICK: Duration = Duration::from_millis(100);
 
 /// Why a run ended early.
 enum Stop {
@@ -130,6 +132,18 @@ fn download(
             continue;
         }
         let part = job.temp_folder.join(format!("{index}.part"));
+        if let Some(countdown) = file.source.countdown(&client, cancel)? {
+            write_log(
+                log,
+                &format!(
+                    "{}: {}'s countdown, {} s",
+                    file.path.display(),
+                    host.name(),
+                    countdown.as_secs()
+                ),
+            );
+            wait_out(countdown, cancel, on_progress)?;
+        }
         let fetched = file
             .source
             .address(&client, cancel)
@@ -189,6 +203,38 @@ fn download(
     }
     on_progress(DownloadProgress::at(DownloadStage::Finishing));
     Ok(saved)
+}
+
+/// Waits out a host's countdown before a free download, showing the seconds left.
+fn wait_out(
+    countdown: Duration,
+    cancel: &CancelToken,
+    on_progress: &mut dyn FnMut(DownloadProgress),
+) -> Result<(), Stop> {
+    let start = Instant::now();
+    let mut shown = None;
+    loop {
+        if cancel.is_cancelled() {
+            return Err(Stop::Cancelled);
+        }
+        let elapsed = start.elapsed();
+        let Some(left) = countdown
+            .checked_sub(elapsed)
+            .filter(|left| !left.is_zero())
+        else {
+            return Ok(());
+        };
+        let seconds_left = left.as_secs() + u64::from(left.subsec_nanos() > 0);
+        if shown != Some(seconds_left) {
+            shown = Some(seconds_left);
+            on_progress(DownloadProgress {
+                fraction: Some(elapsed.as_secs_f64() / countdown.as_secs_f64()),
+                eta: Some(seconds_left),
+                ..DownloadProgress::at(DownloadStage::Countdown)
+            });
+        }
+        thread::sleep(COUNTDOWN_TICK.min(left));
+    }
 }
 
 /// The page to open for a file the host put behind a check only a person can pass, or the run's end as it was.
@@ -655,6 +701,33 @@ mod tests {
         assert_eq!(progress.downloaded_bytes, Some(250));
         assert_eq!(progress.total_bytes, Some(1000));
         assert_eq!(progress.eta, None, "no speed yet");
+    }
+
+    #[test]
+    fn waits_out_a_countdown_showing_the_seconds_left() {
+        let mut shown = Vec::new();
+        let started = Instant::now();
+        let waited = wait_out(
+            Duration::from_millis(1_200),
+            &CancelToken::new(),
+            &mut |progress| shown.push((progress.stage, progress.eta)),
+        );
+        assert!(waited.is_ok());
+        assert!(started.elapsed() >= Duration::from_millis(1_200));
+        assert_eq!(
+            shown,
+            [
+                (DownloadStage::Countdown, Some(2)),
+                (DownloadStage::Countdown, Some(1))
+            ]
+        );
+
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        assert!(matches!(
+            wait_out(Duration::from_secs(60), &cancel, &mut |_| {}),
+            Err(Stop::Cancelled)
+        ));
     }
 }
 

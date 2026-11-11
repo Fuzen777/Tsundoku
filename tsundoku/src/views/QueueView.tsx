@@ -352,6 +352,9 @@ function sizeDetails(item: QueueItem, progress: DownloadProgress | null): (strin
   if (item.state === "done") {
     return [item.result?.fileSize ? formatBytes(item.result.fileSize) : null]
   }
+  if (progress?.stage === "countdown") {
+    return [progress.eta === null ? null : strings.queue.timeLeft(formatDuration(progress.eta))]
+  }
   if (!progress || progress.totalBytes === null) return []
   return [
     strings.queue.progress(formatBytes(progress.downloadedBytes ?? 0), formatBytes(progress.totalBytes)),

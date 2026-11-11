@@ -144,6 +144,7 @@ export const strings = {
       embedding: "Embedding",
       processing: "Processing",
       finishing: "Finishing",
+      countdown: "Counting Down",
       done: "Done",
       stopped: "Stopped",
       failed: "Failed",
@@ -569,6 +570,9 @@ export const strings = {
         `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
       limitReached: (site: string) =>
         `${site}'s download limit is used up for now. Try again in a few hours.`,
+      waitBetweenDownloads: (site: string, time: string) =>
+        `${site} makes free downloads wait between each other. Try again after ${time}.`,
+      subscribersOnly: (site: string) => `The owner of this ${site} file keeps it for ${site}'s subscribers.`,
       passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
       linkIncomplete: (site: string) =>
         `This ${site} link is missing its key, or it's cut off. Copy the whole link again.`,

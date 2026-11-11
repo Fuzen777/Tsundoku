@@ -1,7 +1,7 @@
 //! File hosts Tsundoku reads itself, without a tool: MEGA, MediaFire, Google Drive, Dropbox and OneDrive. A host's
 //! reader turns a share link into the files behind it (`Share`), once for the preview card and again when the
 //! download starts, since the addresses files download from expire. `downloads::file_runner` then saves them. A host
-//! may put a check only a person can pass in front of a file (`check`).
+//! may put a check only a person can pass in front of a file (`check`), or a countdown (`FileSource::countdown`).
 
 pub mod archive;
 pub mod boxcom;
@@ -12,6 +12,7 @@ pub mod icedrive;
 pub mod mediafire;
 pub mod mega;
 pub mod onedrive;
+pub mod onefichier;
 pub mod pcloud;
 pub mod wetransfer;
 pub mod yandex;
@@ -60,6 +61,7 @@ pub enum Host {
     YandexDisk,
     Box,
     Icedrive,
+    OneFichier,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -84,7 +86,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -96,6 +98,7 @@ impl Host {
         Self::YandexDisk,
         Self::Box,
         Self::Icedrive,
+        Self::OneFichier,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -106,6 +109,7 @@ impl Host {
             Self::Dropbox => &dropbox::FACTS,
             Self::OneDrive => &onedrive::FACTS,
             Self::Icedrive => &icedrive::FACTS,
+            Self::OneFichier => &onefichier::FACTS,
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,
@@ -267,6 +271,7 @@ pub enum FileSource {
     ArchiveOrg(archive::ArchiveFile),
     WeTransfer(wetransfer::WeTransferFile),
     PCloud(pcloud::PCloudFile),
+    OneFichier(onefichier::OneFichierFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -313,6 +318,21 @@ impl FileSource {
             Self::ArchiveOrg(file) => archive::address(client, file, cancel),
             Self::WeTransfer(file) => wetransfer::address(client, file, cancel),
             Self::PCloud(file) => pcloud::address(client, file, cancel),
+            Self::OneFichier(file) => onefichier::address(client, file, cancel),
+        }
+    }
+
+    /// How long the host makes a free download wait before it gives the file's address, asked just before
+    /// `address` (1fichier's countdown). The host may instead say to wait between downloads
+    /// (`PreviewError::WaitBetweenDownloads`).
+    pub fn countdown(
+        &self,
+        client: &Client,
+        cancel: &CancelToken,
+    ) -> Result<Option<Duration>, PreviewError> {
+        match self {
+            Self::OneFichier(file) => onefichier::countdown(client, file, cancel).map(Some),
+            _ => Ok(None),
         }
     }
 }
@@ -355,6 +375,13 @@ fn built(builder: reqwest::blocking::ClientBuilder, agent: &str) -> Result<Clien
 pub fn read(link: &str, cancel: &CancelToken) -> Result<Share, PreviewError> {
     let host = Host::of(link).ok_or(PreviewError::UnsupportedSite)?;
     host.read(&client_for(host)?, link, cancel)
+}
+
+/// Form fields as a request's body (`application/x-www-form-urlencoded`).
+pub(crate) fn form(fields: &[(&str, &str)]) -> String {
+    let mut url = reqwest::Url::parse("https://form.invalid/").expect("an address");
+    url.query_pairs_mut().extend_pairs(fields);
+    url.query().unwrap_or_default().to_owned()
 }
 
 /// A file or folder name from a host, safe to use on Windows.

@@ -203,6 +203,9 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Waiting and Retrying
 
+**70. 1fichier** · 0.1.114
+- [ ] Paste a 1fichier file link → the card shows its name and size → Download. The row says Counting Down with the time left for about a minute, then downloads the file. Right after, add another 1fichier link (or Retry this one once it's removed) → it waits in the queue with "1fichier's download limit is used up. Continuing at …", a few hours on. Claude read the link, a deleted one and the wait through Tsundoku's code, and did the countdown and got the download link by hand, but couldn't run the whole download in the app: 1fichier then makes this connection wait 4 hours.
+
 **24. Room checked before downloading** · 0.1.58
 - [ ] If you have a small USB stick or a nearly full drive: make a rule save there and queue Big Buck Bunny at Best Video → it waits with "E: has X free, and this needs Y." while the downloads after it that fit go ahead. Free some space → it starts within 30 seconds.
 - Known: posts, videos added before a restart and videos whose site gives no sizes aren't checked.

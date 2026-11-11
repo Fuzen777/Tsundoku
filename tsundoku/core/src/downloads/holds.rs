@@ -35,6 +35,8 @@ pub const FIRST_LIMIT_WAIT: Duration = Duration::from_secs(30 * 60);
 /// The longest wait for a download limit: each time it's still used up, the wait doubles, up to this. A download never
 /// fails for it.
 pub const LONGEST_LIMIT_WAIT: Duration = Duration::from_secs(4 * 60 * 60);
+/// Seconds added to a wait a host names, since it counts in whole minutes.
+const WAIT_MARGIN: u64 = 60;
 
 /// What a download's automatic retries have done so far, in memory only: put back to its start by a run that
 /// finishes, and by Resume and Retry.
@@ -54,7 +56,8 @@ pub struct Recovery {
 impl Recovery {
     /// Whether a run that failed with `error` at `now` is tried again by itself, and when: a lost connection after
     /// `CONNECTION_RETRY_WAITS`, a used-up download limit after a wait that doubles from `FIRST_LIMIT_WAIT` up to
-    /// `LONGEST_LIMIT_WAIT`. `None` means it fails.
+    /// `LONGEST_LIMIT_WAIT`, a host's wait between free downloads once it's over, with a minute to spare. `None`
+    /// means it fails.
     pub(super) fn after_failure(&mut self, error: &DownloadError, now: i64) -> Option<Hold> {
         let DownloadError::YtDlp { error } = error else {
             return None;
@@ -76,6 +79,11 @@ impl Recovery {
                     until: now + millis(limit_wait(self.limits_reached)),
                 }
             }
+            // The host said how long: no doubling, and it never fails for it.
+            PreviewError::WaitBetweenDownloads { site, seconds } => Hold::LimitReached {
+                site: site.clone(),
+                until: now + millis(Duration::from_secs(seconds.saturating_add(WAIT_MARGIN))),
+            },
             _ => return None,
         };
         self.wait = Some(hold.clone());
@@ -489,5 +497,25 @@ mod tests {
             }),
             "a used-up limit counts apart from lost connections"
         );
+    }
+
+    #[test]
+    fn a_wait_the_host_names_is_kept_to_with_a_minute_to_spare() {
+        let mut recovery = Recovery::default();
+        let wait = failure(PreviewError::WaitBetweenDownloads {
+            site: "1fichier".to_owned(),
+            seconds: 240 * 60,
+        });
+        for _ in 0..2 {
+            assert_eq!(
+                recovery.after_failure(&wait, 1_000),
+                Some(Hold::LimitReached {
+                    site: "1fichier".to_owned(),
+                    until: 1_000 + 241 * 60 * 1000
+                }),
+                "the same each time, never doubled"
+            );
+        }
+        assert_eq!(recovery.limits_reached, 0);
     }
 }

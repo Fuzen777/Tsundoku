@@ -212,6 +212,8 @@ pub enum DownloadStage {
     Processing,
     /// Moving the file into its folder.
     Finishing,
+    /// A file host's countdown before a free download (1fichier's), with the seconds left as `eta`.
+    Countdown,
 }
 
 /// Why a download, or an action on the queue, failed.

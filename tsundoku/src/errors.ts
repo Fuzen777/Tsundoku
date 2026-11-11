@@ -106,6 +106,10 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: describeSignIn(error.site, error.cookies), detail: error.detail }
     case "limitReached":
       return { message: text.limitReached(error.site), detail: error.detail }
+    case "waitBetweenDownloads":
+      return { message: text.waitBetweenDownloads(error.site, formatClockTime(Date.now() + error.seconds * 1000)) }
+    case "subscribersOnly":
+      return { message: text.subscribersOnly(error.site) }
     case "passwordProtected":
       return { message: text.passwordProtected(error.site) }
     case "linkIncomplete":

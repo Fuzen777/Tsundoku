@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{
-    Answer, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel, code_error,
+    Answer, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel, code_error, form,
     network_error, percent_decode, probe, safe_name, title_of,
 };
 use crate::cancel::CancelToken;
@@ -327,12 +327,6 @@ fn list(
 }
 
 /// Fields as a form sends them.
-fn form(fields: &[(&str, &str)]) -> String {
-    let mut url = Url::parse(SITE).expect("SITE is an address");
-    url.query_pairs_mut().extend_pairs(fields);
-    url.query().unwrap_or_default().to_owned()
-}
-
 /// Dropbox only checks that a request's "t" field matches its "t" cookie, so that another site can't post for
 /// someone signed in. Any value does.
 fn token() -> String {

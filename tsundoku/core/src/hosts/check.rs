@@ -49,7 +49,8 @@ impl CheckPage {
             | FileSource::Box(_)
             | FileSource::ArchiveOrg(_)
             | FileSource::WeTransfer(_)
-            | FileSource::PCloud(_) => None,
+            | FileSource::PCloud(_)
+            | FileSource::OneFichier(_) => None,
         }
     }
 
@@ -94,7 +95,8 @@ fn caught_file(host: Host, download: &str) -> Option<String> {
         | Host::Box
         | Host::ArchiveOrg
         | Host::WeTransfer
-        | Host::PCloud => None,
+        | Host::PCloud
+        | Host::OneFichier => None,
     }
 }
 

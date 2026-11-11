@@ -172,6 +172,17 @@ pub enum PreviewError {
     /// A file host's free downloads for this connection are used up for now, such as MEGA's transfer quota.
     #[error("{site}'s download limit is reached: {detail}")]
     LimitReached { site: String, detail: String },
+    /// A file host makes free downloads wait between each other, and says for how long (1fichier's "You must wait
+    /// 240 minutes"): the queue holds the download until then.
+    #[error("{site} makes free downloads wait {seconds} seconds")]
+    WaitBetweenDownloads {
+        site: String,
+        #[ts(type = "number")]
+        seconds: u64,
+    },
+    /// A file its owner keeps for the host's paying subscribers.
+    #[error("{site} file for subscribers only")]
+    SubscribersOnly { site: String },
     /// A link that needs a password, which Tsundoku can't ask for yet.
     #[error("{site} link with a password")]
     PasswordProtected { site: String },

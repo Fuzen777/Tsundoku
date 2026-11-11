@@ -123,6 +123,12 @@ describe("file host errors", () => {
     expect(describePreviewError({ kind: "linkNotRecognized", site: "MediaFire" }).message).toBe(
       strings.preview.errors.linkNotRecognized("MediaFire"),
     )
+    expect(describePreviewError({ kind: "subscribersOnly", site: "1fichier" })).toEqual({
+      message: strings.preview.errors.subscribersOnly("1fichier"),
+    })
+    expect(describePreviewError({ kind: "waitBetweenDownloads", site: "1fichier", seconds: 600 }).message).toContain(
+      "1fichier makes free downloads wait",
+    )
     expect(describePreviewError({ kind: "limitReached", site: "MEGA", detail: "MEGA answered -17" })).toEqual({
       message: strings.preview.errors.limitReached("MEGA"),
       detail: "MEGA answered -17",
