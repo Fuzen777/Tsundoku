@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{DownloadProgress, DownloadStage, QueueItem, QueueState};
+use super::{DownloadProgress, DownloadStage, Hold, QueueItem, QueueState};
 
 /// yt-dlp reports a fraction for each file it downloads. A video downloaded as two files (its video, then its audio)
 /// counts its video file as this much of the whole, and its audio as the rest.
@@ -27,6 +27,8 @@ struct Member {
     fraction: Option<f64>,
     /// Its video came as a file of its own, so its audio file is the last part of it.
     split: bool,
+    /// It waits for a person to open a check (`Hold::BrowserCheck`), which may take any time: the run doesn't wait.
+    waits_for_check: bool,
 }
 
 impl Member {
@@ -37,11 +39,13 @@ impl Member {
             size: item.video.files.map(|files| files.bytes),
             fraction: None,
             split: false,
+            waits_for_check: check_site(item).is_some(),
         }
     }
 
     fn follow(&mut self, item: &QueueItem) {
         self.state = item.state;
+        self.waits_for_check = check_site(item).is_some();
         if item.state == QueueState::Done {
             self.fraction = Some(1.0);
             self.size = item
@@ -76,9 +80,10 @@ impl Member {
         }
     }
 
-    /// Ended: done, or failed and not retried yet.
+    /// Ended: done, or failed and not retried yet. One waiting for a person to open a check is set aside too, so the
+    /// run can end without it; it joins the next run once the check is passed.
     fn has_ended(&self) -> bool {
-        matches!(self.state, QueueState::Done | QueueState::Failed)
+        matches!(self.state, QueueState::Done | QueueState::Failed) || self.waits_for_check
     }
 
     /// How much of it is over, from 0 to 1, and whether that's known: an ended download is all over, one waiting or
@@ -95,8 +100,8 @@ impl Member {
 impl QueueRun {
     /// Follows the queue's items. A download waiting or running joins the run (a new one if there was none), so do
     /// those added or resumed meanwhile. One removed from the queue leaves it, unless it was done (Clear Finished).
-    /// The run ends once none of its downloads is waiting, running or stopped. Answers what happened, for the
-    /// notifications: downloads that failed, and the run ending.
+    /// The run ends once none of its downloads is waiting (unless for a check), running or stopped. Answers what
+    /// happened, for the notifications: downloads that failed or wait for a check, and the run ending.
     pub fn update(&mut self, items: &[QueueItem]) -> Vec<RunEvent> {
         let mut events = Vec::new();
         self.members.retain(|id, member| {
@@ -108,6 +113,14 @@ impl QueueRun {
                     if item.state == QueueState::Failed && member.state != QueueState::Failed {
                         events.push(RunEvent::Failed {
                             title: member.title.clone(),
+                        });
+                    }
+                    if let Some(site) = check_site(item)
+                        && !member.waits_for_check
+                    {
+                        events.push(RunEvent::NeedsCheck {
+                            title: member.title.clone(),
+                            site: site.to_owned(),
                         });
                     }
                     member.follow(item);
@@ -256,11 +269,21 @@ impl RunSummary {
     }
 }
 
+/// The site whose check `item` waits for a person to open, if it does.
+fn check_site(item: &QueueItem) -> Option<&str> {
+    match &item.hold {
+        Some(Hold::BrowserCheck { site, .. }) if item.state == QueueState::Waiting => Some(site),
+        _ => None,
+    }
+}
+
 /// What happened to the run, for the notifications.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunEvent {
     /// One of its downloads failed.
     Failed { title: String },
+    /// One of its downloads waits for a person to open its site's check (`Hold::BrowserCheck`).
+    NeedsCheck { title: String, site: String },
     /// Every one of its downloads has ended: how many finished and how many failed. Cancelled ones aren't counted.
     Ended { finished: usize, failed: usize },
 }
@@ -273,19 +296,29 @@ pub struct Notice {
 }
 
 /// The notifications for events that came close together, as Settings → Adding Links asks: one for all the failures
-/// among them (`failures`), then one for a run that ended (`finished`). A run where nothing finished adds nothing to
-/// the failures already told.
+/// among them and one for the downloads waiting for a check (`failures`, both needing the person), then one for a run
+/// that ended (`finished`). A run where nothing finished adds nothing to the failures already told.
 pub fn notices(events: &[RunEvent], failures: bool, finished: bool) -> Vec<Notice> {
     let mut notices = Vec::new();
     let failed: Vec<&str> = events
         .iter()
         .filter_map(|event| match event {
             RunEvent::Failed { title } => Some(title.as_str()),
-            RunEvent::Ended { .. } => None,
+            RunEvent::NeedsCheck { .. } | RunEvent::Ended { .. } => None,
         })
         .collect();
     if failures && !failed.is_empty() {
         notices.push(failure_notice(&failed));
+    }
+    let checks: Vec<(&str, &str)> = events
+        .iter()
+        .filter_map(|event| match event {
+            RunEvent::NeedsCheck { title, site } => Some((title.as_str(), site.as_str())),
+            RunEvent::Failed { .. } | RunEvent::Ended { .. } => None,
+        })
+        .collect();
+    if failures && !checks.is_empty() {
+        notices.push(check_notice(&checks));
     }
     for event in events {
         if let RunEvent::Ended {
@@ -318,6 +351,29 @@ fn failure_notice(titles: &[&str]) -> Notice {
         },
         [] => Notice {
             title: "Couldn't Download".to_owned(),
+            body: String::new(),
+        },
+    }
+}
+
+/// "A Download Needs You", with the site and the title, or for several, how many and the first title.
+fn check_notice(checks: &[(&str, &str)]) -> Notice {
+    match checks {
+        [(title, site)] => Notice {
+            title: "A Download Needs You".to_owned(),
+            body: format!(
+                "{site} wants to check you're a person before {title}. It waits in the queue until you open the check."
+            ),
+        },
+        [(first, _), rest @ ..] => Notice {
+            title: format!("{} Downloads Need You", checks.len()),
+            body: format!(
+                "{first} and {} more wait in the queue until you open their checks.",
+                rest.len()
+            ),
+        },
+        [] => Notice {
+            title: "A Download Needs You".to_owned(),
             body: String::new(),
         },
     }
@@ -601,6 +657,68 @@ mod tests {
             [notice("Couldn't Download 3 Links", "Zoo, Cats and 1 more")]
         );
         assert_eq!(notices(&[failed("Zoo")], false, true), []);
+    }
+
+    #[test]
+    fn a_download_waiting_for_a_check_is_told_once_and_doesnt_hold_up_the_run() {
+        let mut run = QueueRun::default();
+        let held = |id| QueueItem {
+            hold: Some(Hold::BrowserCheck {
+                site: "MediaFire".to_owned(),
+                files: 1,
+            }),
+            ..titled(id, QueueState::Waiting)
+        };
+        run.update(&[
+            titled(1, QueueState::Running),
+            titled(2, QueueState::Running),
+        ]);
+        let needs_check = RunEvent::NeedsCheck {
+            title: "Video 1".to_owned(),
+            site: "MediaFire".to_owned(),
+        };
+        assert_eq!(
+            run.update(&[held(1), titled(2, QueueState::Running)]),
+            std::slice::from_ref(&needs_check)
+        );
+        assert_eq!(
+            run.update(&[held(1), titled(2, QueueState::Running)]),
+            [],
+            "told once"
+        );
+        assert_eq!(
+            run.update(&[held(1), done(2, 10)]),
+            [RunEvent::Ended {
+                finished: 1,
+                failed: 0
+            }],
+            "the run ends without it"
+        );
+        assert_eq!(
+            run.update(&[titled(1, QueueState::Waiting), done(2, 10)]),
+            []
+        );
+        assert_eq!(
+            run.summary().waiting,
+            1,
+            "once past the check, it joins a new run"
+        );
+
+        let notice = notices(std::slice::from_ref(&needs_check), true, true);
+        assert_eq!(notice[0].title, "A Download Needs You");
+        assert_eq!(
+            notice[0].body,
+            "MediaFire wants to check you're a person before Video 1. It waits in the queue until you open the check."
+        );
+        assert_eq!(
+            notices(&[needs_check.clone(), needs_check.clone()], true, true)[0].title,
+            "2 Downloads Need You"
+        );
+        assert_eq!(
+            notices(&[needs_check], false, true),
+            [],
+            "told with the failures"
+        );
     }
 
     #[test]

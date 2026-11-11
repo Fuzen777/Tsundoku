@@ -127,6 +127,12 @@ impl DataPaths {
     pub fn thumbnails_folder(&self) -> PathBuf {
         self.root.join("thumbnails")
     }
+
+    /// The check window's browser profile (its cookies, such as a check passed, and its cache), kept apart from the
+    /// app's own WebView.
+    pub fn browser_folder(&self) -> PathBuf {
+        self.root.join("browser")
+    }
 }
 
 #[cfg(test)]

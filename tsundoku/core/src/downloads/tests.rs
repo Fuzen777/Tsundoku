@@ -581,6 +581,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         progress: None,
         hold: None,
         recovery: Recovery::default(),
+        caught_links: Vec::new(),
     }
 }
 
@@ -1710,4 +1711,165 @@ fn a_rule_names_a_shared_file_with_what_its_pattern_captured() {
         Some("RJ123456")
     );
     test.queue.cancel(id).unwrap();
+}
+
+/// A MediaFire folder's two files behind Cloudflare's check, as a run finds them.
+fn mediafire_check() -> crate::hosts::check::BrowserCheck {
+    let page = |key: &str| {
+        crate::hosts::check::CheckPage::of(&crate::hosts::FileSource::MediaFire(
+            crate::hosts::mediafire::MediaFireFile {
+                quick_key: key.to_owned(),
+                sha256: None,
+                direct: None,
+            },
+        ))
+        .unwrap()
+    };
+    crate::hosts::check::BrowserCheck {
+        site: "MediaFire".to_owned(),
+        pages: vec![page("firstkey1"), page("secondkey2")],
+    }
+}
+
+/// The Download button's own link for a MediaFire file.
+fn direct_link(key: &str) -> String {
+    format!("https://download2390.mediafire.com/token/{key}/{key}.zip")
+}
+
+impl FakeRunner {
+    /// The job of the item's latest run.
+    fn last_job(&self, id: i64) -> JobSpec {
+        lock(&self.jobs)
+            .iter()
+            .rev()
+            .find(|job| job.id == id)
+            .cloned()
+            .unwrap()
+    }
+}
+
+impl Test {
+    /// Adds a MediaFire folder, and waits until its run is told it needs the check.
+    fn held_for_check(&self) -> i64 {
+        let folder = VideoInfo {
+            site: "mediafire".to_owned(),
+            site_name: "mediafire.com".to_owned(),
+            url: "https://www.mediafire.com/folder/folderkey/Pack".to_owned(),
+            duration_seconds: None,
+            best_height: None,
+            files: Some(crate::metadata::FileContents {
+                count: 3,
+                bytes: 3072,
+            }),
+            ..video("folderkey")
+        };
+        let id = self.queue.add_post(folder).unwrap().id;
+        wait_until("it runs", || self.times_started(id) == 1);
+        self.runner
+            .complete(id, JobOutcome::NeedsCheck(mediafire_check()));
+        id
+    }
+}
+
+#[test]
+fn a_download_behind_a_check_waits_for_a_person_and_continues_with_what_the_window_caught() {
+    let test = Test::new();
+    let id = test.held_for_check();
+    let other = test.add("other");
+    assert_eq!(
+        test.held(id),
+        Hold::BrowserCheck {
+            site: "MediaFire".to_owned(),
+            files: 2
+        }
+    );
+    wait_until("the others carry on", || {
+        test.runner.started().contains(&other)
+    });
+    assert_eq!(test.item(id).error, None, "it didn't fail");
+    assert_eq!(
+        test.queue.try_now(id),
+        Err(DownloadError::WrongState),
+        "only the person gets it past"
+    );
+    test.queue.end_site_waits();
+    assert_eq!(test.times_started(id), 1, "it never starts by itself");
+
+    let check = test.queue.check_for(id).unwrap();
+    assert_eq!(check.pages.len(), 2);
+    assert_eq!(
+        check.pages[0].url,
+        "https://www.mediafire.com/file/firstkey1"
+    );
+    assert_eq!(test.queue.check_for(other), Err(DownloadError::WrongState));
+
+    // The person passed the first file's check, then closed the window.
+    test.queue
+        .passed_check(id, vec![direct_link("firstkey1")])
+        .unwrap();
+    assert!(
+        matches!(
+            test.item(id).hold,
+            Some(Hold::BrowserCheck { files: 1, .. })
+        ),
+        "the second file still waits"
+    );
+    assert_eq!(test.times_started(id), 1);
+    test.queue
+        .passed_check(id, vec![direct_link("secondkey2")])
+        .unwrap();
+    wait_until("it runs again", || test.times_started(id) == 2);
+    assert_eq!(
+        test.runner.last_job(id).caught_links,
+        [direct_link("firstkey1"), direct_link("secondkey2")]
+    );
+    test.runner
+        .complete(id, test.finished_file("firstkey1.zip"));
+    wait_until("it's done", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(test.item(id).caught_links, Vec::<String>::new());
+    test.cancel_all();
+}
+
+#[test]
+fn a_pasted_download_link_gets_a_waiting_download_past_its_check() {
+    let test = Test::new();
+    let id = test.held_for_check();
+    test.held(id);
+    let pasted = VideoInfo {
+        site: "mediafire".to_owned(),
+        site_name: "mediafire.com".to_owned(),
+        url: direct_link("firstkey1"),
+        files: Some(crate::metadata::FileContents {
+            count: 1,
+            bytes: 1024,
+        }),
+        ..video("firstkey1")
+    };
+    assert!(
+        !test.queue.contains_video(&pasted) && test.queue.check_takes(&pasted.url),
+        "the preview card offers to download it"
+    );
+    let given = test.queue.add_post(pasted.clone()).unwrap();
+    assert_eq!(given.id, id, "given to the waiting download, not added");
+    assert_eq!(test.queue.items().len(), 1);
+    assert!(matches!(
+        test.item(id).hold,
+        Some(Hold::BrowserCheck { files: 1, .. })
+    ));
+    assert!(
+        test.queue.add_post(pasted).is_ok(),
+        "a file outside the check is added as usual"
+    );
+    assert_eq!(test.queue.items().len(), 2);
+
+    // Resume and Retry try afresh: the run finds the check again if it's still there.
+    test.queue.stop(id).unwrap();
+    test.queue.resume(id).unwrap();
+    wait_until("it runs again", || test.times_started(id) == 2);
+    assert_eq!(
+        test.runner.last_job(id).caught_links,
+        [direct_link("firstkey1")],
+        "keeping what was caught"
+    );
+    test.cancel_all();
 }

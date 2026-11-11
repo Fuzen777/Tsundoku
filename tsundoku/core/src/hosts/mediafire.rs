@@ -1,8 +1,8 @@
 //! MediaFire: links to a file or a folder. Its public API (`/api/1.4`) gives a file's name, size and SHA-256 and a
 //! folder's contents without signing in; the address a file downloads from is the Download button on its page.
-//! MediaFire may put that page behind Cloudflare's browser check, which Tsundoku doesn't try to pass: a link copied
-//! from the Download button (`download<n>.mediafire.com/…`), which the browser got past the check, is used as it is
-//! while it still leads to the file.
+//! MediaFire may put that page behind Cloudflare's browser check, which Tsundoku doesn't try to pass: the person opens
+//! the page in the check window (`check`), and the Download button's address caught there, or copied from a browser
+//! (`download<n>.mediafire.com/…`), is used as it is while it still leads to the file.
 
 use std::path::PathBuf;
 
@@ -140,7 +140,7 @@ pub(super) fn address(
         }
     }
     check_cancel(cancel)?;
-    let page = format!("{SITE}/file/{}", file.quick_key);
+    let page = file_page(&file.quick_key);
     let response = client.get(&page).send().map_err(network_error)?;
     if !response.status().is_success() {
         return Err(page_error(&Page::read(response)));
@@ -414,6 +414,23 @@ fn parse_link(link: &str) -> Option<MediaFireLink> {
     }
 }
 
+/// A file's page, with its Download button: what a person opens in the check window.
+pub(super) fn file_page(quick_key: &str) -> String {
+    format!("{SITE}/file/{quick_key}")
+}
+
+/// The file's key in the Download button's own link (`download<n>.mediafire.com/<token>/<key>/<name>`), for a link
+/// caught in the check window or pasted. `None` for any other link.
+pub(super) fn direct_link_key(link: &str) -> Option<String> {
+    match parse_link(link)? {
+        MediaFireLink::File {
+            key,
+            direct: Some(_),
+        } => Some(key),
+        _ => None,
+    }
+}
+
 /// The address behind the page's Download button: its link, or the base64 one MediaFire sometimes scrambles it into.
 fn download_button(html: &str) -> Option<String> {
     let id = html.find("id=\"downloadButton\"")?;
@@ -443,9 +460,8 @@ fn page_error(page: &Page) -> PreviewError {
         PreviewError::Unavailable {
             detail: "MediaFire says the file was removed".to_owned(),
         }
-    } else if page.html.contains("Just a moment...") || page.html.contains("_cf_chl_opt") {
+    } else if super::check::is_browser_check(page) {
         // Cloudflare's check page, answered with 403 (MediaFire sends some files' pages to "?action=check" for it).
-        // Its "challenge-platform" script is on every MediaFire page, so it isn't a sign.
         PreviewError::BrowserCheck {
             site: Host::MediaFire.name().to_owned(),
         }
@@ -546,6 +562,7 @@ mod tests {
             url: url.to_owned(),
             status: reqwest::StatusCode::from_u16(status).unwrap(),
             html: html.to_owned(),
+            challenged: false,
         }
     }
 

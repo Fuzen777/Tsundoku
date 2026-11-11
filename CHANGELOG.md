@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.103 · 2026-11-11
+
+### Added
+
+- **MediaFire's check, in a window of Tsundoku's**: a MediaFire file behind MediaFire's "check you're a person" page no longer fails. Its download waits in the queue, saying so, while the others carry on, and nothing opens until you choose. Open Check shows MediaFire's page in a small Tsundoku window: do whatever the check asks and click Download, and the window closes while Tsundoku downloads the file itself, checked as usual. The window never downloads anything itself, can't be taken away from MediaFire by an advert, and remembers a check you passed. Leave the download for later, or close the window, and it keeps waiting. In a shared folder, the files that don't need the check download first, and the window shows each remaining file's page in turn.
+- A notification says when a download waits for you to open a check, under Notify When a Download Fails.
+
+### Changed
+
+- A MediaFire download link copied from your browser, pasted while a download waits for that file's check, gets the download past it instead of saying it's already in the queue.
+
 ## 0.1.102 · 2026-11-11
 
 ### Added

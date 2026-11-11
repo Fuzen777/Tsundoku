@@ -11,6 +11,7 @@ use serde::Deserialize;
 
 use super::{DownloadError, DownloadProgress, DownloadStage, file_runner, post_runner, progress};
 use crate::cancel::CancelToken;
+use crate::hosts::check::BrowserCheck;
 use crate::metadata::{FileContents, PreviewError, classify_failure};
 use crate::presets::{Preset, PresetError};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
@@ -51,6 +52,9 @@ pub struct JobSpec {
     /// A file host's link of one file named by a rule (`rules::file_name`): its name without the extension, which the
     /// file keeps.
     pub shared_file_name: Option<String>,
+    /// Addresses of a file host's files caught in the check window or pasted, to download those files from
+    /// (`Share::use_caught_links`).
+    pub caught_links: Vec<String>,
 }
 
 /// What downloading a post takes beyond a video's needs.
@@ -77,6 +81,9 @@ pub enum JobOutcome {
     },
     Cancelled,
     Failed(DownloadError),
+    /// A file host's files that need a person to open its check (`hosts::check`): the download waits for them, with
+    /// the files it could download already saved.
+    NeedsCheck(BrowserCheck),
 }
 
 pub trait JobRunner: Send + Sync {
@@ -353,6 +360,7 @@ mod tests {
             post: None,
             files: None,
             shared_file_name: None,
+            caught_links: Vec::new(),
         }
     }
 

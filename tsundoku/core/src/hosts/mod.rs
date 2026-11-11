@@ -1,7 +1,9 @@
 //! File hosts Tsundoku reads itself, without a tool: MEGA, MediaFire, Google Drive, Dropbox and OneDrive. A host's
 //! reader turns a share link into the files behind it (`Share`), once for the preview card and again when the
-//! download starts, since the addresses files download from expire. `downloads::file_runner` then saves them.
+//! download starts, since the addresses files download from expire. `downloads::file_runner` then saves them. A host
+//! may put a check only a person can pass in front of a file (`check`).
 
+pub mod check;
 pub mod drive;
 pub mod dropbox;
 pub mod mediafire;
@@ -125,8 +127,13 @@ impl Host {
         self.facts().sends_attachments
     }
 
-    /// Why the host answered with a page instead of a file.
+    /// Why the host answered with a page instead of a file. Cloudflare's check for a browser is the same on every host.
     pub(crate) fn page_error(self, page: &Page) -> PreviewError {
+        if check::is_browser_check(page) {
+            return PreviewError::BrowserCheck {
+                site: self.name().to_owned(),
+            };
+        }
         match self.facts().page_error {
             Some(page_error) => page_error(page),
             None => code_error(self, page.status).unwrap_or_else(|| PreviewError::Failed {
@@ -366,6 +373,8 @@ pub(crate) struct Page {
     pub url: String,
     pub status: StatusCode,
     pub html: String,
+    /// Cloudflare marked it as its check for a browser (`cf-mitigated: challenge`).
+    pub challenged: bool,
 }
 
 impl Page {
@@ -373,6 +382,11 @@ impl Page {
     pub(crate) fn read(response: Response) -> Self {
         let url = response.url().to_string();
         let status = response.status();
+        let challenged = response
+            .headers()
+            .get("cf-mitigated")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.trim().eq_ignore_ascii_case("challenge"));
         let mut bytes = Vec::new();
         // A page that doesn't arrive whole still has its status.
         let _ = response.take(PAGE_LIMIT).read_to_end(&mut bytes);
@@ -380,6 +394,7 @@ impl Page {
             url,
             status,
             html: String::from_utf8_lossy(&bytes).into_owned(),
+            challenged,
         }
     }
 }

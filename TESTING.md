@@ -145,9 +145,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Paste `https://1drv.ms/f/c/2d90e71fb9eb254f/EnMm8c2mP_FPv6lwt1jy01YB6bQhoPQ25vtzAhycYisERw?e=DiI2Ab` (a newer folder link) → "3 files, 2.6 GB".
 - Claude read a single file and that last folder's top level through OneDrive's API while building it; this PC's safety check stopped its later requests, so subfolders, the onedrive.live.com link forms and a real download weren't tried.
 
-**67. MediaFire's browser check** · 0.1.93
-- [ ] Open `https://www.mediafire.com/file/orecif6losbo2uw/file` in Firefox, click Download, cancel the download, then copy its link from the Downloads panel (`download….mediafire.com/…`) and add it to Tsundoku → it downloads, with progress, and the file is checked once it arrives.
-- Claude checked against MediaFire that the page link and an expired copied link both stop at the browser check with its message; only your browser can get a working copied link.
+**67. MediaFire's check** · 0.1.93, 0.1.103
+- [ ] Queue: add `https://www.mediafire.com/file/orecif6losbo2uw/file` (890 MB). If its row says "MediaFire wants to check you're a person…", click Open Check → a "MediaFire Check" window shows MediaFire's page. If Cloudflare asks to verify you're human, do it, then click Download → the window closes, nothing lands in your Downloads folder, and the download continues in Tsundoku with progress, then is checked. (If the row just downloads, MediaFire didn't ask Tsundoku for the check this time; try another file of yours that does.)
+- [ ] Remove that download, add the link again and close Tsundoku's window to the tray at once → when it reaches the check, a notification says "A Download Needs You".
+- Claude ran this in a dev build with that link: the download waited with the message, Open Check showed MediaFire's page (Cloudflare didn't challenge the window on this PC, so its check page itself wasn't seen), and a mouse click on Download sent through DevTools was caught; the window closed and Tsundoku downloaded and checked the file. A folder with several files behind the check, a pasted download link and the notification were only unit-tested.
 
 ## Pending and the Queue
 

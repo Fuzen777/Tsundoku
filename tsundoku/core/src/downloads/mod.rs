@@ -101,6 +101,11 @@ pub struct QueueItem {
     #[serde(skip)]
     #[ts(skip)]
     pub recovery: Recovery,
+    /// A file host's download addresses caught in the check window or pasted (`hosts::check`), which its next runs
+    /// download from while they still lead to the files. In memory only.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub caught_links: Vec<String>,
 }
 
 /// How much of a log the Queue's log viewer shows: its end.
@@ -393,6 +398,12 @@ impl DownloadQueue {
         })
     }
 
+    /// Whether the video is in the queue and not done yet, unless it waits for a check that `video`, the Download
+    /// button's own link, gets past (`pass_check_with`): what the preview card and Pending call "in the queue".
+    pub fn contains_video(&self, video: &VideoInfo) -> bool {
+        self.contains(&video.site, &video.video_id) && !self.check_takes(&video.url)
+    }
+
     /// Whether a download not done yet has exactly this address (its page's, as the tool that read it gave it).
     pub fn has_link(&self, url: &str) -> bool {
         lock(&self.state)
@@ -464,6 +475,7 @@ impl DownloadQueue {
             progress: None,
             hold: None,
             recovery: Recovery::default(),
+            caught_links: Vec::new(),
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -532,6 +544,10 @@ impl DownloadQueue {
         if !video.post_files.is_empty() && !video.post_files.iter().any(|file| file.picked) {
             return Err(DownloadError::NothingPicked);
         }
+        // The Download button's own link, pasted or copied, for a download that waits for its check.
+        if let Some(item) = self.pass_check_with(&video.url) {
+            return Ok(item);
+        }
         if self.contains(&video.site, &video.video_id) {
             return Err(DownloadError::AlreadyQueued);
         }
@@ -554,6 +570,7 @@ impl DownloadQueue {
             progress: None,
             hold: None,
             recovery: Recovery::default(),
+            caught_links: Vec::new(),
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -1021,6 +1038,7 @@ impl DownloadQueue {
                 .is_some()
                 .then(|| item.file_name.clone())
                 .flatten(),
+            caught_links: item.caught_links.clone(),
         }
     }
 
@@ -1095,6 +1113,11 @@ impl DownloadQueue {
                 (_, JobOutcome::Failed(_)) if retry.is_some() => {
                     item.state = QueueState::Waiting;
                 }
+                // It waits, with the files it could download saved, until a person opens the check.
+                (_, JobOutcome::NeedsCheck(check)) => {
+                    item.state = QueueState::Waiting;
+                    item.recovery.check = Some(check);
+                }
                 (_, JobOutcome::Failed(error)) => {
                     item.state = QueueState::Failed;
                     item.error = Some(error);
@@ -1117,6 +1140,7 @@ impl DownloadQueue {
                             remove_folder(&job.temp_folder);
                             self.site_worked(&item.video.url);
                             item.recovery = Recovery::default();
+                            item.caught_links.clear();
                         }
                         Err(error) => {
                             item.state = QueueState::Failed;

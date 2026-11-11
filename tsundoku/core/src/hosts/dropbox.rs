@@ -539,6 +539,7 @@ mod tests {
             url: SITE.to_owned(),
             status: StatusCode::from_u16(status).unwrap(),
             html: format!("<html><head><title>{title}</title></head></html>"),
+            challenged: false,
         };
         assert!(matches!(
             page_error(&page(200, "Dropbox - Invalid Link - Simplify your life")),

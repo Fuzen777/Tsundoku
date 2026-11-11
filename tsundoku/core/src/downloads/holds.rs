@@ -1,6 +1,7 @@
 //! Why a waiting download doesn't start yet: it lost its connection or found its site's download limit used up, and
-//! tries again by itself later (`Recovery`), its site answered "too many requests" (`site_limits`), or the hourly limit
-//! on a paced site's files is reached. The queue works each waiting item's hold out whenever it schedules, and a
+//! tries again by itself later (`Recovery`), its site answered "too many requests" (`site_limits`), the hourly limit
+//! on a paced site's files is reached, or a file host put files behind a check only a person can pass
+//! (`hosts::check`), which waits for them. The queue works each waiting item's hold out whenever it schedules, and a
 //! thread schedules again once one ends.
 
 use std::sync::Weak;
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{DownloadError, DownloadQueue, QueueItem, QueueState};
+use crate::hosts::check::BrowserCheck;
 use crate::metadata::PreviewError;
 use crate::settings::DownloadSettings;
 use crate::site_limits::{self, SiteWait, hourly_limit_end, now_ms};
@@ -44,6 +46,9 @@ pub struct Recovery {
     limits_reached: u32,
     /// Its own wait before the next run, after either: a `Hold::Retry` or `Hold::LimitReached`.
     wait: Option<Hold>,
+    /// The pages its last run found behind a check only a person can pass: it waits for them (`Hold::BrowserCheck`)
+    /// until the check window or a pasted link gets past them, or Resume or Retry tries afresh.
+    pub(super) check: Option<BrowserCheck>,
 }
 
 impl Recovery {
@@ -142,10 +147,13 @@ pub enum Hold {
         #[ts(type = "number")]
         until: i64,
     },
+    /// The site put `files` of its files behind a check only a person can pass (Cloudflare's browser check on
+    /// MediaFire): it waits, without end, until the person opens the check (`check_for`), or tries afresh.
+    BrowserCheck { site: String, files: u32 },
 }
 
 impl Hold {
-    /// When it ends, in milliseconds since 1970.
+    /// When it ends, in milliseconds since 1970: never for a check, which waits for a person.
     pub fn until(&self) -> i64 {
         match self {
             Self::SlowDown { until, .. }
@@ -153,6 +161,7 @@ impl Hold {
             | Self::Retry { until, .. }
             | Self::LimitReached { until, .. } => *until,
             Self::NotEnoughRoom { until, .. } => *until,
+            Self::BrowserCheck { .. } => i64::MAX,
         }
     }
 }
@@ -232,10 +241,67 @@ impl DownloadQueue {
         Ok(())
     }
 
-    /// Why `item` can't start at `now`: its own wait after losing its connection or finding the site's download limit
-    /// used up, its site's wait after a "too many requests", or the hourly limit on a paced site's files leaving no
-    /// room for its files (a post's, or one for a video).
+    /// The pages a download waiting for a check needs a person to open, for the check window. `WrongState` when it
+    /// doesn't wait for one.
+    pub fn check_for(&self, id: i64) -> Result<BrowserCheck, DownloadError> {
+        let mut state = lock(&self.state);
+        let item = super::find(&mut state.items, id)?;
+        match (&item.state, &item.recovery.check) {
+            (QueueState::Waiting, Some(check)) => Ok(check.clone()),
+            _ => Err(DownloadError::WrongState),
+        }
+    }
+
+    /// The check window caught `links`, the addresses of downloads a person started past the check: the download
+    /// keeps them to download those files from, stops waiting for the pages they get past, and starts once none is
+    /// left. A download that stopped or failed meanwhile keeps them for when it's resumed.
+    pub fn passed_check(&self, id: i64, links: Vec<String>) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let item = super::find(&mut state.items, id)?;
+            if matches!(item.state, QueueState::Done | QueueState::Running) {
+                return Err(DownloadError::WrongState);
+            }
+            take_links(item, links);
+        }
+        self.schedule();
+        Ok(())
+    }
+
+    /// A link pasted or copied for a file that a download waits for a check on (the Download button's own,
+    /// `download<n>.mediafire.com/…`), given to that download instead of adding another: the download, once given it.
+    pub(super) fn pass_check_with(&self, link: &str) -> Option<QueueItem> {
+        let item = {
+            let mut state = lock(&self.state);
+            let item = state
+                .items
+                .iter_mut()
+                .find(|item| waits_for_check_on(item, link))?;
+            take_links(item, vec![link.to_owned()]);
+            item.clone()
+        };
+        self.schedule();
+        Some(item)
+    }
+
+    /// Whether a download waits for a check that `link` gets past (`pass_check_with`).
+    pub(super) fn check_takes(&self, link: &str) -> bool {
+        lock(&self.state)
+            .items
+            .iter()
+            .any(|item| waits_for_check_on(item, link))
+    }
+
+    /// Why `item` can't start at `now`: files behind a check only a person can pass, its own wait after losing its
+    /// connection or finding the site's download limit used up, its site's wait after a "too many requests", or the
+    /// hourly limit on a paced site's files leaving no room for its files (a post's, or one for a video).
     fn hold_for(&self, item: &QueueItem, options: &DownloadSettings, now: i64) -> Option<Hold> {
+        if let Some(check) = &item.recovery.check {
+            return Some(Hold::BrowserCheck {
+                site: check.site.clone(),
+                files: u32::try_from(check.pages.len()).unwrap_or(u32::MAX),
+            });
+        }
         if let Some(wait) = &item.recovery.wait {
             return Some(wait.clone());
         }
@@ -282,6 +348,30 @@ impl DownloadQueue {
                 && item.hold.as_ref().is_some_and(|hold| hold.until() <= now)
         })
     }
+}
+
+/// Whether `item` waits for a check that `link` gets past.
+fn waits_for_check_on(item: &QueueItem, link: &str) -> bool {
+    item.state == QueueState::Waiting
+        && item
+            .recovery
+            .check
+            .as_ref()
+            .is_some_and(|check| check.takes(link))
+}
+
+/// Gives a download the addresses caught past its check, and drops the pages they get past; once none is left, it no
+/// longer waits for the check.
+fn take_links(item: &mut QueueItem, links: Vec<String>) {
+    if let Some(check) = &mut item.recovery.check {
+        for link in &links {
+            check.passed(link);
+        }
+        if check.pages.is_empty() {
+            item.recovery.check = None;
+        }
+    }
+    item.caught_links.extend(links);
 }
 
 /// Whether a run failed because its site answered "too many requests". It then waits instead of failing.

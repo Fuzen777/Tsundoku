@@ -156,6 +156,12 @@ A post of images (`video.post` set) is downloaded by gallery-dl instead, in `pos
 
 File host downloads (MEGA, MediaFire, Google Drive, Dropbox, OneDrive) don't run a tool: `file_runner.rs` reads the link again (`core::hosts`), then fetches each file over HTTPS into `<n>.part` in the item's temporary folder. A part file resumes with a `Range` request, MEGA's decrypted from where it stopped. Each file is checked when it's complete (MEGA's MAC, MediaFire's SHA-256, OneDrive's SHA-1); a damaged one is deleted and the item fails with `damaged`, so Retry downloads it again. Google Drive and Dropbox give no checksum, so their files are checked by size, and an answer that isn't the file (such as Google Drive's download limit page) fails the item before anything is written. Its progress is the bytes of all the share's files, with the speed limit applied by sleeping between reads, and its log names each file and its size (MEGA's key is never written).
 
+### A Check Only a Person Can Pass
+
+- A file whose page Cloudflare answers with its check for a browser (MediaFire sends some files' pages there) is left for later while the share's other files download (`hosts::check`). The run then ends as `NeedsCheck`, and the item waits with `Hold::BrowserCheck`, which never ends by itself and never fails.
+- Open Check shows those files' pages in the check window, one after another (`src-tauri/src/check_window.rs`). The person does what the check asks and starts the download on the page; the window catches its address as the page goes to it, so the WebView never fetches the file, and the item keeps the addresses (`caught_links`) and starts. The next run downloads those files from them, as a link copied from the Download button would be; files already in the folder are skipped.
+- An address that has run out by then sends the run back to the page, which may ask again. Resume and Retry try afresh. Like the other holds, it lives in memory: after a restart, the run finds the check again.
+
 ## Temporary Folders
 
 - Each item works in `<destination>\.tsundoku-<id>\`: on the same drive as the destination, so yt-dlp's final move is a rename, not a copy of a large file. The ID never repeats (`AUTOINCREMENT`).

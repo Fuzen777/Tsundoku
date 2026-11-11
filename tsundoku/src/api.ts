@@ -472,6 +472,13 @@ export async function tryDownloadNow(id: number): Promise<void> {
   await invoke("try_download_now", { id })
 }
 
+/** Open Check: shows the check a download waits for (a site's check that you're a person) in Tsundoku's check window,
+ * where the person passes it and starts the download on the site's page. */
+export async function openCheckWindow(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("open_check_window", { id })
+}
+
 /** Removes a download that isn't done, with its partial files. */
 export async function cancelDownload(id: number): Promise<void> {
   if (!isTauri()) return outsideTauri()

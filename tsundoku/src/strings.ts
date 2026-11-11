@@ -153,6 +153,7 @@ export const strings = {
     cancel: "Cancel",
     retry: "Retry",
     tryNow: "Try Now",
+    openCheck: "Open Check",
     openLog: "Open Log",
     showLog: "Show Log",
     hideLog: "Hide Log",
@@ -192,6 +193,10 @@ export const strings = {
         `${drive} has ${free} free, and this needs ${needed}. It starts by itself once there's room.`,
       notEnoughRoomBeside: (drive: string, free: string, needed: string, others: string) =>
         `${drive} has ${free} free, and this needs ${needed} besides the ${others} the downloads running there still need. It starts by itself once there's room.`,
+      browserCheck: (site: string, files: number) =>
+        files > 1
+          ? `${site} wants to check you're a person before ${files} of these files. They wait here until you open the check and start each one's download on ${site}'s page.`
+          : `${site} wants to check you're a person before this download. It waits here until you open the check and start the download on ${site}'s page.`,
     },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>

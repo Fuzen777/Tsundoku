@@ -152,7 +152,7 @@ fn preview_of(
                 last_download: history
                     .last_download(&video.site, &video.video_id)
                     .map_err(history_failed)?,
-                in_queue: queue.contains(&video.site, &video.video_id),
+                in_queue: queue.contains_video(&video),
                 video,
                 missing_js_runtime: fetched.missing_js_runtime,
             })))

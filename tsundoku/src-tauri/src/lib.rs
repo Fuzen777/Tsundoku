@@ -3,6 +3,7 @@
 mod appearance;
 mod background;
 mod backup;
+mod check_window;
 mod downloads;
 mod history;
 mod pending;
@@ -288,6 +289,8 @@ pub fn run() {
             app.manage(Backdrop { has_mica });
 
             let tool_manager = open_data(app)?;
+            app.manage(check_window::CheckWindow::default());
+            check_window::open_from_environment(app.handle());
             whats_new::note_start(
                 app.handle(),
                 &app.state::<Arc<SettingsStore>>(),
@@ -369,6 +372,7 @@ pub fn run() {
             downloads::resume_download,
             downloads::retry_download,
             downloads::try_download_now,
+            check_window::open_check_window,
             downloads::cancel_download,
             downloads::stop_all_downloads,
             downloads::resume_all_downloads,

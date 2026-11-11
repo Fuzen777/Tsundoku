@@ -19,3 +19,14 @@ describe("a download without room on its drive", () => {
     expect(holdEnd({ kind: "slowDown", site: "YouTube", until: 5 })).toBe(5)
   })
 })
+
+describe("a download behind a check", () => {
+  it("says it waits for you, without a countdown", () => {
+    const check: Hold = { kind: "browserCheck", site: "MediaFire", files: 1 }
+    expect(describeHold(check)).toBe(
+      "MediaFire wants to check you're a person before this download. It waits here until you open the check and start the download on MediaFire's page.",
+    )
+    expect(describeHold({ ...check, files: 3 })).toContain("before 3 of these files")
+    expect(holdEnd(check)).toBeNull()
+  })
+})

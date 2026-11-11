@@ -5,6 +5,7 @@ import {
   clearFinishedDownloads,
   confirmWithUser,
   downloadNext,
+  openCheckWindow,
   openDownload,
   pickFolder,
   removeFinishedDownload,
@@ -218,7 +219,15 @@ function QueueRow({ item }: { item: QueueItem }) {
           ])}
         </p>
         {item.state === "running" && <ProgressBar value={progress?.fraction ?? undefined} label={stage} />}
-        {hold && <StatusMessage tone="neutral" message={describeHold(hold)} detail={holdTimeLeft ?? undefined} />}
+        {hold && (
+          <StatusMessage tone="neutral" message={describeHold(hold)} detail={holdTimeLeft ?? undefined}>
+            {hold.kind === "browserCheck" && (
+              <Button size="sm" onClick={() => act(openCheckWindow)}>
+                {strings.queue.openCheck}
+              </Button>
+            )}
+          </StatusMessage>
+        )}
         {item.state === "failed" && item.error && (
           <StatusMessage tone="danger" {...describeDownloadError(item.error)}>
             {fixFor(item.error) && <FailureFixes error={item.error} />}
@@ -236,7 +245,7 @@ function QueueRow({ item }: { item: QueueItem }) {
             onClick={() => act(stopDownload)}
           />
         )}
-        {hold && hold.kind !== "hourlyLimit" && (
+        {hold && hold.kind !== "hourlyLimit" && hold.kind !== "browserCheck" && (
           <IconButton label={strings.queue.tryNow} icon={RefreshCw} onClick={() => act(tryDownloadNow)} />
         )}
         {item.state === "stopped" && (

@@ -1,7 +1,8 @@
 //! Downloading a file host's link (`hosts`) without a tool: every file of the share, one after another, into the
 //! item's folder, a shared folder keeping its own folders. Each file downloads into the item's temporary folder,
 //! continuing what an earlier run left there, is decrypted as it arrives (MEGA), checked once complete (MEGA's MAC,
-//! MediaFire's SHA-256), then moved into place.
+//! MediaFire's SHA-256), then moved into place. A file behind a check only a person can pass (`hosts::check`) is
+//! left for later while the others download, and the run ends asking for the check.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -18,6 +19,7 @@ use sha2::{Digest, Sha256};
 use super::runner::{JobOutcome, JobSpec, make_folders, open_log, seconds_since_epoch, write_log};
 use super::{DownloadError, DownloadProgress, DownloadStage};
 use crate::cancel::CancelToken;
+use crate::hosts::check::{BrowserCheck, CheckPage};
 use crate::hosts::{self, Address, FileCheck, Host, Page, RemoteFile};
 use crate::metadata::PreviewError;
 
@@ -30,6 +32,8 @@ const PROGRESS_INTERVAL: Duration = Duration::from_millis(500);
 enum Stop {
     Cancelled,
     Failed(DownloadError),
+    /// Files a person has to open the check for; the others are downloaded.
+    Check(BrowserCheck),
 }
 
 impl From<DownloadError> for Stop {
@@ -61,6 +65,17 @@ pub(super) fn run(
             format: None,
         },
         Err(Stop::Cancelled) => JobOutcome::Cancelled,
+        Err(Stop::Check(check)) => {
+            write_log(
+                &mut log,
+                &format!(
+                    "waiting for a person to open {}'s check ({} files)",
+                    check.site,
+                    check.pages.len()
+                ),
+            );
+            JobOutcome::NeedsCheck(check)
+        }
         Err(Stop::Failed(error)) => {
             write_log(&mut log, &format!("failed: {error}"));
             JobOutcome::Failed(error)
@@ -82,7 +97,8 @@ fn download(
 
     let host = Host::of(&job.url).ok_or(PreviewError::UnsupportedSite)?;
     let client = hosts::client()?;
-    let share = host.read(&client, &job.url, cancel)?;
+    let mut share = host.read(&client, &job.url, cancel)?;
+    share.use_caught_links(&job.caught_links);
     write_log(
         log,
         &format!("{} files, {} bytes", share.files.len(), share.total_bytes()),
@@ -91,6 +107,8 @@ fn download(
     let rate = job.rate_limit.as_deref().and_then(bytes_per_second);
     let mut meter = Meter::new(share.total_bytes(), rate);
     let mut saved = Vec::new();
+    // Files behind a check only a person can pass, left for later.
+    let mut behind: Option<BrowserCheck> = None;
     // A rule's name only for a share of one file, which might have become a folder since it was added.
     let single_name = job
         .shared_file_name
@@ -110,22 +128,46 @@ fn download(
             continue;
         }
         let part = job.temp_folder.join(format!("{index}.part"));
-        let address = file.source.address(&client, cancel)?;
-        write_log(
-            log,
-            &format!("{}: {} bytes", file.path.display(), file.size),
-        );
-        fetch(
-            &client,
-            host,
-            &address,
-            file,
-            &part,
-            cancel,
-            &mut meter,
-            log,
-            on_progress,
-        )?;
+        let fetched = file
+            .source
+            .address(&client, cancel)
+            .map_err(Stop::from)
+            .and_then(|address| {
+                write_log(
+                    log,
+                    &format!("{}: {} bytes", file.path.display(), file.size),
+                );
+                fetch(
+                    &client,
+                    host,
+                    &address,
+                    file,
+                    &part,
+                    cancel,
+                    &mut meter,
+                    log,
+                    on_progress,
+                )
+                .map(|()| address)
+            });
+        let address = match fetched {
+            Ok(address) => address,
+            Err(stop) => {
+                let page = behind_check(stop, file)?;
+                write_log(
+                    log,
+                    &format!("{}: behind a check, left for later", file.path.display()),
+                );
+                behind
+                    .get_or_insert_with(|| BrowserCheck {
+                        site: host.name().to_owned(),
+                        pages: Vec::new(),
+                    })
+                    .pages
+                    .push(page);
+                continue;
+            }
+        };
         // Checking a file and moving it is quick between a folder's files, so only the last one shows Finishing.
         if index + 1 == share.files.len() {
             on_progress(DownloadProgress::at(DownloadStage::Finishing));
@@ -140,8 +182,24 @@ fn download(
         }
         saved.push(place(&part, &destination)?);
     }
+    if let Some(check) = behind {
+        return Err(Stop::Check(check));
+    }
     on_progress(DownloadProgress::at(DownloadStage::Finishing));
     Ok(saved)
+}
+
+/// The page to open for a file the host put behind a check only a person can pass, or the run's end as it was.
+fn behind_check(stop: Stop, file: &RemoteFile) -> Result<CheckPage, Stop> {
+    match (&stop, CheckPage::of(&file.source)) {
+        (
+            Stop::Failed(DownloadError::YtDlp {
+                error: PreviewError::BrowserCheck { .. },
+            }),
+            Some(page),
+        ) => Ok(page),
+        _ => Err(stop),
+    }
 }
 
 /// Downloads a file to `part`, continuing what's already there when the host allows.
@@ -523,6 +581,43 @@ mod tests {
         assert!(matches!(check(&sha1, &part, &cancel), Ok(true)));
         let wrong_sha1 = FileCheck::Sha1("00".repeat(20));
         assert!(matches!(check(&wrong_sha1, &part, &cancel), Ok(false)));
+    }
+
+    #[test]
+    fn a_file_behind_a_check_is_left_for_later_when_it_has_a_page_to_open() {
+        use crate::hosts::FileSource;
+        let check = || {
+            Stop::Failed(DownloadError::YtDlp {
+                error: PreviewError::BrowserCheck {
+                    site: "MediaFire".to_owned(),
+                },
+            })
+        };
+        let file = |source| RemoteFile {
+            path: PathBuf::from("a.zip"),
+            size: 1,
+            source,
+        };
+        let mediafire = file(FileSource::MediaFire(hosts::mediafire::MediaFireFile {
+            quick_key: "abc123".to_owned(),
+            sha256: None,
+            direct: None,
+        }));
+        assert!(matches!(
+            behind_check(check(), &mediafire),
+            Ok(page) if page.url == "https://www.mediafire.com/file/abc123"
+        ));
+        let dropbox = file(FileSource::Dropbox(hosts::dropbox::DropboxFile {
+            url: "https://www.dropbox.com/scl/fi/a/a.zip?dl=1".to_owned(),
+        }));
+        assert!(
+            matches!(behind_check(check(), &dropbox), Err(Stop::Failed(_))),
+            "no page a person could open: it fails"
+        );
+        assert!(matches!(
+            behind_check(Stop::Failed(DownloadError::NoFile), &mediafire),
+            Err(Stop::Failed(DownloadError::NoFile))
+        ));
     }
 
     #[test]

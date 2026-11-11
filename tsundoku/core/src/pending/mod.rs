@@ -835,7 +835,7 @@ impl PendingLinks {
 
     /// Whether the queue or the history has the video already.
     fn has_video(&self, video: &VideoInfo) -> bool {
-        self.queue.contains(&video.site, &video.video_id)
+        self.queue.contains_video(video)
             || self
                 .history
                 .last_download(&video.site, &video.video_id)

@@ -522,6 +522,9 @@ export const standIns = {
         until: Date.now() + 30_000,
       },
     }),
+    queueStandIn(9, "waiting", "Behind a Check", {
+      hold: { kind: "browserCheck", site: "MediaFire", files: 1 },
+    }),
     queueStandIn(4, "stopped", "Stopped Halfway"),
     queueStandIn(5, "failed", "A Video That Failed", {
       error: { kind: "ytDlp", error: { kind: "unavailable", detail: "[youtube] video5: This video is unavailable" } },

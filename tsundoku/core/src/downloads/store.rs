@@ -81,6 +81,7 @@ impl QueueStore {
                 progress: None,
                 hold: None,
                 recovery: Recovery::default(),
+                caught_links: Vec::new(),
             });
         }
         Ok(items)

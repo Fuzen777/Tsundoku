@@ -425,6 +425,7 @@ mod tests {
             url: url.to_owned(),
             status: StatusCode::from_u16(status).unwrap(),
             html: html.to_owned(),
+            challenged: false,
         };
         assert!(matches!(
             page_error(&page("https://accounts.google.com/ServiceLogin?service=wise", 200, "")),
