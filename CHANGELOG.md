@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.117 · 2026-11-11
+
+### Added
+
+- **upload.ee**: pasting an upload.ee file link (upload.ee/files/…) shows the file's name, date and size, with Download. A deleted file says so.
+
 ## 0.1.116 · 2026-11-11
 
 ### Added
