@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.112 · 2026-11-11
+
+### Added
+
+- **Box**: pasting a Box shared link (app.box.com/s/…, or a company's Box site) to a file or a folder shows its name and what it holds, with Download; a folder keeps its subfolders. Box Notes in a folder are left out. A link with a password and one that was removed say so.
+
 ## 0.1.111 · 2026-11-11
 
 ### Added

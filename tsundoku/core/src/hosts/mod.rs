@@ -4,6 +4,7 @@
 //! may put a check only a person can pass in front of a file (`check`).
 
 pub mod archive;
+pub mod boxcom;
 pub mod check;
 pub mod drive;
 pub mod dropbox;
@@ -56,6 +57,7 @@ pub enum Host {
     WeTransfer,
     ArchiveOrg,
     YandexDisk,
+    Box,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -80,7 +82,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -90,6 +92,7 @@ impl Host {
         Self::WeTransfer,
         Self::ArchiveOrg,
         Self::YandexDisk,
+        Self::Box,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -99,6 +102,7 @@ impl Host {
             Self::GoogleDrive => &drive::FACTS,
             Self::Dropbox => &dropbox::FACTS,
             Self::OneDrive => &onedrive::FACTS,
+            Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,
             Self::WeTransfer => &wetransfer::FACTS,
@@ -253,6 +257,7 @@ pub enum FileSource {
     GoogleDrive(drive::DriveFile),
     Dropbox(dropbox::DropboxFile),
     OneDrive(onedrive::OneDriveFile),
+    Box(boxcom::BoxFile),
     YandexDisk(yandex::YandexFile),
     ArchiveOrg(archive::ArchiveFile),
     WeTransfer(wetransfer::WeTransferFile),
@@ -294,6 +299,10 @@ impl FileSource {
                 check: FileCheck::None,
             }),
             Self::OneDrive(file) => onedrive::address(client, file, cancel),
+            Self::Box(file) => Ok(Address {
+                url: boxcom::download_url(file),
+                check: FileCheck::None,
+            }),
             Self::YandexDisk(file) => yandex::address(client, file, cancel),
             Self::ArchiveOrg(file) => archive::address(client, file, cancel),
             Self::WeTransfer(file) => wetransfer::address(client, file, cancel),
