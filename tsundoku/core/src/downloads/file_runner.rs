@@ -25,6 +25,8 @@ use crate::metadata::PreviewError;
 
 /// How much is read from the network or the disk at a time.
 const BUFFER_SIZE: usize = 256 * 1024;
+/// How many times a server that can't be reached is asked again at once (`send`).
+const CONNECT_RETRIES: u32 = 2;
 /// How often progress is reported.
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -226,11 +228,7 @@ fn fetch(
         meter.skip(offset);
         return Ok(());
     }
-    let mut request = client.get(&address.url);
-    if offset > 0 {
-        request = request.header(RANGE, format!("bytes={offset}-"));
-    }
-    let mut response = request.send().map_err(hosts::network_error)?;
+    let mut response = send(client, &address.url, offset, cancel)?;
     if let Some(error) = hosts::status_error(host, &response) {
         return Err(error.into());
     }
@@ -301,6 +299,33 @@ fn fetch(
         .into());
     }
     Ok(())
+}
+
+/// Asks for a file from `offset`. A server that can't be reached is asked again at once, twice: a host that sends
+/// requests on to its servers (archive.org) may pick another one.
+fn send(
+    client: &Client,
+    url: &str,
+    offset: u64,
+    cancel: &CancelToken,
+) -> Result<reqwest::blocking::Response, Stop> {
+    let mut tries = 0;
+    loop {
+        if cancel.is_cancelled() {
+            return Err(Stop::Cancelled);
+        }
+        let mut request = client.get(url);
+        if offset > 0 {
+            request = request.header(RANGE, format!("bytes={offset}-"));
+        }
+        match request.send() {
+            Ok(response) => return Ok(response),
+            Err(error) if (error.is_connect() || error.is_timeout()) && tries < CONNECT_RETRIES => {
+                tries += 1;
+            }
+            Err(error) => return Err(hosts::network_error(error).into()),
+        }
+    }
 }
 
 /// Whether a downloaded file is what the host sent: MEGA's MAC, MediaFire's SHA-256 or OneDrive's SHA-1. Google Drive

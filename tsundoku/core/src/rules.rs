@@ -368,9 +368,15 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
 pub fn site_name(video: &VideoInfo) -> String {
     let site = sites::sign_in_site(&video.url)
         .map(|site| site.name)
-        .or_else(|| Host::of(&video.url).map(Host::name))
+        .or_else(|| file_host(video).map(Host::name))
         .unwrap_or(video.site.as_str());
     safe_folder_name(site, "Other")
+}
+
+/// The file host a download comes from, when Tsundoku reads it itself: a link on archive.org that yt-dlp read (a
+/// video) keeps yt-dlp's name for its site.
+fn file_host(video: &VideoInfo) -> Option<Host> {
+    video.files.and(Host::of(&video.url))
 }
 
 /// A download about to be queued, as rules see it.
@@ -400,7 +406,7 @@ impl RuleSubject<'_> {
             RuleField::Site => {
                 let mut names = vec![video.site.as_str(), video.site_name.as_str()];
                 names.extend(sites::sign_in_site(&video.url).map(|site| site.name));
-                names.extend(Host::of(&video.url).map(Host::name));
+                names.extend(file_host(video).map(Host::name));
                 names
             }
             RuleField::Uploader => video

@@ -228,9 +228,10 @@ fn read_with_tools(
         return Err(PreviewError::Playlist);
     }
     let set = LinkTools::new(tools, cookies_choice, link);
-    // A file host Tsundoku reads itself goes there first, since its domains are exact.
-    let fetched = match Host::of(link) {
-        Some(_) => hosts::read(link, cancel).map(|share| Fetched {
+    // A file host Tsundoku reads itself goes there first, since its domains are exact, unless it leaves the link to
+    // the tools.
+    let fetched = match read_host(link, cancel) {
+        Some(read) => read.map(|share| Fetched {
             video: share.video_info(),
             missing_js_runtime: false,
         }),
@@ -254,10 +255,15 @@ fn read_for_preview(
     cancel: &CancelToken,
 ) -> Result<Found, PreviewError> {
     let set = LinkTools::new(tools, cookies_choice, link);
+    let host_read = if listing::listing_link(link).is_some() {
+        None
+    } else {
+        read_host(link, cancel)
+    };
     let found = if let Some(listing_link) = listing::listing_link(link) {
         listing::read(&set.videos(true), &set.images(), &listing_link, cancel).map(Found::Listing)
-    } else if Host::of(link).is_some() {
-        hosts::read(link, cancel).map(|share| {
+    } else if let Some(read) = host_read {
+        read.map(|share| {
             Found::One(Fetched {
                 video: share.video_info(),
                 missing_js_runtime: false,
@@ -276,6 +282,16 @@ fn read_for_preview(
         )
     };
     found.map_err(|error| with_sign_in_state(error, cookies_choice, link))
+}
+
+/// Reads `link` as a file host's, or `None` when it isn't one's, or when its host leaves it to the tools: the
+/// Internet Archive declines its video and audio items (`UnsupportedSite`), which yt-dlp reads with the presets.
+fn read_host(link: &str, cancel: &CancelToken) -> Option<Result<hosts::Share, PreviewError>> {
+    Host::of(link)?;
+    match hosts::read(link, cancel) {
+        Err(PreviewError::UnsupportedSite) => None,
+        read => Some(read),
+    }
 }
 
 /// A sign-in error says which site and whether a browser is signed in to it, for the hint on the card; Instagram's
@@ -358,6 +374,18 @@ mod tests {
     use std::cell::RefCell;
 
     use super::*;
+
+    #[test]
+    fn the_internet_archive_leaves_video_and_audio_to_the_tools() {
+        // These are declined before anything is fetched.
+        for link in [
+            "https://archive.org/download/night_of_the_living_dead/night_of_the_living_dead_512kb.mp4",
+            "https://web.archive.org/web/2020/https://example.com/",
+            "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+        ] {
+            assert!(read_host(link, &CancelToken::new()).is_none(), "{link}");
+        }
+    }
     use crate::metadata::PostContents;
 
     const PHOTO: &str = "https://www.instagram.com/p/DfPQchkG1tg/";

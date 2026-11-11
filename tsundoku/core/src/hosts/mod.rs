@@ -3,6 +3,7 @@
 //! download starts, since the addresses files download from expire. `downloads::file_runner` then saves them. A host
 //! may put a check only a person can pass in front of a file (`check`).
 
+pub mod archive;
 pub mod check;
 pub mod drive;
 pub mod dropbox;
@@ -52,6 +53,7 @@ pub enum Host {
     OneDrive,
     PCloud,
     WeTransfer,
+    ArchiveOrg,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -76,7 +78,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -84,6 +86,7 @@ impl Host {
         Self::OneDrive,
         Self::PCloud,
         Self::WeTransfer,
+        Self::ArchiveOrg,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -93,6 +96,7 @@ impl Host {
             Self::GoogleDrive => &drive::FACTS,
             Self::Dropbox => &dropbox::FACTS,
             Self::OneDrive => &onedrive::FACTS,
+            Self::ArchiveOrg => &archive::FACTS,
             Self::WeTransfer => &wetransfer::FACTS,
             Self::PCloud => &pcloud::FACTS,
         }
@@ -245,6 +249,7 @@ pub enum FileSource {
     GoogleDrive(drive::DriveFile),
     Dropbox(dropbox::DropboxFile),
     OneDrive(onedrive::OneDriveFile),
+    ArchiveOrg(archive::ArchiveFile),
     WeTransfer(wetransfer::WeTransferFile),
     PCloud(pcloud::PCloudFile),
 }
@@ -284,6 +289,7 @@ impl FileSource {
                 check: FileCheck::None,
             }),
             Self::OneDrive(file) => onedrive::address(client, file, cancel),
+            Self::ArchiveOrg(file) => archive::address(client, file, cancel),
             Self::WeTransfer(file) => wetransfer::address(client, file, cancel),
             Self::PCloud(file) => pcloud::address(client, file, cancel),
         }

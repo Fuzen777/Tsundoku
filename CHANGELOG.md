@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.110 · 2026-11-11
+
+### Added
+
+- **Internet Archive items**: pasting an archive.org link to a book, software, images or any other item that isn't video or audio shows its title and files, with Download: the files its uploader gave it, in their own folders, without the copies archive.org makes of them (other formats, OCR text) or its records of the item. A link to one of an item's files (archive.org/download/…) downloads just that file, whichever it is. Each file is checked once it arrives. Video and audio items still go through yt-dlp with a preset, as before. A book only lent to read online says so.
+
+### Changed
+
+- A file host's server that can't be reached is asked again at once, twice, before the download waits to try again.
+
 ## 0.1.109 · 2026-11-11
 
 ### Changed
