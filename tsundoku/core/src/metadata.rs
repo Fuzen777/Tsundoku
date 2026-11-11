@@ -180,7 +180,8 @@ pub enum PreviewError {
         #[ts(type = "number")]
         seconds: u64,
     },
-    /// A mirror page (MultiUp's) whose mirrors are all on hosts Tsundoku doesn't read: `mirrors` names them.
+    /// A mirror page (MultiUp's, mirrored.to's) whose mirrors are all on sites Tsundoku doesn't read: `mirrors`
+    /// names them.
     #[error("{site} page with no mirror Tsundoku reads")]
     NoSupportedMirror { site: String, mirrors: Vec<String> },
     /// A file its owner keeps for the host's paying subscribers.

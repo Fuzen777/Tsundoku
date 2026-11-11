@@ -21,6 +21,7 @@ pub mod history;
 pub mod hosts;
 pub mod listing;
 pub mod metadata;
+pub mod mirrors;
 pub mod name_parts;
 pub mod pending;
 pub mod post_names;

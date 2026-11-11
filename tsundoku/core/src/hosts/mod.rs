@@ -13,7 +13,6 @@ pub mod filesfm;
 pub mod icedrive;
 pub mod mediafire;
 pub mod mega;
-pub mod multiup;
 pub mod onedrive;
 pub mod onefichier;
 pub mod pcloud;
@@ -71,7 +70,6 @@ pub enum Host {
     SwissTransfer,
     FilesFm,
     UploadEe,
-    MultiUp,
     TransferNow,
     Filemail,
 }
@@ -98,7 +96,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 17] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -114,7 +112,6 @@ impl Host {
         Self::SwissTransfer,
         Self::FilesFm,
         Self::UploadEe,
-        Self::MultiUp,
         Self::TransferNow,
         Self::Filemail,
     ];
@@ -131,7 +128,6 @@ impl Host {
             Self::SwissTransfer => &swisstransfer::FACTS,
             Self::FilesFm => &filesfm::FACTS,
             Self::UploadEe => &uploadee::FACTS,
-            Self::MultiUp => &multiup::FACTS,
             Self::TransferNow => &transfernow::FACTS,
             Self::Filemail => &filemail::FACTS,
             Self::Box => &boxcom::FACTS,
@@ -381,6 +377,11 @@ pub fn client() -> Result<Client, PreviewError> {
 /// The client a host's requests go through: saying it's Tsundoku, unless the host expects a browser.
 pub fn client_for(host: Host) -> Result<Client, PreviewError> {
     built(Client::builder(), host.user_agent())
+}
+
+/// A client saying it's Tsundoku, for a site that isn't one of the hosts (a mirror page).
+pub(crate) fn tsundoku_client() -> Result<Client, PreviewError> {
+    built(Client::builder(), HONEST_AGENT)
 }
 
 /// A host's client, answering redirects instead of following them: for a short link, whose redirect names what it

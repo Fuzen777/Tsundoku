@@ -16,6 +16,7 @@ use crate::history::{History, PastDownload};
 use crate::hosts::{self, Host};
 use crate::listing::{self, Found, Listing};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
+use crate::mirrors;
 use crate::pending::LinkReader;
 use crate::settings::{CookiesBrowser, SettingsStore};
 use crate::sites;
@@ -224,6 +225,8 @@ fn read_with_tools(
     any_page: bool,
     cancel: &CancelToken,
 ) -> Result<Fetched, PreviewError> {
+    let mirror = mirrors::resolve(link, cancel).transpose()?;
+    let link = mirror.as_deref().unwrap_or(link);
     if listing::listing_link(link).is_some() {
         return Err(PreviewError::Playlist);
     }
@@ -254,6 +257,8 @@ fn read_for_preview(
     link: &str,
     cancel: &CancelToken,
 ) -> Result<Found, PreviewError> {
+    let mirror = mirrors::resolve(link, cancel).transpose()?;
+    let link = mirror.as_deref().unwrap_or(link);
     let set = LinkTools::new(tools, cookies_choice, link);
     let host_read = if listing::listing_link(link).is_some() {
         None

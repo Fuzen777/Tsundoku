@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.121 · 2026-11-12
+
+### Added
+
+- **Mirrored.to mirror pages**: pasting a Mirrored.to link (mirrored.to/files/…, or a short mir.cr link) opens its first working mirror on a site Tsundoku downloads from, as MultiUp's pages do. When none of Tsundoku's own hosts is among the mirrors, a GoFile or Pixeldrain mirror is taken, for both kinds of pages. A page whose mirrors are all on other sites says which sites they are.
+
 ## 0.1.120 · 2026-11-12
 
 ### Added
