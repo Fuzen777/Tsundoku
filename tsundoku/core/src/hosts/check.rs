@@ -35,6 +35,12 @@ impl CheckPage {
                 host: Host::MediaFire,
                 file_id: file.quick_key.clone(),
             }),
+            // Its captcha (`yandex::page_error`), on the file's own page.
+            FileSource::YandexDisk(file) => Some(Self {
+                url: file.page(),
+                host: Host::YandexDisk,
+                file_id: file.name.clone(),
+            }),
             FileSource::Mega(_)
             | FileSource::GoogleDrive(_)
             | FileSource::Dropbox(_)
@@ -77,6 +83,7 @@ impl BrowserCheck {
 fn caught_file(host: Host, download: &str) -> Option<String> {
     match host {
         Host::MediaFire => super::mediafire::direct_link_key(download),
+        Host::YandexDisk => super::yandex::caught_file(download),
         Host::Mega
         | Host::GoogleDrive
         | Host::Dropbox
@@ -92,13 +99,17 @@ impl Share {
     /// still leads to the file. A later link for a file replaces an earlier one.
     pub fn use_caught_links(&mut self, links: &[String]) {
         for file in &mut self.files {
-            let FileSource::MediaFire(file) = &mut file.source else {
-                continue;
+            let (key, direct) = match &mut file.source {
+                FileSource::MediaFire(file) => (file.quick_key.clone(), &mut file.direct),
+                FileSource::YandexDisk(file) => (file.name.clone(), &mut file.direct),
+                _ => continue,
             };
-            if let Some(link) = links.iter().rev().find(|link| {
-                super::mediafire::direct_link_key(link).as_deref() == Some(&file.quick_key)
-            }) {
-                file.direct = Some(link.clone());
+            if let Some(link) = links
+                .iter()
+                .rev()
+                .find(|link| caught_file(self.host, link).as_deref() == Some(key.as_str()))
+            {
+                *direct = Some(link.clone());
             }
         }
     }

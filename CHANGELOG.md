@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.111 · 2026-11-11
+
+### Added
+
+- **Yandex Disk**: pasting a public Yandex Disk link (disk.yandex.ru, yadi.sk and its other domains) to a file or a folder shows its name, date and what it holds, with Download; a folder keeps its subfolders, and each file is checked once it arrives. A link to a single video still goes through yt-dlp with a preset, as before. When Yandex asks for its captcha before a file, the download waits for you to open the check, as MediaFire's does. A deleted link and one whose downloads are used up for now say so.
+
 ## 0.1.110 · 2026-11-11
 
 ### Added

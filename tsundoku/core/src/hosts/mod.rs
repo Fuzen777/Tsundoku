@@ -12,6 +12,7 @@ pub mod mega;
 pub mod onedrive;
 pub mod pcloud;
 pub mod wetransfer;
+pub mod yandex;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -54,6 +55,7 @@ pub enum Host {
     PCloud,
     WeTransfer,
     ArchiveOrg,
+    YandexDisk,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -78,7 +80,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -87,6 +89,7 @@ impl Host {
         Self::PCloud,
         Self::WeTransfer,
         Self::ArchiveOrg,
+        Self::YandexDisk,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -96,6 +99,7 @@ impl Host {
             Self::GoogleDrive => &drive::FACTS,
             Self::Dropbox => &dropbox::FACTS,
             Self::OneDrive => &onedrive::FACTS,
+            Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,
             Self::WeTransfer => &wetransfer::FACTS,
             Self::PCloud => &pcloud::FACTS,
@@ -249,6 +253,7 @@ pub enum FileSource {
     GoogleDrive(drive::DriveFile),
     Dropbox(dropbox::DropboxFile),
     OneDrive(onedrive::OneDriveFile),
+    YandexDisk(yandex::YandexFile),
     ArchiveOrg(archive::ArchiveFile),
     WeTransfer(wetransfer::WeTransferFile),
     PCloud(pcloud::PCloudFile),
@@ -289,6 +294,7 @@ impl FileSource {
                 check: FileCheck::None,
             }),
             Self::OneDrive(file) => onedrive::address(client, file, cancel),
+            Self::YandexDisk(file) => yandex::address(client, file, cancel),
             Self::ArchiveOrg(file) => archive::address(client, file, cancel),
             Self::WeTransfer(file) => wetransfer::address(client, file, cancel),
             Self::PCloud(file) => pcloud::address(client, file, cancel),
