@@ -15,6 +15,7 @@ use ts_rs::TS;
 
 use crate::hosts::Host;
 use crate::metadata::VideoInfo;
+use crate::name_parts::{NamePart, join_leaving_out};
 use crate::post_names::{self, PostNameError};
 use crate::presets::Preset;
 use crate::settings::{SettingsError, SettingsStore};
@@ -67,6 +68,10 @@ pub struct FolderRule {
     /// name. Videos keep their preset's name. See `file_name`. Missing in rules saved before 0.1.96.
     #[serde(default)]
     pub file_name: String,
+    /// What a placeholder in `folder` or `file_name` becomes when the download has no value for it, such as `{account}`
+    /// for a file host: a word in its place, or nothing. Missing in rules saved before 0.1.101.
+    #[serde(default)]
+    pub missing_values: MissingValues,
     /// The preset matching videos start with, by its ID, or `None` to leave it to the rules before it. A rule that
     /// checks the kind or the preset can't pick one (`can_pick_preset`), since both depend on the preset.
     #[serde(default)]
@@ -87,6 +92,22 @@ pub enum ConditionJoin {
     All,
     /// OR: either is enough, "when the site is X OR the site is Bluesky".
     Any,
+}
+
+/// What a placeholder becomes in a rule's folder and file name when the download has no value for it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum MissingValues {
+    /// A word stands in for it in the folder: Unknown, No Playlist for `{playlist}`, Untitled for `{title}`, the kind for
+    /// `{preset}`. In the file name, `{account}` becomes the site, and an unknown date or a group the pattern didn't
+    /// capture is left out (`name_parts::join_leaving_out`), as Settings → Posts of Images does.
+    #[default]
+    StandIn,
+    /// It's left out with the text that separates it from the placeholder before it (or after it, when it's the first),
+    /// and a folder of the path whose placeholders all have no value goes with its separator: `{site}\{account}` is
+    /// `MediaFire`. In the file name, `{account}` too.
+    LeaveOut,
 }
 
 /// One test of a download: its `field` compared to `value`, ignoring case unless `case_sensitive`.
@@ -309,6 +330,7 @@ pub fn catch_all_rule() -> FolderRule {
         conditions: Vec::new(),
         folder: format!("{{{SITE_PLACEHOLDER}}}"),
         file_name: String::new(),
+        missing_values: MissingValues::StandIn,
         preset_id: None,
         download_right_away: None,
         join: ConditionJoin::All,
@@ -333,6 +355,7 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
             .display()
             .to_string(),
         file_name: String::new(),
+        missing_values: MissingValues::StandIn,
         preset_id: None,
         download_right_away: None,
         join: ConditionJoin::All,
@@ -467,7 +490,7 @@ impl FolderRule {
             return Err(RuleError::NoAction { rule: number });
         }
         if !self.file_name.trim().is_empty()
-            && let Err(error) = post_names::check_text(&fill_captures(&self.file_name, None))
+            && let Err(error) = post_names::check_text(&self.file_name)
         {
             return Err(RuleError::FileName {
                 rule: number,
@@ -685,11 +708,12 @@ fn rule_number(index: usize) -> u32 {
 }
 
 /// How a download's files are named by the rules: the file name of the last rule that's on, names files and matches,
-/// with `{1}` to `{9}` filled in from its pattern, or `None` to leave it to Settings (a post) or the file's own name.
-/// A post's name is kept as Settings → Posts of Images writes one, with ` {post}` and ` {number}` added when it lacks
-/// them so no two files share a name, for `post_names::gallery_format`. A file host's link of one file gets its name
-/// filled in (`post_names::shared_file_name`), without the extension, which the file keeps. A video keeps its preset's
-/// name, and a shared folder's files their own.
+/// with `{1}` to `{9}` filled in from its pattern and, when the rule leaves out what's missing, `{account}` taken out
+/// for a download without one (`post_names::fill_rule_name`), or `None` to leave it to Settings (a post) or the file's
+/// own name. A post's name is kept as Settings → Posts of Images writes one, with `{post}` and `{number}` added when it
+/// lacks them so no two files share a name, for `post_names::gallery_format`. A file host's link of one file gets its
+/// name filled in (`post_names::shared_file_name`), without the extension, which the file keeps. A video keeps its
+/// preset's name, and a shared folder's files their own.
 pub fn file_name(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<String> {
     let video = subject.video;
     let is_post = video.post.is_some();
@@ -704,33 +728,30 @@ pub fn file_name(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<Stri
             && rule.matches(subject)
     })?;
     let captured = rule.captured(subject);
-    let mut name = fill_captures(rule.file_name.trim(), captured.as_deref());
+    let filled = post_names::fill_rule_name(
+        rule.file_name.trim(),
+        video,
+        captured.as_deref(),
+        rule.missing_values,
+    );
+    let mut name = filled.trim().to_owned();
     if !is_post {
         return Some(post_names::shared_file_name(&name, video));
     }
     let lowered = name.to_lowercase();
-    if !lowered.contains("{post}") {
-        name.push_str(" {post}");
-    }
-    if !lowered.contains("{number}") && !lowered.contains("{numberifmany}") {
-        name.push_str(" {number}");
+    let lacks_number = !lowered.contains("{number}") && !lowered.contains("{numberifmany}");
+    for (lacks, placeholder) in [
+        (!lowered.contains("{post}"), "{post}"),
+        (lacks_number, "{number}"),
+    ] {
+        if lacks {
+            if !name.is_empty() {
+                name.push(' ');
+            }
+            name.push_str(placeholder);
+        }
     }
     Some(name)
-}
-
-/// `{1}` to `{9}` in a file name replaced by what the rule's pattern captured (`captured`, whole match first), made safe
-/// for a file name and without braces, or by nothing when there's no such group.
-fn fill_captures(name: &str, captured: Option<&[Option<String>]>) -> String {
-    let mut filled = name.to_owned();
-    for group in 1..=9 {
-        let value = captured
-            .and_then(|groups| groups.get(group))
-            .and_then(Option::as_deref)
-            .map(|value| safe_folder_name(&value.replace(['{', '}'], ""), ""))
-            .unwrap_or_default();
-        filled = filled.replace(&format!("{{{group}}}"), &value);
-    }
-    filled
 }
 
 /// A rule's folder for one download added on `today`: its placeholders filled in, inside the download folder unless
@@ -744,26 +765,38 @@ fn rule_folder(
     let fill_in = FillIn {
         captured: rule.captured(subject),
         today,
+        missing: rule.missing_values,
     };
-    let folder = PathBuf::from(fill_placeholders(rule.folder.trim(), subject, &fill_in));
-    if folder.is_absolute() {
-        folder
-    } else {
-        download_folder.join(folder)
-    }
+    inside_download_folder(
+        fill_placeholders(rule.folder.trim(), subject, &fill_in),
+        download_folder,
+    )
 }
 
 /// A folder with the rules' placeholders filled in for one download added today, inside the download folder unless it's
-/// a full path: a watched source's Save In. `{1}` to `{9}` stay as they are, having no pattern.
+/// a full path: a watched source's Save In. `{1}` to `{9}` stay as they are, having no pattern, and a placeholder
+/// without a value gets its stand-in word.
 pub fn filled_folder(template: &str, subject: &RuleSubject<'_>, download_folder: &Path) -> PathBuf {
     let today = local_date();
     let fill_in = FillIn {
         captured: None,
         today: &today,
+        missing: MissingValues::StandIn,
     };
-    let folder = PathBuf::from(fill_placeholders(template.trim(), subject, &fill_in));
+    inside_download_folder(
+        fill_placeholders(template.trim(), subject, &fill_in),
+        download_folder,
+    )
+}
+
+/// A filled-in folder as it is when it's a full path, else inside the download folder; the download folder itself when
+/// nothing is left of it.
+fn inside_download_folder(folder: String, download_folder: &Path) -> PathBuf {
+    let folder = PathBuf::from(folder);
     if folder.is_absolute() {
         folder
+    } else if folder.as_os_str().is_empty() {
+        download_folder.to_path_buf()
     } else {
         download_folder.join(folder)
     }
@@ -775,42 +808,96 @@ struct FillIn<'a> {
     captured: Option<Vec<Option<String>>>,
     /// The local date it's added, as YYYY-MM-DD.
     today: &'a str,
+    /// What a placeholder the download has no value for becomes.
+    missing: MissingValues,
 }
 
 /// Every placeholder (`placeholder_value`), in any case, replaced by the download's value, made safe as a folder's
-/// name. Other text in braces stays as it is.
+/// name. Other text in braces stays as it is. A placeholder the download has no value for becomes its stand-in word,
+/// or, when the rule leaves out what's missing, goes with the text that separates it, and a folder of the path whose
+/// placeholders all have no value goes with its separator (`fill_folder_name`).
 fn fill_placeholders(folder: &str, subject: &RuleSubject<'_>, fill_in: &FillIn<'_>) -> String {
     let mut filled = String::with_capacity(folder.len());
+    // The separator after the last folder kept, written once another one follows it.
+    let mut separator_after_kept: Option<&str> = None;
+    let mut left_out = false;
     let mut rest = folder;
+    loop {
+        let (name, separator, next) = match rest.find(['\\', '/']) {
+            Some(at) => (&rest[..at], &rest[at..=at], Some(&rest[at + 1..])),
+            None => (rest, "", None),
+        };
+        match fill_folder_name(name, subject, fill_in) {
+            Some(name) => {
+                filled.push_str(separator_after_kept.unwrap_or_default());
+                filled.push_str(&name);
+                separator_after_kept = Some(separator);
+            }
+            None => left_out = true,
+        }
+        let Some(next) = next else {
+            break;
+        };
+        rest = next;
+    }
+    // A drive alone, as `D:\{account}` leaves, is the drive's current folder, not its root.
+    if left_out && filled.ends_with(':') {
+        filled.push('\\');
+    }
+    filled
+}
+
+/// One folder's name in a rule's folder, its placeholders filled in (`placeholder_value`), or `None` when it has
+/// placeholders and none has a value. One that had a placeholder left out loses the spaces and dots at its ends, which
+/// Windows doesn't keep, and goes too when nothing is left.
+fn fill_folder_name(name: &str, subject: &RuleSubject<'_>, fill_in: &FillIn<'_>) -> Option<String> {
+    let mut parts = Vec::new();
+    let push_text = |parts: &mut Vec<NamePart>, text: &str| {
+        if !text.is_empty() {
+            parts.push(NamePart::text(text));
+        }
+    };
+    let mut rest = name;
     while let Some(start) = rest.find('{') {
-        filled.push_str(&rest[..start]);
+        push_text(&mut parts, &rest[..start]);
         rest = &rest[start..];
         let Some(end) = rest.find('}') else {
             break;
         };
         match placeholder_value(&rest[1..end], subject, fill_in) {
-            Some(value) => filled.push_str(&value),
-            None => filled.push_str(&rest[..=end]),
+            Some(value) => parts.push(value),
+            None => push_text(&mut parts, &rest[..=end]),
         }
         rest = &rest[end + 1..];
     }
-    filled.push_str(rest);
-    filled
+    push_text(&mut parts, rest);
+    if !parts.iter().any(NamePart::is_missing) {
+        return Some(join_leaving_out(&parts));
+    }
+    if !parts
+        .iter()
+        .any(|part| matches!(part, NamePart::Value(Some(_))))
+    {
+        return None;
+    }
+    let joined = join_leaving_out(&parts);
+    let trimmed = joined.trim_matches([' ', '.']);
+    (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
-/// What a placeholder in a rule's folder becomes, made safe as a folder's name, with a word for a value the download
-/// doesn't have. `None` for a name that isn't a placeholder, and for `{1}` to `{9}` in a rule without a pattern that
-/// captures, which then stay as they are.
+/// What a placeholder in a rule's folder becomes: the download's value, made safe as a folder's name, else a word in
+/// its place or nothing (`MissingValues`). `None` for a name that isn't a placeholder, and for `{1}` to `{9}` in a rule
+/// without a pattern that captures, which then stay as they are.
 fn placeholder_value(
     name: &str,
     subject: &RuleSubject<'_>,
     fill_in: &FillIn<'_>,
-) -> Option<String> {
+) -> Option<NamePart> {
     let video = subject.video;
     let uploaded = video.upload_date.as_deref();
     let kind = subject.kind().folder_name();
-    let (value, fallback): (Option<&str>, &str) = match name.to_ascii_lowercase().as_str() {
-        SITE_PLACEHOLDER => return Some(site_name(video)),
+    let (value, stand_in): (Option<&str>, &str) = match name.to_ascii_lowercase().as_str() {
+        SITE_PLACEHOLDER => return Some(NamePart::Value(Some(site_name(video)))),
         "uploader" => (video.uploader.as_deref(), "Unknown"),
         // The name stands in on a site without handles.
         "account" => (
@@ -833,21 +920,27 @@ fn placeholder_value(
                 return None;
             };
             let captured = fill_in.captured.as_ref()?;
-            let group = captured.get(usize::from(digit - b'0')).cloned().flatten();
-            return Some(folder_part(group.as_deref().unwrap_or_default(), "Unknown"));
+            let group = captured.get(usize::from(digit - b'0'));
+            (group.and_then(Option::as_deref), "Unknown")
         }
     };
-    Some(folder_part(value.unwrap_or_default(), fallback))
+    let value = folder_part(value.unwrap_or_default());
+    Some(NamePart::Value(match fill_in.missing {
+        _ if !value.is_empty() => Some(value),
+        MissingValues::StandIn => Some(stand_in.to_owned()),
+        MissingValues::LeaveOut => None,
+    }))
 }
 
-/// `value` made safe as one folder's name (`safe_folder_name`), cut to `LONGEST_PLACEHOLDER` characters.
-fn folder_part(value: &str, fallback: &str) -> String {
-    let safe = safe_folder_name(value, fallback);
+/// `value` made safe as one folder's name (`safe_folder_name`), cut to `LONGEST_PLACEHOLDER` characters; empty when
+/// nothing is left.
+fn folder_part(value: &str) -> String {
+    let safe = safe_folder_name(value, "");
     if safe.chars().count() <= LONGEST_PLACEHOLDER {
         return safe;
     }
     let cut: String = safe.chars().take(LONGEST_PLACEHOLDER).collect();
-    safe_folder_name(&cut, fallback)
+    safe_folder_name(&cut, "")
 }
 
 /// Today's local date, as YYYY-MM-DD, for `{added}`.
@@ -1045,6 +1138,7 @@ mod tests {
             conditions,
             folder: folder.to_owned(),
             file_name: String::new(),
+            missing_values: MissingValues::StandIn,
             preset_id: None,
             download_right_away: None,
             join: ConditionJoin::All,
@@ -1674,6 +1768,172 @@ mod tests {
         assert_eq!(folder_on(&[without], &episode, None), r"D:\Series\{1}");
     }
 
+    /// A rule that leaves out placeholders without a value.
+    fn leaving_out(rule: FolderRule) -> FolderRule {
+        FolderRule {
+            missing_values: MissingValues::LeaveOut,
+            ..rule
+        }
+    }
+
+    #[test]
+    fn leaves_out_a_folder_whose_placeholders_have_no_value() {
+        let shared = mega_file();
+        let by_account = rule(Vec::new(), r"{site}\{account}");
+        assert_eq!(
+            folder_on(std::slice::from_ref(&by_account), &shared, None),
+            r"D:\Tsundoku\MEGA\Unknown",
+            "Unknown to start with"
+        );
+        assert_eq!(
+            folder_on(&[leaving_out(by_account)], &shared, None),
+            r"D:\Tsundoku\MEGA"
+        );
+        for (folder, expected) in [
+            (r"{account}\{site}", r"D:\Tsundoku\MEGA"),
+            (r"D:\Hydrus\{uploader}\{playlist}\{site}", r"D:\Hydrus\MEGA"),
+            (r"D:\{account}", r"D:\"),
+            (r"D:\{account}\", r"D:\"),
+            (r"\\server\share\{account}/{site}", r"\\server\share\MEGA"),
+            (r"{site}\By {account}", r"D:\Tsundoku\MEGA"),
+            (r"{site}\{account} - {year}", r"D:\Tsundoku\MEGA"),
+            (r"{site}\{preset}", r"D:\Tsundoku\MEGA"),
+            (
+                r"{site}\{kind}\{added}",
+                r"D:\Tsundoku\MEGA\Files\2026-11-06",
+            ),
+            (r"{site}\{other}\{account}", r"D:\Tsundoku\MEGA\{other}"),
+        ] {
+            assert_eq!(
+                folder_on(&[leaving_out(rule(Vec::new(), folder))], &shared, None),
+                expected,
+                "{folder}"
+            );
+        }
+
+        let mut dated = shared.clone();
+        dated.upload_date = Some("2026-11-04".to_owned());
+        let named = leaving_out(rule(Vec::new(), r"{site}\{account} - {year} ({month})"));
+        assert_eq!(
+            folder_on(&[named], &dated, None),
+            r"D:\Tsundoku\MEGA\2026 (11)",
+            "a folder keeps what has a value, without the separator of what's left out"
+        );
+        assert_eq!(
+            folder_on(
+                &[leaving_out(rule(Vec::new(), r"{site}\{uploader}"))],
+                &tweet(),
+                None
+            ),
+            r"D:\Tsundoku\X\NASA",
+            "a value the download has stays"
+        );
+        assert_eq!(
+            folder_on(&[leaving_out(rule(Vec::new(), "{account}"))], &shared, None),
+            DOWNLOADS,
+            "nothing left is the download folder"
+        );
+    }
+
+    #[test]
+    fn leaves_out_a_group_the_pattern_didnt_capture() {
+        let mut episode = video();
+        episode.title = "[Show] Episode 12".to_owned();
+        let captures = leaving_out(rule(
+            vec![condition(
+                RuleField::Title,
+                RuleOperator::Matches,
+                r"^\[(.+?)\] episode (\d+)(x)?",
+            )],
+            r"D:\Series\{1}\{3}\{2}",
+        ));
+        assert_eq!(folder_on(&[captures], &episode, None), r"D:\Series\Show\12");
+        let without = leaving_out(rule(
+            vec![condition(
+                RuleField::Title,
+                RuleOperator::Contains,
+                "episode",
+            )],
+            r"D:\Series\{1}",
+        ));
+        assert_eq!(
+            folder_on(&[without], &episode, None),
+            r"D:\Series\{1}",
+            "a rule without a pattern that captures has no {{1}}"
+        );
+    }
+
+    #[test]
+    fn leaves_out_what_a_file_name_has_no_value_for() {
+        let rj = condition(RuleField::Title, RuleOperator::Matches, r"(RJ\d+)");
+        let named = |name: &str| FolderRule {
+            file_name: name.to_owned(),
+            ..rule(vec![rj.clone()], "")
+        };
+        let shared = VideoInfo {
+            title: "SomefileRJ123456.rar".to_owned(),
+            ..mega_file()
+        };
+        let shared_subject = RuleSubject {
+            video: &shared,
+            preset: None,
+        };
+        assert_eq!(
+            file_name(&[named("{account} - {1}")], &shared_subject).as_deref(),
+            Some("MEGA - RJ123456"),
+            "the site stands in for the account to start with"
+        );
+        assert_eq!(
+            file_name(&[leaving_out(named("{account} - {1}"))], &shared_subject).as_deref(),
+            Some("RJ123456")
+        );
+        assert_eq!(
+            file_name(&[named("{1} - {2} - {date} - {post}")], &shared_subject).as_deref(),
+            Some("RJ123456 - AbCdEf12"),
+            "a group the pattern doesn't have and an unknown date go with their separators either way"
+        );
+
+        let mut post = tweet();
+        post.title = "RJ01234".to_owned();
+        post.uploader = None;
+        let post_subject = RuleSubject {
+            video: &post,
+            preset: None,
+        };
+        assert_eq!(
+            file_name(&[named("{account}_{post} {number}")], &post_subject).as_deref(),
+            Some("{account}_{post} {number}")
+        );
+        assert_eq!(
+            file_name(
+                &[leaving_out(named("{account}_{post} {number}"))],
+                &post_subject
+            )
+            .as_deref(),
+            Some("{post} {number}")
+        );
+        assert_eq!(
+            file_name(&[leaving_out(named("{account}"))], &post_subject).as_deref(),
+            Some("{post} {number}"),
+            "the post and the number added without a space before them"
+        );
+        assert_eq!(
+            file_name(
+                &[leaving_out(named("{account} {post} {number}"))],
+                &RuleSubject {
+                    video: &VideoInfo {
+                        title: "RJ01234".to_owned(),
+                        ..tweet()
+                    },
+                    preset: None,
+                }
+            )
+            .as_deref(),
+            Some("{account} {post} {number}"),
+            "an account the post has stays"
+        );
+    }
+
     #[test]
     fn a_folder_that_isnt_a_full_path_is_inside_the_download_folder() {
         let tweet = tweet();
@@ -2005,6 +2265,26 @@ mod tests {
             manager.save(vec![with_actions]).unwrap(),
             vec![catch_all_rule()],
             "it only picks a folder"
+        );
+    }
+
+    #[test]
+    fn keeps_leaving_out_through_a_save_and_on_the_catch_all() {
+        let folder = tempfile::tempdir().unwrap();
+        let manager = manager_in(&folder);
+        let catch_all = leaving_out(catch_all_rule());
+        let saved = manager
+            .save(vec![
+                catch_all.clone(),
+                leaving_out(rule(Vec::new(), r"D:\{account}")),
+            ])
+            .unwrap();
+        assert_eq!(saved[0], catch_all);
+        assert_eq!(saved[1].missing_values, MissingValues::LeaveOut);
+        assert_eq!(manager.list(), saved);
+        assert_eq!(
+            serde_json::to_value(&saved[1]).unwrap()["missingValues"],
+            "leaveOut"
         );
     }
 

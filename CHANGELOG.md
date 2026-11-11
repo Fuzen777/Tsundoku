@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.102 · 2026-11-11
+
+### Added
+
+- **Placeholders without a value**: a rule can leave out a placeholder the download has no value for instead of writing Unknown. With its new When a Placeholder Has No Value set to Leave Out, `{site}\{account}` saves a MediaFire file in MediaFire rather than MediaFire\Unknown: a folder whose placeholders all have no value goes, and one with some keeps them, without the separator of what's missing. In the rule's File Name, `{account}` on a download without one is left out the same way instead of becoming the site. Every rule starts with Write Unknown, as before. The rule's row says "Leaves out placeholders without a value", and How Rules Work explains both.
+
+### Fixed
+
+- A rule's file name no longer keeps the separator of a {1} its pattern didn't capture, or of a shared file's unknown date: "{account} - {date} - {post}" on a MEGA file is "MEGA - AbCdEf12", not "MEGA - - AbCdEf12".
+
 ## 0.1.101 · 2026-11-11
 
 ### Changed

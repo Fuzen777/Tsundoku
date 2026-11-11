@@ -573,6 +573,7 @@ fn no_actions() -> rules::FolderRule {
         conditions: Vec::new(),
         folder: String::new(),
         file_name: String::new(),
+        missing_values: rules::MissingValues::StandIn,
         preset_id: None,
         download_right_away: None,
         join: rules::ConditionJoin::All,

@@ -95,6 +95,7 @@ export function newRule(): FolderRule {
     conditions: [newCondition("site", "")],
     folder: "",
     fileName: "",
+    missingValues: "standIn",
     presetId: null,
     downloadRightAway: null,
   }
@@ -128,12 +129,16 @@ export function canPickPreset(conditions: readonly RuleCondition[]): boolean {
   return !conditions.some((condition) => condition.field === "kind" || condition.field === "preset")
 }
 
-/** What a rule does besides picking a folder, as short phrases: the preset it starts videos with, and whether
+/** What a rule does besides picking a folder, as short phrases: how it names files, whether it leaves out placeholders
+ * without a value (when it has a folder or a file name for them), the preset it starts videos with, and whether
  * matching links download right away. */
 export function describeActions(rule: FolderRule, presets: readonly Preset[]): string[] {
   const actions = text.actions
   const phrases: string[] = []
   if (rule.fileName.trim()) phrases.push(actions.namesFiles(rule.fileName.trim()))
+  if (rule.missingValues === "leaveOut" && (rule.folder.trim() || rule.fileName.trim())) {
+    phrases.push(actions.leavesOut)
+  }
   if (rule.presetId !== null) {
     const preset = presets.find((candidate) => candidate.id === rule.presetId)
     phrases.push(preset ? actions.startsAs(preset.name) : actions.presetDeleted)

@@ -266,6 +266,7 @@ function helpTopics(downloadFolder: string): HelpTopic[] {
     { title: text.when, paragraphs: help.when },
     { title: text.saveIn, paragraphs: help.saveIn(downloadFolder) },
     { title: text.fileName, paragraphs: help.fileName },
+    { title: text.missingValues, paragraphs: help.missingValues },
     { title: text.startAs, paragraphs: help.startAs },
     { title: text.downloadRightAway, paragraphs: [help.downloadRightAway] },
   ]

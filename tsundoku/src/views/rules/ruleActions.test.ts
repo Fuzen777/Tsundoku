@@ -19,6 +19,12 @@ describe("describeActions", () => {
     ])
   })
 
+  it("says when it leaves out placeholders without a value", () => {
+    const rule = { ...newRule(), folder: "{site}\\{account}", missingValues: "leaveOut" as const }
+    expect(describeActions(rule, [audioMp3])).toEqual(["Leaves out placeholders without a value"])
+    expect(describeActions({ ...rule, folder: "", presetId: "audio-mp3" }, [audioMp3])).toEqual(["Starts as Audio MP3"])
+  })
+
   it("says nothing for a rule that only picks a folder", () => {
     expect(describeActions({ ...newRule(), folder: "D:\\Music" }, [audioMp3])).toEqual([])
   })

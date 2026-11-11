@@ -1608,6 +1608,7 @@ fn a_rule_picks_the_folder() {
                 }],
                 folder: by_uploader.join("{uploader}").display().to_string(),
                 file_name: String::new(),
+                missing_values: crate::rules::MissingValues::StandIn,
                 preset_id: None,
                 download_right_away: None,
                 join: crate::rules::ConditionJoin::All,

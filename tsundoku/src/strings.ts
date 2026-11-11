@@ -670,6 +670,11 @@ export const strings = {
         "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (MEGA, MediaFire, Google Drive, Dropbox, OneDrive) when it's a single file. Videos keep their preset's name.",
         "{1}, {2}… are what the rule's Matches pattern captured in parentheses. A post's name gets {post} and {number} added when it lacks them, so no two files share a name; the extension is added, or kept for a shared file. Leave it empty to let a rule above name them, else Settings or the file's own name.",
       ],
+      missingValues: [
+        "What a placeholder becomes when the download has no value for it, such as {account} on MediaFire, which has no accounts.",
+        "Write Unknown puts Unknown in its place in the folder (No Playlist for {playlist}, Posts or Files for {preset}), and the site in a file name's {account}.",
+        "Leave Out drops it with the separator before it, and a folder whose placeholders all have none, so {site}\\{account} saves in MediaFire. In a file name, {account} goes too. An unknown date or {1} is left out of a file name either way.",
+      ],
       startAs: [
         "The preset matching videos start with, unless you pick another. Posts and shared files have none.",
         "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",
@@ -754,6 +759,8 @@ export const strings = {
     chooseFolderTitle: "Choose Where Matching Downloads Go",
     fileName: "File Name",
     usingDefault: "Using Default",
+    missingValues: "When a Placeholder Has No Value",
+    missingValueChoices: { standIn: "Write Unknown", leaveOut: "Leave Out" },
     startAs: "Start As",
     startAsUnavailable: "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",
     leaveAsIs: "Leave as Is",
@@ -763,6 +770,7 @@ export const strings = {
     /** What a rule does besides picking a folder, under its folder in the list. */
     actions: {
       namesFiles: (name: string) => `Names posts' files “${name}”`,
+      leavesOut: "Leaves out placeholders without a value",
       startsAs: (preset: string) => `Starts as ${preset}`,
       presetDeleted: "Starts with the default preset, since the one it picked was deleted",
       rightAway: "Downloads right away",

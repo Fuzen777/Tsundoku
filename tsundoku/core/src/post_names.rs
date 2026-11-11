@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::metadata::VideoInfo;
-use crate::rules;
+use crate::name_parts::{NamePart, join_leaving_out};
+use crate::rules::{self, MissingValues};
 
 /// The account, the post's date, its ID and the file's place in it: "natgeo 2026-11-04 DfPQchkG1tg 1".
 pub const DEFAULT_POST_FILE_NAME: &str = "{account} {date} {post} {number}";
@@ -82,11 +83,13 @@ pub enum PostNameError {
     ForbiddenCharacter { character: String },
 }
 
-/// A piece of a name: text as it is, or a placeholder.
+/// A piece of a name: text as it is, a placeholder, or `{1}` to `{9}`, which a rule fills in with what its pattern
+/// captured (`fill_rule_name`) and which are text anywhere else.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Part {
     Text(String),
     Placeholder(PostNamePlaceholder),
+    Group(u8),
 }
 
 /// Checks a post file name and returns it trimmed, or the default when it's blank. It must hold `{post}` and
@@ -122,7 +125,7 @@ pub fn check(template: &str) -> Result<String, PostNameError> {
     Ok(template.to_owned())
 }
 
-/// The name's text and placeholders. `{word}` must be a placeholder; other braces are text.
+/// The name's text, placeholders and groups. `{word}` must be a placeholder; other braces are text.
 fn parse(template: &str) -> Result<Vec<Part>, PostNameError> {
     let mut parts = Vec::new();
     let mut text = String::new();
@@ -130,6 +133,14 @@ fn parse(template: &str) -> Result<Vec<Part>, PostNameError> {
     while let Some(start) = rest.find('{') {
         text.push_str(&rest[..start]);
         rest = &rest[start..];
+        if let [b'{', digit @ b'1'..=b'9', b'}', ..] = rest.as_bytes() {
+            if !text.is_empty() {
+                parts.push(Part::Text(std::mem::take(&mut text)));
+            }
+            parts.push(Part::Group(digit - b'0'));
+            rest = &rest[3..];
+            continue;
+        }
         let word_length = rest[1..]
             .find(|character: char| !character.is_ascii_alphabetic())
             .unwrap_or(rest.len() - 1);
@@ -171,28 +182,82 @@ pub fn check_text(template: &str) -> Result<(), PostNameError> {
     parse(template).map(|_| ())
 }
 
-/// A file host's file named by a rule's `template` (as a post's name is written): the account (the uploader, else the
-/// site), the date it was uploaded (left out when unknown), the share's ID as `{post}`, 1 as `{number}` and the site,
-/// with spaces collapsed and made safe for a file name, without the extension. The file's title when nothing is left.
+/// A rule's file name (`rules::FolderRule::file_name`) for one download, ready for `gallery_format` or
+/// `shared_file_name`: `{1}` to `{9}` filled in with what the rule's pattern captured (`captured`, whole match first),
+/// made safe for a file name and without braces, `{date}` taken out when the date isn't known, as those two would, and,
+/// when the rule leaves out what's missing (`missing`), `{account}` when the download has no account. A group or a
+/// placeholder taken out goes with the text that separates it (`join_leaving_out`), here, where what the groups
+/// captured still counts as values. A name that doesn't parse, which only a settings.json edited by hand can hold,
+/// stays as it is.
+pub fn fill_rule_name(
+    template: &str,
+    video: &VideoInfo,
+    captured: Option<&[Option<String>]>,
+    missing: MissingValues,
+) -> String {
+    let Ok(parts) = parse(template) else {
+        return template.to_owned();
+    };
+    let pieces: Vec<NamePart> = parts
+        .into_iter()
+        .map(|part| match part {
+            Part::Text(text) => NamePart::Text(text),
+            Part::Group(group) => NamePart::Value(
+                captured
+                    .and_then(|groups| groups.get(usize::from(group)))
+                    .and_then(Option::as_deref)
+                    .map(|value| rules::safe_folder_name(&value.replace(['{', '}'], ""), ""))
+                    .filter(|value| !value.is_empty()),
+            ),
+            Part::Placeholder(placeholder) => {
+                let known = match placeholder {
+                    PostNamePlaceholder::Date => video.upload_date.is_some(),
+                    PostNamePlaceholder::Account => {
+                        missing == MissingValues::StandIn || has_account(video)
+                    }
+                    _ => true,
+                };
+                NamePart::Value(known.then(|| format!("{{{}}}", placeholder.name())))
+            }
+        })
+        .collect();
+    join_leaving_out(&pieces)
+}
+
+/// Whether the download has an account or an uploader, for `{account}`.
+fn has_account(video: &VideoInfo) -> bool {
+    video
+        .account
+        .iter()
+        .chain(&video.uploader)
+        .any(|name| !name.trim().is_empty())
+}
+
+/// A file host's file named by a rule's `template` (from `fill_rule_name`): the account (the uploader, else the site),
+/// the date it was uploaded, the share's ID as `{post}`, 1 as `{number}` and the site, with spaces collapsed and made
+/// safe for a file name, without the extension. An unknown date and `{numberIfMany}` (a single file) are left out with
+/// the text that separates them. The file's title when nothing is left.
 pub fn shared_file_name(template: &str, video: &VideoInfo) -> String {
     let site = rules::site_name(video);
-    let text: String = parse(template)
+    let pieces: Vec<NamePart> = parse(template)
         .unwrap_or_default()
         .into_iter()
         .map(|part| match part {
-            Part::Text(text) => text,
-            Part::Placeholder(PostNamePlaceholder::Account) => {
-                video.uploader.clone().unwrap_or_else(|| site.clone())
-            }
-            Part::Placeholder(PostNamePlaceholder::Date) => {
-                video.upload_date.clone().unwrap_or_default()
-            }
-            Part::Placeholder(PostNamePlaceholder::Post) => video.video_id.clone(),
-            Part::Placeholder(PostNamePlaceholder::Number) => "1".to_owned(),
-            Part::Placeholder(PostNamePlaceholder::NumberIfMany) => String::new(),
-            Part::Placeholder(PostNamePlaceholder::Site) => site.clone(),
+            Part::Text(text) => NamePart::Text(text),
+            Part::Group(group) => NamePart::Text(format!("{{{group}}}")),
+            Part::Placeholder(placeholder) => NamePart::Value(match placeholder {
+                PostNamePlaceholder::Account => {
+                    Some(video.uploader.clone().unwrap_or_else(|| site.clone()))
+                }
+                PostNamePlaceholder::Date => video.upload_date.clone(),
+                PostNamePlaceholder::Post => Some(video.video_id.clone()),
+                PostNamePlaceholder::Number => Some("1".to_owned()),
+                PostNamePlaceholder::NumberIfMany => None,
+                PostNamePlaceholder::Site => Some(site.clone()),
+            }),
         })
         .collect();
+    let text = join_leaving_out(&pieces);
     let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
     rules::safe_folder_name(&collapsed, &rules::safe_folder_name(&video.title, "File"))
 }
@@ -205,41 +270,15 @@ pub fn gallery_format(template: &str, post: &VideoInfo) -> String {
         .ok()
         .and_then(|template| parse(&template).ok())
         .unwrap_or_else(|| parse(DEFAULT_POST_FILE_NAME).expect("the default name parses"));
-    let pieces: Vec<Option<String>> = parts
+    let pieces: Vec<NamePart> = parts
         .iter()
         .map(|part| match part {
-            Part::Text(text) => Some(literal(text)),
-            Part::Placeholder(placeholder) => value(*placeholder, post),
+            Part::Text(text) => NamePart::Text(literal(text)),
+            Part::Group(group) => NamePart::Text(literal(&format!("{{{group}}}"))),
+            Part::Placeholder(placeholder) => NamePart::Value(value(*placeholder, post)),
         })
         .collect();
-
-    // Which pieces stay: a missing value goes, with the text before it, or after it when it's the first placeholder.
-    let mut kept = vec![true; parts.len()];
-    for (index, piece) in pieces.iter().enumerate() {
-        if piece.is_some() {
-            continue;
-        }
-        kept[index] = false;
-        let earlier_placeholder = parts[..index]
-            .iter()
-            .enumerate()
-            .any(|(at, part)| kept[at] && matches!(part, Part::Placeholder(_)));
-        let separator = if earlier_placeholder {
-            index.checked_sub(1)
-        } else {
-            Some(index + 1).filter(|next| *next + 1 < parts.len())
-        };
-        if let Some(separator) = separator
-            && matches!(parts.get(separator), Some(Part::Text(_)))
-        {
-            kept[separator] = false;
-        }
-    }
-    let mut format: String = pieces
-        .into_iter()
-        .zip(kept)
-        .filter_map(|(piece, kept)| piece.filter(|_| kept))
-        .collect();
+    let mut format = join_leaving_out(&pieces);
     format.push_str(".{extension}");
     format
 }
@@ -346,10 +385,13 @@ mod tests {
             ]
         );
         assert_eq!(
-            parse("{} {1} {post}").unwrap(),
+            parse("{} {1} {post} {0}").unwrap(),
             [
-                Part::Text("{} {1} ".to_owned()),
-                Part::Placeholder(PostNamePlaceholder::Post)
+                Part::Text("{} ".to_owned()),
+                Part::Group(1),
+                Part::Text(" ".to_owned()),
+                Part::Placeholder(PostNamePlaceholder::Post),
+                Part::Text(" {0}".to_owned()),
             ]
         );
     }

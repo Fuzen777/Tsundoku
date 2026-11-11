@@ -3,6 +3,7 @@ import { CaseSensitive, Plus, X } from "lucide-react"
 import { pickFolder } from "../../api"
 import type { ConditionJoin } from "../../bindings/ConditionJoin"
 import type { FolderRule } from "../../bindings/FolderRule"
+import type { MissingValues } from "../../bindings/MissingValues"
 import type { Preset } from "../../bindings/Preset"
 import type { RuleCondition } from "../../bindings/RuleCondition"
 import type { RuleField } from "../../bindings/RuleField"
@@ -41,6 +42,11 @@ const RIGHT_AWAY_CHOICES: readonly { value: RightAwayChoice; label: string }[] =
   { value: "unset", label: text.leaveAsIs },
   { value: "on", label: text.on },
   { value: "off", label: text.off },
+]
+
+const MISSING_VALUE_CHOICES: readonly { value: MissingValues; label: string }[] = [
+  { value: "standIn", label: text.missingValueChoices.standIn },
+  { value: "leaveOut", label: text.missingValueChoices.leaveOut },
 ]
 
 /** The site field's suggestions: every supported site. */
@@ -166,6 +172,14 @@ export function RuleEditor({
           />
         </Field>
       )}
+      <Field label={text.missingValues}>
+        <SegmentedControl
+          label={text.missingValues}
+          options={MISSING_VALUE_CHOICES}
+          value={draft.missingValues}
+          onChange={(missingValues) => update({ missingValues })}
+        />
+      </Field>
       {!isCatchAll && <RuleActions draft={draft} presets={presets} onChange={update} />}
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex justify-end gap-2">
