@@ -96,7 +96,7 @@ fn download(
     on_progress(DownloadProgress::at(DownloadStage::Starting));
 
     let host = Host::of(&job.url).ok_or(PreviewError::UnsupportedSite)?;
-    let client = hosts::client()?;
+    let client = hosts::client_for(host)?;
     let mut share = host.read(&client, &job.url, cancel)?;
     share.use_caught_links(&job.caught_links);
     write_log(
@@ -687,7 +687,7 @@ mod onedrive_live {
     fn onedrive_live_downloads_a_folders_file() {
         // A shared folder of 331 images, listed over two pages.
         let link = "https://1drv.ms/f/s!AittnGm6vRKLwiL55f7f0xdpuD9_";
-        let client = hosts::client().unwrap();
+        let client = hosts::client_for(Host::OneDrive).unwrap();
         let share = hosts::read(link, &CancelToken::new()).unwrap();
         let file = &share.files[0];
         let address = file.source.address(&client, &CancelToken::new()).unwrap();

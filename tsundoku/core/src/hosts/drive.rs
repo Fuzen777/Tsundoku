@@ -26,6 +26,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     site: "googledrive",
     domains: &["drive.google.com", "drive.usercontent.google.com"],
     sends_attachments: true,
+    browser_agent: true,
     read,
     page_error: Some(page_error),
 };

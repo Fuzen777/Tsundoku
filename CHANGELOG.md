@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.108 · 2026-11-11
+
+### Added
+
+- **WeTransfer**: pasting a WeTransfer link (we.tl or wetransfer.com/downloads) shows the transfer's name, date and files, with Download. A transfer of several files keeps them in a folder named after it. An expired or deleted transfer, one with a password and one that asks for an email check each say so.
+
+### Changed
+
+- pCloud and WeTransfer are asked as Tsundoku rather than as Firefox, since they answer it the same.
+
 ## 0.1.107 · 2026-11-11
 
 ### Added

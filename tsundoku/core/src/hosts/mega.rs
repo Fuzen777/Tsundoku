@@ -32,6 +32,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     site: "mega",
     domains: &["mega.nz", "mega.co.nz"],
     sends_attachments: false,
+    browser_agent: true,
     read,
     page_error: None,
 };

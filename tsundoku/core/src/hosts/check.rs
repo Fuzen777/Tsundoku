@@ -39,6 +39,7 @@ impl CheckPage {
             | FileSource::GoogleDrive(_)
             | FileSource::Dropbox(_)
             | FileSource::OneDrive(_)
+            | FileSource::WeTransfer(_)
             | FileSource::PCloud(_) => None,
         }
     }
@@ -75,7 +76,12 @@ impl BrowserCheck {
 fn caught_file(host: Host, download: &str) -> Option<String> {
     match host {
         Host::MediaFire => super::mediafire::direct_link_key(download),
-        Host::Mega | Host::GoogleDrive | Host::Dropbox | Host::OneDrive | Host::PCloud => None,
+        Host::Mega
+        | Host::GoogleDrive
+        | Host::Dropbox
+        | Host::OneDrive
+        | Host::WeTransfer
+        | Host::PCloud => None,
     }
 }
 

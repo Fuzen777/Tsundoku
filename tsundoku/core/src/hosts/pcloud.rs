@@ -24,6 +24,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     site: "pcloud",
     domains: &["pcloud.link", "pcloud.com"],
     sends_attachments: false,
+    // It answers Tsundoku saying who it is as it answers a browser.
+    browser_agent: false,
     read,
     page_error: None,
 };

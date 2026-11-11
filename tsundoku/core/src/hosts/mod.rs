@@ -10,6 +10,7 @@ pub mod mediafire;
 pub mod mega;
 pub mod onedrive;
 pub mod pcloud;
+pub mod wetransfer;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -31,9 +32,12 @@ use crate::sites;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long a request may wait for its answer, or a download for its next bytes.
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
-/// Sent with every request. MediaFire only shows its download button to a browser.
+/// Sent with the requests to hosts that expect a browser (`HostFacts::browser_agent`). MediaFire only shows its
+/// download button to a browser.
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
+/// Sent with the requests to hosts that answer Tsundoku as they answer a browser.
+const HONEST_AGENT: &str = concat!("Tsundoku/", env!("CARGO_PKG_VERSION"));
 /// Pages in English, for the error messages read from them (Google Drive's follow the address otherwise).
 const LANGUAGE: &str = "en-US,en;q=0.9";
 /// The most of a page read to explain why a file didn't come.
@@ -47,6 +51,7 @@ pub enum Host {
     Dropbox,
     OneDrive,
     PCloud,
+    WeTransfer,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -61,6 +66,9 @@ pub(crate) struct HostFacts {
     /// Whether it marks every file it sends as an attachment, so that any other answer is a page saying why the file
     /// didn't come.
     pub sends_attachments: bool,
+    /// Whether it's asked as Firefox (`USER_AGENT`), as the hosts Tsundoku read first were. A host that answers the
+    /// same to Tsundoku saying who it is (`HONEST_AGENT`) is asked that way.
+    pub browser_agent: bool,
     /// Lists the files behind a link.
     pub read: fn(&Client, &str, &CancelToken) -> Result<Share, PreviewError>,
     /// Why it answered with a page instead of a file, when its pages say more than their status.
@@ -68,13 +76,14 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
         Self::Dropbox,
         Self::OneDrive,
         Self::PCloud,
+        Self::WeTransfer,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -84,6 +93,7 @@ impl Host {
             Self::GoogleDrive => &drive::FACTS,
             Self::Dropbox => &dropbox::FACTS,
             Self::OneDrive => &onedrive::FACTS,
+            Self::WeTransfer => &wetransfer::FACTS,
             Self::PCloud => &pcloud::FACTS,
         }
     }
@@ -123,6 +133,15 @@ impl Host {
 
     fn domains(self) -> &'static [&'static str] {
         self.facts().domains
+    }
+
+    /// What its requests say they come from: Firefox, or Tsundoku and its version.
+    fn user_agent(self) -> &'static str {
+        if self.facts().browser_agent {
+            USER_AGENT
+        } else {
+            HONEST_AGENT
+        }
     }
 
     /// Whether the host marks every file it sends as an attachment, so that any other answer is a page saying why
@@ -226,6 +245,7 @@ pub enum FileSource {
     GoogleDrive(drive::DriveFile),
     Dropbox(dropbox::DropboxFile),
     OneDrive(onedrive::OneDriveFile),
+    WeTransfer(wetransfer::WeTransferFile),
     PCloud(pcloud::PCloudFile),
 }
 
@@ -264,6 +284,7 @@ impl FileSource {
                 check: FileCheck::None,
             }),
             Self::OneDrive(file) => onedrive::address(client, file, cancel),
+            Self::WeTransfer(file) => wetransfer::address(client, file, cancel),
             Self::PCloud(file) => pcloud::address(client, file, cancel),
         }
     }
@@ -271,8 +292,26 @@ impl FileSource {
 
 /// The client every host request goes through.
 pub fn client() -> Result<Client, PreviewError> {
-    Client::builder()
-        .user_agent(USER_AGENT)
+    built(Client::builder(), USER_AGENT)
+}
+
+/// The client a host's requests go through: saying it's Tsundoku, unless the host expects a browser.
+pub fn client_for(host: Host) -> Result<Client, PreviewError> {
+    built(Client::builder(), host.user_agent())
+}
+
+/// A host's client, answering redirects instead of following them: for a short link, whose redirect names what it
+/// leads to.
+pub(crate) fn client_without_redirects(host: Host) -> Result<Client, PreviewError> {
+    built(
+        Client::builder().redirect(reqwest::redirect::Policy::none()),
+        host.user_agent(),
+    )
+}
+
+fn built(builder: reqwest::blocking::ClientBuilder, agent: &str) -> Result<Client, PreviewError> {
+    builder
+        .user_agent(agent)
         .default_headers(HeaderMap::from_iter([(
             ACCEPT_LANGUAGE,
             HeaderValue::from_static(LANGUAGE),
@@ -288,7 +327,7 @@ pub fn client() -> Result<Client, PreviewError> {
 /// Lists the files behind a host's link, for the preview card.
 pub fn read(link: &str, cancel: &CancelToken) -> Result<Share, PreviewError> {
     let host = Host::of(link).ok_or(PreviewError::UnsupportedSite)?;
-    host.read(&client()?, link, cancel)
+    host.read(&client_for(host)?, link, cancel)
 }
 
 /// A file or folder name from a host, safe to use on Windows.
