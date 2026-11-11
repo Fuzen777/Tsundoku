@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.109 · 2026-11-11
+
+### Changed
+
+- MEGA, Google Drive, Dropbox and OneDrive are asked as Tsundoku rather than as Firefox, since they answer it the same. MediaFire still says it's Firefox.
+
 ## 0.1.108 · 2026-11-11
 
 ### Added

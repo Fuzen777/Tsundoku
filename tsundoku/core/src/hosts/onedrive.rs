@@ -36,7 +36,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
         "skydrive.live.com",
     ],
     sends_attachments: false,
-    browser_agent: true,
+    browser_agent: false,
     read,
     page_error: None,
 };

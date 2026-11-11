@@ -28,7 +28,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     site: "dropbox",
     domains: &["dropbox.com", "dropboxusercontent.com"],
     sends_attachments: true,
-    browser_agent: true,
+    browser_agent: false,
     read,
     page_error: Some(page_error),
 };
