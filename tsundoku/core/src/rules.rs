@@ -1159,6 +1159,7 @@ mod tests {
             post: Some(PostContents {
                 images: 1,
                 videos: 0,
+                others: 0,
             }),
             ..video()
         }

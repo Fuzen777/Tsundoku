@@ -23,6 +23,20 @@ const TITLE_LENGTH: usize = 120;
 
 /// File extensions counted as videos. X gives its animated GIFs as MP4.
 const VIDEO_EXTENSIONS: [&str; 6] = ["mp4", "webm", "mov", "m4v", "mkv", "m3u8"];
+/// File extensions counted as images. Anything else, such as a .zip or a .pdf on Pixeldrain or Gofile, is a file of
+/// another kind, which has no picture to show.
+const IMAGE_EXTENSIONS: [&str; 13] = [
+    "jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "heic", "heif", "jxl", "tif", "tiff", "svg",
+];
+
+/// What a post's file is, by its extension, or its MIME type when the extension says nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FileKind {
+    Image,
+    Video,
+    /// Neither: an archive, a document, a program.
+    Other,
+}
 
 /// The programs a fetch runs: gallery-dl, and where to read cookies from.
 #[derive(Debug, Clone, Default)]
@@ -284,15 +298,24 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         detail: "gallery-dl's answer has no post ID".to_owned(),
     })?;
 
-    let videos = files.iter().filter(|(_, file)| is_video(file)).count();
+    let of_kind = |kind| {
+        count(
+            files
+                .iter()
+                .filter(|(_, file)| kind_of(file) == kind)
+                .count(),
+        )
+    };
     let contents = PostContents {
-        images: count(files.len() - videos),
-        videos: count(videos),
+        images: of_kind(FileKind::Image),
+        videos: of_kind(FileKind::Video),
+        others: of_kind(FileKind::Other),
     };
     let uploader = uploader(post);
     let account = account(&site, post);
     let title = caption_title(post)
         .or_else(|| uploader.as_ref().map(|name| format!("Post by {name}")))
+        .or_else(|| lone_file_name(files))
         .unwrap_or_else(|| post_id.clone());
 
     Ok(VideoInfo {
@@ -469,13 +492,31 @@ fn caption_title(post: &Value) -> Option<String> {
     })
 }
 
-/// The first image, or a video's poster (Instagram gives one as `display_url`).
+/// The first image, or a video's poster (Instagram gives one as `display_url`). A file of another kind has none: its
+/// address is the file itself, which may be gigabytes.
 fn thumbnail(files: &[(&str, &Value)]) -> Option<String> {
-    files.iter().find_map(|(url, file)| {
-        if !is_video(file) {
-            return Some((*url).to_owned());
-        }
-        text(file, "display_url")
+    files.iter().find_map(|(url, file)| match kind_of(file) {
+        FileKind::Image => Some((*url).to_owned()),
+        FileKind::Video => text(file, "display_url"),
+        FileKind::Other => None,
+    })
+}
+
+/// The name of a post's only file when it's neither an image nor a video, such as a .zip shared on Pixeldrain: the
+/// post's best title when it has no caption or uploader.
+fn lone_file_name(files: &[(&str, &Value)]) -> Option<String> {
+    let [(_, file)] = files else {
+        return None;
+    };
+    if kind_of(file) != FileKind::Other {
+        return None;
+    }
+    text(file, "name").or_else(|| {
+        let name = text(file, "filename")?;
+        Some(match text(file, "extension") {
+            Some(extension) => format!("{name}.{extension}"),
+            None => name,
+        })
     })
 }
 
@@ -486,12 +527,12 @@ fn post_files(files: &[(&str, &Value)]) -> Vec<crate::metadata::PostFile> {
         .iter()
         .zip(1..)
         .map(|((url, file), number)| {
-            let video = is_video(file);
+            let kind = kind_of(file);
             crate::metadata::PostFile {
                 number,
-                video,
+                video: kind == FileKind::Video,
                 thumbnail_url: text(file, "display_url")
-                    .or_else(|| (!video).then(|| small_image(url)))
+                    .or_else(|| (kind == FileKind::Image).then(|| small_image(url)))
                     .filter(|url| url.starts_with("https://")),
                 picked: true,
             }
@@ -508,10 +549,19 @@ fn small_image(url: &str) -> String {
     }
 }
 
-fn is_video(file: &Value) -> bool {
-    text(file, "extension").is_some_and(|extension| {
-        VIDEO_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-    })
+fn kind_of(file: &Value) -> FileKind {
+    let extension = text(file, "extension").map(|extension| extension.to_ascii_lowercase());
+    let mime = text(file, "mime_type").map(|mime| mime.to_ascii_lowercase());
+    let mime_is = |start: &str| mime.as_deref().is_some_and(|mime| mime.starts_with(start));
+    match extension.as_deref() {
+        Some(extension) if VIDEO_EXTENSIONS.contains(&extension) => FileKind::Video,
+        Some(extension) if IMAGE_EXTENSIONS.contains(&extension) => FileKind::Image,
+        // A file without an extension is taken as an image, as sites' images often are.
+        None => FileKind::Image,
+        Some(_) if mime_is("video/") => FileKind::Video,
+        Some(_) if mime_is("image/") => FileKind::Image,
+        Some(_) => FileKind::Other,
+    }
 }
 
 /// The link's host without "www.", as the site's name ("instagram.com", "x.com").
@@ -616,7 +666,8 @@ mod tests {
             post.post,
             Some(PostContents {
                 images: 2,
-                videos: 4
+                videos: 4,
+                others: 0,
             })
         );
         assert!(post.thumbnail_url.is_some());
@@ -638,7 +689,8 @@ mod tests {
             post.post,
             Some(PostContents {
                 images: 0,
-                videos: 1
+                videos: 1,
+                others: 0,
             })
         );
         // The reel's poster.
@@ -662,7 +714,8 @@ mod tests {
             images.post,
             Some(PostContents {
                 images: 4,
-                videos: 0
+                videos: 0,
+                others: 0,
             })
         );
 
@@ -676,7 +729,8 @@ mod tests {
             video.post,
             Some(PostContents {
                 images: 0,
-                videos: 1
+                videos: 1,
+                others: 0,
             })
         );
     }
@@ -719,8 +773,63 @@ mod tests {
             post.post,
             Some(PostContents {
                 images: 2,
-                videos: 0
+                videos: 0,
+                others: 0,
             })
+        );
+    }
+
+    #[test]
+    fn a_file_thats_neither_an_image_nor_a_video_is_a_file() {
+        // Pixeldrain's answer for a .zip, trimmed: its address is the file itself.
+        let file = r#"{"category": "pixeldrain", "subcategory": "file", "id": "VUo4mjaM", "name": "YAOCTRU_v11.0.zip",
+            "filename": "YAOCTRU_v11.0", "extension": "zip", "mime_type": "application/zip", "size": 10315,
+            "date": "2025-08-23 17:00:54", "url": "https://pixeldrain.com/api/file/VUo4mjaM?download"}"#;
+        let json = format!(
+            r#"[[2, {file}], [3, "https://pixeldrain.com/api/file/VUo4mjaM?download", {file}]]"#
+        );
+        let post = parse_answer(&json, "https://pixeldrain.com/u/VUo4mjaM").unwrap();
+        assert_eq!(
+            post.post,
+            Some(PostContents {
+                images: 0,
+                videos: 0,
+                others: 1,
+            })
+        );
+        assert_eq!(
+            post.title, "YAOCTRU_v11.0.zip",
+            "named by its file, not its ID"
+        );
+        assert_eq!(
+            post.thumbnail_url, None,
+            "the file isn't fetched as a picture"
+        );
+        assert_eq!(post.post_files[0].thumbnail_url, None);
+        assert!(!post.post_files[0].video);
+        assert_eq!(post.post_file_count(), Some(1));
+
+        let kinds: Vec<FileKind> = [
+            r#"{"extension": "JPG"}"#,
+            r#"{"extension": "webm"}"#,
+            r#"{"extension": "bin", "mime_type": "video/mp4"}"#,
+            r#"{"extension": "dat", "mime_type": "image/png"}"#,
+            r#"{"extension": "pdf", "mime_type": "application/pdf"}"#,
+            r#"{}"#,
+        ]
+        .iter()
+        .map(|file| kind_of(&serde_json::from_str(file).unwrap()))
+        .collect();
+        assert_eq!(
+            kinds,
+            [
+                FileKind::Image,
+                FileKind::Video,
+                FileKind::Video,
+                FileKind::Image,
+                FileKind::Other,
+                FileKind::Image
+            ]
         );
     }
 
@@ -784,7 +893,8 @@ mod tests {
             post.post,
             Some(PostContents {
                 images: 2,
-                videos: 1
+                videos: 1,
+                others: 0,
             })
         );
     }

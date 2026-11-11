@@ -381,7 +381,8 @@ fn reads_an_instagram_accounts_newest_posts() {
         first.post,
         Some(PostContents {
             images: 0,
-            videos: 1
+            videos: 1,
+            others: 0,
         })
     );
 
@@ -394,7 +395,8 @@ fn reads_an_instagram_accounts_newest_posts() {
         carousel.video.post,
         Some(PostContents {
             images: 2,
-            videos: 4
+            videos: 4,
+            others: 0,
         }),
         "the same as the carousel's own link gives"
     );

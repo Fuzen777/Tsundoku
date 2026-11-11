@@ -80,7 +80,7 @@ impl VideoInfo {
         let post = self.post?;
         Some(match self.picked_post_files() {
             Some(picked) => u32::try_from(picked.len()).unwrap_or(u32::MAX),
-            None => post.images + post.videos,
+            None => post.images + post.videos + post.others,
         })
     }
 }
@@ -92,6 +92,9 @@ impl VideoInfo {
 pub struct PostContents {
     pub images: u32,
     pub videos: u32,
+    /// Files that are neither, such as a .zip on Pixeldrain. Missing from posts read before 0.1.106.
+    #[serde(default)]
+    pub others: u32,
 }
 
 /// One file of a post, as the strip of the preview card and of a pending link shows it.

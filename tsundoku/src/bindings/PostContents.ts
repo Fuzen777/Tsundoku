@@ -3,4 +3,8 @@
 /**
  * The files of a post, such as an Instagram carousel.
  */
-export type PostContents = { images: number, videos: number, };
+export type PostContents = { images: number, videos: number, 
+/**
+ * Files that are neither, such as a .zip on Pixeldrain. Missing from posts read before 0.1.106.
+ */
+others: number, };

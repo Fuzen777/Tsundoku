@@ -358,6 +358,7 @@ mod tests {
             post: Some(crate::metadata::PostContents {
                 images: 2,
                 videos: 1,
+                others: 0,
             }),
             files: None,
             post_files: Vec::new(),
@@ -471,6 +472,7 @@ mod tests {
         single.post = Some(crate::metadata::PostContents {
             images: 1,
             videos: 0,
+            others: 0,
         });
         assert_eq!(
             gallery_format(name, &single),

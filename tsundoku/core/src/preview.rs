@@ -387,6 +387,7 @@ mod tests {
         PostContents {
             images: 2,
             videos: 0,
+            others: 0,
         }
     }
 

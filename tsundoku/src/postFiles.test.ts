@@ -21,7 +21,7 @@ const post: VideoInfo = {
   uploadDate: null,
   thumbnailUrl: null,
   bestHeight: null,
-  post: { images: 2, videos: 2 },
+  post: { images: 2, videos: 2, others: 0 },
   files: null,
   postFiles: files,
 }

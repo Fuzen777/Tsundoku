@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.106 · 2026-11-11
+
+### Fixed
+
+- **Files on Pixeldrain, Gofile, Bunkr and Cyberdrop**: a file that's neither an image nor a video, such as a .zip, shows on the card and in the queue as "1 file", titled with its name, instead of "1 image" titled with its ID. The card no longer fetches the whole file as its picture, which could mean gigabytes.
+
 ## 0.1.105 · 2026-11-11
 
 ### Fixed

@@ -503,10 +503,11 @@ export const strings = {
     downloadAgain: "Download Again",
     quality: (height: number) => `${height}p`,
     audioOnly: "Audio Only",
-    postContents: (images: number, videos: number) => {
+    postContents: (images: number, videos: number, others: number) => {
       const parts = [
         images > 0 && `${images} ${images === 1 ? "image" : "images"}`,
         videos > 0 && `${videos} ${videos === 1 ? "video" : "videos"}`,
+        others > 0 && `${others} ${others === 1 ? "file" : "files"}`,
       ].filter(Boolean)
       return parts.join(", ")
     },

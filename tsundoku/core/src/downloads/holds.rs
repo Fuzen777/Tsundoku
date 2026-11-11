@@ -322,10 +322,11 @@ impl DownloadQueue {
             .into_iter()
             .map(|(finished, files)| (finished * 1000, files))
             .collect();
-        let files = item
-            .video
-            .post
-            .map_or(1, |post| post.images.saturating_add(post.videos));
+        let files = item.video.post.map_or(1, |post| {
+            post.images
+                .saturating_add(post.videos)
+                .saturating_add(post.others)
+        });
         hourly_limit_end(&recent, files, limit, now).map(|until| Hold::HourlyLimit {
             site: site.name,
             limit,

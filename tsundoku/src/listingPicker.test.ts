@@ -25,7 +25,7 @@ function item(videoId: string, fields: Partial<ListedItem> = {}, post = false): 
       uploadDate: null,
       thumbnailUrl: null,
       bestHeight: null,
-      post: post ? { images: 2, videos: 0 } : null,
+      post: post ? { images: 2, videos: 0, others: 0 } : null,
       files: null,
     },
     approximateDate: null,

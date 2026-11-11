@@ -912,7 +912,11 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
         thumbnail_url: row.get(9)?,
         best_height: row.get(10)?,
         post: match (row.get(12)?, row.get(13)?) {
-            (Some(images), Some(videos)) => Some(PostContents { images, videos }),
+            (Some(images), Some(videos)) => Some(PostContents {
+                images,
+                videos,
+                others: 0,
+            }),
             _ => None,
         },
         files: match (row.get(14)?, row.get::<_, Option<i64>>(15)?) {
@@ -1546,6 +1550,7 @@ mod tests {
         post.post = Some(PostContents {
             images: 2,
             videos: 1,
+            others: 0,
         });
         let three_files = NewDownload {
             files: ["1.jpg", "2.mp4", "3.jpg"]
@@ -1592,6 +1597,7 @@ mod tests {
         post.post = Some(PostContents {
             images: 2,
             videos: 1,
+            others: 0,
         });
         let saved = NewDownload {
             preset: String::new(),
@@ -1651,6 +1657,7 @@ mod tests {
             post: Some(PostContents {
                 images: 2,
                 videos: 2,
+                others: 0,
             }),
             post_files: (1..=4)
                 .map(|number| crate::metadata::PostFile {
@@ -2038,6 +2045,7 @@ mod tests {
                 subject.post = Some(PostContents {
                     images: 1,
                     videos: 0,
+                    others: 0,
                 })
             }
             DownloadKind::File => subject.files = Some(FileContents { count: 1, bytes: 1 }),

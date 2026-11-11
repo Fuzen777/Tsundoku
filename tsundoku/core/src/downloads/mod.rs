@@ -1053,7 +1053,7 @@ impl DownloadQueue {
                 files: item
                     .video
                     .post_file_count()
-                    .unwrap_or(contents.images + contents.videos),
+                    .unwrap_or(contents.images + contents.videos + contents.others),
                 range: item.video.picked_post_files(),
                 file_name: post_names::gallery_format(
                     item.file_name.as_deref().unwrap_or(&options.post_file_name),

@@ -93,7 +93,8 @@ describe("joinDetails", () => {
 
 describe("formatContents", () => {
   it("counts a post's images and videos", () => {
-    expect(formatContents({ post: { images: 2, videos: 1 }, files: null })).toBe("2 images, 1 video")
+    expect(formatContents({ post: { images: 2, videos: 1, others: 0 }, files: null })).toBe("2 images, 1 video")
+    expect(formatContents({ post: { images: 0, videos: 0, others: 1 }, files: null })).toBe("1 file")
   })
 
   it("shows one file's size, or a folder's count and size", () => {

@@ -338,6 +338,7 @@ fn video_at(link: &str) -> VideoInfo {
         post: post.then_some(PostContents {
             images: 2,
             videos: 0,
+            others: 0,
         }),
         files: shared.then_some(FileContents {
             count: 3,

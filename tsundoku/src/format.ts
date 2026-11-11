@@ -76,9 +76,10 @@ export function joinDetails(parts: readonly (string | null | undefined | false)[
   return parts.filter(Boolean).join(strings.separator)
 }
 
-/** What a post or a file host's link holds: "2 images, 1 video", "3 files, 1.2 GB". Null for a video. */
+/** What a post or a file host's link holds: "2 images, 1 video", "1 file" (a .zip on Pixeldrain), "3 files, 1.2 GB".
+ * Null for a video. */
 export function formatContents({ post, files }: { post: PostContents | null; files: FileContents | null }): string | null {
-  if (post) return strings.preview.postContents(post.images, post.videos)
+  if (post) return strings.preview.postContents(post.images, post.videos, post.others)
   if (files) return strings.preview.fileContents(files.count, formatBytes(files.bytes))
   return null
 }

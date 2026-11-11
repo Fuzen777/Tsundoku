@@ -481,6 +481,7 @@ mod tests {
                 post: (kind == DownloadKind::Post).then_some(PostContents {
                     images: 1,
                     videos: 0,
+                    others: 0,
                 }),
                 files: (kind == DownloadKind::File).then_some(FileContents { count: 1, bytes: 1 }),
                 post_files: Vec::new(),

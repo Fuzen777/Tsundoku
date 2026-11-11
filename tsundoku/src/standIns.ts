@@ -138,7 +138,7 @@ const postHistoryStandIn: HistoryVideo = {
   uploader: "Instagram",
   durationSeconds: null,
   bestHeight: null,
-  post: { images: 2, videos: 1 },
+  post: { images: 2, videos: 1, others: 0 },
   lastDownload: {
     id: 4,
     preset: "",
@@ -204,7 +204,7 @@ const postStandIn: VideoPreview = {
     uploadDate: "2026-11-02",
     thumbnailUrl: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
     bestHeight: null,
-    post: { images: 2, videos: 4 },
+    post: { images: 2, videos: 4, others: 0 },
     files: null,
     postFiles: [
       "jNQXAC9IVRw",

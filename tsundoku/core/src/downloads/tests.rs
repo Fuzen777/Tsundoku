@@ -908,6 +908,7 @@ fn post(post_id: &str) -> VideoInfo {
         post: Some(crate::metadata::PostContents {
             images: 2,
             videos: 1,
+            others: 0,
         }),
         files: None,
         post_files: Vec::new(),
