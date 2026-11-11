@@ -8,6 +8,7 @@ pub mod boxcom;
 pub mod check;
 pub mod drive;
 pub mod dropbox;
+pub mod filesfm;
 pub mod icedrive;
 pub mod mediafire;
 pub mod mega;
@@ -64,6 +65,7 @@ pub enum Host {
     Icedrive,
     OneFichier,
     SwissTransfer,
+    FilesFm,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -88,7 +90,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -102,6 +104,7 @@ impl Host {
         Self::Icedrive,
         Self::OneFichier,
         Self::SwissTransfer,
+        Self::FilesFm,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -114,6 +117,7 @@ impl Host {
             Self::Icedrive => &icedrive::FACTS,
             Self::OneFichier => &onefichier::FACTS,
             Self::SwissTransfer => &swisstransfer::FACTS,
+            Self::FilesFm => &filesfm::FACTS,
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,
@@ -277,6 +281,7 @@ pub enum FileSource {
     PCloud(pcloud::PCloudFile),
     OneFichier(onefichier::OneFichierFile),
     SwissTransfer(swisstransfer::SwissTransferFile),
+    FilesFm(filesfm::FilesFmFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -325,6 +330,7 @@ impl FileSource {
             Self::PCloud(file) => pcloud::address(client, file, cancel),
             Self::OneFichier(file) => onefichier::address(client, file, cancel),
             Self::SwissTransfer(file) => swisstransfer::address(client, file, cancel),
+            Self::FilesFm(file) => filesfm::address(client, file, cancel),
         }
     }
 

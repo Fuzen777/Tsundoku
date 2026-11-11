@@ -51,7 +51,8 @@ impl CheckPage {
             | FileSource::WeTransfer(_)
             | FileSource::PCloud(_)
             | FileSource::OneFichier(_)
-            | FileSource::SwissTransfer(_) => None,
+            | FileSource::SwissTransfer(_)
+            | FileSource::FilesFm(_) => None,
         }
     }
 
@@ -98,7 +99,8 @@ fn caught_file(host: Host, download: &str) -> Option<String> {
         | Host::WeTransfer
         | Host::PCloud
         | Host::OneFichier
-        | Host::SwissTransfer => None,
+        | Host::SwissTransfer
+        | Host::FilesFm => None,
     }
 }
 

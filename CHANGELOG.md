@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.116 · 2026-11-11
+
+### Added
+
+- **Files.fm**: pasting a Files.fm link to a folder (files.fm/u/…) or a file (files.fm/f/…) shows its name, date and what it holds, with Download; a folder's files go in a folder named after it. A deleted link says so, as does a folder with folders inside it, which Tsundoku can't read yet.
+
 ## 0.1.115 · 2026-11-11
 
 ### Added
