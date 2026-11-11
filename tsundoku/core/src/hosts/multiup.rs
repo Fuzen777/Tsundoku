@@ -27,7 +27,7 @@ const SITE: &str = "https://multiup.io";
 
 /// The hosts a mirror is taken from first: those that give a checksum or answer at once, then those with a check, a
 /// countdown or a wait between downloads.
-const PREFERRED: [Host; 15] = [
+const PREFERRED: [Host; 16] = [
     Host::GoogleDrive,
     Host::Dropbox,
     Host::OneDrive,
@@ -40,6 +40,7 @@ const PREFERRED: [Host; 15] = [
     Host::SwissTransfer,
     Host::WeTransfer,
     Host::TransferNow,
+    Host::Filemail,
     Host::UploadEe,
     Host::MediaFire,
     Host::OneFichier,

@@ -14,6 +14,7 @@ aes = "0.9"
 base64 = "0.23"
 ctr = "0.10"
 dirs = "7"
+md-5 = "0.11"
 # Native TLS is Windows' own (SChannel): no crypto library to build, and Windows' certificate store.
 # Rule conditions' patterns (rules.rs). Matching takes linear time, so no pattern can hang the app.
 regex = "1"

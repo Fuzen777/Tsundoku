@@ -8,6 +8,7 @@ pub mod boxcom;
 pub mod check;
 pub mod drive;
 pub mod dropbox;
+pub mod filemail;
 pub mod filesfm;
 pub mod icedrive;
 pub mod mediafire;
@@ -72,6 +73,7 @@ pub enum Host {
     UploadEe,
     MultiUp,
     TransferNow,
+    Filemail,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -96,7 +98,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -114,6 +116,7 @@ impl Host {
         Self::UploadEe,
         Self::MultiUp,
         Self::TransferNow,
+        Self::Filemail,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -130,6 +133,7 @@ impl Host {
             Self::UploadEe => &uploadee::FACTS,
             Self::MultiUp => &multiup::FACTS,
             Self::TransferNow => &transfernow::FACTS,
+            Self::Filemail => &filemail::FACTS,
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,
@@ -296,6 +300,7 @@ pub enum FileSource {
     FilesFm(filesfm::FilesFmFile),
     UploadEe(uploadee::UploadEeFile),
     TransferNow(transfernow::TransferNowFile),
+    Filemail(filemail::FilemailFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -313,6 +318,8 @@ pub enum FileCheck {
     Sha256(String),
     /// The SHA-1 OneDrive gives, in lowercase hex.
     Sha1(String),
+    /// The MD5 Filemail gives, in lowercase hex.
+    Md5(String),
     /// Google Drive and Dropbox give nothing to check by beyond the size.
     None,
 }
@@ -347,6 +354,7 @@ impl FileSource {
             Self::FilesFm(file) => filesfm::address(client, file, cancel),
             Self::UploadEe(file) => uploadee::address(client, file, cancel),
             Self::TransferNow(file) => transfernow::address(client, file, cancel),
+            Self::Filemail(file) => filemail::address(client, file, cancel),
         }
     }
 

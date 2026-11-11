@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use md5::Md5;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::RANGE;
@@ -386,6 +387,7 @@ fn check(check: &FileCheck, part: &Path, cancel: &CancelToken) -> Result<bool, S
         }
         FileCheck::Sha256(expected) => Ok(&digest::<Sha256>(part, cancel)? == expected),
         FileCheck::Sha1(expected) => Ok(&digest::<Sha1>(part, cancel)? == expected),
+        FileCheck::Md5(expected) => Ok(&digest::<Md5>(part, cancel)? == expected),
     }
 }
 
@@ -652,6 +654,12 @@ mod tests {
         assert!(matches!(check(&sha1, &part, &cancel), Ok(true)));
         let wrong_sha1 = FileCheck::Sha1("00".repeat(20));
         assert!(matches!(check(&wrong_sha1, &part, &cancel), Ok(false)));
+        let md5 = FileCheck::Md5("900150983cd24fb0d6963f7d28e17f72".to_owned());
+        assert!(matches!(check(&md5, &part, &cancel), Ok(true)));
+        assert!(matches!(
+            check(&FileCheck::Md5("00".repeat(16)), &part, &cancel),
+            Ok(false)
+        ));
     }
 
     #[test]

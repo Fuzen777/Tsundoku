@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.120 · 2026-11-12
+
+### Added
+
+- **Filemail**: pasting a Filemail link (filemail.com/d/…) shows the transfer's files, with Download; each file is checked once it arrives. An expired transfer, one with a password and one found to hold a virus say so.
+
 ## 0.1.119 · 2026-11-11
 
 ### Added
