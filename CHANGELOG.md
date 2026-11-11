@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.115 · 2026-11-11
+
+### Added
+
+- **SwissTransfer**: pasting a SwissTransfer link (swisstransfer.com/dl/…, or the older /d/…) shows the transfer's title and files, with Download; a transfer of several files goes in a folder named after it, keeping any folders inside. An expired or deleted transfer, one with a password and one whose downloads are used up say so.
+
 ## 0.1.114 · 2026-11-11
 
 ### Added
