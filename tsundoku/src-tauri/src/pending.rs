@@ -154,6 +154,16 @@ pub fn set_pending_folder(
     pending.set_folder(id, folder)
 }
 
+/// Picks the rule that decides first what it sets for one link, by its ID, or `None` for the rules as usual.
+#[tauri::command]
+pub fn set_pending_rule(
+    pending: Pending<'_>,
+    id: i64,
+    rule_id: Option<String>,
+) -> Result<(), DownloadError> {
+    pending.set_rule(id, rule_id)
+}
+
 /// Picks one link's preset, or `None` for the one picked for them all.
 #[tauri::command]
 pub fn set_pending_preset(

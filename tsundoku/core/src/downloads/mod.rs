@@ -76,6 +76,11 @@ pub struct QueueItem {
     /// rules.
     #[serde(default)]
     pub folder_chosen: bool,
+    /// The rule picked for this download in Pending, by its ID, which decides everything it sets before any other
+    /// (`rules::destination`): the folder it was given when added, and again when its folder goes back to the rules'.
+    /// `None` when none was.
+    #[serde(default)]
+    pub rule_id: Option<String>,
     /// How a post's files, or a file host's one file, are named by a rule when it was added (`rules::file_name`), or
     /// `None` for Settings' name or the file's own, and for a video. The UI doesn't need it.
     #[serde(skip)]
@@ -423,18 +428,20 @@ impl DownloadQueue {
         preset_id: &str,
         overwrite: bool,
     ) -> Result<QueueItem, DownloadError> {
-        self.add_in(video, preset_id, overwrite, None)
+        self.add_in(video, preset_id, overwrite, None, None)
     }
 
-    /// `add`, into `folder` when one was picked for it instead of the one the rules give.
+    /// `add`, into `folder` when one was picked for it instead of the one the rules give, with the rule picked for it
+    /// (`rule_id`) deciding what it sets before any other.
     pub fn add_in(
         &self,
         video: VideoInfo,
         preset_id: &str,
         overwrite: bool,
         folder: Option<String>,
+        rule_id: Option<String>,
     ) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_video(video, preset_id, overwrite, folder)?;
+        let item = self.insert_video(video, preset_id, overwrite, folder, rule_id)?;
         self.schedule();
         Ok(item)
     }
@@ -446,6 +453,7 @@ impl DownloadQueue {
         preset_id: &str,
         overwrite: bool,
         chosen: Option<String>,
+        rule_id: Option<String>,
     ) -> Result<QueueItem, DownloadError> {
         let preset = self.presets.get(preset_id).ok_or(DownloadError::Preset {
             error: PresetError::NotFound,
@@ -458,12 +466,16 @@ impl DownloadQueue {
         }
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
-        let folder = chosen.unwrap_or_else(|| self.destination(&video, Some(&preset)).folder);
+        let folder = chosen.unwrap_or_else(|| {
+            self.destination(&video, Some(&preset), rule_id.as_deref())
+                .folder
+        });
         let file_name = None;
         let mut item = QueueItem {
             id: 0,
             folder,
             folder_chosen,
+            rule_id,
             file_name,
             video,
             preset: Some(preset),
@@ -486,16 +498,18 @@ impl DownloadQueue {
     /// download all its files into the folder the rules give it (a post's by default the site's folder in the
     /// download folder). Files already there are skipped, so adding it again only fetches what's missing.
     pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
-        self.add_post_in(video, None)
+        self.add_post_in(video, None, None)
     }
 
-    /// `add_post`, into `folder` when one was picked for it instead of the one the rules give.
+    /// `add_post`, into `folder` when one was picked for it instead of the one the rules give, with the rule picked for
+    /// it (`rule_id`) deciding what it sets before any other.
     pub fn add_post_in(
         &self,
         video: VideoInfo,
         folder: Option<String>,
+        rule_id: Option<String>,
     ) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_post(video, folder)?;
+        let item = self.insert_post(video, folder, rule_id)?;
         self.schedule();
         Ok(item)
     }
@@ -514,8 +528,8 @@ impl DownloadQueue {
         } in picks
         {
             let inserted = match preset_id {
-                Some(preset_id) => self.insert_video(video, &preset_id, overwrite, folder),
-                None => self.insert_post(video, folder),
+                Some(preset_id) => self.insert_video(video, &preset_id, overwrite, folder, None),
+                None => self.insert_post(video, folder, None),
             };
             match inserted {
                 Ok(_) => added += 1,
@@ -536,6 +550,7 @@ impl DownloadQueue {
         &self,
         video: VideoInfo,
         chosen: Option<String>,
+        rule_id: Option<String>,
     ) -> Result<QueueItem, DownloadError> {
         if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
@@ -553,12 +568,14 @@ impl DownloadQueue {
         }
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
-        let folder = chosen.unwrap_or_else(|| self.destination(&video, None).folder);
-        let file_name = self.rule_file_name(&video);
+        let folder =
+            chosen.unwrap_or_else(|| self.destination(&video, None, rule_id.as_deref()).folder);
+        let file_name = self.rule_file_name(&video, rule_id.as_deref());
         let mut item = QueueItem {
             id: 0,
             folder,
             folder_chosen,
+            rule_id,
             file_name,
             video,
             preset: None,
@@ -720,7 +737,10 @@ impl DownloadQueue {
             let folder_chosen = chosen.is_some();
             let folder = match chosen {
                 Some(folder) => folder,
-                None => self.destination(&item.video, item.preset.as_ref()).folder,
+                None => {
+                    self.destination(&item.video, item.preset.as_ref(), item.rule_id.as_deref())
+                        .folder
+                }
             };
             if folder != item.folder {
                 remove_folder(&temp_folder(item));
@@ -871,24 +891,33 @@ impl DownloadQueue {
         first_error.map_or(Ok(restored), Err)
     }
 
-    /// How a post's files, or a file host's one file, are named by the rules (`rules::file_name`).
-    fn rule_file_name(&self, video: &VideoInfo) -> Option<String> {
+    /// How a post's files, or a file host's one file, are named by the rules, the one `picked` for it first
+    /// (`rules::file_name`).
+    fn rule_file_name(&self, video: &VideoInfo, picked: Option<&str>) -> Option<String> {
         rules::file_name(
             &self.settings.get().rules.list,
             &RuleSubject {
                 video,
                 preset: None,
             },
+            picked,
         )
     }
 
-    /// Where a download of `video` would go, with `preset` (`None` for a post): the folder of the last rule that
-    /// matches, else the preset's own folder, else the download folder. Adding uses it, and the preview card shows it.
-    pub fn destination(&self, video: &VideoInfo, preset: Option<&Preset>) -> Destination {
+    /// Where a download of `video` would go, with `preset` (`None` for a post): the folder of the rule `picked` for it
+    /// (by ID) when it picks one, else of the last rule that matches, else the preset's own folder, else the download
+    /// folder. Adding uses it, and the preview card and Pending show it.
+    pub fn destination(
+        &self,
+        video: &VideoInfo,
+        preset: Option<&Preset>,
+        picked: Option<&str>,
+    ) -> Destination {
         let settings = self.settings.get();
         rules::destination(
             &settings.rules.list,
             &RuleSubject { video, preset },
+            picked,
             &settings.downloads.resolved_folder(),
         )
     }

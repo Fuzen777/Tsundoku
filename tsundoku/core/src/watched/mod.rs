@@ -380,7 +380,7 @@ impl WatchedSources {
                 .filter(|id| self.presets.get(id).is_some())
                 .or_else(|| {
                     let rules = self.settings.get().rules.list;
-                    rules::start_preset(&rules, video, |id| self.presets.get(id).is_some())
+                    rules::start_preset(&rules, video, None, |id| self.presets.get(id).is_some())
                         .map(|picked| picked.preset_id)
                 })
                 .unwrap_or_else(|| self.presets.overview().default_id)

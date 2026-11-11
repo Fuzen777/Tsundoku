@@ -356,7 +356,7 @@ fn a_download_can_go_to_a_folder_picked_for_it() {
     let picked = test.folder.path().join("picked").display().to_string();
     let second = test
         .queue
-        .add_in(video("b"), "best-video", false, Some(picked.clone()))
+        .add_in(video("b"), "best-video", false, Some(picked.clone()), None)
         .unwrap();
     assert_eq!(second.folder, picked);
     assert!(second.folder_chosen);
@@ -572,6 +572,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         preset: None,
         folder: String::new(),
         folder_chosen: false,
+        rule_id: None,
         file_name: None,
         state,
         overwrite: false,
@@ -1582,7 +1583,9 @@ fn a_preset_without_a_folder_saves_where_the_catch_all_says() {
         .unwrap();
     let preset = test.queue.presets.get("best-video");
     assert_eq!(
-        test.queue.destination(&video("b"), preset.as_ref()).folder,
+        test.queue
+            .destination(&video("b"), preset.as_ref(), None)
+            .folder,
         everything.display().to_string(),
         "with the catch-all off, the download folder"
     );
@@ -1617,7 +1620,7 @@ fn a_rule_picks_the_folder() {
         })
         .unwrap();
     let preset = test.queue.presets.get("best-video");
-    let destination = test.queue.destination(&video("a"), preset.as_ref());
+    let destination = test.queue.destination(&video("a"), preset.as_ref(), None);
     assert_eq!(destination.source, DestinationSource::Rule { number: 2 });
     let item = test.queue.add(video("a"), "best-video", false).unwrap();
     assert_eq!(
@@ -1628,6 +1631,74 @@ fn a_rule_picks_the_folder() {
     assert_eq!(item.folder, destination.folder);
     wait_until("it runs", || test.runner.started().contains(&item.id));
     test.queue.cancel(item.id).unwrap();
+}
+
+#[test]
+fn a_rule_picked_for_a_download_gives_its_folder_and_name_and_the_item_keeps_it() {
+    use crate::rules::FolderRule;
+
+    let test = Test::new();
+    let picked_folder = test.folder.path().join("picked");
+    test.settings
+        .update(|settings| {
+            // The video runs, so the post waits.
+            settings.downloads.at_once = 1;
+            // Off and matching nothing: only picking it makes it decide.
+            settings.rules.list.push(FolderRule {
+                id: "rule-1".to_owned(),
+                enabled: false,
+                folder: picked_folder.display().to_string(),
+                file_name: "picked {post} {number}".to_owned(),
+                conditions: vec![crate::rules::RuleCondition {
+                    field: crate::rules::RuleField::Title,
+                    operator: crate::rules::RuleOperator::Is,
+                    value: "nothing".to_owned(),
+                    case_sensitive: false,
+                    join: crate::rules::ConditionJoin::All,
+                }],
+                ..crate::rules::catch_all_rule()
+            });
+        })
+        .unwrap();
+    let picked = Some("rule-1".to_owned());
+    let video_item = test
+        .queue
+        .add_in(video("a"), "best-video", false, None, picked.clone())
+        .unwrap();
+    assert_eq!(video_item.folder, picked_folder.display().to_string());
+    assert!(
+        !video_item.folder_chosen,
+        "the rules' folder, from the rule picked"
+    );
+    let post_item = test
+        .queue
+        .add_post_in(post("Picked"), None, picked.clone())
+        .unwrap();
+    assert_eq!(post_item.folder, picked_folder.display().to_string());
+    assert_eq!(
+        post_item.file_name.as_deref(),
+        Some("picked {post} {number}")
+    );
+    let usual = test.queue.add_post(post("Usual")).unwrap();
+    assert_ne!(usual.folder, post_item.folder, "only where it was picked");
+
+    let elsewhere = test.folder.path().join("elsewhere").display().to_string();
+    test.queue
+        .set_folder(post_item.id, Some(elsewhere))
+        .unwrap();
+    let back = test.queue.set_folder(post_item.id, None).unwrap();
+    assert_eq!(
+        back.folder,
+        picked_folder.display().to_string(),
+        "the usual folder is the picked rule's"
+    );
+    let kept = test
+        .reopen()
+        .items()
+        .into_iter()
+        .find(|item| item.id == video_item.id)
+        .unwrap();
+    assert_eq!(kept.rule_id, picked);
 }
 
 #[test]

@@ -95,6 +95,7 @@ function queueStandIn(id: number, state: QueueItem["state"], title: string, extr
     preset: presetStandIns[id % presetStandIns.length],
     folder: id % 2 ? String.raw`C:\Users\You\Videos` : String.raw`C:\Users\You\Downloads\Tsundoku\youtube.com`,
     folderChosen: false,
+    ruleId: null,
     state,
     overwrite: false,
     addedAt: 1_793_876_473 + id * 60,
@@ -260,6 +261,7 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
     error: null,
     presetId: null,
     folder: null,
+    ruleId: null,
     startWhenRead: false,
     addedAt: 1_793_876_473 + id * 60,
     caught: false,
@@ -475,8 +477,13 @@ export const standIns = {
       downloadRightAway: true,
     },
   ] satisfies FolderRule[],
-  /** The first rule's folder for the video's site, as a new install has it. */
-  destination(video: VideoInfo): Destination {
+  /** The first rule's folder for the video's site, as a new install has it, or the folder of the rule picked for it. */
+  destination(video: VideoInfo, ruleId: string | null = null): Destination {
+    const picked = standIns.folderRules.findIndex((rule) => rule.id === ruleId && rule.folder !== "")
+    if (picked >= 0) {
+      const folder = standIns.folderRules[picked].folder.replace("{site}", video.siteName).replace("{account}", "natgeo")
+      return { folder, source: { kind: "rule", number: picked + 1 } }
+    }
     return {
       folder: ["C:", "Users", "You", "Downloads", "Tsundoku", video.siteName].join("\\"),
       source: { kind: "rule", number: 1 },
@@ -488,8 +495,12 @@ export const standIns = {
     // As the stand-in rules have it: rule 3 downloads videos with "zoo" in their title right away.
     return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 4 } : null
   },
-  rulePreset(video: VideoInfo): RulePreset | null {
-    if (video.post || video.files || !video.title.toLowerCase().includes("zoo")) return null
+  rulePreset(video: VideoInfo, ruleId: string | null = null): RulePreset | null {
+    if (video.post || video.files) return null
+    const picked = standIns.folderRules.findIndex((rule) => rule.id === ruleId && rule.presetId !== null)
+    const presetId = standIns.folderRules[picked]?.presetId
+    if (presetId) return { presetId, rule: picked + 1 }
+    if (!video.title.toLowerCase().includes("zoo")) return null
     return { presetId: "best-audio", rule: 4 }
   },
   queueItems: [
@@ -543,6 +554,7 @@ export const standIns = {
   },
   pendingLinks: [
     pendingStandIn(1, "https://www.instagram.com/p/DfPQchkG1tg/", {
+      ruleId: "rule-1",
       preview: {
         ...postStandIn,
         video: {

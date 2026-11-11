@@ -8,6 +8,7 @@ import {
   setPendingPostFiles,
   setPendingFolder,
   setPendingPreset,
+  setPendingRule,
   startPendingLinks,
 } from "../api"
 import { AFTER_GROUPS, arrangeNested, firstItems, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
@@ -94,14 +95,17 @@ export function PendingView() {
   const ruleGroupOf = useRuleGroupOf(group === "rule")
   // Where each read link will be saved, to group them by folder. The rows ask the same, so they share the answers.
   const readLinks = links.flatMap((link) => (link.preview ? [{ link, video: link.preview.video }] : []))
-  // The preset a rule picks for each read video. A link follows it, else the one picked for them all, until it gets
-  // its own.
-  const rulePresets = useRulePresets(readLinks.map(({ video }) => video))
+  // The preset a rule picks for each read video, the one picked for the link first. A link follows it, else the one
+  // picked for them all, until it gets its own.
+  const rulePresets = useRulePresets(
+    readLinks.map(({ video }) => video),
+    readLinks.map(({ link }) => link.ruleId),
+  )
   const rulePresetOf = new Map(readLinks.map(({ link }, index) => [link.id, rulePresets[index] ?? null]))
   const followedPreset = (link: PendingLink) => rulePresetOf.get(link.id)?.presetId ?? presetId
   const destinations = useDownloadDestinations(
     readLinks.map(({ link, video }) =>
-      destinationRequest(video, link.presetId ?? followedPreset(link), needsDestinations),
+      destinationRequest(video, link.presetId ?? followedPreset(link), link.ruleId, needsDestinations),
     ),
   )
   const destinationOf = new Map(readLinks.map(({ link }, index) => [link.id, destinations[index]]))
@@ -402,6 +406,8 @@ function PendingRow({
             presetId={presetId}
             chosenFolder={link.folder}
             onChoose={(folder) => act(() => setPendingFolder(link.id, folder))}
+            chosenRuleId={link.ruleId}
+            onChooseRule={(ruleId) => act(() => setPendingRule(link.id, ruleId))}
           />
         )}
         {preview?.lastDownload && (
@@ -524,28 +530,39 @@ function PendingPostFiles({
 }
 
 /** Where a read link will be saved, and what picked the folder, as the preview card shows it: with the preset it would
- * start with, or none for a post or a file host's files. Nothing until it's known. */
+ * start with, or none for a post or a file host's files, and the rule picked for it. Nothing until it's known. */
 function PendingDestination({
   video,
   presetId,
   chosenFolder,
+  chosenRuleId,
   folderInHeading,
   onChoose,
+  onChooseRule,
 }: {
   video: VideoInfo
   presetId: string | null
   chosenFolder: string | null
+  chosenRuleId: string | null
   folderInHeading: boolean
   onChoose: (folder: string | null) => void
+  onChooseRule: (ruleId: string | null) => void
 }) {
-  const request = destinationRequest(video, presetId)
-  const { data: destination } = useDownloadDestination(request.video, request.presetId, request.enabled)
+  const request = destinationRequest(video, presetId, chosenRuleId)
+  const { data: destination } = useDownloadDestination(
+    request.video,
+    request.presetId,
+    request.enabled,
+    request.ruleId,
+  )
   return destination || chosenFolder ? (
     <DestinationLine
       destination={destination}
       chosenFolder={chosenFolder}
       folderShown={!folderInHeading}
       onChoose={onChoose}
+      chosenRuleId={chosenRuleId}
+      onChooseRule={onChooseRule}
     />
   ) : null
 }
@@ -566,10 +583,20 @@ function useRemoveLinks(): (ids: number[]) => Promise<void> {
 }
 
 /** Asks where a read link will be saved: with the preset it would start with, or none for a post or a file host's
- * files, which don't use one. A video waits for a preset. */
-function destinationRequest(video: VideoInfo, presetId: string | null, enabled = true): DestinationRequest {
+ * files, which don't use one, and the rule picked for it. A video waits for a preset. */
+function destinationRequest(
+  video: VideoInfo,
+  presetId: string | null,
+  ruleId: string | null,
+  enabled = true,
+): DestinationRequest {
   const usesPreset = !video.post && !video.files
-  return { video, presetId: usesPreset ? presetId : null, enabled: enabled && (!usesPreset || presetId !== null) }
+  return {
+    video,
+    presetId: usesPreset ? presetId : null,
+    ruleId,
+    enabled: enabled && (!usesPreset || presetId !== null),
+  }
 }
 
 /** For a link not read yet: whether it waits its turn or is being read, and whether it starts once read. */

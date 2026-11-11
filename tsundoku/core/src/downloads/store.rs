@@ -21,7 +21,8 @@ impl QueueStore {
         let connection = self.database.lock();
         let mut statement = connection
             .prepare(
-                "SELECT id, video, preset, folder, state, overwrite, added_at, result, error, folder_chosen, file_name
+                "SELECT id, video, preset, folder, state, overwrite, added_at, result, error, folder_chosen, file_name,
+                    rule
                 FROM queue_items ORDER BY position, id",
             )
             .map_err(storage_error)?;
@@ -39,6 +40,7 @@ impl QueueStore {
                     row.get::<_, Option<String>>(8)?,
                     row.get::<_, bool>(9)?,
                     row.get::<_, Option<String>>(10)?,
+                    row.get::<_, Option<String>>(11)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -57,6 +59,7 @@ impl QueueStore {
                 error,
                 folder_chosen,
                 file_name,
+                rule_id,
             ) = row.map_err(storage_error)?;
             // An item that can't be read (from a newer version, say) is skipped rather than blocking the queue.
             let (Ok(video), Ok(preset), Some(state)) = (
@@ -72,6 +75,7 @@ impl QueueStore {
                 preset,
                 folder,
                 folder_chosen,
+                rule_id,
                 file_name,
                 state,
                 overwrite,
@@ -104,8 +108,8 @@ impl QueueStore {
             .query_row(
                 "INSERT INTO queue_items
                     (id, video, preset, folder, state, overwrite, added_at, result, error, position, folder_chosen,
-                    file_name)
-                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12) RETURNING id",
+                    file_name, rule)
+                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13) RETURNING id",
                 params![
                     to_json(&item.video),
                     to_json(&item.preset),
@@ -119,6 +123,7 @@ impl QueueStore {
                     put_back_at.unwrap_or(0),
                     item.folder_chosen,
                     item.file_name,
+                    item.rule_id,
                 ],
                 |row| row.get(0),
             )

@@ -425,16 +425,20 @@ export function saveFolderRules(rules: FolderRule[]): Promise<FolderRule[]> {
 }
 
 /** Where a download would go and what decided it: with a preset for a video, none for a post. */
-export function getDownloadDestination(video: VideoInfo, presetId: string | null): Promise<Destination> {
-  if (!isTauri()) return Promise.resolve(standIns.destination(video))
-  return invoke<Destination>("download_destination", { video, presetId })
+export function getDownloadDestination(
+  video: VideoInfo,
+  presetId: string | null,
+  ruleId: string | null = null,
+): Promise<Destination> {
+  if (!isTauri()) return Promise.resolve(standIns.destination(video, ruleId))
+  return invoke<Destination>("download_destination", { video, presetId, ruleId })
 }
 
 /** The preset a rule picks for a video, and which rule: null when no rule picks one, and for a post or a file host's
  * files. */
-export function getRulePreset(video: VideoInfo): Promise<RulePreset | null> {
-  if (!isTauri()) return Promise.resolve(standIns.rulePreset(video))
-  return invoke<RulePreset | null>("rule_preset", { video })
+export function getRulePreset(video: VideoInfo, ruleId: string | null = null): Promise<RulePreset | null> {
+  if (!isTauri()) return Promise.resolve(standIns.rulePreset(video, ruleId))
+  return invoke<RulePreset | null>("rule_preset", { video, ruleId })
 }
 
 /** Whether a rule makes copied and sent links of a video start once read, and which rule: null when Settings' Download
@@ -636,6 +640,13 @@ export async function setPendingPostFiles(id: number, picked: number[]): Promise
 export async function setPendingFolder(id: number, folder: string | null): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("set_pending_folder", { id, folder })
+}
+
+/** Picks the rule that decides first what it sets for one link (its folder, preset and file name), or null for the
+ * matching rules. */
+export async function setPendingRule(id: number, ruleId: string | null): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("set_pending_rule", { id, ruleId })
 }
 
 export async function setPendingPreset(id: number, presetId: string | null): Promise<void> {

@@ -629,6 +629,71 @@ fn a_rule_picks_the_preset_unless_the_link_has_its_own() {
 }
 
 #[test]
+fn a_rule_picked_for_a_link_decides_what_it_sets_through_a_restart_and_into_the_queue() {
+    let test = Test::new();
+    add_rule(
+        &test,
+        "Title of",
+        rules::FolderRule {
+            preset_id: Some("audio-mp3".to_owned()),
+            ..no_actions()
+        },
+    );
+    add_rule(
+        &test,
+        "matches nothing",
+        rules::FolderRule {
+            id: "rule-8".to_owned(),
+            folder: r"D:\Picked".to_owned(),
+            preset_id: Some("best-audio".to_owned()),
+            ..no_actions()
+        },
+    );
+    test.add(&[FIRST, SECOND]);
+    test.wait_until_read(FIRST);
+    test.wait_until_read(SECOND);
+    let first = test.link(FIRST).unwrap().id;
+    let second = test.link(SECOND).unwrap().id;
+    test.links
+        .set_rule(first, Some("rule-8".to_owned()))
+        .unwrap();
+    test.links
+        .set_rule(second, Some("rule-8".to_owned()))
+        .unwrap();
+    test.links.set_rule(second, Some("  ".to_owned())).unwrap();
+    let reopened = test.reopen();
+    let rule_of = |id: i64| {
+        reopened
+            .list()
+            .into_iter()
+            .find(|link| link.id == id)
+            .and_then(|link| link.rule_id)
+    };
+    assert_eq!(
+        rule_of(first).as_deref(),
+        Some("rule-8"),
+        "kept through a restart"
+    );
+    assert_eq!(rule_of(second), None, "a blank one is none");
+
+    test.links.start(&[first, second], "1080p-mp4").unwrap();
+    let picked = test.queued("first").unwrap();
+    assert_eq!(
+        (
+            picked.folder.as_str(),
+            picked.folder_chosen,
+            picked.preset.unwrap().id.as_str(),
+            picked.rule_id.as_deref()
+        ),
+        (r"D:\Picked", false, "best-audio", Some("rule-8")),
+        "the picked rule's folder and preset, over the matching rule's"
+    );
+    let usual = test.queued("second").unwrap();
+    assert_eq!(usual.preset.unwrap().id, "audio-mp3");
+    assert_ne!(usual.folder, r"D:\Picked");
+}
+
+#[test]
 fn a_rules_deleted_preset_is_passed_over() {
     let test = Test::new();
     add_rule(

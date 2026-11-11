@@ -408,6 +408,7 @@ pub fn run() {
             pending::read_pending_link_again,
             pending::set_pending_preset,
             pending::set_pending_folder,
+            pending::set_pending_rule,
             pending::set_pending_post_files,
             pending::start_pending_links,
             pending::adding_options,

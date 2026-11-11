@@ -83,10 +83,16 @@ export function QueueView() {
   const [queueError, setQueueError] = useState<ErrorDescription | null>(null)
   const { arrangement, ready, change: changeArrangement, error: arrangeError } = useListArrangement("queue")
   const { group, byStatus } = arrangement
-  // What picks each download's folder is asked again, since the queue keeps only the folder.
+  // What picks each download's folder is asked again, since the queue keeps only the folder (and the rule picked for
+  // it in Pending).
   const ruleGroupOf = useRuleGroupOf(group === "rule")
   const destinations = useDownloadDestinations(
-    items.map((item) => ({ video: item.video, presetId: item.preset?.id ?? null, enabled: group === "rule" })),
+    items.map((item) => ({
+      video: item.video,
+      presetId: item.preset?.id ?? null,
+      ruleId: item.ruleId,
+      enabled: group === "rule",
+    })),
   )
   const destinationOf = new Map(items.map((item, index) => [item.id, destinations[index]]))
   const groups = arrangeNested(

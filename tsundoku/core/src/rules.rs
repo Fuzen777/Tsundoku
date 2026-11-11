@@ -4,7 +4,8 @@
 //! rule that's on, does it and matches decides (the bottom-most in the Rules view), so one rule can pick the preset and
 //! an earlier one the folder. With no rule picking the folder, the preset's own folder, then the catch-all (the first
 //! rule, which takes everything else), then the download folder; with none picking the preset, the one picked by hand or the default; with none picking
-//! Download Right Away, Settings. Kept in `settings.json`, edited in the Rules view.
+//! Download Right Away, Settings. A rule picked by hand for one link (Pending) decides everything it sets for it, before
+//! any other rule (`picked_rule`). Kept in `settings.json`, edited in the Rules view.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -462,6 +463,22 @@ impl FolderRule {
             .find(|captured| captured.len() > 1)
     }
 
+    /// `captured`, for the rule picked for a download, which its pattern may not match: `{1}` to `{9}` then take
+    /// nothing, as a group that took no part does, rather than staying as they are, as in a rule without such a pattern.
+    fn captured_when_picked(&self, subject: &RuleSubject<'_>) -> Option<Vec<Option<String>>> {
+        self.captured(subject).or_else(|| {
+            self.conditions
+                .iter()
+                .any(|condition| {
+                    condition.operator == RuleOperator::Matches
+                        && condition
+                            .pattern()
+                            .is_ok_and(|pattern| pattern.captures_len() > 1)
+                })
+                .then(Vec::new)
+        })
+    }
+
     /// Whether it picks where matching downloads go.
     pub fn picks_folder(&self) -> bool {
         !self.folder.trim().is_empty()
@@ -602,23 +619,44 @@ fn pattern_problem(error: &regex::Error) -> String {
         .map_or_else(|| message.clone(), str::to_owned)
 }
 
-/// Where a download goes: the folder of the last rule that's on, picks one and matches, else the preset's own folder,
-/// else the catch-all's when it's on, else the download folder.
+/// Where a download goes: the folder of the rule picked for it (`picked`, by ID) when that one picks a folder, else of
+/// the last rule that's on, picks one and matches, else the preset's own folder, else the catch-all's when it's on,
+/// else the download folder.
 pub fn destination(
     rules: &[FolderRule],
     subject: &RuleSubject<'_>,
+    picked: Option<&str>,
     download_folder: &Path,
 ) -> Destination {
-    destination_on(rules, subject, download_folder, &local_date())
+    destination_on(rules, subject, picked, download_folder, &local_date())
 }
 
 /// `destination` for a download added on `today` (YYYY-MM-DD), which `{added}` becomes.
 fn destination_on(
     rules: &[FolderRule],
     subject: &RuleSubject<'_>,
+    picked: Option<&str>,
     download_folder: &Path,
     today: &str,
 ) -> Destination {
+    let picked_folder = || {
+        picked_rule(rules, picked)
+            .filter(|(_, rule)| rule.picks_folder())
+            .map(|(index, rule)| {
+                (
+                    rule_folder(
+                        rule,
+                        rule.captured_when_picked(subject),
+                        subject,
+                        download_folder,
+                        today,
+                    ),
+                    DestinationSource::Rule {
+                        number: rule_number(index),
+                    },
+                )
+            })
+    };
     let rule_folder_of = |catch_all: bool| {
         rules
             .iter()
@@ -632,7 +670,13 @@ fn destination_on(
             })
             .map(|(index, rule)| {
                 (
-                    rule_folder(rule, subject, download_folder, today),
+                    rule_folder(
+                        rule,
+                        rule.captured(subject),
+                        subject,
+                        download_folder,
+                        today,
+                    ),
                     DestinationSource::Rule {
                         number: rule_number(index),
                     },
@@ -645,7 +689,8 @@ fn destination_on(
             .and_then(Preset::own_folder)
             .map(|folder| (PathBuf::from(folder), DestinationSource::Preset))
     };
-    let (folder, source) = rule_folder_of(false)
+    let (folder, source) = picked_folder()
+        .or_else(|| rule_folder_of(false))
         .or_else(preset_folder)
         .or_else(|| rule_folder_of(true))
         .unwrap_or_else(|| {
@@ -660,12 +705,13 @@ fn destination_on(
     }
 }
 
-/// The preset a video starts with by the rules: that of the last rule that's on, picks a preset that still exists
-/// (`exists`), may pick one and matches. `None` when no rule picks one, and for a post or a file host's files, which
-/// have no preset.
+/// The preset a video starts with by the rules: that of the rule picked for it (`picked`, by ID) when it picks one,
+/// else of the last rule that's on and matches; either must pick a preset that still exists (`exists`) and may pick
+/// one. `None` when no rule picks one, and for a post or a file host's files, which have no preset.
 pub fn start_preset(
     rules: &[FolderRule],
     video: &VideoInfo,
+    picked: Option<&str>,
     exists: impl Fn(&str) -> bool,
 ) -> Option<RulePreset> {
     if video.post.is_some() || video.files.is_some() {
@@ -675,14 +721,22 @@ pub fn start_preset(
         video,
         preset: None,
     };
-    rules.iter().enumerate().rev().find_map(|(index, rule)| {
+    let preset_of = |index: usize, rule: &FolderRule| {
         let preset_id = rule.preset_id.as_deref()?;
-        (rule.enabled && rule.can_pick_preset() && exists(preset_id) && rule.matches(&subject))
-            .then(|| RulePreset {
-                preset_id: preset_id.to_owned(),
-                rule: rule_number(index),
+        (rule.can_pick_preset() && exists(preset_id)).then(|| RulePreset {
+            preset_id: preset_id.to_owned(),
+            rule: rule_number(index),
+        })
+    };
+    picked_rule(rules, picked)
+        .and_then(|(index, rule)| preset_of(index, rule))
+        .or_else(|| {
+            rules.iter().enumerate().rev().find_map(|(index, rule)| {
+                (rule.enabled && rule.matches(&subject))
+                    .then(|| preset_of(index, rule))
+                    .flatten()
             })
-    })
+        })
 }
 
 /// Whether a link that Download Right Away covers starts once read, by the last rule that's on, says so and matches.
@@ -707,26 +761,46 @@ fn rule_number(index: usize) -> u32 {
     u32::try_from(index + 1).unwrap_or(u32::MAX)
 }
 
-/// How a download's files are named by the rules: the file name of the last rule that's on, names files and matches,
-/// with `{1}` to `{9}` filled in from its pattern and, when the rule leaves out what's missing, `{account}` taken out
-/// for a download without one (`post_names::fill_rule_name`), or `None` to leave it to Settings (a post) or the file's
-/// own name. A post's name is kept as Settings → Posts of Images writes one, with `{post}` and `{number}` added when it
-/// lacks them so no two files share a name, for `post_names::gallery_format`. A file host's link of one file gets its
-/// name filled in (`post_names::shared_file_name`), without the extension, which the file keeps. A video keeps its
-/// preset's name, and a shared folder's files their own.
-pub fn file_name(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<String> {
+/// The rule picked by hand for one download, by its ID, with its place in the list: it decides everything it sets
+/// (its folder, preset and file name) before any other rule, whatever its conditions, and even while it's off, since
+/// it was picked. What it doesn't set is left to the rules as usual. `None` when none was picked, or it's gone.
+fn picked_rule<'a>(
+    rules: &'a [FolderRule],
+    picked: Option<&str>,
+) -> Option<(usize, &'a FolderRule)> {
+    let picked = picked?;
+    rules.iter().enumerate().find(|(_, rule)| rule.id == picked)
+}
+
+/// How a download's files are named by the rules: the file name of the rule picked for it (`picked`, by ID) when it
+/// names files, else of the last rule that's on, names files and matches, with `{1}` to `{9}` filled in from its
+/// pattern and, when the rule leaves out what's missing, `{account}` taken out for a download without one
+/// (`post_names::fill_rule_name`), or `None` to leave it to Settings (a post) or the file's own name. A post's name is
+/// kept as Settings → Posts of Images writes one, with `{post}` and `{number}` added when it lacks them so no two files
+/// share a name, for `post_names::gallery_format`. A file host's link of one file gets its name filled in
+/// (`post_names::shared_file_name`), without the extension, which the file keeps. A video keeps its preset's name, and
+/// a shared folder's files their own.
+pub fn file_name(
+    rules: &[FolderRule],
+    subject: &RuleSubject<'_>,
+    picked: Option<&str>,
+) -> Option<String> {
     let video = subject.video;
     let is_post = video.post.is_some();
     let is_one_file = video.files.as_ref().is_some_and(|files| files.count == 1);
     if !is_post && !is_one_file {
         return None;
     }
-    let rule = rules.iter().rev().find(|rule| {
-        rule.enabled
-            && !rule.is_catch_all()
-            && !rule.file_name.trim().is_empty()
-            && rule.matches(subject)
-    })?;
+    let names_files = |rule: &FolderRule| !rule.is_catch_all() && !rule.file_name.trim().is_empty();
+    let rule = picked_rule(rules, picked)
+        .map(|(_, rule)| rule)
+        .filter(|rule| names_files(rule))
+        .or_else(|| {
+            rules
+                .iter()
+                .rev()
+                .find(|rule| rule.enabled && names_files(rule) && rule.matches(subject))
+        })?;
     let captured = rule.captured(subject);
     let filled = post_names::fill_rule_name(
         rule.file_name.trim(),
@@ -754,16 +828,17 @@ pub fn file_name(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<Stri
     Some(name)
 }
 
-/// A rule's folder for one download added on `today`: its placeholders filled in, inside the download folder unless
-/// it's a full path.
+/// A rule's folder for one download added on `today`, with what its pattern `captured`: its placeholders filled in,
+/// inside the download folder unless it's a full path.
 fn rule_folder(
     rule: &FolderRule,
+    captured: Option<Vec<Option<String>>>,
     subject: &RuleSubject<'_>,
     download_folder: &Path,
     today: &str,
 ) -> PathBuf {
     let fill_in = FillIn {
-        captured: rule.captured(subject),
+        captured,
         today,
         missing: rule.missing_values,
     };
@@ -999,13 +1074,15 @@ impl RuleManager {
         self.settings.get().rules.list
     }
 
-    /// The preset a rule picks for `video`, if any, among those for which `exists` holds (`start_preset`).
+    /// The preset a rule picks for `video`, if any, among those for which `exists` holds, the rule `picked` for it
+    /// first (`start_preset`).
     pub fn start_preset(
         &self,
         video: &VideoInfo,
+        picked: Option<&str>,
         exists: impl Fn(&str) -> bool,
     ) -> Option<RulePreset> {
-        start_preset(&self.list(), video, exists)
+        start_preset(&self.list(), video, picked, exists)
     }
 
     /// Replaces every rule, in this order but with the catch-all first, after checking each. Folders, presets and
@@ -1173,7 +1250,12 @@ mod tests {
     const DOWNLOADS: &str = r"D:\Tsundoku";
 
     fn folder_of(rules: &[FolderRule], video: &VideoInfo, preset: Option<&Preset>) -> Destination {
-        destination(rules, &RuleSubject { video, preset }, Path::new(DOWNLOADS))
+        destination(
+            rules,
+            &RuleSubject { video, preset },
+            None,
+            Path::new(DOWNLOADS),
+        )
     }
 
     #[test]
@@ -1355,7 +1437,7 @@ mod tests {
             ..rule(Vec::new(), "")
         };
         assert_eq!(
-            file_name(&[catch_all_rule()], &subject),
+            file_name(&[catch_all_rule()], &subject, None),
             None,
             "Settings' name"
         );
@@ -1365,7 +1447,7 @@ mod tests {
             rule(Vec::new(), r"D:\x"),
         ];
         assert_eq!(
-            file_name(&rules, &subject).as_deref(),
+            file_name(&rules, &subject, None).as_deref(),
             Some("{site} {post} {number}"),
             "the last one that names files, trimmed"
         );
@@ -1375,7 +1457,7 @@ mod tests {
             preset: None,
         };
         assert_eq!(
-            file_name(&rules, &video_subject),
+            file_name(&rules, &video_subject, None),
             None,
             "a video keeps its preset's name"
         );
@@ -1385,7 +1467,7 @@ mod tests {
             preset: None,
         };
         assert_eq!(
-            file_name(&rules, &file_subject).as_deref(),
+            file_name(&rules, &file_subject, None).as_deref(),
             Some("MEGA AbCdEf12 1"),
             "a file host's link of one file is named too"
         );
@@ -1407,11 +1489,11 @@ mod tests {
             preset: None,
         };
         assert_eq!(
-            file_name(&[named("{1}")], &subject).as_deref(),
+            file_name(&[named("{1}")], &subject, None).as_deref(),
             Some("RJ123456")
         );
         assert_eq!(
-            file_name(&[named("{site} {1} {2}")], &subject).as_deref(),
+            file_name(&[named("{site} {1} {2}")], &subject, None).as_deref(),
             Some("MEGA RJ123456"),
             "a group the pattern doesn't have is left out"
         );
@@ -1425,9 +1507,99 @@ mod tests {
             preset: None,
         };
         assert_eq!(
-            file_name(&[named("{account} {1}")], &post_subject).as_deref(),
+            file_name(&[named("{account} {1}")], &post_subject, None).as_deref(),
             Some("{account} RJ01234 {post} {number}"),
             "a post's name gets the post and the number when it has neither"
+        );
+    }
+
+    #[test]
+    fn a_rule_picked_by_hand_decides_what_it_sets_before_every_other() {
+        let with_id = |id: &str, rule: FolderRule| FolderRule {
+            id: id.to_owned(),
+            ..rule
+        };
+        // Rule 2 is off and never matches; rule 3 takes X; rule 4 starts every video as Best Video.
+        let rules = vec![
+            catch_all_rule(),
+            with_id(
+                "rule-2",
+                FolderRule {
+                    enabled: false,
+                    file_name: "{account} picked".to_owned(),
+                    preset_id: Some("audio".to_owned()),
+                    ..rule(
+                        vec![condition(
+                            RuleField::Title,
+                            RuleOperator::Matches,
+                            r"(RJ\d+)",
+                        )],
+                        r"D:\Picked\{1}",
+                    )
+                },
+            ),
+            with_id(
+                "rule-3",
+                rule(
+                    vec![condition(RuleField::Site, RuleOperator::Is, "X")],
+                    r"D:\X",
+                ),
+            ),
+            with_id("rule-4", preset_rule(Vec::new(), "best-video")),
+        ];
+        let tweet = tweet();
+        let subject = RuleSubject {
+            video: &tweet,
+            preset: None,
+        };
+        let folder = |picked| destination(&rules, &subject, picked, Path::new(DOWNLOADS));
+        let by_rule = |folder: &str, number| Destination {
+            folder: folder.to_owned(),
+            source: DestinationSource::Rule { number },
+        };
+        assert_eq!(folder(None), by_rule(r"D:\X", 3));
+        assert_eq!(
+            folder(Some("rule-2")),
+            by_rule(r"D:\Picked\Unknown", 2),
+            "off, not matching, and what its pattern would capture left empty"
+        );
+        assert_eq!(
+            folder(Some("catch-all")),
+            by_rule(r"D:\Tsundoku\X", 1),
+            "the catch-all too"
+        );
+        assert_eq!(
+            folder(Some("rule-4")),
+            folder(None),
+            "one that picks no folder leaves it to the others"
+        );
+        assert_eq!(folder(Some("rule-9")), folder(None), "a rule that's gone");
+
+        assert_eq!(
+            file_name(&rules, &subject, Some("rule-2")).as_deref(),
+            Some("{account} picked {post} {number}")
+        );
+        assert_eq!(file_name(&rules, &subject, Some("rule-3")), None);
+
+        let track = soundcloud_track();
+        let preset_of = |picked| start_preset(&rules, &track, picked, any_preset);
+        assert_eq!(
+            preset_of(Some("rule-2")),
+            Some(RulePreset {
+                preset_id: "audio".to_owned(),
+                rule: 2
+            })
+        );
+        assert_eq!(
+            preset_of(Some("rule-3")),
+            preset_of(None),
+            "one that picks no preset leaves it to the others"
+        );
+        assert_eq!(preset_of(None).map(|pick| pick.rule), Some(4));
+        assert_eq!(
+            start_preset(&rules, &track, Some("rule-2"), |id| id != "audio").map(|pick| pick.rule),
+            Some(4),
+            "a preset that's gone is passed over"
         );
     }
 
@@ -1628,6 +1800,7 @@ mod tests {
         destination_on(
             rules,
             &RuleSubject { video, preset },
+            None,
             Path::new(DOWNLOADS),
             "2026-11-06",
         )
@@ -1879,16 +2052,26 @@ mod tests {
             preset: None,
         };
         assert_eq!(
-            file_name(&[named("{account} - {1}")], &shared_subject).as_deref(),
+            file_name(&[named("{account} - {1}")], &shared_subject, None).as_deref(),
             Some("MEGA - RJ123456"),
             "the site stands in for the account to start with"
         );
         assert_eq!(
-            file_name(&[leaving_out(named("{account} - {1}"))], &shared_subject).as_deref(),
+            file_name(
+                &[leaving_out(named("{account} - {1}"))],
+                &shared_subject,
+                None
+            )
+            .as_deref(),
             Some("RJ123456")
         );
         assert_eq!(
-            file_name(&[named("{1} - {2} - {date} - {post}")], &shared_subject).as_deref(),
+            file_name(
+                &[named("{1} - {2} - {date} - {post}")],
+                &shared_subject,
+                None
+            )
+            .as_deref(),
             Some("RJ123456 - AbCdEf12"),
             "a group the pattern doesn't have and an unknown date go with their separators either way"
         );
@@ -1901,19 +2084,20 @@ mod tests {
             preset: None,
         };
         assert_eq!(
-            file_name(&[named("{account}_{post} {number}")], &post_subject).as_deref(),
+            file_name(&[named("{account}_{post} {number}")], &post_subject, None).as_deref(),
             Some("{account}_{post} {number}")
         );
         assert_eq!(
             file_name(
                 &[leaving_out(named("{account}_{post} {number}"))],
-                &post_subject
+                &post_subject,
+                None
             )
             .as_deref(),
             Some("{post} {number}")
         );
         assert_eq!(
-            file_name(&[leaving_out(named("{account}"))], &post_subject).as_deref(),
+            file_name(&[leaving_out(named("{account}"))], &post_subject, None).as_deref(),
             Some("{post} {number}"),
             "the post and the number added without a space before them"
         );
@@ -1926,7 +2110,8 @@ mod tests {
                         ..tweet()
                     },
                     preset: None,
-                }
+                },
+                None
             )
             .as_deref(),
             Some("{account} {post} {number}"),
@@ -2041,18 +2226,18 @@ mod tests {
             off,
         ];
         assert_eq!(
-            start_preset(&rules, &track, any_preset),
+            start_preset(&rules, &track, None, any_preset),
             Some(RulePreset {
                 preset_id: "audio-mp3".to_owned(),
                 rule: 3,
             })
         );
         assert_eq!(
-            start_preset(&rules, &video(), any_preset).map(|pick| pick.rule),
+            start_preset(&rules, &video(), None, any_preset).map(|pick| pick.rule),
             Some(4)
         );
         assert_eq!(
-            start_preset(&[rule(Vec::new(), r"D:\All")], &track, any_preset),
+            start_preset(&[rule(Vec::new(), r"D:\All")], &track, None, any_preset),
             None,
             "no rule picks one"
         );
@@ -2061,8 +2246,8 @@ mod tests {
     #[test]
     fn posts_and_shared_files_get_no_preset() {
         let rules = vec![preset_rule(Vec::new(), "best-video")];
-        assert_eq!(start_preset(&rules, &tweet(), any_preset), None);
-        assert_eq!(start_preset(&rules, &mega_file(), any_preset), None);
+        assert_eq!(start_preset(&rules, &tweet(), None, any_preset), None);
+        assert_eq!(start_preset(&rules, &mega_file(), None, any_preset), None);
     }
 
     #[test]
@@ -2073,11 +2258,11 @@ mod tests {
         ];
         let exists = |id: &str| id != "custom-1";
         assert_eq!(
-            start_preset(&rules, &soundcloud_track(), exists).map(|pick| pick.preset_id),
+            start_preset(&rules, &soundcloud_track(), None, exists).map(|pick| pick.preset_id),
             Some("audio-mp3".to_owned())
         );
         assert_eq!(
-            start_preset(&rules[..1], &soundcloud_track(), exists),
+            start_preset(&rules[..1], &soundcloud_track(), None, exists),
             None,
             "the default, then"
         );
@@ -2097,7 +2282,7 @@ mod tests {
                 "audio-mp3",
             );
             assert!(!circular.can_pick_preset());
-            assert_eq!(start_preset(&[circular], &video, any_preset), None);
+            assert_eq!(start_preset(&[circular], &video, None, any_preset), None);
         }
         let site = preset_rule(
             vec![condition(RuleField::Site, RuleOperator::Is, "youtube")],
@@ -2388,7 +2573,7 @@ mod tests {
         assert_eq!(manager_in(&folder).list(), saved, "kept in settings.json");
         assert_eq!(
             manager
-                .start_preset(&soundcloud_track(), any_preset)
+                .start_preset(&soundcloud_track(), None, any_preset)
                 .map(|pick| pick.rule),
             Some(2)
         );

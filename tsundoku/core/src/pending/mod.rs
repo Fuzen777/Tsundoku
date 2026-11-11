@@ -70,6 +70,9 @@ pub struct PendingLink {
     pub preset_id: Option<String>,
     /// A folder picked for this link instead of the one the rules give, as a full path.
     pub folder: Option<String>,
+    /// A rule picked for this link, by its ID, which decides everything it sets (its folder, preset and file name)
+    /// before any other rule, whatever its conditions (`rules::destination`). `None` for the rules as usual.
+    pub rule_id: Option<String>,
     /// Started before it was read: it joins the queue once it's read, unless it was downloaded before.
     pub start_when_read: bool,
     /// In seconds since 1970.
@@ -179,6 +182,8 @@ struct Entry {
     preset_id: Option<String>,
     /// A folder picked for this link instead of the one the rules give.
     folder: Option<String>,
+    /// A rule picked for this link, which decides what it sets before any other.
+    rule_id: Option<String>,
     start_when_read: StartWhenRead,
     added_at: i64,
     origin: LinkOrigin,
@@ -391,6 +396,7 @@ impl PendingLinks {
                     error: None,
                     preset_id: None,
                     folder: None,
+                    rule_id: None,
                     start_when_read,
                     added_at,
                     origin,
@@ -560,6 +566,22 @@ impl PendingLinks {
         Ok(())
     }
 
+    /// Picks the rule that decides, before any other, everything it sets for one link (its folder, preset and file
+    /// name), by its ID, or `None` for the rules as usual.
+    pub fn set_rule(&self, id: i64, rule_id: Option<String>) -> Result<(), DownloadError> {
+        let rule_id = rule_id
+            .map(|rule_id| rule_id.trim().to_owned())
+            .filter(|rule_id| !rule_id.is_empty());
+        {
+            let mut state = lock(&self.state);
+            let entry = find(&mut state.entries, id)?;
+            entry.rule_id = rule_id;
+            self.store.update(entry)?;
+        }
+        self.notify();
+        Ok(())
+    }
+
     /// Starts links. One that was read joins the download queue now, with its own preset, else the one a rule picks,
     /// else `preset_id`, and leaves the pending links; one not read yet joins once it's read, unless it turns out to be
     /// downloaded already, with the preset a rule picks then, else `preset_id`. One that couldn't be read stays. A
@@ -605,8 +627,8 @@ impl PendingLinks {
         first_error.map_or(Ok(()), Err)
     }
 
-    /// Adds a link that was read to the download queue: a post or a file host's link as it is, a video with the preset
-    /// `start_preset` gives. A video already in the queue counts as started.
+    /// Adds a link that was read to the download queue, with its folder and rule: a post or a file host's link as it
+    /// is, a video with the preset `start_preset` gives. A video already in the queue counts as started.
     fn enqueue(
         &self,
         entry: &Entry,
@@ -619,21 +641,23 @@ impl PendingLinks {
             .map(|fetched| fetched.video.clone())
             .ok_or(DownloadError::WrongState)?;
         let folder = entry.folder.clone();
+        let rule_id = entry.rule_id.clone();
         let added = if video.post.is_some() || video.files.is_some() {
-            self.queue.add_post_in(video, folder)
+            self.queue.add_post_in(video, folder, rule_id)
         } else {
-            let preset =
-                self.start_preset(&video, chosen, otherwise)
-                    .ok_or(DownloadError::Preset {
-                        error: PresetError::NotFound,
-                    })?;
+            let preset = self
+                .start_preset(&video, chosen, rule_id.as_deref(), otherwise)
+                .ok_or(DownloadError::Preset {
+                    error: PresetError::NotFound,
+                })?;
             let overwrite = self
                 .history
                 .last_download(&video.site, &video.video_id)
                 .ok()
                 .flatten()
                 .is_some_and(|last| last.preset == preset.name);
-            self.queue.add_in(video, &preset.id, overwrite, folder)
+            self.queue
+                .add_in(video, &preset.id, overwrite, folder, rule_id)
         };
         match added {
             Ok(_) | Err(DownloadError::AlreadyQueued) => Ok(()),
@@ -641,16 +665,18 @@ impl PendingLinks {
         }
     }
 
-    /// The preset a video starts with: `chosen` for it, else the one a rule picks, else `otherwise`, else the default
-    /// one, each only if it still exists.
+    /// The preset a video starts with: `chosen` for it, else the one the rule `picked` for it or another rule picks,
+    /// else `otherwise`, else the default one, each only if it still exists.
     fn start_preset(
         &self,
         video: &VideoInfo,
         chosen: Option<&str>,
+        picked: Option<&str>,
         otherwise: Option<&str>,
     ) -> Option<Preset> {
         let rules = self.settings.get().rules.list;
-        let by_rule = rules::start_preset(&rules, video, |id| self.presets.get(id).is_some());
+        let by_rule =
+            rules::start_preset(&rules, video, picked, |id| self.presets.get(id).is_some());
         [
             chosen,
             by_rule.as_ref().map(|pick| pick.preset_id.as_str()),
@@ -667,7 +693,14 @@ impl PendingLinks {
     fn downloads_right_away(&self, entry: &Entry, video: &VideoInfo) -> bool {
         let settings = self.settings.get();
         let preset = (video.post.is_none() && video.files.is_none())
-            .then(|| self.start_preset(video, None, entry.preset_id.as_deref()))
+            .then(|| {
+                self.start_preset(
+                    video,
+                    None,
+                    entry.rule_id.as_deref(),
+                    entry.preset_id.as_deref(),
+                )
+            })
             .flatten();
         let subject = RuleSubject {
             video,
@@ -889,6 +922,7 @@ impl PendingLinks {
             error: entry.error,
             preset_id: entry.preset_id,
             folder: entry.folder,
+            rule_id: entry.rule_id,
             start_when_read: self.shows_starting_once_read(entry.start_when_read),
             added_at: entry.added_at,
             caught: entry.origin == LinkOrigin::Copied,

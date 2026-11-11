@@ -134,6 +134,10 @@ const MIGRATIONS: &[&str] = &[
     );",
     // 13: how a queue item's post's files are named by a rule (`rules::file_name`), or NULL for Settings' name.
     "ALTER TABLE queue_items ADD COLUMN file_name TEXT;",
+    // 14: the rule picked by hand for one link or download, by its ID, which decides everything it sets before any
+    // other rule (`rules::picked_rule`); NULL when none was.
+    "ALTER TABLE pending_links ADD COLUMN rule TEXT;
+    ALTER TABLE queue_items ADD COLUMN rule TEXT;",
 ];
 
 pub struct Database {

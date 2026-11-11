@@ -167,16 +167,22 @@ export function useFolderRules() {
 }
 
 /** Where a download would go, kept while the next answer loads so the preview card doesn't flicker. */
-export function useDownloadDestination(video: VideoInfo, presetId: string | null, enabled = true) {
-  return useQuery(destinationQuery({ video, presetId, enabled }))
+export function useDownloadDestination(
+  video: VideoInfo,
+  presetId: string | null,
+  enabled = true,
+  ruleId: string | null = null,
+) {
+  return useQuery(destinationQuery({ video, presetId, enabled, ruleId }))
 }
 
-/** A download whose folder is asked: the video, and the preset it would start with (none for a post or a file host's
- * files). */
+/** A download whose folder is asked: the video, the preset it would start with (none for a post or a file host's
+ * files), and the rule picked for it, if any. */
 export interface DestinationRequest {
   video: VideoInfo
   presetId: string | null
   enabled: boolean
+  ruleId?: string | null
 }
 
 /** Where several downloads would go, in the order asked, each undefined until it's known. They share their answers
@@ -185,10 +191,10 @@ export function useDownloadDestinations(requests: readonly DestinationRequest[])
   return useQueries({ queries: requests.map(destinationQuery), combine: destinationsOf })
 }
 
-function destinationQuery({ video, presetId, enabled }: DestinationRequest) {
+function destinationQuery({ video, presetId, enabled, ruleId = null }: DestinationRequest) {
   return {
-    queryKey: [...queryKeys.downloadDestination, video.site, video.videoId, presetId],
-    queryFn: () => getDownloadDestination(video, presetId),
+    queryKey: [...queryKeys.downloadDestination, video.site, video.videoId, presetId, ruleId],
+    queryFn: () => getDownloadDestination(video, presetId, ruleId),
     placeholderData: keepPreviousData,
     enabled,
   }
@@ -227,16 +233,22 @@ export function useRulePreset(video: VideoInfo) {
   return useQuery(rulePresetQuery(video))
 }
 
-/** The presets rules pick for several videos, in the order asked: undefined until known, null when no rule picks one.
- * They share their answers with `useRulePreset`. */
-export function useRulePresets(videos: readonly VideoInfo[]): (RulePreset | null | undefined)[] {
-  return useQueries({ queries: videos.map(rulePresetQuery), combine: rulePresetsOf })
+/** The presets rules pick for several videos, in the order asked, each with the rule picked for it in `ruleIds`
+ * first, if any: undefined until known, null when no rule picks one. They share their answers with `useRulePreset`. */
+export function useRulePresets(
+  videos: readonly VideoInfo[],
+  ruleIds: readonly (string | null)[] = [],
+): (RulePreset | null | undefined)[] {
+  return useQueries({
+    queries: videos.map((video, index) => rulePresetQuery(video, ruleIds[index] ?? null)),
+    combine: rulePresetsOf,
+  })
 }
 
-function rulePresetQuery(video: VideoInfo) {
+function rulePresetQuery(video: VideoInfo, ruleId: string | null = null) {
   return {
-    queryKey: [...queryKeys.rulePreset, video.site, video.videoId],
-    queryFn: () => getRulePreset(video),
+    queryKey: [...queryKeys.rulePreset, video.site, video.videoId, ruleId],
+    queryFn: () => getRulePreset(video, ruleId),
     enabled: !video.post && !video.files,
   }
 }

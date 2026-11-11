@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.104 · 2026-11-11
+
+### Added
+
+- **Apply a rule to one link**: in Pending, the rules button after a read link's folder (Apply a Rule…) lists every rule, and the one you pick decides that link's folder, preset and file name, whatever its conditions, even a rule that's turned off. What it doesn't set still comes from the rules that match. The line says which ("Picked: Nat Geo"), Use the Matching Rules goes back, and the pick is kept through a restart and goes with the link to the queue.
+
 ## 0.1.103 · 2026-11-11
 
 ### Added

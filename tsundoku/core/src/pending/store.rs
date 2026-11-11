@@ -25,7 +25,7 @@ impl PendingStore {
         let mut statement = connection
             .prepare(
                 "SELECT id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught,
-                    folder
+                    folder, rule
                 FROM pending_links ORDER BY id",
             )
             .map_err(storage_error)?;
@@ -43,6 +43,7 @@ impl PendingStore {
                     row.get::<_, i64>(8)?,
                     row.get::<_, LinkOrigin>(9)?,
                     row.get::<_, Option<String>>(10)?,
+                    row.get::<_, Option<String>>(11)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -61,6 +62,7 @@ impl PendingStore {
                 added_at,
                 origin,
                 folder,
+                rule_id,
             ) = row.map_err(storage_error)?;
             let fetched = video
                 .and_then(|json| serde_json::from_str(&json).ok())
@@ -83,6 +85,7 @@ impl PendingStore {
                 error,
                 preset_id,
                 folder,
+                rule_id,
                 start_when_read,
                 added_at,
                 origin,
@@ -115,7 +118,7 @@ impl PendingStore {
         connection
             .execute(
                 "UPDATE pending_links SET state = ?2, video = ?3, missing_js_runtime = ?4, error = ?5, preset = ?6,
-                    start_when_read = ?7, folder = ?8
+                    start_when_read = ?7, folder = ?8, rule = ?9
                 WHERE id = ?1",
                 params![
                     entry.id,
@@ -126,6 +129,7 @@ impl PendingStore {
                     entry.preset_id,
                     entry.start_when_read,
                     entry.folder,
+                    entry.rule_id,
                 ],
             )
             .map_err(storage_error)?;
@@ -145,8 +149,9 @@ fn insert_into(connection: &Connection, entry: &Entry) -> Result<i64, DownloadEr
     connection
         .query_row(
             "INSERT INTO pending_links
-                (id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught, folder)
-            VALUES (?10, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?11) RETURNING id",
+                (id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught, folder,
+                rule)
+            VALUES (?10, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?11, ?12) RETURNING id",
             params![
                 entry.link,
                 state_name(entry.state),
@@ -159,6 +164,7 @@ fn insert_into(connection: &Connection, entry: &Entry) -> Result<i64, DownloadEr
                 entry.origin,
                 (entry.id != 0).then_some(entry.id),
                 entry.folder,
+                entry.rule_id,
             ],
             |row| row.get(0),
         )

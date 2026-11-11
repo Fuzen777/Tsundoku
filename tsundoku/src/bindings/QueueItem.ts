@@ -21,7 +21,13 @@ folder: string,
  * The folder was picked for this download (`set_folder`, or picked before it was added) rather than given by the
  * rules.
  */
-folderChosen: boolean, state: QueueState, 
+folderChosen: boolean, 
+/**
+ * The rule picked for this download in Pending, by its ID, which decides everything it sets before any other
+ * (`rules::destination`): the folder it was given when added, and again when its folder goes back to the rules'.
+ * `None` when none was.
+ */
+ruleId: string | null, state: QueueState, 
 /**
  * Download Again with the same preset: replace the file made before.
  */

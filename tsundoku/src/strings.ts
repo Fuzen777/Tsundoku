@@ -525,10 +525,19 @@ export const strings = {
       preset: "Preset's Folder",
       downloadFolder: "Download Folder",
       chosen: "Picked for This One",
+      /** A rule picked for this one download (`ruleLabel`), which decides what it sets whatever its conditions. Short,
+       * so the folder before it keeps its room. */
+      pickedRule: (rule: string) => `Picked: ${rule}`,
     },
+    pickedRuleHint: (rule: string) => `${rule} applies to this one, whatever its conditions`,
     chooseFolder: "Change Folder…",
     chooseFolderTitle: "Choose Where This Download Goes",
     usualFolder: "Use the Usual Folder",
+    /** Picks a rule for this one download: its folder, preset and file name win over every other rule's. */
+    applyRule: "Apply a Rule…",
+    /** In Apply a Rule's list, a rule that's off, which still applies when picked. */
+    ruleOff: (rule: string) => `${rule} (Off)`,
+    matchingRules: "Use the Matching Rules",
     /** Beside the preset picker when a rule picked the preset, opening the rules. */
     presetByRule: (rule: string) => rule,
     presetByRuleHint: (rule: string) => `${rule} picks this preset`,

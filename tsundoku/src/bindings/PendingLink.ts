@@ -22,6 +22,11 @@ presetId: string | null,
  */
 folder: string | null, 
 /**
+ * A rule picked for this link, by its ID, which decides everything it sets (its folder, preset and file name)
+ * before any other rule, whatever its conditions (`rules::destination`). `None` for the rules as usual.
+ */
+ruleId: string | null, 
+/**
  * Started before it was read: it joins the queue once it's read, unless it was downloaded before.
  */
 startWhenRead: boolean, 

@@ -124,27 +124,30 @@ pub fn save_folder_rules(
     manager.save(rules)
 }
 
-/// Where a download would go and what decided it, for the preview card: with a preset for a video, none for a post.
+/// Where a download would go and what decided it, for the preview card and Pending: with a preset for a video, none
+/// for a post, and the rule picked for it, if any.
 #[tauri::command]
 pub fn download_destination(
     queue: Queue<'_>,
     presets: Presets<'_>,
     video: VideoInfo,
     preset_id: Option<String>,
+    rule_id: Option<String>,
 ) -> Destination {
     let preset = preset_id.and_then(|id| presets.get(&id));
-    queue.destination(&video, preset.as_ref())
+    queue.destination(&video, preset.as_ref(), rule_id.as_deref())
 }
 
-/// The preset a rule picks for a video, and which rule, for the preview card and Pending: `None` when no rule picks
-/// one, and for a post or a file host's files.
+/// The preset a rule picks for a video, the one picked for it first, and which rule, for the preview card and
+/// Pending: `None` when no rule picks one, and for a post or a file host's files.
 #[tauri::command]
 pub fn rule_preset(
     manager: Rules<'_>,
     presets: Presets<'_>,
     video: VideoInfo,
+    rule_id: Option<String>,
 ) -> Option<RulePreset> {
-    manager.start_preset(&video, |id| presets.get(id).is_some())
+    manager.start_preset(&video, rule_id.as_deref(), |id| presets.get(id).is_some())
 }
 
 /// Whether a rule makes copied and sent links of a video start once read, and which rule, for Rules' Test a Link:
@@ -177,7 +180,7 @@ pub fn add_to_queue(
     overwrite: bool,
     folder: Option<String>,
 ) -> Result<QueueItem, DownloadError> {
-    queue.add_in(video, &preset_id, overwrite, folder)
+    queue.add_in(video, &preset_id, overwrite, folder, None)
 }
 
 /// Adds a post of images, whose files all go into the site's folder in the posts folder.
@@ -187,7 +190,7 @@ pub fn add_post_to_queue(
     video: VideoInfo,
     folder: Option<String>,
 ) -> Result<QueueItem, DownloadError> {
-    queue.add_post_in(video, folder)
+    queue.add_post_in(video, folder, None)
 }
 
 /// Saves a download that isn't running in a folder picked for it, or back in the rules' (`None`).
