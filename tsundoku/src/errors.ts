@@ -108,6 +108,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.limitReached(error.site), detail: error.detail }
     case "waitBetweenDownloads":
       return { message: text.waitBetweenDownloads(error.site, formatClockTime(Date.now() + error.seconds * 1000)) }
+    case "noSupportedMirror":
+      return { message: text.noSupportedMirror(error.site, error.mirrors) }
     case "subscribersOnly":
       return { message: text.subscribersOnly(error.site) }
     case "passwordProtected":

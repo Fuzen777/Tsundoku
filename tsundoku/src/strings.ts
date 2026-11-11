@@ -572,6 +572,10 @@ export const strings = {
         `${site}'s download limit is used up for now. Try again in a few hours.`,
       waitBetweenDownloads: (site: string, time: string) =>
         `${site} makes free downloads wait between each other. Try again after ${time}.`,
+      noSupportedMirror: (site: string, mirrors: string[]) =>
+        mirrors.length === 0
+          ? `This ${site} page lists no mirrors.`
+          : `None of this ${site} page's mirrors is on a site Tsundoku downloads from: ${mirrors.join(", ")}.`,
       subscribersOnly: (site: string) => `The owner of this ${site} file keeps it for ${site}'s subscribers.`,
       passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
       linkIncomplete: (site: string) =>

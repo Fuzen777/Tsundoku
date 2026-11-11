@@ -102,7 +102,8 @@ fn caught_file(host: Host, download: &str) -> Option<String> {
         | Host::OneFichier
         | Host::SwissTransfer
         | Host::FilesFm
-        | Host::UploadEe => None,
+        | Host::UploadEe
+        | Host::MultiUp => None,
     }
 }
 

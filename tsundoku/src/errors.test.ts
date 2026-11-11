@@ -123,6 +123,9 @@ describe("file host errors", () => {
     expect(describePreviewError({ kind: "linkNotRecognized", site: "MediaFire" }).message).toBe(
       strings.preview.errors.linkNotRecognized("MediaFire"),
     )
+    expect(
+      describePreviewError({ kind: "noSupportedMirror", site: "MultiUp", mirrors: ["clicknupload.click"] }).message,
+    ).toBe(strings.preview.errors.noSupportedMirror("MultiUp", ["clicknupload.click"]))
     expect(describePreviewError({ kind: "subscribersOnly", site: "1fichier" })).toEqual({
       message: strings.preview.errors.subscribersOnly("1fichier"),
     })

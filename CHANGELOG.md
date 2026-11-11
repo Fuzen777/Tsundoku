@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.118 · 2026-11-11
+
+### Added
+
+- **MultiUp mirror pages**: pasting a MultiUp link (multiup.io/download/…) opens its first working mirror on a site Tsundoku downloads from, preferring those that check the file and make no one wait, and shows that file with Download. A page whose mirrors are all on other sites says which sites they are.
+
 ## 0.1.117 · 2026-11-11
 
 ### Added
