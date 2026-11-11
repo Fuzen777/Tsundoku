@@ -7,6 +7,7 @@ import type { Preset } from "../bindings/Preset"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
+import { HelpMenu, type HelpTopic } from "../components/HelpMenu"
 import { IconButton } from "../components/IconButton"
 import { Menu, type MenuItem } from "../components/Menu"
 import { Page } from "../components/Page"
@@ -154,7 +155,6 @@ export function RulesView() {
       number={current.index + 1}
       presets={presets}
       defaultPresetId={presetsOverview?.defaultId ?? ""}
-      downloadFolder={downloadFolder}
       saving={saving}
       error={error}
       onChange={(draft) => setEditing({ ...current, draft })}
@@ -212,10 +212,13 @@ export function RulesView() {
     <Page
       title={strings.nav.rules}
       actions={
-        <Button size="sm" disabled={busy} onClick={() => startEditing(rules.length, newRule(), true)}>
-          <Plus size={14} />
-          {text.addRule}
-        </Button>
+        <>
+          <HelpMenu label={text.help.label} topics={helpTopics(downloadFolder)} />
+          <Button size="sm" disabled={busy} onClick={() => startEditing(rules.length, newRule(), true)}>
+            <Plus size={14} />
+            {text.addRule}
+          </Button>
+        </>
       }
     >
       <div
@@ -253,6 +256,19 @@ export function RulesView() {
       </div>
     </Page>
   )
+}
+
+/** What each of the rule editor's fields means, in the editor's order, under the field's own label. */
+function helpTopics(downloadFolder: string): HelpTopic[] {
+  const help = text.help
+  return [
+    { title: text.name, paragraphs: [help.name] },
+    { title: text.when, paragraphs: help.when },
+    { title: text.saveIn, paragraphs: help.saveIn(downloadFolder) },
+    { title: text.fileName, paragraphs: help.fileName },
+    { title: text.startAs, paragraphs: help.startAs },
+    { title: text.downloadRightAway, paragraphs: [help.downloadRightAway] },
+  ]
 }
 
 interface RuleRowProps {

@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.101 · 2026-11-11
+
+### Changed
+
+- **How Rules Work**: the explanations under each field of a rule's editor (Name, When, Save In, File Name, Start As and Download Right Away) moved into a (?) beside Add Rule, so the editor shows the fields alone. Start As still says why when a rule can't pick the preset.
+
 ## 0.1.100 · 2026-11-11
 
 ### Added

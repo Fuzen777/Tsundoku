@@ -52,7 +52,6 @@ interface RuleEditorProps {
   number: number
   presets: readonly Preset[]
   defaultPresetId: string
-  downloadFolder: string
   saving: boolean
   error: ErrorDescription | null
   onChange: (draft: FolderRule) => void
@@ -67,7 +66,6 @@ export function RuleEditor({
   number,
   presets,
   defaultPresetId,
-  downloadFolder,
   saving,
   error,
   onChange,
@@ -81,7 +79,6 @@ export function RuleEditor({
   const isCatchAll = draft.id === CATCH_ALL_RULE_ID
   const { placeholders, hints: placeholderHints } = folderPlaceholders(draft.conditions)
   const capturedPlaceholders = placeholders.filter((placeholder) => /^\d$/.test(placeholder))
-  const hasPattern = draft.conditions.some((condition) => isPattern(condition.operator))
   const update = (changes: Partial<FolderRule>) => onChange({ ...draft, ...changes })
   const setCondition = (index: number, condition: RuleCondition) =>
     update({ conditions: draft.conditions.map((existing, at) => (at === index ? condition : existing)) })
@@ -94,7 +91,7 @@ export function RuleEditor({
   return (
     <Card className="flex flex-col gap-4 p-4">
       <p className="font-semibold">{draft.name.trim() || text.number(number)}</p>
-      <Field label={text.name} hint={text.nameHint(number)} htmlFor="rule-name">
+      <Field label={text.name} htmlFor="rule-name">
         <TextInput
           id="rule-name"
           className="max-w-sm"
@@ -108,7 +105,7 @@ export function RuleEditor({
           <p className="text-fg-secondary">{text.catchAllWhen}</p>
         </Field>
       ) : (
-        <Field label={text.when} hint={hasPattern ? `${text.whenHint} ${text.patternHint}` : text.whenHint}>
+        <Field label={text.when}>
           <div className="flex flex-col gap-2">
             {draft.conditions.map((condition, index) => (
               <ConditionRow
@@ -135,13 +132,7 @@ export function RuleEditor({
           </div>
         </Field>
       )}
-      <Field
-        label={text.saveIn}
-        hint={
-          isCatchAll ? text.saveInHint(downloadFolder) : `${text.saveInHint(downloadFolder)} ${text.saveInEmptyHint}`
-        }
-        htmlFor="rule-folder"
-      >
+      <Field label={text.saveIn} htmlFor="rule-folder">
         <div className="flex flex-col gap-2">
           <div className="flex gap-2">
             <TextInput
@@ -163,7 +154,7 @@ export function RuleEditor({
         </div>
       </Field>
       {!isCatchAll && (
-        <Field label={text.fileName} hint={text.fileNameHint} htmlFor="rule-file-name">
+        <Field label={text.fileName} htmlFor="rule-file-name">
           <PostNameInput
             id="rule-file-name"
             value={draft.fileName}
@@ -221,7 +212,7 @@ function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
     <>
       <Field
         label={text.startAs}
-        hint={presetAllowed ? text.startAsHint : text.startAsUnavailable}
+        hint={presetAllowed ? undefined : text.startAsUnavailable}
         error={!presetAllowed && draft.presetId !== null ? text.startAsUnavailable : undefined}
         htmlFor="rule-preset"
       >
@@ -241,7 +232,7 @@ function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
           {presetMissing && <option value={draft.presetId ?? ""}>{text.deletedPreset}</option>}
         </SelectInput>
       </Field>
-      <Field label={text.downloadRightAway} hint={text.downloadRightAwayHint}>
+      <Field label={text.downloadRightAway}>
         <SegmentedControl
           label={text.downloadRightAway}
           options={RIGHT_AWAY_CHOICES}

@@ -654,6 +654,29 @@ export const strings = {
   rules: {
     intro:
       "Rules pick where downloads go, the preset videos start with, and whether copied links download right away. For each, the last rule that matches and picks it decides, so a rule overrides those above it. A preset with a folder of its own comes before the first rule, which takes everything else.",
+    /** The (?) at the top of the view: what each of the editor's fields means, under the field's own label. */
+    help: {
+      label: "How Rules Work",
+      name: "Shown instead of the rule's number, such as “Rule 3”, wherever the rule is named, such as beside a download's folder. Leave it empty to use its number.",
+      when: [
+        "Conditions joined by OR are alternatives, of which one must match; AND joins those, and each must. So “site is X OR site is Bluesky AND title contains cat” takes a cat from either site. A rule without conditions matches every download.",
+        "Text is compared ignoring case and the spaces around it, unless Match Case is on. Matches takes a regular expression, found anywhere in the text; what it captures in parentheses can go in the folder and the file name as {1}, {2} and so on.",
+      ],
+      saveIn: (downloadFolder: string) => [
+        "Placeholders such as {site} become the download's own: click one to put it where the cursor is, and hover over it to see what it becomes.",
+        `A folder that isn't a full path goes inside the download folder, ${downloadFolder}. Leave it empty to let a rule above pick the folder.`,
+      ],
+      fileName: [
+        "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (MEGA, MediaFire, Google Drive, Dropbox, OneDrive) when it's a single file. Videos keep their preset's name.",
+        "{1}, {2}… are what the rule's Matches pattern captured in parentheses. A post's name gets {post} and {number} added when it lacks them, so no two files share a name; the extension is added, or kept for a shared file. Leave it empty to let a rule above name them, else Settings or the file's own name.",
+      ],
+      startAs: [
+        "The preset matching videos start with, unless you pick another. Posts and shared files have none.",
+        "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",
+      ],
+      downloadRightAway:
+        "Whether matching links you copy, or that the clipboard shortcut or your browser send, start downloading once they're read. Leave as Is follows Settings.",
+    },
     addRule: "Add Rule",
     emptyTitle: "No Rules",
     emptyBody:
@@ -679,8 +702,6 @@ export const strings = {
     },
     number: (number: number) => `Rule ${number}`,
     name: "Name",
-    nameHint: (number: number) =>
-      `Shown instead of “Rule ${number}” wherever the rule is named, such as beside a download's folder. Leave it empty to use its number.`,
     off: "Off",
     edit: "Edit",
     duplicate: "Duplicate",
@@ -694,8 +715,6 @@ export const strings = {
     save: "Save",
     discard: "Discard",
     when: "When",
-    whenHint:
-      "Conditions joined by OR are alternatives, of which one must match; AND joins those, and each must. So “site is X OR site is Bluesky AND title contains cat” takes a cat from either site. A rule without conditions matches every download.",
     /** Between two conditions, in capitals as in the rules' sentences; a click switches it. */
     join: { all: "AND", any: "OR" },
     joinHint: {
@@ -711,8 +730,6 @@ export const strings = {
     operator: "Comparison",
     value: "Value",
     saveIn: "Save In",
-    saveInHint: (downloadFolder: string) =>
-      `Placeholders such as {site} become the download's own: click one to put it where the cursor is, and hover over it to see what it becomes. A folder that isn't a full path goes inside the download folder, ${downloadFolder}.`,
     placeholderHints: {
       site: "The download's site, such as Instagram or YouTube.",
       uploader: "The uploader's name, such as National Geographic, or Unknown when there's none.",
@@ -729,27 +746,19 @@ export const strings = {
     },
     capturedHint: (group: string) =>
       `The text the pattern captured in its parentheses number ${group}, counting from the left, or Unknown.`,
-    patternHint:
-      "Matches takes a regular expression, ignoring case unless Match Case is on, found anywhere in the text. Text it captures in parentheses can go in the folder as {1}, {2} and so on.",
     alwaysFirst: "Always First",
     alwaysFirstHint:
       "Takes every download no rule below it takes, unless its preset has a folder of its own. Every other rule overrides it, and new rules go at the bottom.",
     catchAllWhen: "Every download no rule below takes, unless its preset has a folder of its own.",
     chooseFolder: "Choose Folder…",
     chooseFolderTitle: "Choose Where Matching Downloads Go",
-    saveInEmptyHint: "Leave it empty to let a rule above pick the folder.",
     fileName: "File Name",
-    fileNameHint:
-      "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (MEGA, MediaFire, Google Drive, Dropbox, OneDrive) when it's a single file. {1}, {2}… are what the rule's Matches pattern captured in parentheses. A post's name gets {post} and {number} added when it lacks them, so no two files share a name; the extension is added, or kept for a shared file. Leave it empty to let a rule above name them, else Settings or the file's own name. Videos keep their preset's name.",
     usingDefault: "Using Default",
     startAs: "Start As",
-    startAsHint: "The preset matching videos start with, unless you pick another. Posts and shared files have none.",
     startAsUnavailable: "A rule that checks the kind or the preset can't pick the preset, since both depend on it.",
     leaveAsIs: "Leave as Is",
     deletedPreset: "Deleted Preset",
     downloadRightAway: "Download Right Away",
-    downloadRightAwayHint:
-      "Whether matching links you copy, or that the clipboard shortcut or your browser send, start downloading once they're read. Leave as Is follows Settings.",
     on: "On",
     /** What a rule does besides picking a folder, under its folder in the list. */
     actions: {
