@@ -1,11 +1,12 @@
-//! File hosts Tsundoku reads itself, without a tool: MEGA, MediaFire, Google Drive and Dropbox. A host's reader turns
-//! a share link into the files behind it (`Share`), once for the preview card and again when the download starts,
-//! since the addresses files download from expire. `downloads::file_runner` then saves them.
+//! File hosts Tsundoku reads itself, without a tool: MEGA, MediaFire, Google Drive, Dropbox and OneDrive. A host's
+//! reader turns a share link into the files behind it (`Share`), once for the preview card and again when the
+//! download starts, since the addresses files download from expire. `downloads::file_runner` then saves them.
 
 pub mod drive;
 pub mod dropbox;
 pub mod mediafire;
 pub mod mega;
+pub mod onedrive;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -41,35 +42,64 @@ pub enum Host {
     MediaFire,
     GoogleDrive,
     Dropbox,
+    OneDrive,
+}
+
+/// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
+/// `FACTS`, `read` and file source, and a line in `Host::facts`.
+pub(crate) struct HostFacts {
+    /// The name people know it by, shown in Supported Sites and used for its folder.
+    pub name: &'static str,
+    /// The site in the history, in lowercase as the tools' names are.
+    pub site: &'static str,
+    /// The domains its links are on, the one shown on the preview card first.
+    pub domains: &'static [&'static str],
+    /// Whether it marks every file it sends as an attachment, so that any other answer is a page saying why the file
+    /// didn't come.
+    pub sends_attachments: bool,
+    /// Lists the files behind a link.
+    pub read: fn(&Client, &str, &CancelToken) -> Result<Share, PreviewError>,
+    /// Why it answered with a page instead of a file, when its pages say more than their status.
+    pub page_error: Option<fn(&Page) -> PreviewError>,
 }
 
 impl Host {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
         Self::Dropbox,
+        Self::OneDrive,
     ];
+
+    pub(crate) fn facts(self) -> &'static HostFacts {
+        match self {
+            Self::Mega => &mega::FACTS,
+            Self::MediaFire => &mediafire::FACTS,
+            Self::GoogleDrive => &drive::FACTS,
+            Self::Dropbox => &dropbox::FACTS,
+            Self::OneDrive => &onedrive::FACTS,
+        }
+    }
 
     /// The host a link belongs to, by its domain. `link` must come from `metadata::normalize_link`.
     pub fn of(link: &str) -> Option<Self> {
         let host = sites::host(link)?;
-        Self::ALL.into_iter().find(|candidate| {
-            candidate
-                .domains()
-                .iter()
-                .any(|domain| sites::on_domain(&host, domain))
-        })
+        Self::ALL
+            .into_iter()
+            .find(|candidate| candidate.owns(&host))
+    }
+
+    /// Whether `host`, a link's host name, is on one of this host's domains.
+    pub(crate) fn owns(self, host: &str) -> bool {
+        self.domains()
+            .iter()
+            .any(|domain| sites::on_domain(host, domain))
     }
 
     /// The name people know it by, shown in Supported Sites and used for its folder.
     pub fn name(self) -> &'static str {
-        match self {
-            Self::Mega => "MEGA",
-            Self::MediaFire => "MediaFire",
-            Self::GoogleDrive => "Google Drive",
-            Self::Dropbox => "Dropbox",
-        }
+        self.facts().name
     }
 
     /// The error for a link on this host that isn't to a file or folder Tsundoku can read.
@@ -82,39 +112,26 @@ impl Host {
     /// The site in the history, in lowercase as the tools' names are. Google Drive and Dropbox match yt-dlp's names
     /// for them, so what it downloaded from them before still counts.
     pub fn site(self) -> &'static str {
-        match self {
-            Self::Mega => "mega",
-            Self::MediaFire => "mediafire",
-            Self::GoogleDrive => "googledrive",
-            Self::Dropbox => "dropbox",
-        }
+        self.facts().site
     }
 
     fn domains(self) -> &'static [&'static str] {
-        match self {
-            Self::Mega => &["mega.nz", "mega.co.nz"],
-            Self::MediaFire => &["mediafire.com"],
-            Self::GoogleDrive => &["drive.google.com", "drive.usercontent.google.com"],
-            Self::Dropbox => &["dropbox.com", "dropboxusercontent.com"],
-        }
+        self.facts().domains
     }
 
     /// Whether the host marks every file it sends as an attachment, so that any other answer is a page saying why
     /// the file didn't come.
     pub(crate) fn sends_attachments(self) -> bool {
-        matches!(self, Self::GoogleDrive | Self::Dropbox)
+        self.facts().sends_attachments
     }
 
     /// Why the host answered with a page instead of a file.
     pub(crate) fn page_error(self, page: &Page) -> PreviewError {
-        match self {
-            Self::GoogleDrive => drive::page_error(page),
-            Self::Dropbox => dropbox::page_error(page),
-            Self::Mega | Self::MediaFire => {
-                code_error(self, page.status).unwrap_or_else(|| PreviewError::Failed {
-                    detail: format!("{} answered with a page instead of the file", self.name()),
-                })
-            }
+        match self.facts().page_error {
+            Some(page_error) => page_error(page),
+            None => code_error(self, page.status).unwrap_or_else(|| PreviewError::Failed {
+                detail: format!("{} answered with a page instead of the file", self.name()),
+            }),
         }
     }
 
@@ -125,12 +142,7 @@ impl Host {
         link: &str,
         cancel: &CancelToken,
     ) -> Result<Share, PreviewError> {
-        let share = match self {
-            Self::Mega => mega::read(client, link, cancel),
-            Self::MediaFire => mediafire::read(client, link, cancel),
-            Self::GoogleDrive => drive::read(client, link, cancel),
-            Self::Dropbox => dropbox::read(client, link, cancel),
-        }?;
+        let share = (self.facts().read)(client, link, cancel)?;
         if share.files.is_empty() {
             return Err(PreviewError::NoVideo {
                 detail: format!("the {} folder is empty", self.name()),
@@ -202,6 +214,7 @@ pub enum FileSource {
     MediaFire(mediafire::MediaFireFile),
     GoogleDrive(drive::DriveFile),
     Dropbox(dropbox::DropboxFile),
+    OneDrive(onedrive::OneDriveFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -217,6 +230,8 @@ pub enum FileCheck {
     Mega(mega::FileKey),
     /// The SHA-256 MediaFire gives, in lowercase hex.
     Sha256(String),
+    /// The SHA-1 OneDrive gives, in lowercase hex.
+    Sha1(String),
     /// Google Drive and Dropbox give nothing to check by beyond the size.
     None,
 }
@@ -236,6 +251,7 @@ impl FileSource {
                 url: file.url.clone(),
                 check: FileCheck::None,
             }),
+            Self::OneDrive(file) => onedrive::address(client, file, cancel),
         }
     }
 }
@@ -637,6 +653,14 @@ mod tests {
                 "https://dl.dropboxusercontent.com/s/abc/a.mp4",
                 Some(Host::Dropbox),
             ),
+            (
+                "https://1drv.ms/f/c/2d90e71fb9eb254f/EnMm8c2mP_FPv6lwt1jy01YB6bQhoPQ25vtzAhycYisERw",
+                Some(Host::OneDrive),
+            ),
+            (
+                "https://onedrive.live.com/redir?resid=36712431A95E7A25!476",
+                Some(Host::OneDrive),
+            ),
             ("https://notmega.nz/file/AbCdEf12", None),
             ("https://www.youtube.com/watch?v=jNQXAC9IVRw", None),
         ] {
@@ -652,6 +676,8 @@ mod tests {
             ("https://www.mediafire.com/upgrade/", "MediaFire"),
             ("https://drive.google.com/drive/my-drive", "Google Drive"),
             ("https://www.dropbox.com/home", "Dropbox"),
+            ("https://onedrive.live.com/about/en-us/", "OneDrive"),
+            ("https://1drv.ms/", "OneDrive"),
         ] {
             assert_eq!(
                 read(link, &CancelToken::new()).err(),

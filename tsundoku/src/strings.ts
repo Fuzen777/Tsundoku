@@ -740,7 +740,7 @@ export const strings = {
     saveInEmptyHint: "Leave it empty to let a rule above pick the folder.",
     fileName: "File Name",
     fileNameHint:
-      "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (MEGA, MediaFire, Google Drive, Dropbox) when it's a single file. {1}, {2}… are what the rule's Matches pattern captured in parentheses. A post's name gets {post} and {number} added when it lacks them, so no two files share a name; the extension is added, or kept for a shared file. Leave it empty to let a rule above name them, else Settings or the file's own name. Videos keep their preset's name.",
+      "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (MEGA, MediaFire, Google Drive, Dropbox, OneDrive) when it's a single file. {1}, {2}… are what the rule's Matches pattern captured in parentheses. A post's name gets {post} and {number} added when it lacks them, so no two files share a name; the extension is added, or kept for a shared file. Leave it empty to let a rule above name them, else Settings or the file's own name. Videos keep their preset's name.",
     usingDefault: "Using Default",
     startAs: "Start As",
     startAsHint: "The preset matching videos start with, unless you pick another. Posts and shared files have none.",

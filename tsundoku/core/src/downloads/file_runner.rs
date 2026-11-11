@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::RANGE;
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
 use super::runner::{JobOutcome, JobSpec, make_folders, open_log, seconds_since_epoch, write_log};
@@ -244,8 +245,8 @@ fn fetch(
     Ok(())
 }
 
-/// Whether a downloaded file is what the host sent: MEGA's MAC, or MediaFire's SHA-256. Google Drive and Dropbox
-/// files are only checked by their size.
+/// Whether a downloaded file is what the host sent: MEGA's MAC, MediaFire's SHA-256 or OneDrive's SHA-1. Google Drive
+/// and Dropbox files are only checked by their size.
 fn check(check: &FileCheck, part: &Path, cancel: &CancelToken) -> Result<bool, Stop> {
     match check {
         FileCheck::None => Ok(true),
@@ -254,17 +255,20 @@ fn check(check: &FileCheck, part: &Path, cancel: &CancelToken) -> Result<bool, S
             read_file(part, cancel, &mut |data| checker.update(data))?;
             Ok(checker.matches())
         }
-        FileCheck::Sha256(expected) => {
-            let mut hasher = Sha256::new();
-            read_file(part, cancel, &mut |data| hasher.update(data))?;
-            let hash: String = hasher
-                .finalize()
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect();
-            Ok(&hash == expected)
-        }
+        FileCheck::Sha256(expected) => Ok(&digest::<Sha256>(part, cancel)? == expected),
+        FileCheck::Sha1(expected) => Ok(&digest::<Sha1>(part, cancel)? == expected),
     }
+}
+
+/// A file's hash, in lowercase hex.
+fn digest<Hasher: Digest>(part: &Path, cancel: &CancelToken) -> Result<String, Stop> {
+    let mut hasher = Hasher::new();
+    read_file(part, cancel, &mut |data| hasher.update(data))?;
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 /// Feeds a file to `consume`, a buffer at a time.
@@ -503,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn checks_a_sha256() {
+    fn checks_a_sha256_and_a_sha1() {
         let folder = tempfile::tempdir().unwrap();
         let part = folder.path().join("0.part");
         fs::write(&part, "abc").unwrap();
@@ -515,6 +519,10 @@ mod tests {
         assert!(matches!(check(&right, &part, &cancel), Ok(true)));
         assert!(matches!(check(&wrong, &part, &cancel), Ok(false)));
         assert!(matches!(check(&FileCheck::None, &part, &cancel), Ok(true)));
+        let sha1 = FileCheck::Sha1("a9993e364706816aba3e25717850c26c9cd0d89d".to_owned());
+        assert!(matches!(check(&sha1, &part, &cancel), Ok(true)));
+        let wrong_sha1 = FileCheck::Sha1("00".repeat(20));
+        assert!(matches!(check(&wrong_sha1, &part, &cancel), Ok(false)));
     }
 
     #[test]

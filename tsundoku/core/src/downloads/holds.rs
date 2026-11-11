@@ -27,7 +27,8 @@ pub const CONNECTION_RETRY_WAITS: [Duration; 3] = [
     Duration::from_secs(2 * 60),
     Duration::from_secs(8 * 60),
 ];
-/// The wait after a site's download limit first runs out (MEGA's transfer quota, a Google Drive or Dropbox file's).
+/// The wait after a site's download limit first runs out (MEGA's transfer quota, a Google Drive, Dropbox or OneDrive
+/// file's).
 pub const FIRST_LIMIT_WAIT: Duration = Duration::from_secs(30 * 60);
 /// The longest wait for a download limit: each time it's still used up, the wait doubles, up to this. A download never
 /// fails for it.

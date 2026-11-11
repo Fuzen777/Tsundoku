@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.100 · 2026-11-11
+
+### Added
+
+- **OneDrive**: pasting a OneDrive link to a file or a shared folder shows its name, date and what it holds on the preview card, with Download, like MEGA and Dropbox. Short links (1drv.ms, in both the old and the newer form) and the onedrive.live.com links they lead to work without an account. A shared folder keeps its own folder and subfolders, and each file is checked once it arrives. A deleted file, or a link that's private, expired or turned off, says so.
+- Not tried against OneDrive itself yet: reading a shared folder's subfolders, links in the onedrive.live.com `?cid=…&id=…&authkey=…`, `redir` and `embed` forms, and a download in the app. A single file and a folder's top level were read while building it.
+
 ## 0.1.99 · 2026-11-10
 
 ### Added

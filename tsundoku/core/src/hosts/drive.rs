@@ -13,12 +13,22 @@ use reqwest::blocking::Client;
 use reqwest::{StatusCode, Url};
 
 use super::{
-    Answer, FileSource, Host, Page, RemoteFile, Share, between, check_cancel, code_error,
-    html_text, network_error, probe, safe_name, title_of,
+    Answer, FileSource, Host, HostFacts, Page, RemoteFile, Share, between, check_cancel,
+    code_error, html_text, network_error, probe, safe_name, title_of,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
 use crate::sites;
+
+pub(super) const FACTS: HostFacts = HostFacts {
+    name: "Google Drive",
+    // yt-dlp's name for it, so what it downloaded from Google Drive before still counts.
+    site: "googledrive",
+    domains: &["drive.google.com", "drive.usercontent.google.com"],
+    sends_attachments: true,
+    read,
+    page_error: Some(page_error),
+};
 
 const DOWNLOAD: &str = "https://drive.usercontent.google.com/download";
 const FOLDER_VIEW: &str = "https://drive.google.com/embeddedfolderview";
@@ -270,12 +280,7 @@ fn sizes(
 /// "drive.google.com/folderview?id=<id>". A "resourcekey" in the query goes with the ID.
 fn parse_link(link: &str) -> Option<DriveLink> {
     let url = Url::parse(link).ok()?;
-    if !sites::host(link).is_some_and(|host| {
-        Host::GoogleDrive
-            .domains()
-            .iter()
-            .any(|domain| sites::on_domain(&host, domain))
-    }) {
+    if !sites::host(link).is_some_and(|host| Host::GoogleDrive.owns(&host)) {
         return None;
     }
     let query = |name: &str| {

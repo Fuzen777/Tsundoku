@@ -21,11 +21,20 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
-    Address, FileCheck, FileSource, Host, RemoteFile, Share, check_cancel, date_of, network_error,
-    safe_name, status_error,
+    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, check_cancel, date_of,
+    network_error, safe_name, status_error,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
+
+pub(super) const FACTS: HostFacts = HostFacts {
+    name: "MEGA",
+    site: "mega",
+    domains: &["mega.nz", "mega.co.nz"],
+    sends_attachments: false,
+    read,
+    page_error: None,
+};
 
 const API: &str = "https://g.api.mega.co.nz/cs";
 /// How many times a request MEGA answers "busy" (-3) is tried again, waiting twice as long each time.

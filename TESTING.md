@@ -139,6 +139,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] A MEGA link cut off before its key (the part after #) → a message saying so.
 - Claude downloaded real links of all four on your PC, so this is a quick look in the app.
 
+**69. OneDrive** · 0.1.100
+- [ ] Paste `https://1drv.ms/b/s!AhuEg_0yZD86hcpcvhSwRyDwk1Ru0Q?e=4BvzLn` (a small PDF) → its name, date and size on the card; Download → it arrives in the download folder's OneDrive folder.
+- [ ] Paste `https://1drv.ms/f/s!AhIXJn_J-blW00SqrairNetmeVu4` (a folder with the subfolders coco and mpii) → the card counts the files of both subfolders, not only the top level.
+- [ ] Paste `https://1drv.ms/f/c/2d90e71fb9eb254f/EnMm8c2mP_FPv6lwt1jy01YB6bQhoPQ25vtzAhycYisERw?e=DiI2Ab` (a newer folder link) → "3 files, 2.6 GB".
+- Claude read a single file and that last folder's top level through OneDrive's API while building it; this PC's safety check stopped its later requests, so subfolders, the onedrive.live.com link forms and a real download weren't tried.
+
 **67. MediaFire's browser check** · 0.1.93
 - [ ] Open `https://www.mediafire.com/file/orecif6losbo2uw/file` in Firefox, click Download, cancel the download, then copy its link from the Downloads panel (`download….mediafire.com/…`) and add it to Tsundoku → it downloads, with progress, and the file is checked once it arrives.
 - Claude checked against MediaFire that the page link and an expired copied link both stop at the browser check with its message; only your browser can get a working copied link.

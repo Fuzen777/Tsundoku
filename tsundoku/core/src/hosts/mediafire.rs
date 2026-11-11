@@ -14,11 +14,22 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::{
-    Address, Answer, FileCheck, FileSource, Host, Page, RemoteFile, Share, check_cancel,
+    Address, Answer, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel,
     code_error, network_error, probe, safe_name, status_error,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
+
+pub(super) const FACTS: HostFacts = HostFacts {
+    name: "MediaFire",
+    site: "mediafire",
+    domains: &["mediafire.com"],
+    sends_attachments: false,
+    read,
+    // Its download addresses are probed with their own pages in mind (`page_error` below); a download's page says
+    // no more than its status.
+    page_error: None,
+};
 
 const SITE: &str = "https://www.mediafire.com";
 /// Files and folders asked for at once when listing a folder: the most the API gives.

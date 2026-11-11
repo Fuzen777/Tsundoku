@@ -15,12 +15,22 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{
-    Answer, FileSource, Host, Page, RemoteFile, Share, check_cancel, code_error, network_error,
-    percent_decode, probe, safe_name, title_of,
+    Answer, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel, code_error,
+    network_error, percent_decode, probe, safe_name, title_of,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
 use crate::sites;
+
+pub(super) const FACTS: HostFacts = HostFacts {
+    name: "Dropbox",
+    // yt-dlp's name for it, so what it downloaded from Dropbox before still counts.
+    site: "dropbox",
+    domains: &["dropbox.com", "dropboxusercontent.com"],
+    sends_attachments: true,
+    read,
+    page_error: Some(page_error),
+};
 
 const SITE: &str = "https://www.dropbox.com";
 
@@ -364,12 +374,7 @@ fn query(url: &Url, name: &str) -> Option<String> {
 /// dl.dropboxusercontent.com.
 fn parse_link(link: &str) -> Option<DropboxLink> {
     let url = Url::parse(link).ok()?;
-    if !sites::host(link).is_some_and(|host| {
-        Host::Dropbox
-            .domains()
-            .iter()
-            .any(|domain| sites::on_domain(&host, domain))
-    }) {
+    if !sites::host(link).is_some_and(|host| Host::Dropbox.owns(&host)) {
         return None;
     }
     let segments: Vec<&str> = url
