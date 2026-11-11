@@ -53,7 +53,8 @@ impl CheckPage {
             | FileSource::OneFichier(_)
             | FileSource::SwissTransfer(_)
             | FileSource::FilesFm(_)
-            | FileSource::UploadEe(_) => None,
+            | FileSource::UploadEe(_)
+            | FileSource::TransferNow(_) => None,
         }
     }
 
@@ -103,7 +104,8 @@ fn caught_file(host: Host, download: &str) -> Option<String> {
         | Host::SwissTransfer
         | Host::FilesFm
         | Host::UploadEe
-        | Host::MultiUp => None,
+        | Host::MultiUp
+        | Host::TransferNow => None,
     }
 }
 

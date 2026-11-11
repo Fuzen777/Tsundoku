@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.119 · 2026-11-11
+
+### Added
+
+- **TransferNow**: pasting a TransferNow link (transfernow.net/dl/…) shows the transfer's files, with Download; a transfer of several files goes in a folder named after it. An expired or deleted transfer and one with a password say so.
+
 ## 0.1.118 · 2026-11-11
 
 ### Added
