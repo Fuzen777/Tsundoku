@@ -9,6 +9,7 @@ pub mod dropbox;
 pub mod mediafire;
 pub mod mega;
 pub mod onedrive;
+pub mod pcloud;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -45,6 +46,7 @@ pub enum Host {
     GoogleDrive,
     Dropbox,
     OneDrive,
+    PCloud,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -66,12 +68,13 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
         Self::Dropbox,
         Self::OneDrive,
+        Self::PCloud,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -81,6 +84,7 @@ impl Host {
             Self::GoogleDrive => &drive::FACTS,
             Self::Dropbox => &dropbox::FACTS,
             Self::OneDrive => &onedrive::FACTS,
+            Self::PCloud => &pcloud::FACTS,
         }
     }
 
@@ -222,6 +226,7 @@ pub enum FileSource {
     GoogleDrive(drive::DriveFile),
     Dropbox(dropbox::DropboxFile),
     OneDrive(onedrive::OneDriveFile),
+    PCloud(pcloud::PCloudFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -259,6 +264,7 @@ impl FileSource {
                 check: FileCheck::None,
             }),
             Self::OneDrive(file) => onedrive::address(client, file, cancel),
+            Self::PCloud(file) => pcloud::address(client, file, cancel),
         }
     }
 }
@@ -557,7 +563,7 @@ pub(crate) fn percent_decode(text: &str) -> String {
 }
 
 /// A date as an HTTP header gives it ("Fri, 11 Oct 2019 03:51:58 GMT"), as YYYY-MM-DD.
-fn http_date(value: &str) -> Option<String> {
+pub(crate) fn http_date(value: &str) -> Option<String> {
     const MONTHS: [&str; 12] = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
     ];

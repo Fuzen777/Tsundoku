@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.107 · 2026-11-11
+
+### Added
+
+- **pCloud**: pasting a pCloud public link (u.pcloud.link or e.pcloud.link) to a file or a folder shows its name, date and what it holds, with Download, like MEGA and Dropbox. A folder keeps its own folder and subfolders. A deleted link, one with a password and one whose traffic is used up each say so.
+
 ## 0.1.106 · 2026-11-11
 
 ### Fixed

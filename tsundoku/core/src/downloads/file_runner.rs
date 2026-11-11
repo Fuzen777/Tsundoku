@@ -753,3 +753,83 @@ mod onedrive_live {
         }
     }
 }
+
+/// Live checks against any file host, run by hand: `HOST_LINKS="<link> <link>…" cargo test -p tsundoku-core --lib
+/// host_live -- --ignored --nocapture --test-threads 1` reads each link, and `HOST_DOWNLOAD=<link>` downloads one
+/// into a temporary folder. They need the network.
+#[cfg(test)]
+mod host_live {
+    use super::*;
+
+    #[test]
+    #[ignore = "needs the network"]
+    fn host_live_reads_each_link() {
+        let links = std::env::var("HOST_LINKS").unwrap_or_default();
+        for link in links.split_whitespace() {
+            match hosts::read(link, &CancelToken::new()) {
+                Ok(share) => {
+                    let nested = share
+                        .files
+                        .iter()
+                        .filter(|file| file.path.components().count() > 2)
+                        .count();
+                    println!(
+                        "{link}\n  {:?} · id {} · {:?} · {:?} · {} files ({nested} in subfolders) · {} bytes",
+                        share.host,
+                        share.id,
+                        share.title,
+                        share.upload_date,
+                        share.files.len(),
+                        share.total_bytes()
+                    );
+                    for file in share.files.iter().take(4) {
+                        println!("  {} ({} bytes)", file.path.display(), file.size);
+                    }
+                }
+                Err(error) => println!("{link}\n  failed: {error:?}"),
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "needs the network"]
+    fn host_live_downloads_a_link() {
+        let Ok(link) = std::env::var("HOST_DOWNLOAD") else {
+            return;
+        };
+        let folder = tempfile::tempdir().unwrap();
+        let job = JobSpec {
+            id: 1,
+            url: link,
+            preset: None,
+            folder: folder.path().join("Host"),
+            temp_folder: folder.path().join("Host").join(".tsundoku-1"),
+            log_path: folder.path().join("1.log"),
+            overwrite: false,
+            yt_dlp: None,
+            ffmpeg: None,
+            deno: None,
+            caches: None,
+            rate_limit: None,
+            cookies: None,
+            post: None,
+            files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
+            shared_file_name: None,
+            caught_links: Vec::new(),
+        };
+        let outcome = run(&job, &CancelToken::new(), &mut |_| {});
+        println!("{}", fs::read_to_string(&job.log_path).unwrap_or_default());
+        match outcome {
+            JobOutcome::Finished { files, .. } => {
+                for file in files {
+                    println!(
+                        "saved {} · {} bytes",
+                        file.display(),
+                        fs::metadata(&file).unwrap().len()
+                    );
+                }
+            }
+            other => println!("{other:?}"),
+        }
+    }
+}
