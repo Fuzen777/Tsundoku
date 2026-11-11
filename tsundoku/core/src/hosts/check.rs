@@ -45,6 +45,7 @@ impl CheckPage {
             | FileSource::GoogleDrive(_)
             | FileSource::Dropbox(_)
             | FileSource::OneDrive(_)
+            | FileSource::Icedrive(_)
             | FileSource::Box(_)
             | FileSource::ArchiveOrg(_)
             | FileSource::WeTransfer(_)
@@ -89,6 +90,7 @@ fn caught_file(host: Host, download: &str) -> Option<String> {
         | Host::GoogleDrive
         | Host::Dropbox
         | Host::OneDrive
+        | Host::Icedrive
         | Host::Box
         | Host::ArchiveOrg
         | Host::WeTransfer

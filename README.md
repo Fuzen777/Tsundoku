@@ -7,7 +7,7 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 ### Adding Links
 
 - **Paste a link** (or drop one on the window) to see what it is before downloading: a video's thumbnail, title, uploader, length, upload date and best quality; a post's caption, author and what it holds ("2 images, 4 videos"); a shared file or folder's name and size ("14 files, 1.2 GB").
-- **Many sites, one add bar**: videos and audio from YouTube and well over a thousand other sites, posts of images from Instagram, X, Bluesky and other image sites, and files and shared folders from MEGA, MediaFire, Google Drive, Dropbox, OneDrive, pCloud, WeTransfer, the Internet Archive, Yandex Disk and Box. Each link is read by whatever suits it, so there's nothing to choose. Settings → Supported Sites lists every site in one searchable list.
+- **Many sites, one add bar**: videos and audio from YouTube and well over a thousand other sites, posts of images from Instagram, X, Bluesky and other image sites, and files and shared folders from MEGA, MediaFire, Google Drive, Dropbox, OneDrive, pCloud, WeTransfer, the Internet Archive, Yandex Disk, Box and Icedrive. Each link is read by whatever suits it, so there's nothing to choose. Settings → Supported Sites lists every site in one searchable list.
 - **Several links at once**: paste or drop text holding several links and they go to the **Pending** tab, where each is read in the background and shows what it is, whether you already have it and whether it's in the queue. **Start All** queues every one you don't have yet, or tick some and start those. Pending links are kept through a restart, and can be grouped by the folder they'll be saved in, their site or where they stand, and sorted by date, title, uploader or site.
 - **A warning when you already have it**, whatever the link: `youtu.be`, Shorts, a timestamp or a playlist it's in all count as the same video.
 
@@ -15,7 +15,7 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 
 - **Presets** for videos and audio: Best Video, 1080p MP4, Best Audio and Audio MP3 to start with, each with its own quality, format, file name, folder, what to embed and SponsorBlock, and all editable.
 - **Posts of images**: every file of a post is saved as the site gives it, in a folder per site. Files already there are skipped, so downloading a post again only fetches what's missing. Instagram posts download one at a time, with a pause before each file so your account isn't blocked.
-- **MEGA, MediaFire, Google Drive, Dropbox, OneDrive, pCloud, WeTransfer, the Internet Archive, Yandex Disk and Box**: files and shared folders download with their own folder layout, nothing to set up. Each file is checked once it arrives when the host gives a checksum, and a damaged one is downloaded again on Retry.
+- **MEGA, MediaFire, Google Drive, Dropbox, OneDrive, pCloud, WeTransfer, the Internet Archive, Yandex Disk, Box and Icedrive**: files and shared folders download with their own folder layout, nothing to set up. Each file is checked once it arrives when the host gives a checksum, and a damaged one is downloaded again on Retry.
 - **A queue** with progress, Stop and Resume, Cancel and Retry, two downloads at a time (up to five), and an optional speed limit, grouped and sorted as Pending is. It comes back after a restart, and closing while downloading asks first.
 
 ### Where Downloads Go

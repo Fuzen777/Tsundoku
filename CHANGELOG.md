@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.113 · 2026-11-11
+
+### Added
+
+- **Icedrive**: pasting a public Icedrive link (icedrive.net/s/…) to a file or a folder shows its name, date and what it holds, with Download; a folder keeps its subfolders. A link that's no longer shared says so.
+
 ## 0.1.112 · 2026-11-11
 
 ### Added

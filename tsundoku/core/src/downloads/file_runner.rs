@@ -816,6 +816,46 @@ mod host_live {
         }
     }
 
+    /// `HOST_DOWNLOAD_ONE="<link> <file name>"` downloads only that file of a share, with its check.
+    #[test]
+    #[ignore = "needs the network"]
+    fn host_live_downloads_one_file() {
+        let Ok(spec) = std::env::var("HOST_DOWNLOAD_ONE") else {
+            return;
+        };
+        let (link, name) = spec.split_once(' ').unwrap();
+        let cancel = CancelToken::new();
+        let share = hosts::read(link, &cancel).unwrap();
+        let file = share
+            .files
+            .iter()
+            .find(|file| file.path.ends_with(name))
+            .expect("the share has that file");
+        let client = hosts::client_for(share.host).unwrap();
+        let address = file.source.address(&client, &cancel).unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let part = folder.path().join("0.part");
+        let mut meter = Meter::new(file.size, None);
+        let fetched = fetch(
+            &client,
+            share.host,
+            &address,
+            file,
+            &part,
+            &cancel,
+            &mut meter,
+            &mut None,
+            &mut |_| {},
+        );
+        assert!(fetched.is_ok(), "the download failed");
+        println!(
+            "saved {} · {} bytes · checked: {}",
+            file.path.display(),
+            fs::metadata(&part).unwrap().len(),
+            matches!(check(&address.check, &part, &cancel), Ok(true))
+        );
+    }
+
     #[test]
     #[ignore = "needs the network"]
     fn host_live_downloads_a_link() {
