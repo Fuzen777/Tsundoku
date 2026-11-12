@@ -12,9 +12,9 @@ import {
   type ErrorDescription,
 } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
-import { defaultPick, withPicked } from "../postFiles"
+import { defaultPick, listsPostFiles, postLeftOutMessage, withPicked } from "../postFiles"
 import { useDownloadDestination, useLeftOutFiles, useLeftOutSharedFiles, usePresets, useRulePreset } from "../queries"
-import { defaultSharedPick, withSharedPicked } from "../sharedFiles"
+import { defaultSharedPick, sharedLeftOutMessage, withSharedPicked } from "../sharedFiles"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
@@ -25,7 +25,7 @@ import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
 import { ListingPicker } from "./ListingPicker"
 import { PasswordForm } from "./PasswordForm"
-import { PostFilesStrip } from "./PostFilesStrip"
+import { PostFilesPicker } from "./PostFilesPicker"
 import { PresetRuleLink } from "./PresetRuleLink"
 import { SharedFilesList } from "./SharedFilesList"
 import { StatusMessage } from "./StatusMessage"
@@ -272,8 +272,9 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
     <div className="flex flex-col gap-3">
       {picksFiles && (
         <>
-          {leftOut && <StatusMessage tone="neutral" message={strings.postFiles.leftOut(leftOut.length)} />}
-          <PostFilesStrip
+          {leftOut && <StatusMessage tone="neutral" message={postLeftOutMessage(leftOut, picked)} />}
+          <PostFilesPicker
+            asList={listsPostFiles(video)}
             files={files}
             picked={picked}
             leftOut={leftOut}
@@ -285,9 +286,7 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
       )}
       {picksSharedFiles && (
         <>
-          {leftOutShared && (
-            <StatusMessage tone="neutral" message={strings.sharedFiles.leftOut(leftOutShared.length)} />
-          )}
+          {leftOutShared && <StatusMessage tone="neutral" message={sharedLeftOutMessage(leftOutShared, picked)} />}
           <SharedFilesList
             files={sharedFiles}
             picked={picked}

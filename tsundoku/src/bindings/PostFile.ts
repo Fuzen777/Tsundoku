@@ -20,4 +20,13 @@ thumbnailUrl: string | null,
 /**
  * Whether the download takes it. Every file does to start with; a strip unticks the ones not wanted.
  */
-picked: boolean, };
+picked: boolean, 
+/**
+ * Its file's name with its extension, when the site gives one: what the list shows for a post of files that
+ * aren't all pictures (a folder on Gofile or Pixeldrain). `None` for a post read before 0.1.133.
+ */
+name?: string, 
+/**
+ * Its size in bytes, when the site gives it.
+ */
+size?: number, };

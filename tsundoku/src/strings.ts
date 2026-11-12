@@ -29,12 +29,15 @@ export const strings = {
   placeholders: {
     insert: "Insert",
   },
-  /** A post's files, picked in a strip (PostFilesStrip.tsx) on the preview card and in Pending. */
+  /** A post's files, picked in a strip (PostFilesStrip.tsx) on the preview card and in Pending, or in a list
+   * (PostFilesPicker.tsx) for a post of files that aren't all pictures. */
   postFiles: {
     count: (picked: number, total: number) => `${picked} of ${total} Files`,
     summary: (picked: number, total: number) => `${picked} of ${total} files`,
     selectAll: "Select All Files",
     file: (number: number, video: boolean) => `${video ? "Video" : "Image"} ${number}`,
+    /** A file of a post of files (a folder on Gofile or Pixeldrain) when the site gives no name. */
+    namelessFile: (number: number) => `File ${number}`,
     downloaded: "Downloaded",
     downloadedHint: "Downloaded before",
     notPicked: "Not Picked",
@@ -43,6 +46,8 @@ export const strings = {
       count === 1
         ? "1 file wasn't picked last time. It's the one ticked, so downloading again gets just that one."
         : `${count} files weren't picked last time. They're the ones ticked, so downloading again gets just those.`,
+    leftOutCount: (count: number) =>
+      count === 1 ? "1 file wasn't picked last time." : `${count} files weren't picked last time.`,
     pickFiles: "Pick Files",
     hideFiles: "Hide Files",
   },

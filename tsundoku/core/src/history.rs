@@ -1765,6 +1765,8 @@ mod tests {
                     video: number > 2,
                     thumbnail_url: None,
                     picked: true,
+                    name: None,
+                    size: None,
                 })
                 .collect(),
             ..video("instagram", "Abc", "A carousel", "someone", 0.0)

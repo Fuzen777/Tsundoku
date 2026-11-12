@@ -290,6 +290,52 @@ const sharedFolderAgainStandIn: VideoPreview = {
 /** The files the folder downloaded before (`sharedFolderAgainStandIn`) didn't take. */
 const sharedFolderLeftOut = [1, 7, 8, 15, 24]
 
+/** A folder on Gofile as gallery-dl reads it: a post of files that aren't all pictures, each with its name and size
+ * (the last with neither), so its files show as a list. */
+const filePostStandIn: VideoPreview = {
+  video: {
+    site: "gofile",
+    siteName: "gofile.io",
+    videoId: "Ab12Cd",
+    url: "https://gofile.io/d/Ab12Cd",
+    title: "Game Jam Build",
+    uploader: null,
+    durationSeconds: null,
+    uploadDate: "2026-11-01",
+    thumbnailUrl: null,
+    bestHeight: null,
+    post: { images: 1, videos: 1, others: 4 },
+    files: null,
+    postFiles: (
+      [
+        ["Game Jam Build (Windows).zip", 734_003_200, false],
+        ["Read Me.txt", 2_150, false],
+        ["Cover.jpg", 412_000, false],
+        ["Trailer.mp4", 96_468_992, true],
+        ["Manual.pdf", 5_242_880, false],
+        [null, null, false],
+      ] as const
+    ).map(([name, size, video], index) => ({
+      number: index + 1,
+      video,
+      thumbnailUrl: null,
+      picked: true,
+      ...(name && { name }),
+      ...(size && { size }),
+    })),
+  },
+  lastDownload: null,
+  inQueue: false,
+  missingJsRuntime: false,
+}
+
+/** The Gofile folder again, downloaded before with its second and sixth files left out (`leftOutFiles`). */
+const filePostAgainStandIn: VideoPreview = {
+  ...filePostStandIn,
+  video: { ...filePostStandIn.video, videoId: "AgainAgain", url: "https://gofile.io/d/AgainAgain" },
+  lastDownload: { ...historyStandIns[0].lastDownload, preset: "", format: null, fileCount: 4 },
+}
+
 /** The folder with only the files at `picked` ticked. */
 function withSharedFilesPicked(video: VideoInfo, picked: number[]): VideoInfo {
   return { ...video, sharedFiles: video.sharedFiles?.map((file, index) => ({ ...file, picked: picked.includes(index) })) }
@@ -615,9 +661,11 @@ export const standIns = {
       },
     }),
   ] satisfies QueueItem[],
-  /** The carousel downloaded before (`postAgainStandIn`) left its second and fifth files out. */
+  /** The carousel downloaded before (`postAgainStandIn`) left its second and fifth files out, the Gofile folder
+   * (`filePostAgainStandIn`) its second and sixth. */
   leftOutFiles(video: VideoInfo): number[] | null {
-    return video.videoId === postAgainStandIn.video.videoId ? [2, 5] : null
+    if (video.videoId === postAgainStandIn.video.videoId) return [2, 5]
+    return video.url === filePostAgainStandIn.video.url ? [2, 6] : null
   },
   /** The folder downloaded before (`sharedFolderAgainStandIn`) didn't take five of its files. */
   leftOutSharedFiles(video: VideoInfo): number[] | null {
@@ -656,12 +704,15 @@ export const standIns = {
     pendingStandIn(7, "https://mega.nz/folder/AbCdEfGh#key", {
       preview: { ...sharedFolderStandIn, video: withSharedFilesPicked(sharedFolderStandIn.video, [0, 2, 3, 4, 5, 6]) },
     }),
-    pendingStandIn(12, "https://mega.nz/folder/AgainAgain#key", {
+    pendingStandIn(13, "https://mega.nz/folder/AgainAgain#key", {
       preview: {
         ...sharedFolderAgainStandIn,
         video: withSharedFilesPicked(sharedFolderAgainStandIn.video, sharedFolderLeftOut),
       },
     }),
+    // Read before its first download, so every file is still ticked: the sentence over them doesn't claim they're the
+    // ones not picked.
+    pendingStandIn(14, "https://gofile.io/d/AgainAgain", { preview: filePostAgainStandIn }),
     pendingStandIn(4, "https://www.instagram.com/p/Another1/", { state: "reading" }),
     pendingStandIn(5, "https://www.instagram.com/p/Another2/", {
       state: "waiting",
@@ -676,7 +727,7 @@ export const standIns = {
       state: "needsPassword",
       error: { kind: "passwordNeeded", wrong: true },
     }),
-    pendingStandIn(8, "https://www.instagram.com/p/Copied1/", { state: "reading", caught: true }),
+    pendingStandIn(15, "https://www.instagram.com/p/Copied1/", { state: "reading", caught: true }),
     pendingStandIn(9, "https://github.com/Fuzen777/Tsundoku", { state: "waiting", caught: true }),
     pendingStandIn(10, "https://www.bbc.com/news/an-article", { state: "waiting", fromFile: true }),
     pendingStandIn(11, "https://vimeo.com/76979871", { state: "reading", fromFile: true }),
@@ -703,7 +754,8 @@ export const standIns = {
     return [...new Set(links)]
   },
   /**
-   * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link (of
+   * A downloaded video after a short wait; a post of images for an Instagram link; a post of files for a Gofile link
+   * (downloaded before when the link has "again"); a shared folder for a MEGA link (of
    * `folderSize` files, else 25; downloaded before when the link has "again"); a listing for a channel, playlist or
    * account (`listingKind`); or a failure for a link containing "fail", or "images" (gallery-dl not set up). A link
    * with "#P!" needs a password, "secret".
@@ -722,6 +774,8 @@ export const standIns = {
           resolve({ kind: "listing", listing: listingStandIn(kind) })
         } else if (link.includes("instagram")) {
           resolve({ kind: "video", ...postStandIn })
+        } else if (link.includes("gofile.io")) {
+          resolve({ kind: "video", ...(link.toLowerCase().includes("again") ? filePostAgainStandIn : filePostStandIn) })
         } else if (link.includes("mega.nz")) {
           const folder = link.toLowerCase().includes("again")
             ? sharedFolderAgainStandIn

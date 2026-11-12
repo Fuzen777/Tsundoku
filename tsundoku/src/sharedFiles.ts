@@ -6,6 +6,15 @@ import { strings } from "./strings"
 /** Folders start folded in a list of more files than this, so a big folder opens on its outline. */
 export const FOLDED_ABOVE = 200
 
+/** A file of the list: where it sits (its folders, then its name, joined with "/"), its size when known, and a post's
+ * file's number in the post. A shared folder's files (`SharedFile`) are these, and so are a post's for a post of files
+ * (`postListFiles`). */
+export interface ListedFile {
+  path: string
+  size: number | null
+  number?: number
+}
+
 /** One folder of a shared folder's list, with what's in it in the order the host gave it. */
 export interface SharedFolder {
   /** Its path from the list's top, joined with "/": the key it's folded by. "" for the top. */
@@ -26,7 +35,7 @@ export type SharedRow =
   | { kind: "file"; index: number; name: string; depth: number }
 
 /** A file's path split into its folders and name, without the folder every file is in, when there's one. */
-function partsOf(files: readonly SharedFile[]): string[][] {
+function partsOf(files: readonly ListedFile[]): string[][] {
   const split = files.map((file) => file.path.split("/").filter((part) => part !== ""))
   const top = split[0]?.[0]
   // Every host puts the shared folder's own name first, which the card's title already says: the list starts inside it.
@@ -35,17 +44,17 @@ function partsOf(files: readonly SharedFile[]): string[][] {
 }
 
 /** The path a file shows at in the list, from its top: what the filter matches. */
-export function shownPaths(files: readonly SharedFile[]): string[] {
+export function shownPaths(files: readonly ListedFile[]): string[] {
   return partsOf(files).map((parts) => parts.join("/"))
 }
 
 /** The folders and files of a shared folder's list. Each folder holds its folders first, then its files, each in the
  * order the host gave them. */
-export function sharedTree(files: readonly SharedFile[]): SharedFolder {
+export function sharedTree(files: readonly ListedFile[]): SharedFolder {
   const top: SharedFolder = { path: "", name: "", folders: [], files: [], allFiles: [], bytes: 0 }
   const byPath = new Map<string, SharedFolder>([["", top]])
   partsOf(files).forEach((parts, index) => {
-    const size = files[index].size
+    const size = files[index].size ?? 0
     let folder = top
     folder.allFiles.push(index)
     folder.bytes += size
@@ -86,7 +95,7 @@ export function matchingFiles(paths: readonly string[], filter: string): Set<num
  * only the files that match, under every folder that holds one, all open. */
 export function visibleRows(
   top: SharedFolder,
-  files: readonly SharedFile[],
+  files: readonly ListedFile[],
   folded: ReadonlySet<string>,
   matching: ReadonlySet<number> | null,
 ): SharedRow[] {
@@ -155,11 +164,24 @@ export function sameFiles(first: ReadonlySet<number>, second: ReadonlySet<number
   return true
 }
 
-/** The size of the `picked` files together. */
-export function pickedBytes(files: readonly SharedFile[], picked: ReadonlySet<number>): number {
+/** The size of the `picked` files together, those whose size isn't known counting for nothing. */
+export function pickedBytes(files: readonly ListedFile[], picked: ReadonlySet<number>): number {
   let bytes = 0
   for (const index of picked) bytes += files[index]?.size ?? 0
   return bytes
+}
+
+/** Whether every file's size is known, so the list can say what the files ticked weigh. */
+export function allSized(files: readonly ListedFile[]): boolean {
+  return files.every((file) => file.size !== null)
+}
+
+/** What a folder downloaded before says over its list: how many files it didn't take, and, while they're the ones
+ * ticked, that downloading again gets just those. */
+export function sharedLeftOutMessage(leftOut: readonly number[], picked: ReadonlySet<number>): string {
+  return sameFiles(new Set(leftOut), picked)
+    ? strings.sharedFiles.leftOut(leftOut.length)
+    : strings.sharedFiles.leftOutCount(leftOut.length)
 }
 
 /** "12 of 340 files, 1.2 GB" for a shared folder whose download leaves some files out; null when it takes them all,

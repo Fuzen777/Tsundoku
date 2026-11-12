@@ -1,9 +1,9 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Check, ChevronDown, ChevronRight, Folder } from "lucide-react"
-import type { SharedFile } from "../bindings/SharedFile"
 import { formatBytes } from "../format"
 import {
   FOLDED_ABOVE,
+  allSized,
   folderPaths,
   folderState,
   matchingFiles,
@@ -12,6 +12,7 @@ import {
   shownPaths,
   visibleRows,
   withFiles,
+  type ListedFile,
   type SharedFolder,
 } from "../sharedFiles"
 import { strings } from "../strings"
@@ -22,6 +23,18 @@ import { classes } from "./styles"
 
 const text = strings.sharedFiles
 
+/** What each mark says, and its hover text. */
+const markLabel: Record<Mark, string> = {
+  downloaded: text.downloaded,
+  notDownloaded: text.notDownloaded,
+  notPicked: strings.postFiles.notPicked,
+}
+const markHint: Record<Mark, string> = {
+  downloaded: text.downloadedHint,
+  notDownloaded: text.notDownloadedHint,
+  notPicked: strings.postFiles.notPickedHint,
+}
+
 /** The filter shows for a folder of more files than this. */
 const FILTER_ABOVE = 10
 /** How far each level of folders is indented, in pixels. */
@@ -31,28 +44,39 @@ const ROW_HEIGHT_PX = 28
 /** How far past each edge of the list rows are drawn, in pixels. */
 const OVERSCAN_PX = 280
 
-/** What a file says about a folder downloaded before: taken then, or not. */
-type Mark = "downloaded" | "notDownloaded"
+/** What a file says about a folder downloaded before: taken then, or not; a post's file says it wasn't picked. */
+type Mark = "downloaded" | "notDownloaded" | "notPicked"
 
 interface SharedFilesListProps {
-  files: readonly SharedFile[]
+  files: readonly ListedFile[]
   /** The places of the files ticked, in `files`. */
   picked: ReadonlySet<number>
-  /** For a folder downloaded before that left files out: those files, marked Not Downloaded, the others Downloaded. */
+  /** For a folder downloaded before that left files out: those files, marked Not Downloaded (Not Picked for a post's),
+   * the others Downloaded. */
   leftOut: readonly number[] | null
   /** Downloaded before: without `leftOut`, every file is marked Downloaded. */
   downloadedBefore: boolean
+  /** A post's files (`postListFiles`), whose files left out say Not Picked, as the strip's tiles do. */
+  ofPost?: boolean
   disabled?: boolean
   onChange: (picked: Set<number>) => void
 }
 
 /**
- * A shared folder's files as a tree, each file and folder with a box to tick it, a folder's ticking everything under
- * it. Above them, a box for all of them with how many are ticked and their size, and a filter for a folder of many
+ * A shared folder's files as a tree, or a post's files as a flat list with their numbers (`ofPost`), each file and
+ * folder with a box to tick it, a folder's ticking everything under it. Above them, a box for all of them with how many are ticked and their size, and a filter for a folder of many
  * files. For a folder downloaded before, each file says whether it was downloaded then. The list scrolls on its own and
  * draws only the rows on screen (`useVirtualRows`), so a folder of thousands of files ticks and scrolls smoothly.
  */
-export function SharedFilesList({ files, picked, leftOut, downloadedBefore, disabled, onChange }: SharedFilesListProps) {
+export function SharedFilesList({
+  files,
+  picked,
+  leftOut,
+  downloadedBefore,
+  ofPost = false,
+  disabled,
+  onChange,
+}: SharedFilesListProps) {
   const tree = useMemo(() => sharedTree(files), [files])
   const paths = useMemo(() => shownPaths(files), [files])
   const [folded, setFolded] = useState<ReadonlySet<string>>(
@@ -109,9 +133,11 @@ export function SharedFilesList({ files, picked, leftOut, downloadedBefore, disa
   const allLabel = matching ? text.selectShown : text.selectAll
 
   function markOf(index: number): Mark | null {
-    if (leftOutSet) return leftOutSet.has(index) ? "notDownloaded" : "downloaded"
+    if (leftOutSet) return leftOutSet.has(index) ? (ofPost ? "notPicked" : "notDownloaded") : "downloaded"
     return downloadedBefore ? "downloaded" : null
   }
+  // A post's files may come without sizes: the count then leaves the size out.
+  const sized = useMemo(() => allSized(files), [files])
 
   return (
     <div className="flex flex-col gap-2">
@@ -128,7 +154,9 @@ export function SharedFilesList({ files, picked, leftOut, downloadedBefore, disa
             onChange={(event) => onChange(withFiles(picked, scope, event.target.checked))}
           />
           <span className="truncate tabular-nums">
-            {text.count(picked.size, files.length, formatBytes(pickedBytes(files, picked)))}
+            {sized
+              ? text.count(picked.size, files.length, formatBytes(pickedBytes(files, picked)))
+              : strings.postFiles.count(picked.size, files.length)}
           </span>
         </label>
         {files.length > FILTER_ABOVE && (
@@ -168,6 +196,7 @@ export function SharedFilesList({ files, picked, leftOut, downloadedBefore, disa
                 name={row.name}
                 shownPath={paths[row.index]}
                 path={files[row.index].path}
+                number={files[row.index].number}
                 size={files[row.index].size}
                 depth={row.depth}
                 picked={picked.has(row.index)}
@@ -263,7 +292,9 @@ interface FileRowProps {
   shownPath: string
   /** Its whole path in the share, for its hover text. */
   path: string
-  size: number
+  /** A post's file's number in the post. */
+  number?: number
+  size: number | null
   depth: number
   picked: boolean
   mark: Mark | null
@@ -271,12 +302,14 @@ interface FileRowProps {
   onToggle: (index: number, on: boolean) => void
 }
 
-/** A file: its box, its name (muted while unticked), whether it was downloaded before, and its size. */
+/** A file: its box, a post's file's number, its name (muted while unticked), whether it was downloaded before, and its
+ * size when known. */
 const FileRow = memo(function FileRow({
   index,
   name,
   shownPath,
   path,
+  number,
   size,
   depth,
   picked,
@@ -303,20 +336,25 @@ const FileRow = memo(function FileRow({
           disabled={disabled}
           onChange={(event) => onToggle(index, event.target.checked)}
         />
+        {number !== undefined && (
+          <span className="w-6 shrink-0 text-right text-xs text-fg-muted tabular-nums">{number}</span>
+        )}
         <span className={classes("min-w-0 flex-1 truncate", !picked && "text-fg-muted")}>{name}</span>
         {mark && (
           <span
             className={classes(
               "flex shrink-0 items-center gap-1 text-xs",
-              mark === "notDownloaded" ? "font-medium text-accent" : "text-fg-muted",
+              mark === "downloaded" ? "text-fg-muted" : "font-medium text-accent",
             )}
-            title={mark === "notDownloaded" ? text.notDownloadedHint : text.downloadedHint}
+            title={markHint[mark]}
           >
             {mark === "downloaded" && <Check size={12} className="text-success" aria-hidden />}
-            {mark === "notDownloaded" ? text.notDownloaded : text.downloaded}
+            {markLabel[mark]}
           </span>
         )}
-        <span className="w-18 shrink-0 text-right text-xs text-fg-secondary tabular-nums">{formatBytes(size)}</span>
+        <span className="w-18 shrink-0 text-right text-xs text-fg-secondary tabular-nums">
+          {size !== null && formatBytes(size)}
+        </span>
       </label>
     </li>
   )

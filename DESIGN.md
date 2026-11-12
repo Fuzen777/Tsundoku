@@ -215,8 +215,9 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 ## Post Files
 
 - A post of several files shows them as a strip (`components/PostFilesStrip.tsx`): over it, a checkbox for all of them with "4 of 6 Files", indeterminate while some are ticked; then a tile per file, 88 px square, wrapping, and scrolling past 256 px. A tile is the file's picture (`object-cover` on `--color-input`; a `Film` or `Image` icon in muted text when there's none, such as an X video), its checkbox at the top left, its number in the post at the bottom left on `--color-bg`, and, for a video, a `Play` mark at the bottom right on `--color-accent-fill`. An unticked file is dimmed to 35%. The whole tile ticks it; Tab and Space work, and the focused tile gets the accent outline.
-- A post downloaded before marks each tile under it in 12 px: "Downloaded" in muted text after a `Check` in `--color-success`, or "Not Picked" in the accent, medium weight, with a 2 px accent ring around the tile. A sentence over the strip says how many weren't picked last time, and those are the ones ticked.
-- A post of one file has no strip. The preview card's Download is off while nothing is ticked, and while it's still asking which files were left out. In Pending, a row's ticks are saved as they change.
+- A post downloaded before marks each tile under it in 12 px: "Downloaded" in muted text after a `Check` in `--color-success`, or "Not Picked" in the accent, medium weight, with a 2 px accent ring around the tile. A sentence over the strip says how many weren't picked last time, and that those are the ones ticked while they are; once the ticks are others, it says only how many.
+- A post of files that aren't all images or videos (a folder on Gofile or Pixeldrain: `post.others` above 0) shows them in the shared folder's list instead (`components/PostFilesPicker.tsx`), flat: each row has its number in the post in 12 px muted tabular text before its name (else "File 3"), and its size when the site gives one; the count leaves the size out when a file has none. Its marks are the strip's: "Downloaded" and "Not Picked".
+- A post of one file has no strip. The preview card's Download is off while nothing is ticked, and while it's still asking which files were left out. In Pending, a row's ticks show at once and are saved as they change.
 
 ---
 

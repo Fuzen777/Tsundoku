@@ -1460,6 +1460,8 @@ fn downloads_only_the_files_of_a_post_picked() {
                 video: number == 2,
                 thumbnail_url: None,
                 picked: picked.contains(&number),
+                name: None,
+                size: None,
             })
             .collect()
     };

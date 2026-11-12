@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest"
 import type { SharedFile } from "./bindings/SharedFile"
 import type { VideoInfo } from "./bindings/VideoInfo"
 import { pickSummary } from "./postFiles"
+import { strings } from "./strings"
 import {
+  allSized,
   defaultSharedPick,
   folderPaths,
   folderState,
   matchingFiles,
   pickedBytes,
+  sharedLeftOutMessage,
   sharedPickedOf,
   sharedTree,
   shownPaths,
@@ -155,5 +158,29 @@ describe("picks", () => {
     expect(pickSummary(withSharedPicked(folder, new Set([0, 4])))).toBe("2 of 5 files, 3.0 KB")
     expect(pickSummary(folder)).toBeNull()
     expect(pickSummary({ ...folder, sharedFiles: undefined })).toBeNull()
+  })
+})
+
+describe("files whose sizes aren't all known", () => {
+  const listed = [
+    { path: "Build.zip", size: 100, number: 1 },
+    { path: "Read Me.txt", size: null, number: 2 },
+  ]
+
+  it("count for nothing in a size, and keep the list flat", () => {
+    expect(allSized(listed)).toBe(false)
+    expect(allSized([listed[0]])).toBe(true)
+    expect(pickedBytes(listed, new Set([0, 1]))).toBe(100)
+    const tree = sharedTree(listed)
+    expect(tree.folders).toEqual([])
+    expect(tree.files).toEqual([0, 1])
+    expect(tree.bytes).toBe(100)
+  })
+})
+
+describe("sharedLeftOutMessage", () => {
+  it("says the files not downloaded are the ones ticked only while they are", () => {
+    expect(sharedLeftOutMessage([1, 3], new Set([1, 3]))).toBe(strings.sharedFiles.leftOut(2))
+    expect(sharedLeftOutMessage([1, 3], new Set([0, 1, 2, 3]))).toBe(strings.sharedFiles.leftOutCount(2))
   })
 })

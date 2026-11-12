@@ -9,7 +9,7 @@ const text = strings.postFiles
 /** What a tile says about a post downloaded before: taken then, or left out. */
 type Mark = "downloaded" | "notPicked"
 
-interface PostFilesStripProps {
+export interface PostFilesStripProps {
   files: readonly PostFile[]
   /** The numbers of the files ticked. */
   picked: ReadonlySet<number>

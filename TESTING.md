@@ -123,6 +123,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - Claude tried the first check in the real app: exactly files 1 and 6 arrived. Pending's strip and X weren't tried.
 - Known: Start All skips a post downloaded before, even partly; use its row's Download Again.
 
+**73. Pick the files of a Gofile or Pixeldrain folder** · 0.1.133
+- [ ] Paste a Gofile folder or a Pixeldrain list of yours holding several files, some neither pictures nor videos (a .zip, a .pdf, a .txt) → instead of blank tiles, a numbered list of their names with their sizes, everything ticked, and a Filter Files field over ten files. Untick some and Download → only those land, and the queue says "2 of 5 files".
+- [ ] Paste it again → the files downloaded say Downloaded, the others Not Picked and are the ones ticked. Tick another → the sentence over the list only says how many weren't picked.
+- Claude found no public folder of several such files to try (every one linked from GitHub READMEs or gallery-dl's own tests was gone, or held only videos). The list was checked in the browser preview with stand-ins, in light and dark; in the real app, a public Gofile folder of one .zip was read again (it failed before this version), a Pixeldrain folder of two videos kept its strip, and five quick ticks in a row on its strip in Pending all stayed, shown and saved.
+
 **16. Readable names for posts' files** · 0.1.40
 - [ ] Download an Instagram post → its files are named like `instagram 2026-11-02 DfPQchkG1tg 1.jpg`: the account's handle, the post's date, its ID and the file's number. An X post's files carry the account's handle too.
 - [ ] Settings → Posts of Images → File Name: the Insert buttons put {account}, {date}, {post}, {number} and {site} at the cursor, the example under the field follows, and Use Default puts it back.

@@ -144,6 +144,15 @@ pub struct PostFile {
     /// Whether the download takes it. Every file does to start with; a strip unticks the ones not wanted.
     #[serde(default = "picked_by_default")]
     pub picked: bool,
+    /// Its file's name with its extension, when the site gives one: what the list shows for a post of files that
+    /// aren't all pictures (a folder on Gofile or Pixeldrain). `None` for a post read before 0.1.133.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub name: Option<String>,
+    /// Its size in bytes, when the site gives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub size: Option<u64>,
 }
 
 fn picked_by_default() -> bool {
@@ -740,7 +749,13 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
     } else if mentions(&[VIDEO_PASSWORD_OPTION]) {
         // yt-dlp names its option only where it can take the video's password ("use the --video-password option").
         PreviewError::PasswordNeeded { wrong: false }
-    } else if mentions(&["unsupported url", "no suitable extractor"]) {
+    } else if mentions(&[
+        "unsupported url",
+        "no suitable extractor",
+        // yt-dlp's refusal of a site it dropped as used for piracy (GoFile since 2026): unsupported by yt-dlp, so
+        // gallery-dl, which still reads some of them, is asked next.
+        "primarily used for piracy",
+    ]) {
         PreviewError::UnsupportedSite
     } else if mentions(&[
         "no video formats found",
@@ -1066,6 +1081,13 @@ mod tests {
                 "ERROR: No suitable extractor found for URL https://github.com/Fuzen777/Tsundoku"
             ),
             PreviewError::UnsupportedSite
+        );
+        assert_eq!(
+            classify(
+                "ERROR: [Piracy] This website is no longer supported since it has been determined to be primarily used for piracy."
+            ),
+            PreviewError::UnsupportedSite,
+            "yt-dlp's refusal of GoFile, which gallery-dl still reads"
         );
         assert!(matches!(
             classify(

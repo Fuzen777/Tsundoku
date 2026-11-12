@@ -2,6 +2,18 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.133 · 2026-11-12
+
+### Added
+
+- **Picking the files of a Gofile or Pixeldrain folder**: a folder or list on Gofile, Pixeldrain, Bunkr or Cyberdrop that holds files other than pictures and videos (archives, documents) now shows them as a list of their names and sizes, numbered, as a shared folder's are, instead of blank tiles, so you can see what you're ticking. Folders of only pictures and videos keep the strip.
+
+### Fixed
+
+- **Gofile links** failed with "Couldn't read this site's page" since a recent update of one of Tsundoku's tools, which dropped the site; they're read again.
+- **Ticking a post's files quickly in Pending**: several ticks in a row could lose one; each now shows at once and is kept, as in a shared folder's list.
+- **The sentence over files downloaded before** no longer says the files not picked or not downloaded are the ones ticked when they aren't (a link in Pending read before its first download, or ticks changed since): it then says only how many there are.
+
 ## 0.1.132 · 2026-11-12
 
 ### Added

@@ -512,6 +512,11 @@ fn lone_file_name(files: &[(&str, &Value)]) -> Option<String> {
     if kind_of(file) != FileKind::Other {
         return None;
     }
+    file_name(file)
+}
+
+/// A file's name with its extension, as the site gives it: `name`, else `filename` and `extension`.
+fn file_name(file: &Value) -> Option<String> {
     text(file, "name").or_else(|| {
         let name = text(file, "filename")?;
         Some(match text(file, "extension") {
@@ -522,7 +527,7 @@ fn lone_file_name(files: &[(&str, &Value)]) -> Option<String> {
 }
 
 /// The post's files for the strip, numbered from 1 in the answer's order, which is the order gallery-dl's `--range`
-/// counts in when it downloads them, all picked.
+/// counts in when it downloads them, all picked, with their names and sizes when the site gives them.
 fn post_files(files: &[(&str, &Value)]) -> Vec<crate::metadata::PostFile> {
     files
         .iter()
@@ -536,6 +541,8 @@ fn post_files(files: &[(&str, &Value)]) -> Vec<crate::metadata::PostFile> {
                     .or_else(|| (kind == FileKind::Image).then(|| small_image(url)))
                     .filter(|url| url.starts_with("https://")),
                 picked: true,
+                name: file_name(file),
+                size: file.get("size").and_then(Value::as_u64),
             }
         })
         .collect()
@@ -808,7 +815,25 @@ mod tests {
         );
         assert_eq!(post.post_files[0].thumbnail_url, None);
         assert!(!post.post_files[0].video);
+        assert_eq!(
+            post.post_files[0].name.as_deref(),
+            Some("YAOCTRU_v11.0.zip")
+        );
+        assert_eq!(post.post_files[0].size, Some(10315));
         assert_eq!(post.post_file_count(), Some(1));
+
+        // Gofile's answer for a public folder holding one .zip, trimmed: its name and size come with it too.
+        let folder = r#"{"category": "gofile", "subcategory": "folder", "id": "a36c7569-4c79-42d5-9353-b55c05b7dbd3",
+            "name": "Folder", "type": "folder"}"#;
+        let file = r#"{"category": "gofile", "subcategory": "folder", "id": "c995c0c2-ae12-4579-b5e1-040680a0644c",
+            "name": "AI-onnx.zip", "filename": "AI-onnx", "extension": "zip", "mimetype": "application/zip",
+            "size": 111638792, "num": 1, "type": "file"}"#;
+        let json = format!(
+            r#"[[2, {folder}], [3, "https://store4.gofile.io/download/web/c995/AI-onnx.zip", {file}]]"#
+        );
+        let post = parse_answer(&json, "https://gofile.io/d/Folder").unwrap();
+        assert_eq!(post.post_files[0].name.as_deref(), Some("AI-onnx.zip"));
+        assert_eq!(post.post_files[0].size, Some(111_638_792));
 
         let kinds: Vec<FileKind> = [
             r#"{"extension": "JPG"}"#,

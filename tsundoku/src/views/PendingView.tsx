@@ -26,7 +26,7 @@ import { Card } from "../components/Card"
 import { DestinationLine } from "../components/DestinationLine"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
-import { PostFilesStrip } from "../components/PostFilesStrip"
+import { PostFilesPicker } from "../components/PostFilesPicker"
 import { SharedFilesList } from "../components/SharedFilesList"
 import { Checkbox, SelectInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
@@ -39,8 +39,8 @@ import { Thumbnail } from "../components/Thumbnail"
 import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
 import { describeDownloadError, describePreviewError, fixFor, needsPassword, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
-import { pickedOf, pickSummary } from "../postFiles"
-import { sameFiles, sharedPickedOf } from "../sharedFiles"
+import { listsPostFiles, pickedOf, pickSummary, postLeftOutMessage } from "../postFiles"
+import { sameFiles, sharedLeftOutMessage, sharedPickedOf } from "../sharedFiles"
 import { describeSiteWait, useTimeLeft } from "../holds"
 import { checkingCounts, shownPendingLinks } from "../pendingLinks"
 import {
@@ -442,7 +442,8 @@ function PendingRow({
           <PendingPostFiles
             video={video}
             downloadedBefore={!!preview?.lastDownload}
-            onPick={(picked) => act(() => setPendingPostFiles(link.id, [...picked]))}
+            save={(picked) => setPendingPostFiles(link.id, [...picked])}
+            onError={(error) => setActionError(describeDownloadError(error))}
           />
         ))}
         {link.state === "needsPassword" && (
@@ -524,28 +525,33 @@ function PendingRow({
   )
 }
 
-/** A read post's files to pick from, as on the preview card. The ticks are the link's own, saved as they change; a
- * post downloaded before starts with the files left out then. */
+/** A read post's files to pick from, as on the preview card: a strip, or a list for a post of files. The ticks are the
+ * link's own, saved as they change; a post downloaded before starts with the files left out then. */
 function PendingPostFiles({
   video,
   downloadedBefore,
-  onPick,
+  save,
+  onError,
 }: {
   video: VideoInfo
   downloadedBefore: boolean
-  onPick: (picked: Set<number>) => void
+  save: (picked: Set<number>) => Promise<void>
+  onError: (error: unknown) => void
 }) {
   const { data: leftOut } = useLeftOutFiles(video, downloadedBefore)
-  const files = video.postFiles ?? []
+  const files = video.postFiles
+  const saved = useMemo(() => pickedOf(files ?? []), [files])
+  const [picked, change] = useHeldTicks(saved, save, onError)
   return (
     <div className="flex flex-col gap-2 pt-1">
-      {leftOut && <StatusMessage tone="neutral" message={strings.postFiles.leftOut(leftOut.length)} />}
-      <PostFilesStrip
-        files={files}
-        picked={pickedOf(files)}
+      {leftOut && <StatusMessage tone="neutral" message={postLeftOutMessage(leftOut, picked)} />}
+      <PostFilesPicker
+        asList={listsPostFiles(video)}
+        files={files ?? []}
+        picked={picked}
         leftOut={leftOut ?? null}
         downloadedBefore={downloadedBefore}
-        onChange={onPick}
+        onChange={change}
       />
     </div>
   )
@@ -567,41 +573,41 @@ function PendingSharedFiles({
   const { data: leftOut } = useLeftOutSharedFiles(video, downloadedBefore)
   const files = video.sharedFiles
   const saved = useMemo(() => sharedPickedOf(files ?? []), [files])
-  // The ticks made here show at once and hold until the link comes back with them all: a tick made meanwhile builds on
-  // them, not on what the link said before, so quick ticks aren't lost.
-  const [ticked, setTicked] = useState<ReadonlySet<number> | null>(null)
-  if (ticked && sameFiles(ticked, saved)) setTicked(null)
-  const picked = ticked ?? saved
-  // Whether the files not downloaded are the ones ticked: not for a link read before its folder was downloaded, nor once
-  // the ticks change.
-  const tickedAreLeftOut = useMemo(() => !!leftOut && sameFiles(new Set(leftOut), picked), [leftOut, picked])
+  const [picked, change] = useHeldTicks(saved, save, onError)
   return (
     <div className="flex flex-col gap-2 pt-1">
-      {leftOut && (
-        <StatusMessage
-          tone="neutral"
-          message={
-            tickedAreLeftOut
-              ? strings.sharedFiles.leftOut(leftOut.length)
-              : strings.sharedFiles.leftOutCount(leftOut.length)
-          }
-        />
-      )}
+      {leftOut && <StatusMessage tone="neutral" message={sharedLeftOutMessage(leftOut, picked)} />}
       <SharedFilesList
         files={files ?? []}
         picked={picked}
         leftOut={leftOut ?? null}
         downloadedBefore={downloadedBefore}
-        onChange={(next) => {
-          setTicked(next)
-          save(next).catch((error: unknown) => {
-            setTicked(null)
-            onError(error)
-          })
-        }}
+        onChange={change}
       />
     </div>
   )
+}
+
+/** A pending link's ticks as they show: the ones made here show at once and hold until the link comes back with them
+ * all (`saved`), so a tick made meanwhile builds on them, not on what the link said before, and quick ticks aren't
+ * lost. A tick that couldn't be saved goes back. */
+function useHeldTicks(
+  saved: ReadonlySet<number>,
+  save: (picked: Set<number>) => Promise<void>,
+  onError: (error: unknown) => void,
+): [ReadonlySet<number>, (picked: Set<number>) => void] {
+  const [ticked, setTicked] = useState<ReadonlySet<number> | null>(null)
+  if (ticked && sameFiles(ticked, saved)) setTicked(null)
+  return [
+    ticked ?? saved,
+    (next) => {
+      setTicked(next)
+      save(next).catch((error: unknown) => {
+        setTicked(null)
+        onError(error)
+      })
+    },
+  ]
 }
 
 /** Where a read link will be saved, and what picked the folder, as the preview card shows it: with the preset it would
