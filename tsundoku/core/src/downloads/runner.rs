@@ -52,6 +52,9 @@ pub struct JobSpec {
     pub post: Option<PostJob>,
     /// Set for a file host's link (`hosts`), which Tsundoku downloads itself.
     pub files: Option<FileContents>,
+    /// The paths of a shared folder's files picked when not all are (`VideoInfo::picked_shared_files`): the download
+    /// takes only those. `None` for the whole folder, and for anything but a file host's link.
+    pub picked_files: Option<Vec<String>>,
     /// A file host's link of one file named by a rule (`rules::file_name`): its name without the extension, which the
     /// file keeps.
     pub shared_file_name: Option<String>,
@@ -85,10 +88,14 @@ pub struct PostJob {
 #[derive(Debug, Clone, PartialEq)]
 pub enum JobOutcome {
     Finished {
-        /// The files made, in order: one for a video, one or more for a post.
+        /// The files made, in order: one for a video, one or more for a post or a file host's link.
         files: Vec<PathBuf>,
         /// Resolution and codecs, such as "1080p · avc1 + mp4a", or the audio's format.
         format: Option<String>,
+        /// For a file host's link, the paths in the share (`hosts::shared_path`) of the files it took: a file saved
+        /// under another name ("Name (2).zip") can't be told from its saved path, nor an archive from what unpacking
+        /// left in its place. Empty for a video or a post.
+        shared: Vec<String>,
     },
     Cancelled,
     Failed(DownloadError),
@@ -136,6 +143,7 @@ impl JobRunner for ToolRunner {
                 ),
                 // Unpacking was turned off since: the files are done as they are.
                 None => JobOutcome::Finished {
+                    shared: files.shared.clone(),
                     files: files.clone().all(),
                     format: None,
                 },
@@ -147,12 +155,20 @@ impl JobRunner for ToolRunner {
             (None, None) => run_yt_dlp(job, cancel, on_progress),
         };
         match (outcome, &job.unpack) {
-            (JobOutcome::Finished { files, format }, Some(unpack)) => unpacking::run(
+            (
+                JobOutcome::Finished {
+                    files,
+                    format,
+                    shared,
+                },
+                Some(unpack),
+            ) => unpacking::run(
                 job,
                 unpack,
                 DownloadedFiles {
                     settled: Vec::new(),
                     archives: files,
+                    shared,
                 },
                 format,
                 &SystemDisks,
@@ -340,6 +356,7 @@ fn read_result(result_file: &Path) -> JobOutcome {
         }) => JobOutcome::Finished {
             files: vec![PathBuf::from(file_path)],
             format: format_label(height, vcodec.as_deref(), acodec.as_deref(), ext.as_deref()),
+            shared: Vec::new(),
         },
         _ => JobOutcome::Failed(DownloadError::NoFile),
     }
@@ -419,6 +436,7 @@ mod tests {
             cookies: None,
             post: None,
             files: None,
+            picked_files: None,
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
@@ -589,6 +607,7 @@ mod tests {
             JobOutcome::Finished {
                 files: vec![PathBuf::from(r"D:\Videos\Me at the zoo [jNQXAC9IVRw].mkv")],
                 format: Some("240p · av01 + opus".to_owned()),
+                shared: Vec::new(),
             }
         );
         assert_eq!(

@@ -1,6 +1,7 @@
 //! The history of every download: its tables in `tsundoku.db` (database.rs) are its source of truth, and yt-dlp's `archive.txt` is
 //! rewritten from it after every change, one `<site> <id>` line per video, so yt-dlp can use it too.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -63,9 +64,12 @@ pub struct NewDownload {
     pub downloaded_at: i64,
     /// Video or audio by its preset, a post, or a file host's files: what the history's Kind filter matches.
     pub kind: DownloadKind,
+    /// For a file host's link, the paths in the share (`hosts::shared_path`) of the files it took: what
+    /// `left_out_shared_files` goes by. Empty for a video or a post.
+    pub share_paths: Vec<String>,
 }
 
-/// One file of a post, to record.
+/// One file of a post or a file host's link, to record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavedFile {
     pub path: String,
@@ -315,8 +319,8 @@ impl History {
             |row| row.get(0),
         )?;
         let download_id: i64 = transaction.query_row(
-            "INSERT INTO downloads (video, preset, file_path, file_size, format, downloaded_at, kind)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING id",
+            "INSERT INTO downloads (video, preset, file_path, file_size, format, downloaded_at, kind, share_paths)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING id",
             params![
                 video_row,
                 download.preset,
@@ -325,6 +329,9 @@ impl History {
                 download.format,
                 download.downloaded_at,
                 download.kind.as_str(),
+                // A JSON list, which can't fail to write.
+                (!download.share_paths.is_empty())
+                    .then(|| serde_json::Value::from(download.share_paths.clone()).to_string()),
             ],
             |row| row.get(0),
         )?;
@@ -463,6 +470,48 @@ impl History {
             .iter()
             .map(|file| file.number)
             .filter(|number| !taken.contains(&Some(*number)))
+            .collect();
+        Ok((!left_out.is_empty()).then_some(left_out))
+    }
+
+    /// The files of a shared folder that its downloads so far didn't take, by their place in `video.shared_files`
+    /// (from 0): what the list marks Not Downloaded and ticks to start with. `None` when it was never downloaded, when
+    /// a download was made before share paths were kept (downloads took the whole folder then), when nothing is left
+    /// out, or when the link lists no files.
+    pub fn left_out_shared_files(
+        &self,
+        video: &VideoInfo,
+    ) -> Result<Option<Vec<u32>>, HistoryError> {
+        if video.shared_files.is_empty() {
+            return Ok(None);
+        }
+        let downloads: Vec<Option<String>> = {
+            let connection = self.database.lock();
+            let mut statement = connection.prepare(
+                "SELECT d.share_paths FROM downloads d JOIN videos v ON v.id = d.video
+                WHERE v.site = ?1 AND v.video_id = ?2",
+            )?;
+            statement
+                .query_map(params![video.site, video.video_id], |row| row.get(0))?
+                .collect::<Result<_, _>>()?
+        };
+        if downloads.is_empty() || downloads.contains(&None) {
+            return Ok(None);
+        }
+        let mut taken: HashSet<String> = HashSet::new();
+        for paths in downloads.iter().flatten() {
+            // A list this version wrote; one it can't read counts as a whole folder, as a download from before does.
+            let Ok(paths) = serde_json::from_str::<Vec<String>>(paths) else {
+                return Ok(None);
+            };
+            taken.extend(paths);
+        }
+        let left_out: Vec<u32> = video
+            .shared_files
+            .iter()
+            .enumerate()
+            .filter(|(_, file)| !taken.contains(&file.path))
+            .map(|(index, _)| u32::try_from(index).unwrap_or(u32::MAX))
             .collect();
         Ok((!left_out.is_empty()).then_some(left_out))
     }
@@ -974,6 +1023,7 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
             _ => None,
         },
         post_files: Vec::new(),
+        shared_files: Vec::new(),
         playlist: None,
     })
 }
@@ -1150,6 +1200,7 @@ mod tests {
             post: None,
             files: None,
             post_files: Vec::new(),
+            shared_files: Vec::new(),
             playlist: None,
         }
     }
@@ -1163,6 +1214,7 @@ mod tests {
             files: Vec::new(),
             downloaded_at,
             kind: DownloadKind::Video,
+            share_paths: Vec::new(),
         }
     }
 
@@ -1660,6 +1712,7 @@ mod tests {
             format: None,
             downloaded_at: 1,
             kind: DownloadKind::Post,
+            share_paths: Vec::new(),
         };
         let id = test.history.record(&post, &saved).unwrap();
 
@@ -1785,6 +1838,143 @@ mod tests {
         assert_eq!(test.history.left_out_files(&post), Ok(None), "all taken");
     }
 
+    fn shared_folder() -> VideoInfo {
+        let paths = [
+            "Pack/a.zip",
+            "Pack/Sub/b.zip",
+            "Pack/Sub/c.zip",
+            "Pack/d.txt",
+        ];
+        VideoInfo {
+            files: Some(FileContents {
+                count: 4,
+                bytes: 40,
+            }),
+            shared_files: paths
+                .iter()
+                .map(|path| crate::metadata::SharedFile {
+                    path: (*path).to_owned(),
+                    size: 10,
+                    picked: true,
+                })
+                .collect(),
+            ..video("mega", "Pack", "Pack", "someone", 0.0)
+        }
+    }
+
+    /// A download of the shared folder's files at `paths`, as the queue records it.
+    fn saved_shared(paths: &[&str]) -> NewDownload {
+        NewDownload {
+            file_path: format!(r"C:\{}", paths[0]),
+            files: paths
+                .iter()
+                .map(|path| SavedFile {
+                    path: format!(r"C:\{path}"),
+                    size: Some(10),
+                })
+                .collect(),
+            kind: DownloadKind::File,
+            share_paths: paths.iter().map(|path| (*path).to_owned()).collect(),
+            ..download("", 1, 20)
+        }
+    }
+
+    #[test]
+    fn knows_which_files_of_a_shared_folder_were_left_out() {
+        let test = TestHistory::new();
+        let folder = shared_folder();
+        assert_eq!(
+            test.history.left_out_shared_files(&folder),
+            Ok(None),
+            "never downloaded"
+        );
+
+        let first = test
+            .history
+            .record(&folder, &saved_shared(&["Pack/a.zip", "Pack/Sub/c.zip"]))
+            .unwrap();
+        assert_eq!(
+            test.history.left_out_shared_files(&folder),
+            Ok(Some(vec![1, 3]))
+        );
+        let paths: Option<String> = test
+            .history
+            .database
+            .lock()
+            .query_row(
+                "SELECT share_paths FROM downloads WHERE id = ?1",
+                [first],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(paths.as_deref(), Some(r#"["Pack/a.zip","Pack/Sub/c.zip"]"#));
+
+        test.history
+            .record(&folder, &saved_shared(&["Pack/d.txt"]))
+            .unwrap();
+        assert_eq!(
+            test.history.left_out_shared_files(&folder),
+            Ok(Some(vec![1])),
+            "what every download took counts"
+        );
+
+        // The owner added a file since: it wasn't downloaded either.
+        let mut grown = folder.clone();
+        grown.shared_files.push(crate::metadata::SharedFile {
+            path: "Pack/e.zip".to_owned(),
+            size: 10,
+            picked: true,
+        });
+        assert_eq!(
+            test.history.left_out_shared_files(&grown),
+            Ok(Some(vec![1, 4]))
+        );
+
+        test.history
+            .record(&folder, &saved_shared(&["Pack/Sub/b.zip"]))
+            .unwrap();
+        assert_eq!(
+            test.history.left_out_shared_files(&folder),
+            Ok(None),
+            "all taken"
+        );
+        assert_eq!(test.history.left_out_files(&folder), Ok(None), "not a post");
+    }
+
+    #[test]
+    fn a_shared_folder_downloaded_before_its_paths_were_kept_left_nothing_out() {
+        let test = TestHistory::new();
+        let folder = shared_folder();
+        // Downloads made before 0.1.132 kept no path in the share, and took the whole folder.
+        test.history
+            .record(
+                &folder,
+                &NewDownload {
+                    kind: DownloadKind::File,
+                    ..saved(&[r"C:\Pack\a.zip", r"C:\Pack\Sub\b.zip"])
+                },
+            )
+            .unwrap();
+        test.history
+            .record(&folder, &saved_shared(&["Pack/a.zip"]))
+            .unwrap();
+        assert_eq!(test.history.left_out_shared_files(&folder), Ok(None));
+
+        let unlisted = VideoInfo {
+            shared_files: Vec::new(),
+            video_id: "Other".to_owned(),
+            ..folder
+        };
+        test.history
+            .record(&unlisted, &saved_shared(&["Pack/a.zip"]))
+            .unwrap();
+        assert_eq!(
+            test.history.left_out_shared_files(&unlisted),
+            Ok(None),
+            "a link that lists no files"
+        );
+    }
+
     #[test]
     fn a_post_downloaded_without_its_files_listed_left_nothing_out() {
         let test = TestHistory::new();
@@ -1847,6 +2037,7 @@ mod tests {
             format: None,
             downloaded_at: 1,
             kind: DownloadKind::File,
+            share_paths: Vec::new(),
         };
         let id = test.history.record(&share, &saved).unwrap();
 

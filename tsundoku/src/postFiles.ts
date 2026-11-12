@@ -1,5 +1,6 @@
 import type { PostFile } from "./bindings/PostFile"
 import type { VideoInfo } from "./bindings/VideoInfo"
+import { sharedPickSummary } from "./sharedFiles"
 import { strings } from "./strings"
 
 /** The files ticked to start with: those its downloads left out, when they left some out, else every one. */
@@ -17,9 +18,10 @@ export function withPicked(video: VideoInfo, picked: ReadonlySet<number>): Video
   return { ...video, postFiles: video.postFiles?.map((file) => ({ ...file, picked: picked.has(file.number) })) }
 }
 
-/** "3 of 6 files" for a post whose download leaves some files out; null when it takes them all, or isn't a post. */
+/** "3 of 6 files" for a post whose download leaves some files out, "12 of 340 files, 1.2 GB" for a shared folder
+ * (`sharedPickSummary`); null when it takes them all, or is neither. */
 export function pickSummary(video: VideoInfo): string | null {
   const files = video.postFiles ?? []
   const picked = files.filter((file) => file.picked).length
-  return picked < files.length ? strings.postFiles.summary(picked, files.length) : null
+  return picked < files.length ? strings.postFiles.summary(picked, files.length) : sharedPickSummary(video)
 }

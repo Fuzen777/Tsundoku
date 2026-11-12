@@ -210,6 +210,7 @@ impl Test {
                     format: None,
                     downloaded_at: 1,
                     kind: DownloadKind::Video,
+                    share_paths: Vec::new(),
                 },
             )
             .unwrap();
@@ -232,6 +233,7 @@ fn video(id: &str) -> VideoInfo {
         post: None,
         files: None,
         post_files: Vec::new(),
+        shared_files: Vec::new(),
         playlist: None,
     }
 }

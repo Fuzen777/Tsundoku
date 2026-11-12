@@ -4,6 +4,7 @@
 //! MediaFire's SHA-256), then moved into place. A file behind a check only a person can pass (`hosts::check`) is
 //! left for later while the others download, and the run ends asking for the check.
 
+use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -66,10 +67,14 @@ pub(super) fn run(
     let mut log = open_log(&job.log_path);
     let outcome = download(job, cancel, &mut log, on_progress);
     match outcome {
-        Ok(files) => JobOutcome::Finished {
-            files,
-            format: None,
-        },
+        Ok(saved) => {
+            let (files, shared) = saved.into_iter().unzip();
+            JobOutcome::Finished {
+                files,
+                format: None,
+                shared,
+            }
+        }
         Err(Stop::Cancelled) => JobOutcome::Cancelled,
         Err(Stop::Check(check)) => {
             write_log(
@@ -89,12 +94,13 @@ pub(super) fn run(
     }
 }
 
+/// Downloads the job's files, answering each one saved with its path in the share (`hosts::shared_path`).
 fn download(
     job: &JobSpec,
     cancel: &CancelToken,
     log: &mut Option<File>,
     on_progress: &mut dyn FnMut(DownloadProgress),
-) -> Result<Vec<PathBuf>, Stop> {
+) -> Result<Vec<(PathBuf, String)>, Stop> {
     make_folders(job)?;
     // The part after "#" is MEGA's key, which stays out of the log.
     let link = job.url.split('#').next().unwrap_or_default();
@@ -104,13 +110,39 @@ fn download(
     let host = Host::of(&job.url).ok_or(PreviewError::UnsupportedSite)?;
     let client = hosts::client_for(host)?;
     let share = host.read(&client, &job.url, job.password.as_ref(), cancel)?;
+    let paths: Vec<String> = share
+        .files
+        .iter()
+        .map(|file| hosts::shared_path(&file.path))
+        .collect();
+    let taken = taken_files(&paths, job.picked_files.as_deref());
+    let picked_bytes: u64 = taken
+        .indexes
+        .iter()
+        .map(|&index| share.files[index].size)
+        .sum();
     write_log(
         log,
-        &format!("{} files, {} bytes", share.files.len(), share.total_bytes()),
+        &match job.picked_files {
+            Some(_) => format!(
+                "{} files, {} bytes; {} picked, {picked_bytes} bytes",
+                share.files.len(),
+                share.total_bytes(),
+                taken.indexes.len()
+            ),
+            None => format!("{} files, {} bytes", share.files.len(), share.total_bytes()),
+        },
     );
+    for path in &taken.gone {
+        write_log(log, &format!("{path}: picked, but no longer in the folder"));
+    }
+    // The files picked are all gone: downloading the rest of the folder instead would surprise.
+    if taken.indexes.is_empty() {
+        return Err(DownloadError::PickedFilesGone.into());
+    }
 
     let rate = job.rate_limit.as_deref().and_then(bytes_per_second);
-    let mut meter = Meter::new(share.total_bytes(), rate);
+    let mut meter = Meter::new(picked_bytes, rate);
     let mut saved = Vec::new();
     // Files behind a check only a person can pass, left for later.
     let mut behind: Option<BrowserCheck> = None;
@@ -119,8 +151,13 @@ fn download(
         .shared_file_name
         .as_deref()
         .filter(|_| share.files.len() == 1);
-    for (index, listed) in share.files.iter().enumerate() {
-        let last = index + 1 == share.files.len();
+    let last_index = taken.indexes.last().copied();
+    // Each file keeps its place in the whole share for its part file's name, so a stopped download continues the
+    // right one whatever was picked since.
+    for &index in &taken.indexes {
+        let listed = &share.files[index];
+        let share_path = || paths[index].clone();
+        let last = Some(index) == last_index;
         let mut file = listed.clone();
         // A file read through the window has its size and name once its download answers.
         let size_known = file.size > 0 || !matches!(file.source, FileSource::Windowed(_));
@@ -159,7 +196,7 @@ fn download(
             if last {
                 on_progress(DownloadProgress::at(DownloadStage::Finishing));
             }
-            saved.push(place(window_file, &destination)?);
+            saved.push((place(window_file, &destination)?, share_path()));
             continue;
         }
         if size_known && let Some(there) = already_there(job, &file, single_name) {
@@ -168,7 +205,7 @@ fn download(
                 &format!("{}: already in the folder", file.path.display()),
             );
             meter.skip(file.size);
-            saved.push(there);
+            saved.push((there, share_path()));
             continue;
         }
 
@@ -236,7 +273,7 @@ fn download(
                         &format!("{}: already in the folder", file.path.display()),
                     );
                     meter.skip(file.size);
-                    saved.push(there);
+                    saved.push((there, share_path()));
                     continue;
                 }
             }
@@ -337,13 +374,47 @@ fn download(
             }
             .into());
         }
-        saved.push(place(&part, &destination)?);
+        saved.push((place(&part, &destination)?, share_path()));
     }
     if let Some(check) = behind {
         return Err(Stop::Check(check));
     }
     on_progress(DownloadProgress::at(DownloadStage::Finishing));
     Ok(saved)
+}
+
+/// Which of a share's files a download takes, by their place in the share.
+#[derive(Debug, PartialEq, Eq)]
+struct Taken {
+    indexes: Vec<usize>,
+    /// The paths picked that the share no longer has.
+    gone: Vec<String>,
+}
+
+/// Which of a share's files, given by their paths (`hosts::shared_path`), a download takes: every one, or those whose
+/// path was `picked` (`JobSpec::picked_files`). Files with the same path go together.
+fn taken_files(paths: &[String], picked: Option<&[String]>) -> Taken {
+    let Some(picked) = picked else {
+        return Taken {
+            indexes: (0..paths.len()).collect(),
+            gone: Vec::new(),
+        };
+    };
+    let wanted: HashSet<&str> = picked.iter().map(String::as_str).collect();
+    let listed: HashSet<&str> = paths.iter().map(String::as_str).collect();
+    Taken {
+        indexes: paths
+            .iter()
+            .enumerate()
+            .filter(|(_, path)| wanted.contains(path.as_str()))
+            .map(|(index, _)| index)
+            .collect(),
+        gone: picked
+            .iter()
+            .filter(|path| !listed.contains(path.as_str()))
+            .cloned()
+            .collect(),
+    }
 }
 
 /// Where `file` already is in the download's folder, with its size: it isn't downloaded again.
@@ -840,6 +911,56 @@ mod tests {
     }
 
     #[test]
+    fn takes_the_files_picked_by_their_path() {
+        let paths: Vec<String> = ["Pack/a.zip", "Pack/Sub/b.zip", "Pack/a.zip", "Pack/c.txt"]
+            .map(str::to_owned)
+            .to_vec();
+        let picked = |paths: &[&str]| {
+            paths
+                .iter()
+                .map(|path| (*path).to_owned())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            taken_files(&paths, None),
+            Taken {
+                indexes: vec![0, 1, 2, 3],
+                gone: Vec::new()
+            },
+            "the whole folder"
+        );
+        assert_eq!(
+            taken_files(&paths, Some(&picked(&["Pack/c.txt", "Pack/Sub/b.zip"]))),
+            Taken {
+                indexes: vec![1, 3],
+                gone: Vec::new()
+            },
+            "each keeps its place in the share, in the share's order"
+        );
+        assert_eq!(
+            taken_files(&paths, Some(&picked(&["Pack/a.zip"]))).indexes,
+            [0, 2],
+            "two files with one path go together"
+        );
+        assert_eq!(
+            taken_files(&paths, Some(&picked(&["Pack/c.txt", "Pack/Old/d.zip"]))),
+            Taken {
+                indexes: vec![3],
+                gone: vec!["Pack/Old/d.zip".to_owned()]
+            },
+            "a file no longer there"
+        );
+        assert_eq!(
+            taken_files(&paths, Some(&picked(&["Pack/Old/d.zip"]))),
+            Taken {
+                indexes: Vec::new(),
+                gone: vec!["Pack/Old/d.zip".to_owned()]
+            },
+            "none left: never the whole folder instead"
+        );
+    }
+
+    #[test]
     fn a_taken_name_gets_a_number() {
         let folder = tempfile::tempdir().unwrap();
         let path = folder.path().join("Pack.zip");
@@ -1171,6 +1292,7 @@ mod onedrive_live {
             cookies: None,
             post: None,
             files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
+            picked_files: None,
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
@@ -1195,8 +1317,9 @@ mod onedrive_live {
 }
 
 /// Live checks against any file host, run by hand: `HOST_LINKS="<link> <link>…" cargo test -p tsundoku-core --lib
-/// host_live -- --ignored --nocapture --test-threads 1` reads each link, and `HOST_DOWNLOAD=<link>` downloads one
-/// into a temporary folder. `HOST_PASSWORD` opens links that need one. They need the network.
+/// host_live -- --ignored --nocapture --test-threads 1` reads each link, `HOST_DOWNLOAD=<link>` downloads one into a
+/// temporary folder, and `HOST_DOWNLOAD_PICKED="<link>|<path>|<path>…"` downloads only those files of a shared folder
+/// (their paths as `hosts::shared_path` gives them). `HOST_PASSWORD` opens links that need one. They need the network.
 #[cfg(test)]
 mod host_live {
     use super::*;
@@ -1284,6 +1407,21 @@ mod host_live {
         let Ok(link) = std::env::var("HOST_DOWNLOAD") else {
             return;
         };
+        download_live(link, None);
+    }
+
+    #[test]
+    #[ignore = "needs the network"]
+    fn host_live_downloads_the_files_picked() {
+        let Ok(spec) = std::env::var("HOST_DOWNLOAD_PICKED") else {
+            return;
+        };
+        let mut parts = spec.split('|').map(str::to_owned);
+        let link = parts.next().unwrap();
+        download_live(link, Some(parts.collect()));
+    }
+
+    fn download_live(link: String, picked_files: Option<Vec<String>>) {
         let folder = tempfile::tempdir().unwrap();
         let job = JobSpec {
             id: 1,
@@ -1301,6 +1439,7 @@ mod host_live {
             cookies: None,
             post: None,
             files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
+            picked_files,
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
@@ -1311,12 +1450,12 @@ mod host_live {
         let outcome = run(&job, &CancelToken::new(), &mut |_| {});
         println!("{}", fs::read_to_string(&job.log_path).unwrap_or_default());
         match outcome {
-            JobOutcome::Finished { files, .. } => {
-                for file in files {
+            JobOutcome::Finished { files, shared, .. } => {
+                for (file, path) in files.iter().zip(shared) {
                     println!(
-                        "saved {} · {} bytes",
+                        "saved {path} as {} · {} bytes",
                         file.display(),
-                        fs::metadata(&file).unwrap().len()
+                        fs::metadata(file).unwrap().len()
                     );
                 }
             }

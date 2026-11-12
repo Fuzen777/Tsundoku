@@ -559,12 +559,40 @@ impl PendingLinks {
         Ok(())
     }
 
-    /// What was read, with a post downloaded before ticking only the files left out then (`History::left_out_files`),
-    /// as the preview card ticks them.
+    /// Picks which files of a read shared folder the link downloads, by their place in its list
+    /// (`VideoInfo::shared_files`, from 0). Any place the list doesn't have is ignored.
+    pub fn set_shared_files(&self, id: i64, picked: &[u32]) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let entry = find(&mut state.entries, id)?;
+            let video = entry
+                .fetched
+                .as_mut()
+                .map(|fetched| &mut fetched.video)
+                .filter(|video| !video.shared_files.is_empty())
+                .ok_or(DownloadError::WrongState)?;
+            let picked: HashSet<u32> = picked.iter().copied().collect();
+            for (index, file) in video.shared_files.iter_mut().enumerate() {
+                file.picked = u32::try_from(index).is_ok_and(|index| picked.contains(&index));
+            }
+            self.store.update(entry)?;
+        }
+        self.notify();
+        Ok(())
+    }
+
+    /// What was read, with a post or a shared folder downloaded before ticking only the files left out then
+    /// (`History::left_out_files`, `left_out_shared_files`), as the preview card ticks them.
     fn with_left_out_ticked(&self, mut fetched: Fetched) -> Fetched {
         if let Ok(Some(left_out)) = self.history.left_out_files(&fetched.video) {
             for file in &mut fetched.video.post_files {
                 file.picked = left_out.contains(&file.number);
+            }
+        }
+        if let Ok(Some(left_out)) = self.history.left_out_shared_files(&fetched.video) {
+            let left_out: HashSet<u32> = left_out.into_iter().collect();
+            for (index, file) in fetched.video.shared_files.iter_mut().enumerate() {
+                file.picked = u32::try_from(index).is_ok_and(|index| left_out.contains(&index));
             }
         }
         fetched

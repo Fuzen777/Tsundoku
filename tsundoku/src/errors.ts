@@ -251,6 +251,8 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return describePostNameError(error.error)
     case "nothingPicked":
       return { message: text.nothingPicked }
+    case "pickedFilesGone":
+      return { message: text.pickedFilesGone }
     case "shortcutTaken":
       return { message: text.shortcutTaken(error.keys) }
     case "unpack":

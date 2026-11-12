@@ -100,10 +100,11 @@ pub fn remember_sizes(video: &VideoInfo, sizes: FormatSizes) {
     kept.insert((video.site.clone(), video.video_id.clone()), sizes);
 }
 
-/// Roughly what downloading `video` with `preset` takes: a file host's files by their size, a video by yt-dlp's
-/// estimate when its link was read since the app started. `None` when it isn't known, such as for a post.
+/// Roughly what downloading `video` with `preset` takes: a file host's files by their size (those picked, for a shared
+/// folder that leaves some out), a video by yt-dlp's estimate when its link was read since the app started. `None` when
+/// it isn't known, such as for a post.
 pub fn expected_bytes(video: &VideoInfo, preset: Option<&Preset>) -> Option<u64> {
-    if let Some(files) = video.files {
+    if let Some(files) = video.picked_contents() {
         return Some(files.bytes);
     }
     if video.post.is_some() {
@@ -316,6 +317,7 @@ mod tests {
             post: None,
             files: None,
             post_files: Vec::new(),
+            shared_files: Vec::new(),
             playlist: None,
         }
     }

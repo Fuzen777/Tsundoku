@@ -13,7 +13,7 @@ mod store;
 mod unpacking;
 mod window_offer;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
@@ -41,7 +41,7 @@ use crate::passwords::Password;
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
-use crate::rules::{self, Destination, DownloadKind, RuleSubject};
+use crate::rules::{self, Destination, RuleSubject};
 use crate::settings::{DownloadSettings, SettingsStore, UnpackSettings};
 use crate::site_limits::{SiteLimits, now_ms};
 use crate::sites::{self, PacedSite};
@@ -276,9 +276,13 @@ pub enum DownloadError {
     /// A name for posts' files (Settings → Posts of Images) that could lose files, or that Windows refuses.
     #[error("post file name: {error}")]
     PostFileName { error: PostNameError },
-    /// A post with every file unticked.
-    #[error("no file of the post is picked")]
+    /// A post or a shared folder with every file unticked.
+    #[error("no file is picked")]
     NothingPicked,
+    /// A shared folder none of whose picked files is in it any more: they were moved, renamed or deleted since the
+    /// link was read. The download doesn't fall back to the whole folder.
+    #[error("the files picked are no longer in the shared folder")]
+    PickedFilesGone,
     /// The clipboard shortcut picked in Settings → Adding Links is taken by another app, so Windows won't give it to
     /// Tsundoku.
     #[error("{keys} is taken by another app")]
@@ -595,8 +599,12 @@ impl DownloadQueue {
         if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
         }
-        // A post's files can be unticked (`PostFile::picked`), but not all of them.
-        if !video.post_files.is_empty() && !video.post_files.iter().any(|file| file.picked) {
+        // A post's or a shared folder's files can be unticked (`PostFile::picked`, `SharedFile::picked`), but not all
+        // of them.
+        if (!video.post_files.is_empty() && !video.post_files.iter().any(|file| file.picked))
+            || (!video.shared_files.is_empty()
+                && !video.shared_files.iter().any(|file| file.picked))
+        {
             return Err(DownloadError::NothingPicked);
         }
         // The Download button's own link, pasted or copied, for a download that waits for its check.
@@ -1165,6 +1173,7 @@ impl DownloadQueue {
                 ),
             }),
             files: item.video.files,
+            picked_files: item.video.picked_shared_files(),
             shared_file_name: item
                 .video
                 .files
@@ -1298,26 +1307,16 @@ impl DownloadQueue {
                     item.state = QueueState::Failed;
                     item.error = Some(error);
                 }
-                (_, JobOutcome::Finished { files, format }) => {
-                    name_after_its_file(&mut item.video, &files);
-                    let preset = item
-                        .preset
-                        .as_ref()
-                        .map(|preset| preset.name.clone())
-                        .unwrap_or_default();
-                    let kind = RuleSubject {
-                        video: &item.video,
-                        preset: item.preset.as_ref(),
-                    }
-                    .kind();
-                    match self.record(
-                        &item.video,
-                        &preset,
-                        kind,
-                        &files,
+                (
+                    _,
+                    JobOutcome::Finished {
+                        files,
                         format,
-                        item.password.as_ref(),
-                    ) {
+                        shared,
+                    },
+                ) => {
+                    name_after_its_file(&mut item.video, &files);
+                    match self.record(item, &files, &shared, format) {
                         Ok(result) => {
                             item.state = QueueState::Done;
                             item.result = Some(result);
@@ -1346,16 +1345,21 @@ impl DownloadQueue {
     }
 
     /// Records a finished download in the history: its file, or every file of a post or a file host's link with the
-    /// size of all of them, and the password that opened its link. Their preset name is empty.
+    /// size of all of them, its preset's name (empty for a post or a file host's link) and kind, the password that
+    /// opened its link, and for a file host's link the paths in the share of the files it took (`shared`).
     fn record(
         &self,
-        video: &VideoInfo,
-        preset_name: &str,
-        kind: DownloadKind,
+        item: &QueueItem,
         files: &[PathBuf],
+        shared: &[String],
         format: Option<String>,
-        password: Option<&Password>,
     ) -> Result<DownloadResult, DownloadError> {
+        let video = &item.video;
+        let kind = RuleSubject {
+            video,
+            preset: item.preset.as_ref(),
+        }
+        .kind();
         let file_path = files.first().ok_or(DownloadError::NoFile)?;
         let saved: Vec<SavedFile> = files
             .iter()
@@ -1366,10 +1370,21 @@ impl DownloadQueue {
                     .map(|metadata| metadata.len() as i64),
             })
             .collect();
+        // Two files of one path (some hosts allow it) are one path taken.
+        let mut seen = HashSet::new();
+        let share_paths: Vec<String> = shared
+            .iter()
+            .filter(|path| seen.insert(path.as_str()))
+            .cloned()
+            .collect();
         let sizes: Vec<i64> = saved.iter().filter_map(|file| file.size).collect();
         let file_size = (!sizes.is_empty()).then(|| sizes.iter().sum());
         let download = NewDownload {
-            preset: preset_name.to_owned(),
+            preset: item
+                .preset
+                .as_ref()
+                .map(|preset| preset.name.clone())
+                .unwrap_or_default(),
             file_path: file_path.display().to_string(),
             files: if video.post.is_some() || video.files.is_some() {
                 saved
@@ -1380,10 +1395,11 @@ impl DownloadQueue {
             format,
             downloaded_at: seconds_since_epoch(),
             kind,
+            share_paths,
         };
         let download_id = self
             .history
-            .record_opened_with(video, &download, password)
+            .record_opened_with(video, &download, item.password.as_ref())
             .map_err(|error| DownloadError::Storage {
                 detail: error.to_string(),
             })?;

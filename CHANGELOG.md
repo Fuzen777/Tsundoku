@@ -2,6 +2,19 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.132 · 2026-11-12
+
+### Added
+
+- **Pick files inside a shared folder**: a link that holds several files (a MEGA, MediaFire, Google Drive, Dropbox, OneDrive, pCloud, Box, Icedrive, Yandex Disk or Files.fm folder, an Internet Archive item, a WeTransfer, SwissTransfer, TransferNow or Filemail transfer) now lists its files on the preview card as a folder tree, everything ticked to start with, so Download still takes the whole folder. Untick files or whole folders to leave them out; the box above the list ticks them all, with how many are ticked and their size. A folder of more than ten files has a filter, which also lets the box tick just the files shown, and a folder of more than 200 starts folded. The list stays quick with thousands of files.
+- **In Pending**: Pick Files opens the same list under a shared folder's row, and the ticks are kept, through a restart too. Rows in Pending and the Queue say "12 of 340 files, 1.2 GB" when some are left out.
+- **Downloading a folder again**: the list marks each file Downloaded or Not Downloaded, and ticks only those not downloaded before, files the owner added since included, so Download Again gets just them. Files already in the folder are still skipped as before.
+- **Files no longer there**: a picked file the folder no longer has is skipped, and when none of the files picked is left, the download fails saying so rather than taking the rest of the folder.
+
+### Changed
+
+- **Pick Files' icon** is now a list with ticks, for a post's files as for a folder's.
+
 ## 0.1.131 · 2026-11-12
 
 ### Added

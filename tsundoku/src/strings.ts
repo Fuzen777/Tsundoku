@@ -46,6 +46,30 @@ export const strings = {
     pickFiles: "Pick Files",
     hideFiles: "Hide Files",
   },
+  /** A shared folder's files, picked in a list (SharedFilesList.tsx) on the preview card and in Pending. */
+  sharedFiles: {
+    count: (picked: number, total: number, size: string) => `${picked} of ${total} Files · ${size}`,
+    summary: (picked: number, total: number, size: string) => `${picked} of ${total} files, ${size}`,
+    selectAll: "Select All Files",
+    selectShown: "Select the Files Shown",
+    filter: "Filter Files",
+    noMatches: "No files match.",
+    folderContents: (count: number, size: string) => `${count} ${count === 1 ? "file" : "files"} · ${size}`,
+    expand: (folder: string) => `Expand ${folder}`,
+    collapse: (folder: string) => `Collapse ${folder}`,
+    downloaded: "Downloaded",
+    downloadedHint: "Downloaded before",
+    notDownloaded: "Not Downloaded",
+    notDownloadedHint: "Not downloaded before: left out, or added to the folder since",
+    leftOut: (count: number) =>
+      count === 1
+        ? "1 file of this folder wasn't downloaded before. It's the one ticked, so downloading again gets just that one."
+        : `${count} files of this folder weren't downloaded before. They're the ones ticked, so downloading again gets just those.`,
+    leftOutCount: (count: number) =>
+      count === 1
+        ? "1 file of this folder wasn't downloaded before."
+        : `${count} files of this folder weren't downloaded before.`,
+  },
   /** The toast that offers to undo a removal (UndoToast.tsx). */
   undoToast: {
     undo: "Undo",
@@ -225,7 +249,9 @@ export const strings = {
       storage: "Couldn't save the queue or the history.",
       logMissing: "This download has no log yet.",
       invalidRateLimit: "Use a number of bytes per second, with K, M or G after it if you like, such as 500K or 2M.",
-      nothingPicked: "Tick at least one file of the post to download it.",
+      nothingPicked: "Tick at least one file to download it.",
+      pickedFilesGone:
+        "The files picked are no longer in the shared folder: they were moved, renamed or deleted. Paste the link again to pick from what it holds now.",
       shortcutTaken: (keys: string) => `Another app already uses ${keys}. Pick another shortcut.`,
       unpack: {
         needsPassword: (archive: string) =>

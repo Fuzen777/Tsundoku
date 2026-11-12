@@ -362,6 +362,7 @@ mod tests {
             }),
             files: None,
             post_files: Vec::new(),
+            shared_files: Vec::new(),
             playlist: None,
         }
     }

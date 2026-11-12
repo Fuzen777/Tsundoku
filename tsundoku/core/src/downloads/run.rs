@@ -36,7 +36,7 @@ impl Member {
         Self {
             state: item.state,
             title: item.video.title.clone(),
-            size: item.video.files.map(|files| files.bytes),
+            size: item.video.picked_contents().map(|files| files.bytes),
             fraction: None,
             split: false,
             waits_for_check: check_site(item).is_some(),
@@ -512,6 +512,28 @@ mod tests {
         run.update(&[item(1, QueueState::Running), share]);
         run.progress(1, &at(DownloadStage::Downloading, 0.5, Some(1000)));
         assert_eq!(run.summary().percent, Some(12), "500 of 4000 bytes");
+    }
+
+    #[test]
+    fn a_shared_folder_counts_the_files_picked() {
+        let mut run = QueueRun::default();
+        let mut share = item(2, QueueState::Waiting);
+        share.video.files = Some(FileContents {
+            count: 3,
+            bytes: 3000,
+        });
+        share.video.shared_files = [(1000, true), (1000, false), (1000, false)]
+            .into_iter()
+            .enumerate()
+            .map(|(index, (size, picked))| crate::metadata::SharedFile {
+                path: format!("Pack/{index}.zip"),
+                size,
+                picked,
+            })
+            .collect();
+        run.update(&[item(1, QueueState::Running), share]);
+        run.progress(1, &at(DownloadStage::Downloading, 0.5, Some(1000)));
+        assert_eq!(run.summary().percent, Some(25), "500 of 2000 bytes");
     }
 
     #[test]

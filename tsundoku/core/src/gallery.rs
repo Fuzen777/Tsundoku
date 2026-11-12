@@ -335,6 +335,7 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         post: Some(contents),
         files: None,
         post_files: post_files(files),
+        shared_files: Vec::new(),
         playlist: None,
     })
 }

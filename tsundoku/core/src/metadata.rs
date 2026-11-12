@@ -56,6 +56,11 @@ pub struct VideoInfo {
     /// file host's link, or a post read before Tsundoku listed them, whose download takes every file.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub post_files: Vec<PostFile>,
+    /// A file host's files, when its link holds more than one (a shared folder), in the order the host gives them, and
+    /// which of them its download takes. Empty for one file, a video, a post, or a link read before Tsundoku listed
+    /// them, whose download takes every file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared_files: Vec<SharedFile>,
     /// The playlist, channel or account it was picked from (`listing`), for `{playlist}` in a rule's folder. `None` for
     /// a link added on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -82,6 +87,32 @@ impl VideoInfo {
         Some(match self.picked_post_files() {
             Some(picked) => u32::try_from(picked.len()).unwrap_or(u32::MAX),
             None => post.images + post.videos + post.others,
+        })
+    }
+
+    /// The paths of the shared folder's files its download takes, when it leaves some out (`SharedFile::picked`);
+    /// `None` when it takes them all, or the link lists none.
+    pub fn picked_shared_files(&self) -> Option<Vec<String>> {
+        let picked: Vec<String> = self
+            .shared_files
+            .iter()
+            .filter(|file| file.picked)
+            .map(|file| file.path.clone())
+            .collect();
+        (picked.len() < self.shared_files.len()).then_some(picked)
+    }
+
+    /// What a file host's download takes: the count and size of the files picked, or the whole share (`files`) when
+    /// none is left out. `None` for anything but a file host's link.
+    pub fn picked_contents(&self) -> Option<FileContents> {
+        let files = self.files?;
+        if self.shared_files.iter().all(|file| file.picked) {
+            return Some(files);
+        }
+        let picked = self.shared_files.iter().filter(|file| file.picked);
+        Some(FileContents {
+            count: u32::try_from(picked.clone().count()).unwrap_or(u32::MAX),
+            bytes: picked.map(|file| file.size).sum(),
         })
     }
 }
@@ -117,6 +148,21 @@ pub struct PostFile {
 
 fn picked_by_default() -> bool {
     true
+}
+
+/// One file of a shared folder, as the list of the preview card and of a pending link shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SharedFile {
+    /// Where it goes in the download's folder: the shared folder's own folder and subfolders, then its name, joined
+    /// with "/" (`hosts::shared_path`). What the download picks it by, and the history remembers it by.
+    pub path: String,
+    #[ts(type = "number")]
+    pub size: u64,
+    /// Whether the download takes it. Every file does to start with; a list unticks the ones not wanted.
+    #[serde(default = "picked_by_default")]
+    pub picked: bool,
 }
 
 /// The files behind a file host's link, such as a MEGA folder.
@@ -617,6 +663,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         post: None,
         files: None,
         post_files: Vec::new(),
+        shared_files: Vec::new(),
         playlist: None,
     };
     // Kept for when it's downloaded, to check there's room for it first.

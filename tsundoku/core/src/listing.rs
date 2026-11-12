@@ -454,6 +454,7 @@ fn item_from_entry(entry: &Value, rough_dates: bool) -> Option<ListedItem> {
             files: None,
             url,
             // The listing's own name, once it's known (`name_items`).
+            shared_files: Vec::new(),
             playlist: None,
         },
         approximate_date,

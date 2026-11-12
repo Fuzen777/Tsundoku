@@ -156,6 +156,16 @@ pub fn set_pending_post_files(
     pending.set_post_files(id, &picked)
 }
 
+/// Picks which files of a read shared folder one link downloads, by their place in its list, from 0.
+#[tauri::command]
+pub fn set_pending_shared_files(
+    pending: Pending<'_>,
+    id: i64,
+    picked: Vec<u32>,
+) -> Result<(), DownloadError> {
+    pending.set_shared_files(id, &picked)
+}
+
 /// Picks one link's folder, or `None` for the one the rules give.
 #[tauri::command]
 pub fn set_pending_folder(

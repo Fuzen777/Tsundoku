@@ -27,7 +27,7 @@ pub mod windowed;
 pub mod yandex;
 
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use reqwest::blocking::{Client, RequestBuilder, Response};
@@ -38,7 +38,7 @@ use reqwest::header::{
 use reqwest::{ResponseBuilderExt, StatusCode};
 
 use crate::cancel::CancelToken;
-use crate::metadata::{FileContents, PreviewError, VideoInfo};
+use crate::metadata::{FileContents, PreviewError, SharedFile, VideoInfo};
 use crate::passwords::Password;
 use crate::rules::safe_folder_name;
 use crate::sites;
@@ -326,9 +326,31 @@ impl Share {
                 bytes: self.total_bytes(),
             }),
             post_files: Vec::new(),
+            // A share of one file has nothing to pick.
+            shared_files: if self.files.len() > 1 {
+                self.files
+                    .iter()
+                    .map(|file| SharedFile {
+                        path: shared_path(&file.path),
+                        size: file.size,
+                        picked: true,
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
             playlist: None,
         }
     }
+}
+
+/// A share's file's path (`RemoteFile::path`) as the preview, the download and the history spell it: its folders,
+/// then its name, joined with "/".
+pub fn shared_path(path: &Path) -> String {
+    path.components()
+        .map(|part| part.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// One file of a share.
@@ -918,6 +940,82 @@ pub(crate) fn title_of(html: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn share_of(paths: &[&str]) -> Share {
+        Share {
+            host: Host::Dropbox,
+            id: "folder".to_owned(),
+            url: "https://www.dropbox.com/scl/fo/folder".to_owned(),
+            title: "Pack".to_owned(),
+            upload_date: None,
+            files: paths
+                .iter()
+                .map(|path| RemoteFile {
+                    path: PathBuf::from(path),
+                    size: 5,
+                    source: FileSource::Dropbox(dropbox::DropboxFile {
+                        url: format!("https://www.dropbox.com/{path}?dl=1"),
+                    }),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn lists_a_shared_folders_files_to_pick_from() {
+        let folder = share_of(&[r"Pack\a.zip", r"Pack\Sub\b.zip"]).video_info();
+        assert_eq!(
+            folder.shared_files,
+            [
+                SharedFile {
+                    path: "Pack/a.zip".to_owned(),
+                    size: 5,
+                    picked: true,
+                },
+                SharedFile {
+                    path: "Pack/Sub/b.zip".to_owned(),
+                    size: 5,
+                    picked: true,
+                },
+            ],
+            "the folders joined with slashes, in the share's order"
+        );
+        assert_eq!(folder.picked_shared_files(), None, "every file");
+        assert_eq!(folder.picked_contents(), folder.files);
+
+        let one = share_of(&["a.zip"]).video_info();
+        assert!(one.shared_files.is_empty(), "nothing to pick");
+        assert_eq!(one.picked_shared_files(), None);
+        assert_eq!(
+            one.picked_contents(),
+            Some(FileContents { count: 1, bytes: 5 })
+        );
+    }
+
+    #[test]
+    fn a_shared_folder_takes_the_files_ticked() {
+        let mut folder = share_of(&[r"Pack\a.zip", r"Pack\b.zip", r"Pack\c.zip"]).video_info();
+        folder.shared_files[1].picked = false;
+        assert_eq!(
+            folder.picked_shared_files(),
+            Some(vec!["Pack/a.zip".to_owned(), "Pack/c.zip".to_owned()])
+        );
+        assert_eq!(
+            folder.picked_contents(),
+            Some(FileContents {
+                count: 2,
+                bytes: 10
+            })
+        );
+        assert_eq!(
+            folder.files,
+            Some(FileContents {
+                count: 3,
+                bytes: 15
+            }),
+            "what the link holds stays the whole share"
+        );
+    }
 
     #[test]
     fn knows_its_hosts_by_domain() {

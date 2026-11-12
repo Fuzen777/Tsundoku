@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { Download, Images, Inbox, KeyRound, Loader2, RefreshCw, X } from "lucide-react"
+import { useMemo, useState } from "react"
+import { Download, Inbox, KeyRound, ListChecks, Loader2, RefreshCw, X } from "lucide-react"
 import {
   confirmWithUser,
   readPendingLinkAgain,
@@ -7,6 +7,7 @@ import {
   removePendingLinks,
   restoreRemovedPendingLinks,
   setPendingPostFiles,
+  setPendingSharedFiles,
   setPendingFolder,
   setPendingPreset,
   setPendingRule,
@@ -26,6 +27,7 @@ import { DestinationLine } from "../components/DestinationLine"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { PostFilesStrip } from "../components/PostFilesStrip"
+import { SharedFilesList } from "../components/SharedFilesList"
 import { Checkbox, SelectInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Page } from "../components/Page"
@@ -38,12 +40,14 @@ import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
 import { describeDownloadError, describePreviewError, fixFor, needsPassword, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { pickedOf, pickSummary } from "../postFiles"
+import { sameFiles, sharedPickedOf } from "../sharedFiles"
 import { describeSiteWait, useTimeLeft } from "../holds"
 import { checkingCounts, shownPendingLinks } from "../pendingLinks"
 import {
   useDownloadDestination,
   useDownloadDestinations,
   useLeftOutFiles,
+  useLeftOutSharedFiles,
   useListArrangement,
   useRuleGroupOf,
   usePendingLinks,
@@ -361,9 +365,12 @@ function PendingRow({
   const batchPresetName = presets?.presets.find((preset) => preset.id === batchPresetId)?.name
   const [showsFiles, setShowsFiles] = useState(false)
   const files = video?.postFiles ?? []
-  // A post of one file has nothing to pick.
-  const picksFiles = files.length > 1 && !preview?.inQueue
-  const nothingPicked = files.length > 0 && files.every((file) => !file.picked)
+  const sharedFiles = video?.sharedFiles ?? []
+  // A post of one file has nothing to pick; a file host's link lists its files only when it holds several.
+  const picksFiles = (files.length > 1 || sharedFiles.length > 0) && !preview?.inQueue
+  const nothingPicked =
+    (files.length > 0 && files.every((file) => !file.picked)) ||
+    (sharedFiles.length > 0 && sharedFiles.every((file) => !file.picked))
   const hold = link.state === "waiting" ? link.hold : null
   const holdTimeLeft = useTimeLeft(hold?.until ?? null)
 
@@ -424,13 +431,20 @@ function PendingRow({
           />
         )}
         {preview?.inQueue && <StatusMessage tone="neutral" message={strings.pending.inQueue} />}
-        {video && picksFiles && showsFiles && (
+        {video && picksFiles && showsFiles && (sharedFiles.length > 0 ? (
+          <PendingSharedFiles
+            video={video}
+            downloadedBefore={!!preview?.lastDownload}
+            save={(picked) => setPendingSharedFiles(link.id, [...picked])}
+            onError={(error) => setActionError(describeDownloadError(error))}
+          />
+        ) : (
           <PendingPostFiles
             video={video}
             downloadedBefore={!!preview?.lastDownload}
             onPick={(picked) => act(() => setPendingPostFiles(link.id, [...picked]))}
           />
-        )}
+        ))}
         {link.state === "needsPassword" && (
           <PendingPassword link={link} onUnlock={(password) => act(() => unlockPendingLink(link.id, password))} />
         )}
@@ -479,7 +493,7 @@ function PendingRow({
         {picksFiles && (
           <IconButton
             label={showsFiles ? strings.postFiles.hideFiles : strings.postFiles.pickFiles}
-            icon={Images}
+            icon={ListChecks}
             aria-expanded={showsFiles}
             onClick={() => setShowsFiles((shown) => !shown)}
           />
@@ -532,6 +546,59 @@ function PendingPostFiles({
         leftOut={leftOut ?? null}
         downloadedBefore={downloadedBefore}
         onChange={onPick}
+      />
+    </div>
+  )
+}
+
+/** A read shared folder's files to pick from, as on the preview card. The ticks are the link's own, saved as they
+ * change; a folder downloaded before starts with the files it didn't take then. */
+function PendingSharedFiles({
+  video,
+  downloadedBefore,
+  save,
+  onError,
+}: {
+  video: VideoInfo
+  downloadedBefore: boolean
+  save: (picked: Set<number>) => Promise<void>
+  onError: (error: unknown) => void
+}) {
+  const { data: leftOut } = useLeftOutSharedFiles(video, downloadedBefore)
+  const files = video.sharedFiles
+  const saved = useMemo(() => sharedPickedOf(files ?? []), [files])
+  // The ticks made here show at once and hold until the link comes back with them all: a tick made meanwhile builds on
+  // them, not on what the link said before, so quick ticks aren't lost.
+  const [ticked, setTicked] = useState<ReadonlySet<number> | null>(null)
+  if (ticked && sameFiles(ticked, saved)) setTicked(null)
+  const picked = ticked ?? saved
+  // Whether the files not downloaded are the ones ticked: not for a link read before its folder was downloaded, nor once
+  // the ticks change.
+  const tickedAreLeftOut = useMemo(() => !!leftOut && sameFiles(new Set(leftOut), picked), [leftOut, picked])
+  return (
+    <div className="flex flex-col gap-2 pt-1">
+      {leftOut && (
+        <StatusMessage
+          tone="neutral"
+          message={
+            tickedAreLeftOut
+              ? strings.sharedFiles.leftOut(leftOut.length)
+              : strings.sharedFiles.leftOutCount(leftOut.length)
+          }
+        />
+      )}
+      <SharedFilesList
+        files={files ?? []}
+        picked={picked}
+        leftOut={leftOut ?? null}
+        downloadedBefore={downloadedBefore}
+        onChange={(next) => {
+          setTicked(next)
+          save(next).catch((error: unknown) => {
+            setTicked(null)
+            onError(error)
+          })
+        }}
       />
     </div>
   )

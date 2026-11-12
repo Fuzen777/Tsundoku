@@ -59,6 +59,16 @@ pub fn left_out_files(
     history.left_out_files(&video)
 }
 
+/// The files of a shared folder its downloads didn't take, by their place in its list, or `None` when there were
+/// none (or no download).
+#[tauri::command]
+pub fn left_out_shared_files(
+    history: State<'_, Arc<History>>,
+    video: tsundoku_core::metadata::VideoInfo,
+) -> Result<Option<Vec<u32>>, HistoryError> {
+    history.left_out_shared_files(&video)
+}
+
 #[tauri::command]
 pub fn cancel_preview(previews: State<'_, Arc<PreviewService>>) {
     previews.cancel();

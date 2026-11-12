@@ -88,6 +88,7 @@ pub(super) fn run(
         Ok(_) => JobOutcome::Finished {
             files,
             format: None,
+            shared: Vec::new(),
         },
     }
 }
@@ -180,6 +181,7 @@ mod tests {
             cookies: Some("firefox:C:\\Profiles\\main".to_owned()),
             post: None,
             files: None,
+            picked_files: None,
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,

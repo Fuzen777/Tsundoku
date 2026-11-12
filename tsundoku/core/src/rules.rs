@@ -1154,6 +1154,7 @@ mod tests {
             post: None,
             files: None,
             post_files: Vec::new(),
+            shared_files: Vec::new(),
             playlist: None,
         }
     }

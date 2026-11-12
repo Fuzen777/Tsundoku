@@ -82,6 +82,7 @@ export const queryKeys = {
   videoDownloads: ["video-downloads"],
   downloadFiles: ["download-files"],
   leftOutFiles: ["left-out-files"],
+  leftOutSharedFiles: ["left-out-shared-files"],
   downloadOptions: ["download-options"],
   addingOptions: ["adding-options"],
   clickNLoad: ["click-n-load"],
@@ -284,7 +285,8 @@ export async function pickProgram(title: string, filterName: string): Promise<st
 /** What a link is, read with `password` when it needs one (else the one the history keeps for it). Rejects with a
  * PreviewError, `passwordNeeded` when it needs a password, `wrong` when the one given didn't open it. */
 export function fetchPreview(link: string, password: string | null = null): Promise<LinkPreview> {
-  if (!isTauri()) return standIns.fetchPreview(link, password)
+  // `?folder=2000` gives a MEGA link that many files, to check how the list copes.
+  if (!isTauri()) return standIns.fetchPreview(link, password, addressNumber("folder"))
   return invoke<LinkPreview>("fetch_preview", { link, password })
 }
 
@@ -413,6 +415,13 @@ export function setQueueFolder(id: number, folder: string | null): Promise<Queue
 export function getLeftOutFiles(video: VideoInfo): Promise<number[] | null> {
   if (!isTauri()) return Promise.resolve(standIns.leftOutFiles(video))
   return invoke<number[] | null>("left_out_files", { video })
+}
+
+/** The files of a shared folder its downloads didn't take, by their place in its list, or null when they took them
+ * all (or there were none). */
+export function getLeftOutSharedFiles(video: VideoInfo): Promise<number[] | null> {
+  if (!isTauri()) return Promise.resolve(standIns.leftOutSharedFiles(video))
+  return invoke<number[] | null>("left_out_shared_files", { video })
 }
 
 /** Adds the items picked from a channel, playlist or account, each as its own download, and answers how many were
@@ -656,6 +665,13 @@ export async function unlockPendingLink(id: number, password: string): Promise<v
 export async function setPendingPostFiles(id: number, picked: number[]): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("set_pending_post_files", { id, picked })
+}
+
+/** Picks which files of a read shared folder one link downloads, by their place in its list, from 0. Rejects with a
+ * DownloadError. */
+export async function setPendingSharedFiles(id: number, picked: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("set_pending_shared_files", { id, picked })
 }
 
 /** Picks one link's preset, or null for the one picked for them all. */

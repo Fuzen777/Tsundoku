@@ -28,6 +28,7 @@ import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
 import type { RightAwayRule } from "./bindings/RightAwayRule"
 import type { RulePreset } from "./bindings/RulePreset"
+import type { SharedFile } from "./bindings/SharedFile"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
@@ -233,24 +234,65 @@ const postAgainStandIn: VideoPreview = {
   lastDownload: { ...historyStandIns[0].lastDownload, preset: "", format: null, fileCount: 4 },
 }
 
-const sharedFolderStandIn: VideoPreview = {
-  video: {
-    site: "mega",
-    siteName: "mega.nz",
-    videoId: "AbCdEfGh",
-    url: "https://mega.nz/folder/AbCdEfGh#key",
-    title: "Wallpapers 2026",
-    uploader: null,
-    durationSeconds: null,
-    uploadDate: "2026-10-30",
-    thumbnailUrl: null,
-    bestHeight: null,
-    post: null,
-    files: { count: 14, bytes: 1_288_490_189 },
-  },
-  lastDownload: null,
-  inQueue: false,
-  missingJsRuntime: false,
+/** A shared folder's `count` files as a host lists them, its own name first in each path: two at its top, the rest in
+ * nested folders, a block each. */
+function sharedFolderFiles(count: number): SharedFile[] {
+  const folders = ["Desktop/4K", "Desktop/Ultrawide", "Phone", "Extras/Sketches", "Extras/Process Videos"]
+  const top = ["Read Me.txt", "Credits.txt"].slice(0, count)
+  const perFolder = Math.max(1, Math.ceil((count - top.length) / folders.length))
+  const inFolders = Array.from({ length: count - top.length }, (_, index) => {
+    const folder = folders[Math.min(folders.length - 1, Math.floor(index / perFolder))]
+    const number = String((index % perFolder) + 1).padStart(String(perFolder).length, "0")
+    const video = folder.endsWith("Videos")
+    return {
+      path: `Wallpapers 2026/${folder}/${video ? "Timelapse" : "Wallpaper"} ${number}.${video ? "mp4" : "jpg"}`,
+      size: video ? 48_000_000 + index * 1_234_567 : 1_500_000 + ((index * 7919) % 97) * 61_440,
+      picked: true,
+    }
+  })
+  return [...top.map((name, index) => ({ path: `Wallpapers 2026/${name}`, size: 2_048 + index * 517, picked: true })), ...inFolders]
+}
+
+/** A MEGA folder of `count` files (`?folder=2000` in the address for a big one). */
+function sharedFolderStandInOf(count: number): VideoPreview {
+  const sharedFiles = sharedFolderFiles(count)
+  return {
+    video: {
+      site: "mega",
+      siteName: "mega.nz",
+      videoId: "AbCdEfGh",
+      url: "https://mega.nz/folder/AbCdEfGh#key",
+      title: "Wallpapers 2026",
+      uploader: null,
+      durationSeconds: null,
+      uploadDate: "2026-10-30",
+      thumbnailUrl: null,
+      bestHeight: null,
+      post: null,
+      files: { count: sharedFiles.length, bytes: sharedFiles.reduce((sum, file) => sum + file.size, 0) },
+      sharedFiles,
+    },
+    lastDownload: null,
+    inQueue: false,
+    missingJsRuntime: false,
+  }
+}
+
+const sharedFolderStandIn = sharedFolderStandInOf(25)
+
+/** The folder again, downloaded before without five of its files (`leftOutSharedFiles`). */
+const sharedFolderAgainStandIn: VideoPreview = {
+  ...sharedFolderStandIn,
+  video: { ...sharedFolderStandIn.video, videoId: "AgainAgain", url: "https://mega.nz/folder/AgainAgain#key" },
+  lastDownload: { ...historyStandIns[0].lastDownload, preset: "", format: null, fileCount: 20 },
+}
+
+/** The files the folder downloaded before (`sharedFolderAgainStandIn`) didn't take. */
+const sharedFolderLeftOut = [1, 7, 8, 15, 24]
+
+/** The folder with only the files at `picked` ticked. */
+function withSharedFilesPicked(video: VideoInfo, picked: number[]): VideoInfo {
+  return { ...video, sharedFiles: video.sharedFiles?.map((file, index) => ({ ...file, picked: picked.includes(index) })) }
 }
 
 function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> = {}): PendingLink {
@@ -554,6 +596,10 @@ export const standIns = {
     queueStandIn(12, "waiting", "Behind a Password", {
       hold: { kind: "needsPassword", wrong: false },
     }),
+    queueStandIn(13, "waiting", "Wallpapers 2026", {
+      video: withSharedFilesPicked(sharedFolderStandIn.video, [0, 3, 4, 5, 9, 22]),
+      preset: null,
+    }),
     queueStandIn(4, "stopped", "Stopped Halfway"),
     queueStandIn(5, "failed", "A Video That Failed", {
       error: { kind: "ytDlp", error: { kind: "unavailable", detail: "[youtube] video5: This video is unavailable" } },
@@ -572,6 +618,10 @@ export const standIns = {
   /** The carousel downloaded before (`postAgainStandIn`) left its second and fifth files out. */
   leftOutFiles(video: VideoInfo): number[] | null {
     return video.videoId === postAgainStandIn.video.videoId ? [2, 5] : null
+  },
+  /** The folder downloaded before (`sharedFolderAgainStandIn`) didn't take five of its files. */
+  leftOutSharedFiles(video: VideoInfo): number[] | null {
+    return video.videoId === sharedFolderAgainStandIn.video.videoId ? sharedFolderLeftOut : null
   },
   pendingLinks: [
     pendingStandIn(1, "https://www.instagram.com/p/DfPQchkG1tg/", {
@@ -603,7 +653,15 @@ export const standIns = {
       presetId: "audio-mp3",
     }),
     pendingStandIn(3, "https://www.youtube.com/watch?v=jNQXAC9IVRw", { preview: previewStandIn }),
-    pendingStandIn(7, "https://mega.nz/folder/AbCdEfGh#key", { preview: sharedFolderStandIn }),
+    pendingStandIn(7, "https://mega.nz/folder/AbCdEfGh#key", {
+      preview: { ...sharedFolderStandIn, video: withSharedFilesPicked(sharedFolderStandIn.video, [0, 2, 3, 4, 5, 6]) },
+    }),
+    pendingStandIn(12, "https://mega.nz/folder/AgainAgain#key", {
+      preview: {
+        ...sharedFolderAgainStandIn,
+        video: withSharedFilesPicked(sharedFolderAgainStandIn.video, sharedFolderLeftOut),
+      },
+    }),
     pendingStandIn(4, "https://www.instagram.com/p/Another1/", { state: "reading" }),
     pendingStandIn(5, "https://www.instagram.com/p/Another2/", {
       state: "waiting",
@@ -645,11 +703,12 @@ export const standIns = {
     return [...new Set(links)]
   },
   /**
-   * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link; a
-   * listing for a channel, playlist or account (`listingKind`); or a failure for a link containing "fail", or "images"
-   * (gallery-dl not set up). A link with "#P!" needs a password, "secret".
+   * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link (of
+   * `folderSize` files, else 25; downloaded before when the link has "again"); a listing for a channel, playlist or
+   * account (`listingKind`); or a failure for a link containing "fail", or "images" (gallery-dl not set up). A link
+   * with "#P!" needs a password, "secret".
    */
-  fetchPreview(link: string, password: string | null = null): Promise<LinkPreview> {
+  fetchPreview(link: string, password: string | null = null, folderSize: number | null = null): Promise<LinkPreview> {
     const kind = standIns.listingKind(link)
     return new Promise((resolve, reject) =>
       setTimeout(() => {
@@ -664,7 +723,12 @@ export const standIns = {
         } else if (link.includes("instagram")) {
           resolve({ kind: "video", ...postStandIn })
         } else if (link.includes("mega.nz")) {
-          resolve({ kind: "video", ...sharedFolderStandIn })
+          const folder = link.toLowerCase().includes("again")
+            ? sharedFolderAgainStandIn
+            : folderSize
+              ? sharedFolderStandInOf(folderSize)
+              : sharedFolderStandIn
+          resolve({ kind: "video", ...folder })
         } else {
           resolve({ kind: "video", ...previewStandIn })
         }

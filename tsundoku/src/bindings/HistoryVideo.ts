@@ -3,6 +3,7 @@ import type { FileContents } from "./FileContents";
 import type { PastDownload } from "./PastDownload";
 import type { PostContents } from "./PostContents";
 import type { PostFile } from "./PostFile";
+import type { SharedFile } from "./SharedFile";
 
 /**
  * A video in the history, with its latest download.
@@ -62,6 +63,12 @@ files: FileContents | null,
  * file host's link, or a post read before Tsundoku listed them, whose download takes every file.
  */
 postFiles?: Array<PostFile>, 
+/**
+ * A file host's files, when its link holds more than one (a shared folder), in the order the host gives them, and
+ * which of them its download takes. Empty for one file, a video, a post, or a link read before Tsundoku listed
+ * them, whose download takes every file.
+ */
+sharedFiles?: Array<SharedFile>, 
 /**
  * The playlist, channel or account it was picked from (`listing`), for `{playlist}` in a rule's folder. `None` for
  * a link added on its own.

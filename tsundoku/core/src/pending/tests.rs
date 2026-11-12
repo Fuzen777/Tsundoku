@@ -303,6 +303,7 @@ impl Test {
                     format: None,
                     downloaded_at: 1,
                     kind: DownloadKind::Video,
+                    share_paths: Vec::new(),
                 },
             )
             .unwrap();
@@ -399,6 +400,7 @@ fn video_at(link: &str) -> VideoInfo {
             bytes: 1000,
         }),
         post_files: Vec::new(),
+        shared_files: Vec::new(),
         playlist: None,
     }
 }
@@ -420,6 +422,130 @@ fn wait_until(what: &str, condition: impl Fn() -> bool) {
         );
         thread::sleep(Duration::from_millis(5));
     }
+}
+
+/// A MEGA folder of three files, all ticked, at `link`.
+fn shared_folder_at(link: &str) -> VideoInfo {
+    VideoInfo {
+        shared_files: ["Pack/a.zip", "Pack/Sub/b.zip", "Pack/c.txt"]
+            .iter()
+            .map(|path| crate::metadata::SharedFile {
+                path: (*path).to_owned(),
+                size: 100,
+                picked: true,
+            })
+            .collect(),
+        ..video_at(link)
+    }
+}
+
+fn picked_paths(link: &PendingLink) -> Vec<String> {
+    link.preview
+        .as_ref()
+        .unwrap()
+        .video
+        .shared_files
+        .iter()
+        .filter(|file| file.picked)
+        .map(|file| file.path.clone())
+        .collect()
+}
+
+#[test]
+fn keeps_the_files_of_a_shared_folder_picked() {
+    let test = Test::new();
+    let folder = "https://mega.nz/folder/Pack";
+    test.reader
+        .answer(folder, Ok(fetched(shared_folder_at(folder))));
+    test.add(&[folder, FIRST]);
+    test.wait_until_read(folder);
+    test.wait_until_read(FIRST);
+    let id = test.link(folder).unwrap().id;
+    assert_eq!(
+        picked_paths(&test.link(folder).unwrap()).len(),
+        3,
+        "every file to start with"
+    );
+
+    test.links.set_shared_files(id, &[0, 2, 9]).unwrap();
+    assert_eq!(
+        picked_paths(&test.link(folder).unwrap()),
+        ["Pack/a.zip", "Pack/c.txt"],
+        "a place the folder doesn't have is ignored"
+    );
+    let reopened = test.reopen();
+    let kept = reopened
+        .list()
+        .into_iter()
+        .find(|link| link.id == id)
+        .unwrap();
+    assert_eq!(
+        picked_paths(&kept),
+        ["Pack/a.zip", "Pack/c.txt"],
+        "kept through a restart"
+    );
+    assert_eq!(
+        test.links
+            .set_shared_files(test.link(FIRST).unwrap().id, &[0]),
+        Err(DownloadError::WrongState),
+        "a video lists no files"
+    );
+
+    test.links.start(&[id], "best-video").unwrap();
+    let queued = test.queued("Pack").expect("started");
+    assert_eq!(
+        queued.video.picked_shared_files(),
+        Some(vec!["Pack/a.zip".to_owned(), "Pack/c.txt".to_owned()])
+    );
+}
+
+#[test]
+fn a_shared_folder_with_nothing_picked_doesnt_start() {
+    let test = Test::new();
+    let folder = "https://mega.nz/folder/Empty";
+    test.reader
+        .answer(folder, Ok(fetched(shared_folder_at(folder))));
+    test.add(&[folder]);
+    test.wait_until_read(folder);
+    let id = test.link(folder).unwrap().id;
+    test.links.set_shared_files(id, &[]).unwrap();
+    assert_eq!(
+        test.links.start(&[id], "best-video"),
+        Err(DownloadError::NothingPicked)
+    );
+    assert!(test.queued("Empty").is_none());
+}
+
+#[test]
+fn a_shared_folder_downloaded_before_ticks_the_files_it_didnt_take() {
+    let test = Test::new();
+    let folder = "https://mega.nz/folder/Again";
+    let video = shared_folder_at(folder);
+    test.history
+        .record(
+            &video,
+            &NewDownload {
+                preset: String::new(),
+                file_path: r"D:\Pack.zip".to_owned(),
+                files: vec![crate::history::SavedFile {
+                    path: r"D:\Pack.zip".to_owned(),
+                    size: Some(100),
+                }],
+                file_size: Some(100),
+                format: None,
+                downloaded_at: 1,
+                kind: DownloadKind::File,
+                share_paths: vec!["Pack/a.zip".to_owned()],
+            },
+        )
+        .unwrap();
+    test.reader.answer(folder, Ok(fetched(video)));
+    test.add(&[folder]);
+    test.wait_until_read(folder);
+    assert_eq!(
+        picked_paths(&test.link(folder).unwrap()),
+        ["Pack/Sub/b.zip", "Pack/c.txt"]
+    );
 }
 
 #[test]
@@ -1631,6 +1757,7 @@ fn a_link_downloaded_with_a_password_opens_with_it_again() {
                 format: None,
                 downloaded_at: 1,
                 kind: DownloadKind::Video,
+                share_paths: Vec::new(),
             },
             Password::new("pw").as_ref(),
         )

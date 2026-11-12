@@ -7,6 +7,7 @@ use super::*;
 use crate::data_folder::DataPaths;
 use crate::passwords::Password;
 use crate::presets::built_in_presets;
+use crate::rules::DownloadKind;
 
 /// A runner that waits until the test gives it an outcome, or until it's cancelled.
 #[derive(Default)]
@@ -187,6 +188,7 @@ impl Test {
         JobOutcome::Finished {
             files: vec![path],
             format: Some("1080p · avc1 + mp4a".to_owned()),
+            shared: Vec::new(),
         }
     }
 
@@ -214,6 +216,7 @@ fn video(video_id: &str) -> VideoInfo {
         post: None,
         files: None,
         post_files: Vec::new(),
+        shared_files: Vec::new(),
         playlist: None,
     }
 }
@@ -482,6 +485,7 @@ fn an_archive_that_wasnt_unpacked_is_only_unpacked_again() {
     let files = DownloadedFiles {
         settled: Vec::new(),
         archives: vec![archive.clone()],
+        shared: Vec::new(),
     };
     let problem = crate::unpack::UnpackProblem::NeedsPassword;
     test.runner.complete(
@@ -1000,6 +1004,7 @@ fn post(post_id: &str) -> VideoInfo {
         }),
         files: None,
         post_files: Vec::new(),
+        shared_files: Vec::new(),
         playlist: None,
     }
 }
@@ -1107,6 +1112,7 @@ fn downloads_a_post_into_its_sites_folder_at_a_safe_pace() {
         JobOutcome::Finished {
             files: files.clone(),
             format: None,
+            shared: Vec::new(),
         },
     );
     wait_until("it's done", || test.state(id) == Some(QueueState::Done));
@@ -1264,6 +1270,7 @@ fn the_hourly_limit_holds_instagram_until_its_old_files_are_an_hour_old() {
         format: None,
         downloaded_at: ten_minutes_ago,
         kind: DownloadKind::Post,
+        share_paths: Vec::new(),
     };
     test.history.record(&post("Before"), &before).unwrap();
 
@@ -1481,6 +1488,144 @@ fn downloads_only_the_files_of_a_post_picked() {
     wait_until("it runs", || test.runner.started().contains(&id));
     assert_eq!(test.runner.job(id).post.unwrap().range, None, "every file");
     test.queue.cancel(id).unwrap();
+}
+
+/// A MEGA folder of three files of 10, 20 and 30 bytes, those at `picked` (from 0) ticked.
+fn shared_folder(id: &str, picked: &[usize]) -> VideoInfo {
+    VideoInfo {
+        site: "mega".to_owned(),
+        site_name: "mega.nz".to_owned(),
+        url: format!("https://mega.nz/folder/{id}#key"),
+        duration_seconds: None,
+        best_height: None,
+        files: Some(crate::metadata::FileContents {
+            count: 3,
+            bytes: 60,
+        }),
+        shared_files: ["Pack/a.zip", "Pack/Sub/b.zip", "Pack/c.txt"]
+            .iter()
+            .enumerate()
+            .map(|(index, path)| crate::metadata::SharedFile {
+                path: (*path).to_owned(),
+                size: 10 * (index as u64 + 1),
+                picked: picked.contains(&index),
+            })
+            .collect(),
+        ..video(id)
+    }
+}
+
+#[test]
+fn downloads_only_the_files_of_a_shared_folder_picked() {
+    let test = Test::new();
+    let id = test
+        .queue
+        .add_post(shared_folder("Picked", &[0, 2]))
+        .unwrap()
+        .id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    let job = test.runner.job(id);
+    assert_eq!(
+        job.picked_files,
+        Some(vec!["Pack/a.zip".to_owned(), "Pack/c.txt".to_owned()])
+    );
+    assert_eq!(
+        job.files.map(|files| files.count),
+        Some(3),
+        "the whole folder, as read"
+    );
+    test.queue.cancel(id).unwrap();
+
+    assert_eq!(
+        test.queue.add_post(shared_folder("None", &[])),
+        Err(DownloadError::NothingPicked)
+    );
+
+    let all = test
+        .queue
+        .add_post(shared_folder("All", &[0, 1, 2]))
+        .unwrap()
+        .id;
+    wait_until("it runs", || test.runner.started().contains(&all));
+    assert_eq!(test.runner.job(all).picked_files, None, "every file");
+    test.queue.cancel(all).unwrap();
+}
+
+#[test]
+fn records_which_files_of_a_shared_folder_a_download_took() {
+    let test = Test::new();
+    let folder = shared_folder("Taken", &[1]);
+    let id = test.queue.add_post(folder.clone()).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    let job = test.runner.job(id);
+    fs::create_dir_all(job.folder.join("Pack").join("Sub")).unwrap();
+    // Saved under another name, since a file of that name was there: the history keeps its path in the share.
+    let file = job.folder.join("Pack").join("Sub").join("b (2).zip");
+    fs::write(&file, b"twenty bytes of data").unwrap();
+    test.runner.complete(
+        id,
+        JobOutcome::Finished {
+            files: vec![file],
+            format: None,
+            shared: vec!["Pack/Sub/b.zip".to_owned()],
+        },
+    );
+    wait_until("it's done", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(
+        test.history.left_out_shared_files(&folder),
+        Ok(Some(vec![0, 2]))
+    );
+}
+
+#[test]
+fn a_shared_folders_download_knows_what_it_took_once_unpacked() {
+    let test = Test::new();
+    let folder = shared_folder("Unpacked", &[1]);
+    let id = test.queue.add_post(folder.clone()).unwrap().id;
+    wait_until("it runs", || test.runner.started().contains(&id));
+    let job = test.runner.job(id);
+    // The archive taken is gone, unpacked into two files.
+    let unpacked = job.folder.join("Pack").join("Sub").join("b");
+    fs::create_dir_all(&unpacked).unwrap();
+    let files = ["one.txt", "two.txt"].map(|name| unpacked.join(name));
+    for file in &files {
+        fs::write(file, b"text").unwrap();
+    }
+    test.runner.complete(
+        id,
+        JobOutcome::Finished {
+            files: files.to_vec(),
+            format: None,
+            shared: vec!["Pack/Sub/b.zip".to_owned()],
+        },
+    );
+    wait_until("it's done", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(
+        test.history.left_out_shared_files(&folder),
+        Ok(Some(vec![0, 2])),
+        "the archive counts as taken"
+    );
+}
+
+#[test]
+fn a_shared_folder_needs_room_for_the_files_picked_only() {
+    let folder = shared_folder("Room", &[0]);
+    assert_eq!(
+        crate::room::expected_bytes(&folder, None),
+        Some(10),
+        "the file picked"
+    );
+    assert_eq!(
+        crate::room::expected_bytes(&shared_folder("Whole", &[0, 1, 2]), None),
+        Some(60)
+    );
+    assert_eq!(
+        folder.picked_contents(),
+        Some(crate::metadata::FileContents {
+            count: 1,
+            bytes: 10
+        })
+    );
 }
 
 #[test]

@@ -485,6 +485,7 @@ mod tests {
                 }),
                 files: (kind == DownloadKind::File).then_some(FileContents { count: 1, bytes: 1 }),
                 post_files: Vec::new(),
+                shared_files: Vec::new(),
                 playlist: None,
             };
             self.history
@@ -501,6 +502,7 @@ mod tests {
                         format: None,
                         downloaded_at: 1,
                         kind,
+                        share_paths: Vec::new(),
                     },
                 )
                 .unwrap();

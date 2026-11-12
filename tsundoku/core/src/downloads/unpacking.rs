@@ -30,6 +30,9 @@ pub struct DownloadedFiles {
     pub settled: Vec<PathBuf>,
     /// The parts of the archives still to unpack.
     pub archives: Vec<PathBuf>,
+    /// For a file host's link, the paths in the share of the files the download took (`JobOutcome::Finished`'s
+    /// `shared`), carried through unpacking to the history, which can't tell them from what the archives held.
+    pub shared: Vec<String>,
 }
 
 impl DownloadedFiles {
@@ -63,13 +66,20 @@ pub(super) fn run(
     cancel: &CancelToken,
     on_progress: &mut dyn FnMut(DownloadProgress),
 ) -> JobOutcome {
-    let DownloadedFiles { settled, archives } = files;
+    let DownloadedFiles {
+        settled,
+        archives,
+        shared,
+    } = files;
     let archives: Vec<PathBuf> = archives.into_iter().filter(|path| path.exists()).collect();
     let sets = unpack::sets_among(&archives);
     if sets.is_empty() {
+        let mut files = settled;
+        files.extend(archives);
         return JobOutcome::Finished {
-            files: DownloadedFiles { settled, archives }.all(),
+            files,
             format,
+            shared,
         };
     }
 
@@ -117,11 +127,12 @@ pub(super) fn run(
         fates.push(fate);
     }
 
-    let left = arrange(settled, &archives, &sets, fates);
+    let left = arrange(settled, &archives, &sets, fates, shared);
     if stopped || error.is_some() {
         JobOutcome::NotUnpacked { files: left, error }
     } else {
         JobOutcome::Finished {
+            shared: left.shared.clone(),
             files: left.all(),
             format,
         }
@@ -230,12 +241,14 @@ fn unpack_one(
 }
 
 /// The files once unpacking is over, in the order the download made them: what an archive held where its first part
-/// among them was, its parts that are still there after it, and the parts of archives still to unpack set apart.
+/// among them was, its parts that are still there after it, and the parts of archives still to unpack set apart, with
+/// the paths in the share the download took (`shared`) as they were.
 fn arrange(
     mut settled: Vec<PathBuf>,
     archives: &[PathBuf],
     sets: &[ArchiveSet],
     fates: Vec<Fate>,
+    shared: Vec<String>,
 ) -> DownloadedFiles {
     let mut pending = Vec::new();
     let mut placed = vec![false; sets.len()];
@@ -261,6 +274,7 @@ fn arrange(
     DownloadedFiles {
         settled,
         archives: pending,
+        shared,
     }
 }
 
@@ -316,6 +330,7 @@ mod tests {
             cookies: None,
             post: None,
             files: None,
+            picked_files: None,
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
@@ -338,6 +353,7 @@ mod tests {
         DownloadedFiles {
             settled: Vec::new(),
             archives: files.iter().map(|file| file.to_path_buf()).collect(),
+            shared: Vec::new(),
         }
     }
 
@@ -440,6 +456,7 @@ mod tests {
                     folder.path().join("Fine").join("b.txt"),
                 ],
                 archives: vec![broken.clone()],
+                shared: Vec::new(),
             },
             "the other archive is unpacked all the same"
         );
@@ -459,5 +476,46 @@ mod tests {
         };
         assert_eq!(files.len(), 4);
         assert_eq!(files[3], folder.path().join("c.txt"));
+    }
+
+    #[test]
+    fn a_shared_folders_paths_ride_through_unpacking() {
+        let folder = TempDir::new().unwrap();
+        let album = folder.path().join("Album.zip");
+        zip(&album, &[("01.flac", b"one"), ("02.flac", b"two")]);
+        let broken = folder.path().join("Broken.rar");
+        fs::write(&broken, b"not a rar").unwrap();
+        let shared = vec!["Pack/Album.zip".to_owned(), "Pack/Broken.rar".to_owned()];
+        let outcome = run_on(
+            folder.path(),
+            DownloadedFiles {
+                shared: shared.clone(),
+                ..downloaded(&[&album, &broken])
+            },
+            &settings(AfterUnpacking::Delete),
+        );
+        let JobOutcome::NotUnpacked { files, .. } = outcome else {
+            panic!("{outcome:?}");
+        };
+        assert_eq!(files.shared, shared, "kept for Retry");
+
+        fs::remove_file(&broken).unwrap();
+        let retry = DownloadedFiles {
+            archives: Vec::new(),
+            ..files
+        };
+        let JobOutcome::Finished {
+            files,
+            shared: taken,
+            ..
+        } = run_on(folder.path(), retry, &settings(AfterUnpacking::Delete))
+        else {
+            panic!();
+        };
+        assert_eq!(files.len(), 2, "what the album held");
+        assert_eq!(
+            taken, shared,
+            "the files the download took, not what they held"
+        );
     }
 }

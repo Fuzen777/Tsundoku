@@ -13,7 +13,8 @@ import {
 } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { defaultPick, withPicked } from "../postFiles"
-import { useDownloadDestination, useLeftOutFiles, usePresets, useRulePreset } from "../queries"
+import { useDownloadDestination, useLeftOutFiles, useLeftOutSharedFiles, usePresets, useRulePreset } from "../queries"
+import { defaultSharedPick, withSharedPicked } from "../sharedFiles"
 import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
@@ -26,6 +27,7 @@ import { ListingPicker } from "./ListingPicker"
 import { PasswordForm } from "./PasswordForm"
 import { PostFilesStrip } from "./PostFilesStrip"
 import { PresetRuleLink } from "./PresetRuleLink"
+import { SharedFilesList } from "./SharedFilesList"
 import { StatusMessage } from "./StatusMessage"
 import { Thumbnail } from "./Thumbnail"
 
@@ -230,26 +232,35 @@ function DownloadControls({ preview, password, onAdded }: DownloadControlsProps)
 }
 
 /** Download for a post of images or a file host's link: every file as the site gives it, so there's no preset to
- * pick. Downloading again only fetches the files that aren't in the folder any more. */
+ * pick, unless some are unticked in the post's strip or the shared folder's list. Downloading again only fetches the
+ * files that aren't in the folder any more. */
 function PostDownloadControls({ preview, password, onAdded }: DownloadControlsProps) {
   const { video, lastDownload } = preview
   const files = video.postFiles ?? []
-  // A post of one file has nothing to pick.
+  const sharedFiles = video.sharedFiles ?? []
+  // A post of one file has nothing to pick; a file host's link lists its files only when it holds several.
   const picksFiles = files.length > 1
+  const picksSharedFiles = sharedFiles.length > 0
   const leftOutQuery = useLeftOutFiles(video, picksFiles && lastDownload !== null)
   const leftOut = leftOutQuery.data ?? null
+  const leftOutSharedQuery = useLeftOutSharedFiles(video, picksSharedFiles && lastDownload !== null)
+  const leftOutShared = leftOutSharedQuery.data ?? null
   const [chosen, setChosen] = useState<ReadonlySet<number> | null>(null)
-  const picked = chosen ?? defaultPick(files, leftOut)
+  const picked = chosen ?? (picksSharedFiles ? defaultSharedPick(sharedFiles, leftOutShared) : defaultPick(files, leftOut))
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const { data: destination } = useDownloadDestination(video, null)
   const [chosenFolder, setChosenFolder] = useState<string | null>(null)
+  // Until the history says which files were left out, the ticks may still change.
+  const askingHistory =
+    lastDownload !== null && ((picksFiles && leftOutQuery.isPending) || (picksSharedFiles && leftOutSharedQuery.isPending))
 
   async function download() {
     setAdding(true)
     setError(null)
     try {
-      await addPostToQueue(picksFiles ? withPicked(video, picked) : video, chosenFolder, password)
+      const picks = picksSharedFiles ? withSharedPicked(video, picked) : picksFiles ? withPicked(video, picked) : video
+      await addPostToQueue(picks, chosenFolder, password)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))
@@ -272,6 +283,21 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
           />
         </>
       )}
+      {picksSharedFiles && (
+        <>
+          {leftOutShared && (
+            <StatusMessage tone="neutral" message={strings.sharedFiles.leftOut(leftOutShared.length)} />
+          )}
+          <SharedFilesList
+            files={sharedFiles}
+            picked={picked}
+            leftOut={leftOutShared}
+            downloadedBefore={lastDownload !== null}
+            disabled={adding}
+            onChange={setChosen}
+          />
+        </>
+      )}
       <div className="flex flex-col items-end gap-2">
         {error && <StatusMessage tone="danger" {...error} />}
         <div className="flex w-full items-center gap-2">
@@ -285,8 +311,7 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
           <Button
             variant="primary"
             loading={adding}
-            // Until the history says which files were left out, the ticks may still change.
-            disabled={picksFiles && (picked.size === 0 || (lastDownload !== null && leftOutQuery.isPending))}
+            disabled={((picksFiles || picksSharedFiles) && picked.size === 0) || askingHistory}
             onClick={() => void download()}
           >
             {lastDownload ? strings.preview.downloadAgain : strings.preview.download}

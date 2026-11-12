@@ -143,6 +143,11 @@ const MIGRATIONS: &[&str] = &[
     "ALTER TABLE pending_links ADD COLUMN password TEXT;
     ALTER TABLE queue_items ADD COLUMN password TEXT;
     ALTER TABLE videos ADD COLUMN password TEXT;",
+    // 16: the paths in its shared folder (`hosts::shared_path`) of the files a file host's download took, as a JSON
+    // list, so a folder downloaded again shows which files it didn't take. Kept on the download rather than on its
+    // files, which unpacking replaces with what the archives held. NULL for downloads made before, which took every
+    // file, and for videos and posts.
+    "ALTER TABLE downloads ADD COLUMN share_paths TEXT;",
 ];
 
 pub struct Database {
@@ -282,6 +287,50 @@ mod tests {
             kinds,
             ["video", "audio", "audio", "audio", "video", "post", "file"]
         );
+    }
+
+    #[test]
+    fn keeps_no_share_paths_for_older_downloads() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("tsundoku.db");
+        let paths_migration = MIGRATIONS
+            .iter()
+            .position(|migration| migration.contains("ADD COLUMN share_paths"))
+            .unwrap();
+        {
+            let connection = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..paths_migration] {
+                connection.execute_batch(migration).unwrap();
+            }
+            connection
+                .pragma_update(None, "user_version", paths_migration as i64)
+                .unwrap();
+            connection
+                .execute_batch(
+                    "INSERT INTO videos (id, site, site_name, video_id, url, title, first_downloaded_at, file_count,
+                        file_bytes)
+                    VALUES (1, 'mega', 'mega.nz', 'c', 'https://c', 'C', 1, 2, 10);
+                    INSERT INTO downloads (id, video, preset, file_path, downloaded_at, kind)
+                    VALUES (1, 1, '', 'C\\a.zip', 1, 'file');
+                    INSERT INTO download_files (download, position, file_path, file_size)
+                    VALUES (1, 0, 'C\\a.zip', 5), (1, 1, 'C\\b.zip', 5);",
+                )
+                .unwrap();
+        }
+        let database = Database::open(&path).unwrap();
+        let connection = database.lock();
+        let paths: Vec<Option<String>> = connection
+            .prepare("SELECT share_paths FROM downloads")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(paths, [None], "the download is kept, without paths");
+        let files: i64 = connection
+            .query_row("SELECT COUNT(*) FROM download_files", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(files, 2, "with its files");
     }
 
     #[test]

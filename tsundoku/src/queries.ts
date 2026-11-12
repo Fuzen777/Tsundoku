@@ -22,6 +22,7 @@ import {
   getDownloadLog,
   getDownloadOptions,
   getLeftOutFiles,
+  getLeftOutSharedFiles,
   getFirstRunOptions,
   getFolderRules,
   getListArrangements,
@@ -212,6 +213,16 @@ export function useLeftOutFiles(video: VideoInfo, enabled: boolean) {
   return useQuery({
     queryKey: [...queryKeys.leftOutFiles, video.site, video.videoId],
     queryFn: () => getLeftOutFiles(video),
+    enabled,
+  })
+}
+
+/** The files of a shared folder its downloads didn't take (`getLeftOutSharedFiles`), asked only for a folder downloaded
+ * before. */
+export function useLeftOutSharedFiles(video: VideoInfo, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.leftOutSharedFiles, video.site, video.videoId],
+    queryFn: () => getLeftOutSharedFiles(video),
     enabled,
   })
 }

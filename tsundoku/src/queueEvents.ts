@@ -41,6 +41,7 @@ export function trackQueue(queryClient: QueryClient): void {
       void queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
       void queryClient.invalidateQueries({ queryKey: queryKeys.videoDownloads })
       void queryClient.invalidateQueries({ queryKey: queryKeys.leftOutFiles })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.leftOutSharedFiles })
     }
     for (const item of items) {
       if (item.progress) {
