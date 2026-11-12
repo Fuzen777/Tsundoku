@@ -108,6 +108,13 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] With Watch Clipboard on, copy the link behind a MediaFire page's Download button (`download1234.mediafire.com/…`, the one your userscript copies) → it's read as that file and stays in Pending.
 - [ ] Copy a MEGA link that isn't a file or a folder, such as `https://mega.nz/about` → it stays in Pending with "This MEGA link isn't one Tsundoku recognizes" instead of vanishing.
 
+**71. Click'n'Load buttons (FileCrypt)** · 0.1.129
+- [ ] Quit JDownloader first: it listens on the same port. Then turn on Settings → Adding Links → Take Links from Click'n'Load Buttons → no red line under it. (With JDownloader running, a red line says another app is listening on port 9666, with Try Again: close JDownloader, then Try Again → the line goes.)
+- [ ] In Zen, open a FileCrypt folder, pass its captcha, then click its Click'n'Load button → FileCrypt opens a small window of its own. If Zen asks whether the page may reach devices on your local network, allow it.
+- [ ] With Tsundoku's window behind Zen → a notification "FileCrypt Sent N Links" ("They're being read in Pending."). Pending shows "Checking N links pages sent…", then the folder's links, read and waiting to be started, even with Download Right Away on. Links Tsundoku can't download leave without a word.
+- If nothing comes, tell Claude what FileCrypt's small window showed (its address and text, or a blank page), whether Zen asked anything and what you answered, and whether Settings' line is red.
+- Claude tried a test page of its own in Chrome 157, Edge 157 and Firefox 159 (a form into a hidden frame, a fetch, a form into a new window), the port clash with your running JDownloader and with a stand-in, and pages that aren't FileCrypt (refused). FileCrypt's own button wasn't: its small window (plain http) makes the post, and whether Zen lets that window reach this PC is what this checks. In Chrome, a plain http page could only get through by posting into a window of its own.
+
 ## Previews and Picking
 
 **14. Pick from a channel, playlist or account** · 0.1.57

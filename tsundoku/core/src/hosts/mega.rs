@@ -581,21 +581,7 @@ fn decrypt_name(attributes: &str, key: &[u8; 16]) -> Result<String, PreviewError
     if encrypted.is_empty() || encrypted.len() % 16 != 0 {
         return Err(wrong_key());
     }
-    let cipher = Aes128::new(&(*key).into());
-    let mut previous = [0; 16];
-    let mut plain = Vec::with_capacity(encrypted.len());
-    for block in encrypted.as_chunks::<16>().0 {
-        let mut decrypted = (*block).into();
-        cipher.decrypt_block(&mut decrypted);
-        let decrypted: [u8; 16] = decrypted.into();
-        plain.extend(
-            decrypted
-                .iter()
-                .zip(previous)
-                .map(|(byte, previous)| byte ^ previous),
-        );
-        previous = *block;
-    }
+    let plain = crate::cbc::decrypt(key, [0; 16], &encrypted);
     let text = String::from_utf8_lossy(&plain);
     let json = text
         .strip_prefix("MEGA")

@@ -12,6 +12,7 @@ import {
   detectTools,
   dismissWhatsNew,
   getAddingOptions,
+  getClickNLoadStatus,
   getAppInfo,
   getAppearanceOptions,
   getBackgroundOptions,
@@ -365,6 +366,11 @@ export function useDownloadOptions() {
 
 export function useAddingOptions() {
   return useQuery({ queryKey: queryKeys.addingOptions, queryFn: getAddingOptions, staleTime: Infinity })
+}
+
+/** Whether Click'n'Load buttons can send links here; the app's event keeps it current (main.tsx). */
+export function useClickNLoadStatus() {
+  return useQuery({ queryKey: queryKeys.clickNLoad, queryFn: getClickNLoadStatus, staleTime: Infinity })
 }
 
 /** Saves changes to how links get added, from Settings or the Pending view's switch, with the error if it failed. */

@@ -1281,6 +1281,7 @@ fn saved_options_are_announced_and_kept() {
             notify: true,
             notify_failures: true,
             notify_finished: true,
+            click_n_load: false,
         },
         "everything starts off but notifications"
     );
@@ -1336,6 +1337,60 @@ fn links_from_a_file_are_checked_as_copied_links_are() {
     assert!(
         test.reopen().list().iter().all(|link| link.from_file),
         "still from a file after a restart"
+    );
+}
+
+#[test]
+fn links_a_page_sent_are_read_and_never_start_by_themselves() {
+    let test = Test::new();
+    test.download_right_away(true);
+    let unsupported = "https://github.com/Fuzen777/Tsundoku";
+    test.reader
+        .answer(unsupported, Err(PreviewError::UnsupportedSite));
+    test.reader.hold(FIRST);
+    test.record_download(&video_at(SECOND));
+    let links: Vec<String> = [unsupported, FIRST, SECOND]
+        .iter()
+        .map(|link| (*link).to_owned())
+        .collect();
+    assert_eq!(test.links.add_from_page(&links).unwrap().added, 3);
+    let first = test.link(FIRST).unwrap();
+    assert!(first.from_page && !first.from_file && !first.caught);
+    assert!(!first.start_when_read);
+    assert!(
+        !starts_with_all(&first),
+        "counted as being checked until it's read"
+    );
+    test.reader.release(FIRST);
+
+    test.wait_until_gone(unsupported);
+    test.wait_until_read(FIRST);
+    test.wait_until_read(SECOND);
+    assert!(
+        !test.reader.read_any_page(FIRST),
+        "read only by sites the tools know"
+    );
+    assert_eq!(test.state(FIRST), Some(PendingState::Ready));
+    assert!(
+        test.queued("first").is_none(),
+        "it waits to be started, though Download Right Away is on"
+    );
+    assert!(
+        test.link(SECOND)
+            .unwrap()
+            .preview
+            .unwrap()
+            .last_download
+            .is_some(),
+        "one downloaded before stays, marked"
+    );
+    assert!(
+        lock(&test.listener.copied).is_empty(),
+        "nothing is announced"
+    );
+    assert!(
+        test.reopen().list().iter().all(|link| link.from_page),
+        "still sent by a page after a restart"
     );
 }
 

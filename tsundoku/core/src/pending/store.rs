@@ -202,14 +202,15 @@ impl FromSql for StartWhenRead {
     }
 }
 
-/// Where a link came from, in the `caught` column: 0 added by hand, 1 copied, 2 from a file. The column was a yes or
-/// no before 0.1.54, so older versions read a link from a file as copied.
+/// Where a link came from, in the `caught` column: 0 added by hand, 1 copied, 2 from a file, 3 sent by a page. The
+/// column was a yes or no before 0.1.54, so older versions read a link from a file or a page as copied.
 impl ToSql for LinkOrigin {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::from(match self {
             Self::Added => 0_i64,
             Self::Copied => 1,
             Self::File => 2,
+            Self::Page => 3,
         }))
     }
 }
@@ -219,6 +220,7 @@ impl FromSql for LinkOrigin {
         Ok(match i64::column_result(value)? {
             0 => Self::Added,
             2 => Self::File,
+            3 => Self::Page,
             _ => Self::Copied,
         })
     }

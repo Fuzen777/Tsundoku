@@ -99,6 +99,9 @@ pub struct AddingSettings {
     /// A Windows notification while the window isn't in front when every download started has ended
     /// (`downloads::run`).
     pub notify_finished: bool,
+    /// Pages of the sites `click_n_load::SENDERS` lists can send a folder's links to Pending with their Click'n'Load
+    /// button, through a receiver on this PC only. Off unless turned on, and in settings saved before it existed.
+    pub click_n_load: bool,
 }
 
 impl Default for AddingSettings {
@@ -110,6 +113,7 @@ impl Default for AddingSettings {
             notify: true,
             notify_failures: true,
             notify_finished: true,
+            click_n_load: false,
         }
     }
 }
@@ -902,7 +906,9 @@ mod tests {
                 notify: true,
                 notify_failures: true,
                 notify_finished: true,
-            }
+                click_n_load: false,
+            },
+            "Click'n'Load stays off in settings saved before it"
         );
         assert_eq!(settings.background, BackgroundSettings::default());
     }

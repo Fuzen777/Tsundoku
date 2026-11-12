@@ -32,4 +32,9 @@ notifyFailures: boolean,
  * A Windows notification while the window isn't in front when every download started has ended
  * (`downloads::run`).
  */
-notifyFinished: boolean, };
+notifyFinished: boolean, 
+/**
+ * Pages of the sites `click_n_load::SENDERS` lists can send a folder's links to Pending with their Click'n'Load
+ * button, through a receiver on this PC only. Off unless turned on, and in settings saved before it existed.
+ */
+clickNLoad: boolean, };

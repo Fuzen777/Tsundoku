@@ -19,7 +19,7 @@ flowchart LR
     queue -->|queue-changed, download-progress| ui[Queue view]
 ```
 
-1. Download on the preview card adds the video to the queue with a copy of the preset, so editing the preset later doesn't change it. A video can't be in the queue twice until it's done.
+1. Download on the preview card adds the video to the queue with a copy of the preset, so editing the preset later doesn't change it. A video can't be in the queue twice until it's done. Links also come in through Pending (`core::pending`), which reads each as the preview card does and starts it into the queue the same way: several pasted at once, copied ones (the clipboard watcher), sent ones (the clipboard shortcut, the browser bookmark, the send buttons), files of links dropped on the window, and links a page's Click'n'Load button sends (`core::click_n_load`, received on this PC's own address only, which never start by themselves).
 2. The queue starts waiting items while fewer than `downloads.atOnce` (2) run, in the queue's order: the order they were added, apart from those Download Next moved to the front. A post on a paced site (Instagram, and X, Pixiv or Tumblr once Settings → Pacing gives them a pause: `DownloadSettings::pause_for`) waits while another post of the same site runs, since each pauses between its files on its own; items behind it from other sites start meanwhile.
 3. Each run is a thread running yt-dlp to its end. Its progress reaches the UI as events; its output goes to the item's log.
 4. When yt-dlp finishes, the file is recorded in the history (a `videos` row if it's new, and a `downloads` row) and `archive.txt` is rewritten. The item is Done.

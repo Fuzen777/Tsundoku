@@ -44,6 +44,11 @@ caught: boolean,
  */
 fromFile: boolean, 
 /**
+ * Sent by a page's Click'n'Load button (`click_n_load`). Until it's read, the UI only counts it, as a copied
+ * link.
+ */
+fromPage: boolean, 
+/**
  * While it waits to be read, the wait of its site, which answered "too many requests".
  */
 hold: SiteWait | null, };

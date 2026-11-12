@@ -11,6 +11,7 @@ import type { AppInfo } from "./bindings/AppInfo"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { ChangelogSection } from "./bindings/ChangelogSection"
+import type { ClickNLoadStatus } from "./bindings/ClickNLoadStatus"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadLog } from "./bindings/DownloadLog"
@@ -83,6 +84,7 @@ export const queryKeys = {
   leftOutFiles: ["left-out-files"],
   downloadOptions: ["download-options"],
   addingOptions: ["adding-options"],
+  clickNLoad: ["click-n-load"],
   backgroundOptions: ["background-options"],
   appearanceOptions: ["appearance-options"],
   defaultDownloadFolder: ["default-download-folder"],
@@ -104,6 +106,8 @@ const PENDING_CHANGED_EVENT = "pending-changed"
 const WATCHED_CHANGED_EVENT = "watched-changed"
 /** Sent by the app with the options when how links get added changes, such as from the tray's Watch Clipboard. */
 const ADDING_OPTIONS_CHANGED_EVENT = "adding-options-changed"
+/** Sent by the app when the Click'n'Load receiver starts or stops listening, or can't. */
+const CLICK_N_LOAD_CHANGED_EVENT = "click-n-load-changed"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -679,6 +683,23 @@ export function saveAddingOptions(options: AddingSettings): Promise<AddingSettin
 export function onAddingOptionsChanged(handler: (options: AddingSettings) => void): Promise<UnlistenFn> {
   if (!isTauri()) return Promise.resolve(() => {})
   return listen<AddingSettings>(ADDING_OPTIONS_CHANGED_EVENT, (event) => handler(event.payload))
+}
+
+/** Whether Click'n'Load buttons can send links here: listening, off, or the port taken by another app. In a browser,
+ * `?portTaken` shows the port taken. */
+export function getClickNLoadStatus(): Promise<ClickNLoadStatus> {
+  if (!isTauri()) {
+    return Promise.resolve({
+      ...standIns.clickNLoadStatus,
+      state: addressHas("portTaken") ? { kind: "portTaken" } : standIns.clickNLoadStatus.state,
+    })
+  }
+  return invoke<ClickNLoadStatus>("click_n_load_status")
+}
+
+export function onClickNLoadChanged(handler: (status: ClickNLoadStatus) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<ClickNLoadStatus>(CLICK_N_LOAD_CHANGED_EVENT, (event) => handler(event.payload))
 }
 
 /** Puts text on the clipboard, such as the browser bookmark's address. Tsundoku's own copies never reach the

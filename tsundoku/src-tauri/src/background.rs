@@ -119,6 +119,27 @@ mod text {
         }
     }
 
+    /// A Click'n'Load button's links, by the site that sent them: "FileCrypt Sent 12 Links".
+    pub fn page_sent(site: &str, count: u32) -> String {
+        if count == 1 {
+            format!("{site} Sent a Link")
+        } else {
+            format!("{site} Sent {count} Links")
+        }
+    }
+
+    pub fn page_links_read(count: u32) -> &'static str {
+        if count == 1 {
+            "It's being read in Pending."
+        } else {
+            "They're being read in Pending."
+        }
+    }
+
+    pub fn page_links_pending(site: &str) -> String {
+        format!("The links {site} sent are pending already.")
+    }
+
     pub fn links_started(count: usize) -> String {
         if count == 1 {
             "A pending link joined the queue.".to_owned()
@@ -539,6 +560,20 @@ fn add_sent(app: &AppHandle, links: &[String], from_browser: bool) {
         ),
         // Saving failed; the Pending view shows nothing new, and pasting there tells why.
         Err(_) => {}
+    }
+}
+
+/// A page's Click'n'Load button sent links, `added` of them new to Pending: the user hears of it unless the window is
+/// in front.
+pub fn page_sent(app: &AppHandle, site: &str, added: u32) {
+    if added > 0 {
+        announce(
+            app,
+            &text::page_sent(site, added),
+            text::page_links_read(added),
+        );
+    } else {
+        announce(app, text::NOTHING_TO_ADD, &text::page_links_pending(site));
     }
 }
 

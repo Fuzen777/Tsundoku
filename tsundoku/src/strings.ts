@@ -377,6 +377,9 @@ export const strings = {
     checkingCopied: (count: number) => (count === 1 ? "Checking a copied link…" : `Checking ${count} copied links…`),
     checkingFiles: (count: number) =>
       count === 1 ? "Checking a link from a file…" : `Checking ${count.toLocaleString()} links from files…`,
+    /** Links a page's Click'n'Load button sent, while they're read. */
+    checkingPages: (count: number) =>
+      count === 1 ? "Checking a link a page sent…" : `Checking ${count.toLocaleString()} links pages sent…`,
     showMore: (count: number) => `Show ${count.toLocaleString()} More`,
     count: (count: number) => `${count} ${count === 1 ? "link" : "links"}`,
     selectAll: "Select All",
@@ -1054,6 +1057,13 @@ export const strings = {
     userscriptHowTo:
       "Open Tampermonkey or Violentmonkey, create a new script, paste the userscript over everything in it, then save.",
     userscriptCopied: "Copied. Paste it into a new script.",
+    clickNLoad: "Take Links from Click'n'Load Buttons",
+    clickNLoadHint: (sites: string[]) =>
+      `Pages on ${listOf(sites)} can send a folder's links here with their Click'n'Load button, once you've passed their check in your browser. Tsundoku listens on this PC only, and the links wait in Pending to be started. JDownloader uses the same port, so only one of them can take the links at a time.`,
+    clickNLoadPortTaken: (port: number) =>
+      `Another app is already listening on port ${port}, where Click'n'Load buttons send their links. Close it (JDownloader, say), then try again.`,
+    clickNLoadFailed: "Tsundoku couldn't start listening for Click'n'Load buttons.",
+    tryAgain: "Try Again",
     notify: "Show Notifications",
     notifyHint:
       "While Tsundoku's window isn't in front: when a copied link is added or starts downloading, and when the shortcut or your browser adds links. Clicking one opens Tsundoku.",

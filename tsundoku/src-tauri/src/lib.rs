@@ -4,6 +4,7 @@ mod appearance;
 mod background;
 mod backup;
 mod check_window;
+mod click_n_load;
 mod downloads;
 mod history;
 mod pending;
@@ -215,6 +216,9 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(watched_sources);
     app.manage(Arc::new(PreviewService::new()));
     background::start(app.handle(), &settings);
+    // Click'n'Load buttons' links, while Settings → Adding Links takes them.
+    app.manage(click_n_load::ClickNLoad::default());
+    click_n_load::apply(app.handle(), settings.get().adding.click_n_load);
     app.manage(settings);
     Ok(tools)
 }
@@ -314,6 +318,7 @@ pub fn run() {
             open_download_folder,
             backup::save_backup,
             backup::restore_backup,
+            click_n_load::click_n_load_status,
             tools::tools_need_setup,
             tools::first_run_options,
             tools::save_first_run_choices,

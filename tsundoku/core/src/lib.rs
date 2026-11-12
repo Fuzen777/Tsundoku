@@ -9,7 +9,9 @@ pub mod backup;
 pub mod browsers;
 pub mod bug_report;
 pub mod cancel;
+mod cbc;
 pub mod changelog;
+pub mod click_n_load;
 #[cfg(windows)]
 pub mod clipboard;
 pub mod data_folder;

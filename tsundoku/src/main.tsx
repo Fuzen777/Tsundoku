@@ -8,6 +8,7 @@ import {
   getFirstRunOptions,
   getToolsNeedSetup,
   onAddingOptionsChanged,
+  onClickNLoadChanged,
   onToolsChanged,
   queryKeys,
 } from "./api"
@@ -40,6 +41,7 @@ trackQueue(queryClient)
 void onToolsChanged(() => void queryClient.invalidateQueries({ queryKey: queryKeys.toolsOverview }))
 // The tray's Watch Clipboard changes the options outside the UI.
 void onAddingOptionsChanged((options) => queryClient.setQueryData(queryKeys.addingOptions, options))
+void onClickNLoadChanged((status) => queryClient.setQueryData(queryKeys.clickNLoad, status))
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -83,6 +83,9 @@ pub struct PendingLink {
     pub caught: bool,
     /// Read from a file dropped on the window (`files`). Until it's read, the UI only counts it, as a copied link.
     pub from_file: bool,
+    /// Sent by a page's Click'n'Load button (`click_n_load`). Until it's read, the UI only counts it, as a copied
+    /// link.
+    pub from_page: bool,
     /// While it waits to be read, the wait of its site, which answered "too many requests".
     pub hold: Option<SiteWait>,
 }
@@ -190,7 +193,8 @@ struct Entry {
 }
 
 /// Where a link came from, which decides how it's read and whether it stays once read (`leaves_once_read`). Kept in
-/// `pending_links.caught` as 0, 1 and 2, so a version from before 0.1.54 reads a link from a file as copied.
+/// `pending_links.caught` as 0 to 3, so a version from before 0.1.54 reads a link from a file as copied, and one from
+/// before 0.1.129 a link a page sent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LinkOrigin {
     /// Pasted, dropped as text, or sent by the clipboard shortcut or a browser.
@@ -199,6 +203,8 @@ enum LinkOrigin {
     Copied,
     /// Read from a file dropped on the window (`files`), such as a bookmarks export.
     File,
+    /// Sent by a page's Click'n'Load button (`click_n_load`): kept as a link from a file is.
+    Page,
 }
 
 /// How long the pending-changed notices wait after one before sending the next, so a burst of changes (thousands of
@@ -307,6 +313,13 @@ impl PendingLinks {
     /// nothing to download leave once read, without a word (`leaves_once_read`).
     pub fn add_from_files(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
         self.insert(links, LinkOrigin::File, StartWhenRead::No)
+    }
+
+    /// Adds the links a page's Click'n'Load button sent (`click_n_load`), kept as links from a dropped file are: those
+    /// with nothing to download leave once read, without a word, and none starts by itself, whatever Download Right
+    /// Away says, since the page sending them can't always be told for sure.
+    pub fn add_from_page(&self, links: &[String]) -> Result<AddedLinks, DownloadError> {
+        self.insert(links, LinkOrigin::Page, StartWhenRead::No)
     }
 
     /// Adds links copied in another app (`watcher`), skipping those already here and those the queue or the history
@@ -927,6 +940,7 @@ impl PendingLinks {
             added_at: entry.added_at,
             caught: entry.origin == LinkOrigin::Copied,
             from_file: entry.origin == LinkOrigin::File,
+            from_page: entry.origin == LinkOrigin::Page,
             hold,
         }
     }
@@ -967,8 +981,8 @@ impl PendingLinks {
     /// Whether a link leaves once read, without a word: the rule for each origin, in one place. A link added by hand
     /// always stays, to say what it is or why it couldn't be read. A copied link leaves when there's nothing to
     /// download (`nothing_to_download`) or the queue or the history has its video, since nobody picked it. A link from
-    /// a file leaves when there's nothing to download, and otherwise stays as one added by hand does: marked when it
-    /// was downloaded before. (A second link to a video already here leaves whatever its origin.)
+    /// a file, or one a page sent, leaves when there's nothing to download, and otherwise stays as one added by hand
+    /// does: marked when it was downloaded before. (A second link to a video already here leaves whatever its origin.)
     fn leaves_once_read(
         &self,
         origin: LinkOrigin,
@@ -977,9 +991,11 @@ impl PendingLinks {
     ) -> bool {
         match (origin, outcome) {
             (LinkOrigin::Added, _) => false,
-            (LinkOrigin::Copied | LinkOrigin::File, Err(error)) => nothing_to_download(error, link),
+            (LinkOrigin::Copied | LinkOrigin::File | LinkOrigin::Page, Err(error)) => {
+                nothing_to_download(error, link)
+            }
             (LinkOrigin::Copied, Ok(fetched)) => self.has_video(&fetched.video),
-            (LinkOrigin::File, Ok(_)) => false,
+            (LinkOrigin::File | LinkOrigin::Page, Ok(_)) => false,
         }
     }
 }
@@ -1026,7 +1042,7 @@ fn read_links(links: &Weak<PendingLinks>) {
 /// Whether Start All takes a link: not one that couldn't be read, is in the queue, was downloaded before or starts
 /// once read already, nor a copied link still being checked. The Pending view's own Start All matches it.
 pub fn starts_with_all(link: &PendingLink) -> bool {
-    let checking = (link.caught || link.from_file)
+    let checking = (link.caught || link.from_file || link.from_page)
         && matches!(link.state, PendingState::Waiting | PendingState::Reading);
     link.state != PendingState::Failed
         && !checking

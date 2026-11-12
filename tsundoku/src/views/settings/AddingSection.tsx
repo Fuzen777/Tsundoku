@@ -7,7 +7,7 @@ import { Checkbox, Field, SelectInput } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { SETTINGS_PLACES } from "../../navigation"
-import { useSaveAddingOptions } from "../../queries"
+import { useClickNLoadStatus, useSaveAddingOptions } from "../../queries"
 import { SEND_BUTTONS_USERSCRIPT, SEND_PAGE_BOOKMARK } from "../../sendPage"
 import { strings } from "../../strings"
 
@@ -18,7 +18,7 @@ const SHORTCUTS = Object.keys(text.shortcutKeys) as ClipboardShortcut[]
 
 /**
  * Settings → Adding Links: the clipboard watcher, the clipboard shortcut, the browser bookmark and the send buttons'
- * userscript, Download Right Away for the links they add, and notifications.
+ * userscript, Click'n'Load buttons, Download Right Away for the links they add, and notifications.
  */
 export function AddingSection() {
   const { options, save, error } = useSaveAddingOptions()
@@ -73,6 +73,11 @@ export function AddingSection() {
           copiedMessage={text.userscriptCopied}
           value={SEND_BUTTONS_USERSCRIPT}
         />
+        <ClickNLoadSwitch
+          on={options?.clickNLoad ?? false}
+          disabled={!options}
+          onChange={(clickNLoad) => void save({ clickNLoad })}
+        />
         <div className="flex flex-col gap-1">
           <Checkbox
             label={text.downloadRightAway}
@@ -112,6 +117,41 @@ export function AddingSection() {
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
     </Section>
+  )
+}
+
+interface ClickNLoadSwitchProps {
+  on: boolean
+  disabled: boolean
+  /** Saves the setting; saving it on again listens again, after the port was taken. */
+  onChange: (on: boolean) => void
+}
+
+/**
+ * Take Links from Click'n'Load Buttons, with the sites it takes them from and, while it's on but can't listen (another
+ * app has the port), why and Try Again.
+ */
+function ClickNLoadSwitch({ on, disabled, onChange }: ClickNLoadSwitchProps) {
+  const { data: status } = useClickNLoadStatus()
+  const state = status?.state
+  return (
+    <div className="flex flex-col gap-1">
+      <Checkbox label={text.clickNLoad} checked={on} disabled={disabled} onChange={onChange} />
+      {status && <p className="pl-6 text-xs text-fg-muted">{text.clickNLoadHint(status.senders)}</p>}
+      {on && status && (state?.kind === "portTaken" || state?.kind === "failed") && (
+        <div className="mt-1 pl-6">
+          <StatusMessage
+            tone="danger"
+            message={state.kind === "portTaken" ? text.clickNLoadPortTaken(status.port) : text.clickNLoadFailed}
+            detail={state.kind === "failed" ? state.detail : undefined}
+          >
+            <Button size="sm" onClick={() => onChange(true)}>
+              {text.tryAgain}
+            </Button>
+          </StatusMessage>
+        </div>
+      )}
+    </div>
   )
 }
 

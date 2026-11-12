@@ -3,6 +3,7 @@ import type { AppInfo } from "./bindings/AppInfo"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { ChangelogSection } from "./bindings/ChangelogSection"
+import type { ClickNLoadStatus } from "./bindings/ClickNLoadStatus"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadLog } from "./bindings/DownloadLog"
@@ -266,6 +267,7 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
     addedAt: 1_793_876_473 + id * 60,
     caught: false,
     fromFile: false,
+    fromPage: false,
     hold: null,
     ...fields,
   }
@@ -421,7 +423,9 @@ export const standIns = {
     notify: true,
     notifyFailures: true,
     notifyFinished: true,
+    clickNLoad: false,
   } satisfies AddingSettings,
+  clickNLoadStatus: { state: { kind: "off" }, port: 9666, senders: ["FileCrypt"] } satisfies ClickNLoadStatus,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
   appearanceOptions: { theme: "auto", accent: "indigo", customAccent: "#165e83" } satisfies AppearanceSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,

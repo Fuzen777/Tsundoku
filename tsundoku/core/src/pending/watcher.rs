@@ -102,7 +102,7 @@ pub fn copied_links(text: &str) -> Vec<String> {
 }
 
 /// Whether a word starts with "http://" or "https://", in any case: a copied word without it isn't taken for a link.
-fn has_web_scheme(word: &str) -> bool {
+pub(crate) fn has_web_scheme(word: &str) -> bool {
     ["http://", "https://"].iter().any(|scheme| {
         word.get(..scheme.len())
             .is_some_and(|start| start.eq_ignore_ascii_case(scheme))

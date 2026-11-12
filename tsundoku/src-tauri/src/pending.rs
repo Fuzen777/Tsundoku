@@ -12,7 +12,7 @@ use tsundoku_core::pending::files::{self, LinkFileError};
 use tsundoku_core::pending::{self, AddedLinks, PendingLink, PendingLinks, PendingListener};
 use tsundoku_core::settings::AddingSettings;
 
-use crate::background;
+use crate::{background, click_n_load};
 
 /// Sent with every pending link when they change.
 const PENDING_CHANGED_EVENT: &str = "pending-changed";
@@ -201,5 +201,8 @@ pub fn save_adding_options(
 ) -> Result<AddingSettings, DownloadError> {
     let previous = pending.options().clipboard_shortcut;
     background::change_clipboard_shortcut(&app, previous, options.clipboard_shortcut)?;
-    pending.set_options(options)
+    let saved = pending.set_options(options)?;
+    // Listens or stops as the setting says, and listens again after the port was taken (Settings' Try Again).
+    click_n_load::apply(&app, saved.click_n_load);
+    Ok(saved)
 }

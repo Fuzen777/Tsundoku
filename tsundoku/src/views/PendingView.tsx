@@ -235,6 +235,7 @@ export function PendingView() {
       {[
         checking.copied > 0 && strings.pending.checkingCopied(checking.copied),
         checking.fromFiles > 0 && strings.pending.checkingFiles(checking.fromFiles),
+        checking.fromPages > 0 && strings.pending.checkingPages(checking.fromPages),
       ].map(
         (line) =>
           line && (

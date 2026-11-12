@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.129 · 2026-11-12
+
+### Added
+
+- **Click'n'Load buttons**: Settings → Adding Links → Take Links from Click'n'Load Buttons (off until you turn it on) lets a protected link folder on FileCrypt send its links to Tsundoku with its Click'n'Load button, once you've passed its check in your browser, as it would to JDownloader. The links wait in Pending: each is read, those nothing can download leave without a word, and none starts by itself, even with Download Right Away on. A notification says how many came ("FileCrypt Sent 12 Links"). Tsundoku listens on this PC only and takes links only from the sites it lists; FileCrypt is listed from its documented Click'n'Load form, and its real button still has to be tried. JDownloader uses the same port, so only one of them can listen at a time: when another app has it, Settings says so, with Try Again. Your browser may ask once whether the page may reach devices on your network: allow it for the button to work.
+
 ## 0.1.128 · 2026-11-12
 
 ### Added
