@@ -40,7 +40,8 @@ if not exist "%DESTINATION%\.portable.txt" (
   > "%DESTINATION%\.portable.txt" echo Keep this file beside Tsundoku.exe: with it, Tsundoku keeps its settings, tools and history in the data folder here instead of your user folder.
 )
 echo Portable copy ready in %DESTINATION%
+rem The app is started through PowerShell's Start-Process, since start hands it this script's output even when redirected, which would keep a program reading that output waiting until the app quits.
 if defined WAS_RUNNING (
   echo Starting it again.
-  start "" /d "%DESTINATION%" "%EXE%"
+  powershell -NoProfile -Command "Start-Process -FilePath $env:EXE -WorkingDirectory $env:DESTINATION"
 )
