@@ -23,16 +23,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Look and Feel
 
-**1. Light, Dark or Auto** · 0.1.32
-- [ ] Settings → Appearance → Theme: switching between Auto, Light and Dark changes everything at once: colors, title bar, Mica, scrollbars and dropdown lists.
-- [ ] Pick the opposite of Windows' mode, quit and start again → it opens in the chosen theme from the first frame, with no flash of the other one.
-
-**2. RJ Library–inspired dark mode** · 0.1.34 · *needs your approval*
-- [ ] In Dark, the current view sits darker than the sidebar and title bar, with cards and fields lighter again, in plain grays. Main buttons (Add, Download, Start All), the selected choice of a switch and the sidebar's counts are deep indigo with white text; buttons confirming a deletion are dark red with white text. [Before and after](https://claude.ai/artifact/3DE2KntFCUKpBc8ofHyHjd) (browser shots, so without Mica).
-- [ ] Light mode looks exactly as it did.
-
 **48. Accent color** · 0.1.70
-- [ ] Settings → Appearance → Accent Color: picking Teal, Green, Amber, Rose or Purple recolors at once the primary buttons, the selected segments, the sidebar's counts and selection pill, checkboxes, progress bars and links. The picked swatch has a check.
 - [ ] Pick a Color (the last swatch, with a pipette) → Windows' color picker → pick a bright orange → the app turns orange in both themes, readable, and the swatch gets the check. Pick another swatch and back: the orange is remembered. (0.1.74)
 - [ ] Pick a Color opens Windows' color picker in the real app (it did nothing up to 0.1.80), over the window, starting on the custom color, with the full panel open. The window can't be clicked while it's open. Cancel → nothing changes. OK on a color → the app takes it at once. Add a color to Custom Colors, close, open it again → it's still there (until the app restarts). Not tried in the real app yet. (0.1.81)
 - [ ] Each one reads well in Light and in Dark (white text on filled buttons, links readable on the background). Restart → the accent is there from the first frame.
@@ -402,8 +393,3 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **40. Portable copy and the first-run setup** · 0.1.20, 0.1.22, 0.1.24, 0.1.25, 0.1.26
 - [ ] Run `Scripts\Build-Portable.cmd` while the portable copy runs → it quits that copy (never the installed one or a dev build), replaces it and starts it again.
 - [ ] For a first start from nothing, quit Tsundoku, run `Scripts\Build-Portable.cmd D:\Dev\tsundoku\portable-fresh` and start the `Tsundoku.exe` it makes there. The first screen asks where the tools, their caches and downloads go, with caches and downloads unpicked and Continue waiting for them; Tools offers In AppData, picked when the installed copy's tools are there, which are then used without downloading. Back from the tools screen keeps the picks; the tools screen includes gallery-dl and wraps long paths; Continue Without shows if only Deno or gallery-dl fails. Delete the folder afterwards.
-
-## Docs
-
-**41. README** · 25d40db and later
-- [ ] README.md describes the app as it is at 0.1.63. It's only local until main is pushed.
