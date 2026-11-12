@@ -44,8 +44,8 @@ use crate::sites;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long a request may wait for its answer, or a download for its next bytes.
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
-/// Sent with the requests to hosts that expect a browser (`HostFacts::browser_agent`). MediaFire only shows its
-/// download button to a browser.
+/// Sent with the requests to hosts that expect a browser (`HostFacts::browser_agent`; none since MediaFire was found to
+/// answer Tsundoku's own identity without Cloudflare's check), and by `client`, for the history's thumbnails.
 const USER_AGENT: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
 /// Sent with the requests to hosts that answer Tsundoku as they answer a browser.

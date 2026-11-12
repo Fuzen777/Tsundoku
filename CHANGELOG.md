@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.123 · 2026-11-12
+
+### Changed
+
+- **MediaFire**: Tsundoku now asks MediaFire as itself rather than as Firefox. Posing as a browser was what made MediaFire's Cloudflare check appear: asked honestly, its pages come without it, so most MediaFire downloads no longer wait for Open Check. The check stays for when MediaFire still asks.
+
 ## 0.1.122 · 2026-11-12
 
 ### Added

@@ -25,7 +25,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     site: "mediafire",
     domains: &["mediafire.com"],
     sends_attachments: false,
-    browser_agent: true,
+    // Asked as Firefox, its file pages answered with Cloudflare's check; asked as Tsundoku, with the page (2026-11-12).
+    browser_agent: false,
     read,
     // Its download addresses are probed with their own pages in mind (`page_error` below); a download's page says
     // no more than its status.
