@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use super::*;
 use crate::data_folder::DataPaths;
+use crate::passwords::Password;
 use crate::presets::built_in_presets;
 
 /// A runner that waits until the test gives it an outcome, or until it's cancelled.
@@ -356,7 +357,14 @@ fn a_download_can_go_to_a_folder_picked_for_it() {
     let picked = test.folder.path().join("picked").display().to_string();
     let second = test
         .queue
-        .add_in(video("b"), "best-video", false, Some(picked.clone()), None)
+        .add_in(
+            video("b"),
+            "best-video",
+            false,
+            Some(picked.clone()),
+            None,
+            None,
+        )
         .unwrap();
     assert_eq!(second.folder, picked);
     assert!(second.folder_chosen);
@@ -649,6 +657,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         recovery: Recovery::default(),
         caught_links: Vec::new(),
         unpack_files: None,
+        password: None,
     }
 }
 
@@ -1743,7 +1752,7 @@ fn a_rule_picked_for_a_download_gives_its_folder_and_name_and_the_item_keeps_it(
     let picked = Some("rule-1".to_owned());
     let video_item = test
         .queue
-        .add_in(video("a"), "best-video", false, None, picked.clone())
+        .add_in(video("a"), "best-video", false, None, picked.clone(), None)
         .unwrap();
     assert_eq!(video_item.folder, picked_folder.display().to_string());
     assert!(
@@ -1752,7 +1761,7 @@ fn a_rule_picked_for_a_download_gives_its_folder_and_name_and_the_item_keeps_it(
     );
     let post_item = test
         .queue
-        .add_post_in(post("Picked"), None, picked.clone())
+        .add_post_in(post("Picked"), None, picked.clone(), None)
         .unwrap();
     assert_eq!(post_item.folder, picked_folder.display().to_string());
     assert_eq!(
@@ -2382,4 +2391,170 @@ fn a_pasted_download_link_gets_a_waiting_download_past_its_check() {
         "keeping what was given, for its own file"
     );
     test.cancel_all();
+}
+
+fn needs_a_password() -> JobOutcome {
+    JobOutcome::Failed(DownloadError::YtDlp {
+        error: PreviewError::PasswordNeeded { wrong: true },
+    })
+}
+
+#[test]
+fn a_download_that_needs_a_password_waits_for_one_then_starts_with_it() {
+    let test = Test::new();
+    let id = test.add("locked");
+    wait_until("it runs", || test.times_started(id) == 1);
+    assert_eq!(test.runner.last_job(id).password, None);
+    test.runner.complete(id, needs_a_password());
+    wait_until("it waits for a password", || {
+        test.item(id).hold == Some(Hold::NeedsPassword { wrong: false })
+    });
+    let item = test.item(id);
+    assert_eq!(
+        (item.state, item.error),
+        (QueueState::Waiting, None),
+        "not a failure"
+    );
+    assert_eq!(
+        test.queue.try_now(id),
+        Err(DownloadError::WrongState),
+        "only a password starts it"
+    );
+    thread::sleep(Duration::from_millis(1200));
+    assert_eq!(
+        test.times_started(id),
+        1,
+        "and it never tries again by itself"
+    );
+
+    test.queue
+        .enter_password(id, Password::new("not it").unwrap())
+        .unwrap();
+    wait_until("it runs with the password", || test.times_started(id) == 2);
+    assert_eq!(
+        test.runner
+            .last_job(id)
+            .password
+            .as_ref()
+            .map(Password::reveal),
+        Some("not it")
+    );
+    test.runner.complete(id, needs_a_password());
+    wait_until("it asks again, saying it was wrong", || {
+        test.item(id).hold == Some(Hold::NeedsPassword { wrong: true })
+    });
+    assert_eq!(test.item(id).password, None, "a wrong one isn't kept");
+    let saved: Option<String> = test
+        .database
+        .lock()
+        .query_row(
+            "SELECT password FROM queue_items WHERE id = ?1",
+            [id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(saved, None, "nor saved");
+    assert_eq!(
+        test.queue
+            .enter_password(id + 100, Password::new("x").unwrap()),
+        Err(DownloadError::NotFound)
+    );
+
+    test.queue
+        .enter_password(id, Password::new("youtube-dl").unwrap())
+        .unwrap();
+    wait_until("it runs again", || test.times_started(id) == 3);
+    test.runner.complete(id, test.finished_file("locked.mkv"));
+    wait_until("it finishes", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(
+        test.history
+            .password_for("youtube", "locked")
+            .unwrap()
+            .as_ref()
+            .map(Password::reveal),
+        Some("youtube-dl"),
+        "the history keeps it for Download Again"
+    );
+    assert_eq!(
+        test.history
+            .password_for_link("https://www.youtube.com/watch?v=locked")
+            .unwrap()
+            .as_ref()
+            .map(Password::reveal),
+        Some("youtube-dl")
+    );
+
+    // Download Again: the new download opens with the history's password, without asking.
+    test.queue.clear_finished().unwrap();
+    let again = test.add("locked");
+    wait_until("it runs", || test.times_started(again) == 1);
+    assert_eq!(
+        test.runner
+            .last_job(again)
+            .password
+            .as_ref()
+            .map(Password::reveal),
+        Some("youtube-dl")
+    );
+    test.queue.cancel(again).unwrap();
+}
+
+#[test]
+fn a_downloads_password_is_saved_with_it_and_never_sent_to_the_ui() {
+    let test = Test::new();
+    let id = test
+        .queue
+        .add_in(
+            video("kept"),
+            "best-video",
+            false,
+            None,
+            None,
+            Password::new("hunter2"),
+        )
+        .unwrap()
+        .id;
+    wait_until("it runs", || test.times_started(id) == 1);
+    assert_eq!(
+        test.runner
+            .last_job(id)
+            .password
+            .as_ref()
+            .map(Password::reveal),
+        Some("hunter2")
+    );
+    test.queue.stop(id).unwrap();
+    wait_until("it stops", || test.state(id) == Some(QueueState::Stopped));
+    let item = test.item(id);
+    assert_eq!(
+        item.password.as_ref().map(Password::reveal),
+        Some("hunter2")
+    );
+    let json = serde_json::to_string(&item).unwrap();
+    assert!(
+        !json.contains("hunter2") && !json.contains("password"),
+        "{json}"
+    );
+    assert!(!format!("{item:?}").contains("hunter2"), "nor in its Debug");
+
+    let reopened = test.reopen();
+    let after_restart = reopened
+        .items()
+        .into_iter()
+        .find(|item| item.id == id)
+        .unwrap();
+    assert_eq!(
+        after_restart.password.as_ref().map(Password::reveal),
+        Some("hunter2"),
+        "kept across a restart"
+    );
+    // Resume runs with it again.
+    reopened.resume(id).unwrap();
+    wait_until("it runs again", || test.times_started(id) == 2);
+    assert!(
+        lock(&test.runner.jobs)
+            .iter()
+            .all(|job| job.password.as_ref().map(Password::reveal) == Some("hunter2"))
+    );
+    reopened.cancel(id).unwrap();
 }

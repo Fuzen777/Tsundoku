@@ -60,6 +60,9 @@ pub struct Recovery {
     pub(super) window_download: Option<String>,
     /// How far the window's download has got, for its speed: when it started and its last count.
     pub(super) window_meter: Option<WindowMeter>,
+    /// Its link needs a password it doesn't have (`false`), or the one it had didn't open it (`true`): it waits for the
+    /// person to enter one (`Hold::NeedsPassword`, `DownloadQueue::enter_password`).
+    pub(super) needs_password: Option<bool>,
 }
 
 /// The window's download's progress over time, for its speed and time left.
@@ -185,6 +188,9 @@ pub enum Hold {
     /// The person started the download on the site's page in the check window, which saves the file itself (a host
     /// whose download works only in the window's own session); the download then moves it into place.
     WindowDownload { site: String },
+    /// Its link needs a password: it waits, without end, until the person enters one (`enter_password`). `wrong` when
+    /// the one it had didn't open it.
+    NeedsPassword { wrong: bool },
 }
 
 impl Hold {
@@ -196,7 +202,9 @@ impl Hold {
             | Self::Retry { until, .. }
             | Self::LimitReached { until, .. } => *until,
             Self::NotEnoughRoom { until, .. } => *until,
-            Self::BrowserCheck { .. } | Self::WindowDownload { .. } => i64::MAX,
+            Self::BrowserCheck { .. }
+            | Self::WindowDownload { .. }
+            | Self::NeedsPassword { .. } => i64::MAX,
         }
     }
 }
@@ -422,6 +430,9 @@ impl DownloadQueue {
         // Its run answers the check window, which holds the person's download meanwhile.
         if item.recovery.offer.is_some() {
             return None;
+        }
+        if let Some(wrong) = item.recovery.needs_password {
+            return Some(Hold::NeedsPassword { wrong });
         }
         if let Some(check) = &item.recovery.check {
             return Some(Hold::BrowserCheck {

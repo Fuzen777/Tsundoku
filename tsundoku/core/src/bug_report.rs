@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use ts_rs::TS;
 
+use crate::passwords::{PASSWORD_PLACEHOLDER, Password};
 use crate::tools::{ToolId, ToolsOverview};
 
 /// How many of the log's last lines a report holds.
@@ -40,10 +41,13 @@ pub struct DownloadReport {
     pub error: ShownError,
     /// The end of the download's log, or `None` when it has none.
     pub log: Option<String>,
+    /// The download's password, if it has one: nothing writes it in the link, the error or the log, and the report
+    /// blanks it out anyway, wherever it stands as a word.
+    pub password: Option<Password>,
 }
 
 impl DownloadReport {
-    /// The report as plain text, with `user`'s name blanked out everywhere.
+    /// The report as plain text, with `user`'s name and the download's password blanked out everywhere.
     pub fn text(&self, user: &UserNames) -> String {
         let mut lines = vec![
             format!("Tsundoku {}", self.app_version),
@@ -76,7 +80,14 @@ impl DownloadReport {
             }
             None => lines.push("No log.".to_owned()),
         }
-        user.blank(&lines.join("\n"))
+        let text = lines.join("\n");
+        let text = match &self.password {
+            Some(password) => {
+                replace_words_ignoring_case(&text, password.reveal(), PASSWORD_PLACEHOLDER)
+            }
+            None => text,
+        };
+        user.blank(&text)
     }
 }
 
@@ -359,6 +370,7 @@ mod tests {
                 detail: Some(r"C:\Users\Zen\Videos: access denied".to_owned()),
             },
             log: Some(r"[download] Destination: C:\Users\Zen\Videos\a.mkv".to_owned()),
+            password: None,
         };
         assert_eq!(
             report.text(&zen()),
@@ -378,6 +390,34 @@ mod tests {
                 r"[download] Destination: C:\Users\<user>\Videos\a.mkv",
             ]
             .join("\n")
+        );
+    }
+
+    #[test]
+    fn blanks_the_downloads_password_wherever_it_stands_as_a_word() {
+        let report = DownloadReport {
+            app_version: "0.1.128".to_owned(),
+            windows: "Windows 11".to_owned(),
+            tools: Vec::new(),
+            link: "https://player.vimeo.com/video/68375962".to_owned(),
+            error: ShownError {
+                message: "This link needs a password.".to_owned(),
+                detail: Some("echoed: Hunter2-Secret".to_owned()),
+            },
+            log: Some(
+                "=== 1 yt-dlp --video-password hunter2-secret -- link\nhunter2-secretly".to_owned(),
+            ),
+            password: Password::new("hunter2-secret"),
+        };
+        let text = report.text(&zen());
+        assert!(text.contains("echoed: <password>"), "{text}");
+        assert!(
+            text.contains("--video-password <password> -- link"),
+            "{text}"
+        );
+        assert!(
+            text.contains("hunter2-secretly"),
+            "only as a word of its own, so a short one doesn't blank ordinary words"
         );
     }
 }

@@ -156,6 +156,7 @@ export const strings = {
     retry: "Retry",
     tryNow: "Try Now",
     openCheck: "Open Check",
+    enterPassword: "Enter Password",
     openLog: "Open Log",
     showLog: "Show Log",
     hideLog: "Hide Log",
@@ -201,6 +202,10 @@ export const strings = {
           : `${site} wants to check you're a person before this download. It waits here until you open the check and start the download on ${site}'s page.`,
       windowDownload: (site: string) =>
         `Downloading in ${site}'s check window, which saves the file itself. Stopping this download stops it.`,
+      needsPassword: (wrong: boolean) =>
+        wrong
+          ? "The password didn't open this download. It waits here until you enter the right one."
+          : "This download needs a password. It waits here until you enter it.",
     },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>
@@ -417,6 +422,7 @@ export const strings = {
     waiting: "Waiting to be read",
     reading: "Reading…",
     startsWhenRead: "Starts once it's read",
+    startsWhenUnlocked: "Starts once it's unlocked",
     inQueue: "Already in the queue.",
     overwriteTitle: "Download Again?",
     overwriteMessage: (count: number) =>
@@ -428,6 +434,7 @@ export const strings = {
       ready: "Ready to Start",
       downloadedBefore: "Downloaded Before",
       notRead: "Not Read Yet",
+      needsPassword: "Needs a Password",
       failed: "Couldn't Be Read",
       inQueue: "In the Queue",
     },
@@ -512,6 +519,11 @@ export const strings = {
       alreadyWatched: "This source is watched already.",
       storage: "Couldn't save the watched sources.",
     },
+  },
+  /** The field that opens a link that needs a password, on the preview card, a pending link and a download. */
+  password: {
+    field: "Password",
+    unlock: "Unlock",
   },
   preview: {
     fetching: "Fetching the details…",
@@ -606,7 +618,10 @@ export const strings = {
       shortLinkToUnsupportedSite: (site: string, target: string) =>
         `This ${site} link leads to ${target}, which Tsundoku can't download from.`,
       subscribersOnly: (site: string) => `The owner of this ${site} file keeps it for ${site}'s subscribers.`,
-      passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
+      passwordProtected: (site: string) =>
+        `This ${site} link needs a password. Tsundoku can't enter passwords for ${site} links yet.`,
+      passwordNeeded: (wrong: boolean) =>
+        wrong ? "That password didn't open this link. Check it and try again." : "This link needs a password.",
       linkIncomplete: (site: string) =>
         `This ${site} link is missing its key, or it's cut off. Copy the whole link again.`,
       browserCheck: (site: string) =>

@@ -12,6 +12,7 @@ use ts_rs::TS;
 use crate::atomic_file::write_atomically;
 use crate::database::Database;
 use crate::metadata::{FileContents, PostContents, VideoInfo};
+use crate::passwords::Password;
 use crate::relocate::{self, FailedMove, MovedFiles};
 use crate::rules::DownloadKind;
 use crate::thumbnails::{self, ThumbnailJob, ThumbnailSource};
@@ -268,18 +269,30 @@ impl History {
     /// Records a finished download, adding the video or refreshing its details, then rewrites `archive.txt`.
     /// Returns the download's ID.
     pub fn record(&self, video: &VideoInfo, download: &NewDownload) -> Result<i64, HistoryError> {
+        self.record_opened_with(video, download, None)
+    }
+
+    /// `record`, keeping the password that opened the video's link (`None` leaves the one kept before), so Download
+    /// Again opens it without asking (`password_for_link`).
+    pub fn record_opened_with(
+        &self,
+        video: &VideoInfo,
+        download: &NewDownload,
+        password: Option<&Password>,
+    ) -> Result<i64, HistoryError> {
         let mut connection = self.database.lock();
         let transaction = connection.transaction()?;
         let video_row: i64 = transaction.query_row(
             "INSERT INTO videos (site, site_name, video_id, url, title, uploader, duration_seconds, upload_date,
-                thumbnail_url, best_height, first_downloaded_at, post_images, post_videos, file_count, file_bytes)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+                thumbnail_url, best_height, first_downloaded_at, post_images, post_videos, file_count, file_bytes,
+                password)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
             ON CONFLICT (site, video_id) DO UPDATE SET site_name = excluded.site_name, url = excluded.url,
                 title = excluded.title, uploader = excluded.uploader, duration_seconds = excluded.duration_seconds,
                 upload_date = excluded.upload_date, thumbnail_url = excluded.thumbnail_url,
                 best_height = excluded.best_height, post_images = excluded.post_images,
                 post_videos = excluded.post_videos, file_count = excluded.file_count,
-                file_bytes = excluded.file_bytes
+                file_bytes = excluded.file_bytes, password = coalesce(excluded.password, videos.password)
             RETURNING id",
             params![
                 video.site,
@@ -297,6 +310,7 @@ impl History {
                 video.post.map(|post| post.videos),
                 video.files.map(|files| files.count),
                 video.files.map(|files| files.bytes as i64),
+                password.map(Password::reveal),
             ],
             |row| row.get(0),
         )?;
@@ -379,6 +393,39 @@ impl History {
             .query_map(params![site, since], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<Result<_, _>>()?;
         Ok(downloads)
+    }
+
+    /// The password kept for a video downloaded before (`record_opened_with`), by its site and ID.
+    pub fn password_for(
+        &self,
+        site: &str,
+        video_id: &str,
+    ) -> Result<Option<Password>, HistoryError> {
+        let password: Option<String> = self
+            .database
+            .lock()
+            .query_row(
+                "SELECT password FROM videos WHERE site = ?1 AND video_id = ?2",
+                params![site, video_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(password.and_then(Password::new))
+    }
+
+    /// The password kept for a video downloaded before whose address is exactly `url` (as Download Again gives it).
+    pub fn password_for_link(&self, url: &str) -> Result<Option<Password>, HistoryError> {
+        let password: Option<String> = self
+            .database
+            .lock()
+            .query_row(
+                "SELECT password FROM videos WHERE url = ?1 AND password IS NOT NULL LIMIT 1",
+                [url],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(password.and_then(Password::new))
     }
 
     /// Whether a video downloaded before has exactly this address (its page's, as the tool that read it gave it).

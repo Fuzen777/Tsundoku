@@ -26,6 +26,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     page_error: None,
     window_link: None,
     download_file_id: None,
+    unlock: None,
 };
 
 const SITE: &str = "https://icedrive.net";

@@ -31,6 +31,7 @@ pub async fn download_details(
             link: item.video.url,
             error: shown_error,
             log: bug_report::log_tail(&queue.log_path(id), LOG_LINES),
+            password: item.password,
         };
         Ok(report.text(&UserNames::current()))
     })

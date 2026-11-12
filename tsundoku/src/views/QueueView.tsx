@@ -5,6 +5,7 @@ import {
   clearFinishedDownloads,
   confirmWithUser,
   downloadNext,
+  enterDownloadPassword,
   openCheckWindow,
   openDownload,
   pickFolder,
@@ -34,6 +35,7 @@ import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { IconButton } from "../components/IconButton"
 import { LogPanel } from "../components/LogPanel"
+import { PasswordForm } from "../components/PasswordForm"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
 import { ProgressBar } from "../components/ProgressBar"
@@ -192,6 +194,9 @@ function QueueRow({ item }: { item: QueueItem }) {
   const stage = savingInWindow ? strings.queue.stages.downloading : stageLabel(item, progress)
   const holdTimeLeft = useTimeLeft(hold ? holdEnd(hold) : null)
   const offerUndo = useOfferUndo()
+  // Enter Password shows the field; it's sent once, then the download runs with it.
+  const [entersPassword, setEntersPassword] = useState(false)
+  const [sendingPassword, setSendingPassword] = useState(false)
 
   const act = (action: (id: number) => Promise<void>, describe = describeDownloadError) => {
     setActionError(null)
@@ -236,6 +241,26 @@ function QueueRow({ item }: { item: QueueItem }) {
                 {strings.queue.openCheck}
               </Button>
             )}
+            {hold.kind === "needsPassword" &&
+              (entersPassword ? (
+                <PasswordForm
+                  size="sm"
+                  busy={sendingPassword}
+                  onUnlock={(password) => {
+                    setSendingPassword(true)
+                    act((id) =>
+                      enterDownloadPassword(id, password).finally(() => {
+                        setSendingPassword(false)
+                        setEntersPassword(false)
+                      }),
+                    )
+                  }}
+                />
+              ) : (
+                <Button size="sm" onClick={() => setEntersPassword(true)}>
+                  {strings.queue.enterPassword}
+                </Button>
+              ))}
           </StatusMessage>
         )}
         {item.state === "failed" && item.error && (
@@ -261,7 +286,11 @@ function QueueRow({ item }: { item: QueueItem }) {
             onClick={() => act(stopDownload)}
           />
         )}
-        {hold && hold.kind !== "hourlyLimit" && hold.kind !== "browserCheck" && hold.kind !== "windowDownload" && (
+        {hold &&
+          hold.kind !== "hourlyLimit" &&
+          hold.kind !== "browserCheck" &&
+          hold.kind !== "windowDownload" &&
+          hold.kind !== "needsPassword" && (
           <IconButton label={strings.queue.tryNow} icon={RefreshCw} onClick={() => act(tryDownloadNow)} />
         )}
         {item.state === "stopped" && (

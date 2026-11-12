@@ -2,14 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { cancelPreview, fetchPreview, listingKind } from "./api"
 import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListingKind } from "./bindings/ListingKind"
-import { isCancelled } from "./errors"
+import { isCancelled, needsPassword } from "./errors"
 
 export type PreviewState =
   | { stage: "idle" }
   /** `listing` is what the link is when its address says so (a channel, playlist or account), for the waiting text. */
   | { stage: "loading"; link: string; listing: ListingKind | null }
-  | { stage: "ready"; preview: LinkPreview }
-  | { stage: "failed"; link: string; error: unknown }
+  /** `password` is the one typed that opened the link, which its download takes too. */
+  | { stage: "ready"; preview: LinkPreview; password: string | null }
+  /** For a link that needs a password: `unlocking` while a typed one is tried, and `tries` counts the wrong ones. */
+  | { stage: "failed"; link: string; error: unknown; unlocking: boolean; tries: number }
 
 /**
  * The preview card's state. Showing a link replaces whatever was shown, and only the latest link's answer is kept:
@@ -19,7 +21,7 @@ export function usePreview() {
   const [state, setState] = useState<PreviewState>({ stage: "idle" })
   const latestRequest = useRef(0)
 
-  const show = useCallback(async (link: string) => {
+  const show = useCallback(async (link: string, password: string | null = null) => {
     latestRequest.current += 1
     const request = latestRequest.current
     setState({ stage: "loading", link, listing: null })
@@ -33,13 +35,33 @@ export function usePreview() {
         // Only the waiting text would have said more.
       })
     try {
-      const preview = await fetchPreview(link)
-      if (request === latestRequest.current) setState({ stage: "ready", preview })
+      const preview = await fetchPreview(link, password)
+      if (request === latestRequest.current) setState({ stage: "ready", preview, password })
     } catch (error) {
       if (request !== latestRequest.current) return
-      setState(isCancelled(error) ? { stage: "idle" } : { stage: "failed", link, error })
+      setState(isCancelled(error) ? { stage: "idle" } : { stage: "failed", link, error, unlocking: false, tries: 0 })
     }
   }, [])
+
+  /** Unlock, for a link that needs a password: reads it again with `password`, keeping the card's field while it's
+   * tried, and again after a wrong one. */
+  const unlock = useCallback(
+    async (password: string) => {
+      if (state.stage !== "failed" || !needsPassword(state.error)) return
+      const { link, tries } = state
+      latestRequest.current += 1
+      const request = latestRequest.current
+      setState({ ...state, unlocking: true })
+      try {
+        const preview = await fetchPreview(link, password)
+        if (request === latestRequest.current) setState({ stage: "ready", preview, password })
+      } catch (error) {
+        if (request !== latestRequest.current) return
+        setState(isCancelled(error) ? { stage: "idle" } : { stage: "failed", link, error, unlocking: false, tries: tries + 1 })
+      }
+    },
+    [state],
+  )
 
   /** Closes the card, cancelling a fetch in progress. */
   const close = useCallback(() => {
@@ -48,7 +70,7 @@ export function usePreview() {
     setState({ stage: "idle" })
   }, [])
 
-  return { state, show, close }
+  return { state, show, unlock, close }
 }
 
 /** What was dropped on the window: its text (a link, several, or text holding them) and its files, either of which

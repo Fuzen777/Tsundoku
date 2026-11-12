@@ -65,7 +65,7 @@ rules:
 #### Not Now
 
 - [ ] **Google Docs, Sheets and Slides.** Left out of Drive folders for now. They could download as .docx, .xlsx and .pptx through `docs.google.com/KIND/d/ID/export?format=...`.
-- [ ] **Password-protected links.** MEGA's `#P!` links and MediaFire's protected files are refused with a message for now.
+- [ ] **Password-protected links on file hosts.** Videos with a password (yt-dlp's `--video-password`) are done, and every part a host needs is in place (`HostFacts::unlock`). Each host waits for a real link that needs a password to test it with: MEGA's `#P!` links are decoded already (in `D:\Dev\tsundoku\scripts\passwords\mega-unlock.patch`, checked against public links that have since expired), and how MediaFire, 1fichier, pCloud, Box and TransferNow take a password is known. OneDrive, WeTransfer, SwissTransfer and Filemail need their pages read first.
 
 ### Getting Links In
 

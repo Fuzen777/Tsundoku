@@ -8,6 +8,7 @@ use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Emitter, State};
 use tsundoku_core::downloads::DownloadError;
 use tsundoku_core::metadata::VideoInfo;
+use tsundoku_core::passwords::Password;
 use tsundoku_core::pending::files::{self, LinkFileError};
 use tsundoku_core::pending::{self, AddedLinks, PendingLink, PendingLinks, PendingListener};
 use tsundoku_core::settings::AddingSettings;
@@ -132,6 +133,17 @@ pub fn restore_removed_pending_links(pending: Pending<'_>) -> Result<(), Downloa
 #[tauri::command]
 pub fn read_pending_link_again(pending: Pending<'_>, id: i64) -> Result<(), DownloadError> {
     pending.read_again(id)
+}
+
+/// Unlock, for a link that needs a password: it's read again with it.
+#[tauri::command]
+pub fn unlock_pending_link(
+    pending: Pending<'_>,
+    id: i64,
+    password: String,
+) -> Result<(), DownloadError> {
+    let password = Password::new(password).ok_or(DownloadError::WrongState)?;
+    pending.unlock(id, password)
 }
 
 /// Picks which files of a read post one link downloads, by their number in the post.

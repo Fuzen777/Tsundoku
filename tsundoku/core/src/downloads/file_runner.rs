@@ -103,7 +103,7 @@ fn download(
 
     let host = Host::of(&job.url).ok_or(PreviewError::UnsupportedSite)?;
     let client = hosts::client_for(host)?;
-    let share = host.read(&client, &job.url, cancel)?;
+    let share = host.read(&client, &job.url, job.password.as_ref(), cancel)?;
     write_log(
         log,
         &format!("{} files, {} bytes", share.files.len(), share.total_bytes()),
@@ -1093,7 +1093,7 @@ mod onedrive_live {
             })
             .unwrap_or_else(|_| LINKS.map(str::to_owned).to_vec())
         {
-            match hosts::read(&link, &CancelToken::new()) {
+            match hosts::read(&link, None, &CancelToken::new()) {
                 Ok(share) => {
                     println!(
                         "{link}\n  id {} · {:?} · {} files · {} bytes",
@@ -1123,7 +1123,7 @@ mod onedrive_live {
         // A shared folder of 331 images, listed over two pages.
         let link = "https://1drv.ms/f/s!AittnGm6vRKLwiL55f7f0xdpuD9_";
         let client = hosts::client_for(Host::OneDrive).unwrap();
-        let share = hosts::read(link, &CancelToken::new()).unwrap();
+        let share = hosts::read(link, None, &CancelToken::new()).unwrap();
         let file = &share.files[0];
         let address = file.source.address(&client, &CancelToken::new()).unwrap();
         let folder = tempfile::tempdir().unwrap();
@@ -1176,6 +1176,7 @@ mod onedrive_live {
             window_offer: None,
             unpack: None,
             unpack_only: None,
+            password: None,
         };
         let outcome = run(&job, &CancelToken::new(), &mut |_| {});
         println!("{outcome:?}");
@@ -1195,17 +1196,23 @@ mod onedrive_live {
 
 /// Live checks against any file host, run by hand: `HOST_LINKS="<link> <link>…" cargo test -p tsundoku-core --lib
 /// host_live -- --ignored --nocapture --test-threads 1` reads each link, and `HOST_DOWNLOAD=<link>` downloads one
-/// into a temporary folder. They need the network.
+/// into a temporary folder. `HOST_PASSWORD` opens links that need one. They need the network.
 #[cfg(test)]
 mod host_live {
     use super::*;
+    use crate::passwords::Password;
+
+    /// The password `HOST_PASSWORD` gives, for links that need one.
+    fn password() -> Option<Password> {
+        std::env::var("HOST_PASSWORD").ok().and_then(Password::new)
+    }
 
     #[test]
     #[ignore = "needs the network"]
     fn host_live_reads_each_link() {
         let links = std::env::var("HOST_LINKS").unwrap_or_default();
         for link in links.split_whitespace() {
-            match hosts::read(link, &CancelToken::new()) {
+            match hosts::read(link, password().as_ref(), &CancelToken::new()) {
                 Ok(share) => {
                     let nested = share
                         .files
@@ -1239,7 +1246,7 @@ mod host_live {
         };
         let (link, name) = spec.split_once(' ').unwrap();
         let cancel = CancelToken::new();
-        let share = hosts::read(link, &cancel).unwrap();
+        let share = hosts::read(link, password().as_ref(), &cancel).unwrap();
         let file = share
             .files
             .iter()
@@ -1299,6 +1306,7 @@ mod host_live {
             window_offer: None,
             unpack: None,
             unpack_only: None,
+            password: password(),
         };
         let outcome = run(&job, &CancelToken::new(), &mut |_| {});
         println!("{}", fs::read_to_string(&job.log_path).unwrap_or_default());

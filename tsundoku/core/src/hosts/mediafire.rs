@@ -33,6 +33,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     page_error: None,
     window_link: None,
     download_file_id: Some(direct_link_key),
+    unlock: None,
 };
 
 const SITE: &str = "https://www.mediafire.com";

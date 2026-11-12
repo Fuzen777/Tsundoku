@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { FolderOpen, Loader2, Play, X } from "lucide-react"
+import { FolderOpen, KeyRound, Loader2, Play, X } from "lucide-react"
 import { addPostToQueue, addToQueue, confirmWithUser, openDownload, showDownloadInFolder } from "../api"
 import type { PastDownload } from "../bindings/PastDownload"
 import type { VideoPreview } from "../bindings/VideoPreview"
@@ -8,6 +8,7 @@ import {
   describeHistoryError,
   describePreviewError,
   fixFor,
+  needsPassword,
   type ErrorDescription,
 } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
@@ -22,6 +23,7 @@ import { FailureFixes, InstallTool } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
 import { ListingPicker } from "./ListingPicker"
+import { PasswordForm } from "./PasswordForm"
 import { PostFilesStrip } from "./PostFilesStrip"
 import { PresetRuleLink } from "./PresetRuleLink"
 import { StatusMessage } from "./StatusMessage"
@@ -33,13 +35,15 @@ interface PreviewCardProps {
   onClose: () => void
   /** The video joined the queue. */
   onAdded: () => void
-  /** Fetch the link again, after a fix such as setting up gallery-dl. */
-  onRetry: (link: string) => void
+  /** Fetch the link again, after a fix such as setting up gallery-dl, with the password that opened it. */
+  onRetry: (link: string, password: string | null) => void
+  /** Read a link that needs a password again with the one typed. */
+  onUnlock: (password: string) => void
 }
 
 /** Under the add bar: what a link is, whether it was downloaded before, and Download; or, for a channel, playlist or
- * account, its items to pick from (`ListingPicker`). */
-export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardProps) {
+ * account, its items to pick from (`ListingPicker`); or, for a link that needs a password, a field for it. */
+export function PreviewCard({ state, onClose, onAdded, onRetry, onUnlock }: PreviewCardProps) {
   return (
     <Card className="flex flex-col gap-3 p-4">
       {state.stage === "loading" && (
@@ -52,22 +56,40 @@ export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardPro
           <IconButton label={strings.preview.cancel} icon={X} onClick={onClose} />
         </div>
       )}
-      {state.stage === "failed" && (
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <StatusMessage tone="danger" {...describePreviewError(state.error)}>
-              {fixFor(state.error) && <FailureFixes error={state.error} onRetry={() => onRetry(state.link)} />}
-            </StatusMessage>
+      {state.stage === "failed" &&
+        (needsPassword(state.error) ? (
+          <div className="flex items-start gap-3">
+            <KeyRound size={16} className="mt-0.5 shrink-0 text-fg-secondary" />
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <div>
+                <p className={state.error.wrong ? "text-danger" : undefined}>
+                  {describePreviewError(state.error).message}
+                </p>
+                <p className="truncate text-xs text-fg-muted">{state.link}</p>
+              </div>
+              <PasswordForm key={state.tries} busy={state.unlocking} onUnlock={onUnlock} />
+            </div>
+            <IconButton label={strings.preview.dismiss} icon={X} onClick={onClose} />
           </div>
-          <IconButton label={strings.preview.dismiss} icon={X} onClick={onClose} />
-        </div>
-      )}
+        ) : (
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <StatusMessage tone="danger" {...describePreviewError(state.error)}>
+                {fixFor(state.error) && (
+                  <FailureFixes error={state.error} onRetry={() => onRetry(state.link, null)} />
+                )}
+              </StatusMessage>
+            </div>
+            <IconButton label={strings.preview.dismiss} icon={X} onClick={onClose} />
+          </div>
+        ))}
       {state.stage === "ready" &&
         (state.preview.kind === "listing" ? (
           <ListingPicker listing={state.preview.listing} onClose={onClose} onAdded={onAdded} />
         ) : (
           <VideoDetails
             preview={state.preview}
+            password={state.password}
             onClose={onClose}
             onAdded={onAdded}
             onRetry={onRetry}
@@ -79,13 +101,15 @@ export function PreviewCard({ state, onClose, onAdded, onRetry }: PreviewCardPro
 
 interface VideoDetailsProps {
   preview: VideoPreview
+  /** The password typed that opened the link, which its download takes too. */
+  password: string | null
   onClose: () => void
   onAdded: () => void
   /** Read the link again, once Deno is set up. */
-  onRetry: (link: string) => void
+  onRetry: (link: string, password: string | null) => void
 }
 
-function VideoDetails({ preview, onClose, onAdded, onRetry }: VideoDetailsProps) {
+function VideoDetails({ preview, password, onClose, onAdded, onRetry }: VideoDetailsProps) {
   const { video, lastDownload, missingJsRuntime } = preview
   return (
     <>
@@ -110,23 +134,30 @@ function VideoDetails({ preview, onClose, onAdded, onRetry }: VideoDetailsProps)
       {lastDownload && <AlreadyDownloaded download={lastDownload} />}
       {missingJsRuntime && (
         <StatusMessage tone="warning" message={strings.preview.missingDeno}>
-          <InstallTool tool="deno" label={strings.preview.setUpDeno} onDone={() => onRetry(video.url)} />
+          <InstallTool tool="deno" label={strings.preview.setUpDeno} onDone={() => onRetry(video.url, password)} />
         </StatusMessage>
       )}
       {preview.inQueue ? (
         <p className="text-right text-fg-secondary">{strings.preview.inQueue}</p>
       ) : video.post || video.files ? (
-        <PostDownloadControls preview={preview} onAdded={onAdded} />
+        <PostDownloadControls preview={preview} password={password} onAdded={onAdded} />
       ) : (
-        <DownloadControls preview={preview} onAdded={onAdded} />
+        <DownloadControls preview={preview} password={password} onAdded={onAdded} />
       )}
     </>
   )
 }
 
+interface DownloadControlsProps {
+  preview: VideoPreview
+  /** The password typed that opened the link: the download keeps it. */
+  password: string | null
+  onAdded: () => void
+}
+
 /** The preset picker and Download. The preset a rule picks comes first, with the rule beside it, else the default one.
  * Downloading again with the preset used before asks first, since the new file replaces the old one. */
-function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
+function DownloadControls({ preview, password, onAdded }: DownloadControlsProps) {
   const { data: presets } = usePresets()
   const { data: rulePreset, isPending: pickingPreset } = useRulePreset(preview.video)
   const [chosenId, setChosenId] = useState<string | null>(null)
@@ -157,7 +188,7 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
     setAdding(true)
     setError(null)
     try {
-      await addToQueue(preview.video, preset.id, sameAsBefore, chosenFolder)
+      await addToQueue(preview.video, preset.id, sameAsBefore, chosenFolder, password)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))
@@ -200,7 +231,7 @@ function DownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded
 
 /** Download for a post of images or a file host's link: every file as the site gives it, so there's no preset to
  * pick. Downloading again only fetches the files that aren't in the folder any more. */
-function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onAdded: () => void }) {
+function PostDownloadControls({ preview, password, onAdded }: DownloadControlsProps) {
   const { video, lastDownload } = preview
   const files = video.postFiles ?? []
   // A post of one file has nothing to pick.
@@ -218,7 +249,7 @@ function PostDownloadControls({ preview, onAdded }: { preview: VideoPreview; onA
     setAdding(true)
     setError(null)
     try {
-      await addPostToQueue(picksFiles ? withPicked(video, picked) : video, chosenFolder)
+      await addPostToQueue(picksFiles ? withPicked(video, picked) : video, chosenFolder, password)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))

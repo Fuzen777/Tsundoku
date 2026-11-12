@@ -10,6 +10,7 @@ use tsundoku_core::downloads::{
     QueueListener, QueuePick,
 };
 use tsundoku_core::metadata::VideoInfo;
+use tsundoku_core::passwords::Password;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
 use tsundoku_core::rules::{
     self, Destination, FolderRule, RightAwayRule, RuleError, RuleManager, RulePreset, RuleSubject,
@@ -179,18 +180,34 @@ pub fn add_to_queue(
     preset_id: String,
     overwrite: bool,
     folder: Option<String>,
+    password: Option<String>,
 ) -> Result<QueueItem, DownloadError> {
-    queue.add_in(video, &preset_id, overwrite, folder, None)
+    let password = password.and_then(Password::new);
+    queue.add_in(video, &preset_id, overwrite, folder, None, password)
 }
 
-/// Adds a post of images, whose files all go into the site's folder in the posts folder.
+/// Adds a post of images, whose files all go into the site's folder in the posts folder, or a file host's link, with
+/// the password that opened it.
 #[tauri::command]
 pub fn add_post_to_queue(
     queue: Queue<'_>,
     video: VideoInfo,
     folder: Option<String>,
+    password: Option<String>,
 ) -> Result<QueueItem, DownloadError> {
-    queue.add_post_in(video, folder, None)
+    let password = password.and_then(Password::new);
+    queue.add_post_in(video, folder, None, password)
+}
+
+/// Enter Password, for a download that waits for one: it starts with it.
+#[tauri::command]
+pub fn enter_download_password(
+    queue: Queue<'_>,
+    id: i64,
+    password: String,
+) -> Result<(), DownloadError> {
+    let password = Password::new(password).ok_or(DownloadError::WrongState)?;
+    queue.enter_password(id, password)
 }
 
 /// Saves a download that isn't running in a folder picked for it, or back in the rules' (`None`).

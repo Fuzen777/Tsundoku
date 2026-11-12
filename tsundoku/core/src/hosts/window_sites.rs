@@ -71,6 +71,7 @@ const fn entry(
         page_error: None,
         window_link: Some(shape),
         download_file_id: None,
+        unlock: None,
     }
 }
 

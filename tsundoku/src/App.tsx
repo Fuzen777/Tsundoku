@@ -218,7 +218,8 @@ export function App() {
             <PreviewCard
               state={preview.state}
               onClose={preview.close}
-              onRetry={(retryLink) => void preview.show(retryLink)}
+              onRetry={(retryLink, password) => void preview.show(retryLink, password)}
+              onUnlock={(password) => void preview.unlock(password)}
               onAdded={() => {
                 preview.close()
                 setLink("")

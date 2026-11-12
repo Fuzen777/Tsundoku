@@ -37,6 +37,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     page_error: None,
     window_link: None,
     download_file_id: None,
+    unlock: None,
 };
 
 const API: &str = "https://g.api.mega.co.nz/cs";
@@ -442,6 +443,10 @@ fn error_for(code: i64) -> PreviewError {
     match code {
         -2 | -9 => PreviewError::Unavailable {
             detail: format!("MEGA has no such file or folder (error {code})"),
+        },
+        // A link its owner gave an end date, past now.
+        -8 => PreviewError::Unavailable {
+            detail: format!("this MEGA link has expired (error {code})"),
         },
         -11 => PreviewError::Unavailable {
             detail: format!("MEGA refused access (error {code})"),

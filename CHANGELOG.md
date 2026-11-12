@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.131 · 2026-11-12
+
+### Added
+
+- **Videos with a password**: a video that needs a password (Vimeo's, and the other sites yt-dlp opens with one) now asks for it instead of failing. The preview card shows a password field and Unlock (Enter works too), says so when a password doesn't open the link, and becomes the usual card once it does. In Pending, such a link waits as Needs a Password, with the same field on its row: it never leaves by itself, even copied, and Start All and Download Right Away leave it until it's unlocked. A download whose password is missing or no longer works waits in the queue with Enter Password instead of failing. The password is kept with its link in Pending, the queue and the history, so Retry and Download Again never ask twice, and it's never written in a log, Copy Details or a notification.
+
+### Changed
+
+- **Links on file hosts with a password** still can't be opened, and now say Tsundoku can't enter passwords for that site yet. An expired MEGA link says it's unavailable instead of naming MEGA's error.
+
 ## 0.1.130 · 2026-11-12
 
 ### Added

@@ -31,6 +31,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     page_error: Some(page_error),
     window_link: None,
     download_file_id: None,
+    unlock: None,
 };
 
 const STREAM_DATA: &str = "Box.postStreamData = ";

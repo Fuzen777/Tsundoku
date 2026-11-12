@@ -25,6 +25,7 @@ pub mod listing;
 pub mod metadata;
 pub mod mirrors;
 pub mod name_parts;
+pub mod passwords;
 pub mod pending;
 pub mod post_names;
 pub mod presets;

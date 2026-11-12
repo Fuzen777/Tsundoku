@@ -321,6 +321,7 @@ mod tests {
             window_offer: None,
             unpack: Some(settings.clone()),
             unpack_only: None,
+            password: None,
         };
         run(
             &spec,

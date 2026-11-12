@@ -6,7 +6,7 @@ import { strings } from "./strings"
 
 /** Why a waiting download doesn't start yet, as a sentence, and when it continues: its site asked to slow down, the
  * hourly limit on Instagram's files is reached, its connection dropped, its site's download limit is used up, its
- * drive lacks room, or its site wants to check you're a person. */
+ * drive lacks room, its site wants to check you're a person, or its link needs a password. */
 export function describeHold(hold: Hold): string {
   switch (hold.kind) {
     case "slowDown":
@@ -30,16 +30,19 @@ export function describeHold(hold: Hold): string {
       return strings.queue.holds.browserCheck(hold.site, hold.files)
     case "windowDownload":
       return strings.queue.holds.windowDownload(hold.site)
+    case "needsPassword":
+      return strings.queue.holds.needsPassword(hold.wrong)
   }
 }
 
 /** When a hold ends, for its countdown: none for a drive without room, which is only looked at again then, nor for a
- * check, which waits for you. */
+ * check or a password, which wait for you. */
 export function holdEnd(hold: Hold): number | null {
   switch (hold.kind) {
     case "notEnoughRoom":
     case "browserCheck":
     case "windowDownload":
+    case "needsPassword":
       return null
     default:
       return hold.until

@@ -185,6 +185,7 @@ mod tests {
             window_offer: None,
             unpack: None,
             unpack_only: None,
+            password: None,
         };
         let post = PostJob {
             gallery_dl: Some(PathBuf::from("gallery-dl.exe")),

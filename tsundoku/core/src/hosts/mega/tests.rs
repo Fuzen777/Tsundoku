@@ -350,6 +350,9 @@ fn a_folder_its_key_cant_open_is_an_incomplete_link() {
 fn sorts_megas_errors() {
     assert!(matches!(error_for(-9), PreviewError::Unavailable { .. }));
     assert!(
+        matches!(error_for(-8), PreviewError::Unavailable { detail } if detail.contains("expired"))
+    );
+    assert!(
         matches!(error_for(-16), PreviewError::Unavailable { detail } if detail.contains("taken it down"))
     );
     assert!(matches!(error_for(-17), PreviewError::LimitReached { site, .. } if site == "MEGA"));

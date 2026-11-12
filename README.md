@@ -11,6 +11,7 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 - **Several links at once**: paste or drop text holding several links and they go to the **Pending** tab, where each is read in the background and shows what it is, whether you already have it and whether it's in the queue. **Start All** queues every one you don't have yet, or tick some and start those. Pending links are kept through a restart, and can be grouped by the folder they'll be saved in, their site or where they stand, and sorted by date, title, uploader or site.
 - **Click'n'Load buttons**: with Settings → Adding Links → Take Links from Click'n'Load Buttons on, a FileCrypt folder's Click'n'Load button sends its links to Pending once you've passed its check in your browser, as it would to JDownloader. Tsundoku listens on this PC only, and the links wait to be started.
 - **A warning when you already have it**, whatever the link: `youtu.be`, Shorts, a timestamp or a playlist it's in all count as the same video.
+- **Videos with a password** ask for it on the preview card, in Pending and in the queue, and remember it, so downloading again never asks twice.
 
 ### Downloading
 

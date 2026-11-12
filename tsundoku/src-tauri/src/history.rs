@@ -15,6 +15,7 @@ use tsundoku_core::history::{
 };
 use tsundoku_core::listing::{self, ListingKind};
 use tsundoku_core::metadata::PreviewError;
+use tsundoku_core::passwords::Password;
 use tsundoku_core::preview::{LinkPreview, PreviewService};
 use tsundoku_core::relocate::MovedFiles;
 use tsundoku_core::thumbnails;
@@ -28,6 +29,7 @@ pub async fn fetch_preview(
     previews: State<'_, Arc<PreviewService>>,
     queue: State<'_, Arc<DownloadQueue>>,
     link: String,
+    password: Option<String>,
 ) -> Result<LinkPreview, PreviewError> {
     let (tools, history, previews, queue) = (
         Arc::clone(&tools),
@@ -36,13 +38,16 @@ pub async fn fetch_preview(
         Arc::clone(&queue),
     );
     // yt-dlp takes seconds to answer: off the async runtime's threads, which must never block.
-    tauri::async_runtime::spawn_blocking(move || previews.fetch(&tools, &history, &queue, &link))
-        .await
-        .unwrap_or_else(|error| {
-            Err(PreviewError::Failed {
-                detail: error.to_string(),
-            })
+    let password = password.and_then(Password::new);
+    tauri::async_runtime::spawn_blocking(move || {
+        previews.fetch(&tools, &history, &queue, &link, password)
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(PreviewError::Failed {
+            detail: error.to_string(),
         })
+    })
 }
 
 /// The files of a post its downloads left out, by number, or `None` when there were none (or no download).

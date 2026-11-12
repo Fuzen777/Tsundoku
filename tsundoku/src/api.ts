@@ -281,9 +281,11 @@ export async function pickProgram(title: string, filterName: string): Promise<st
  * this one, which then rejects as cancelled.
  */
 /** What a link is: one video or post, or what a channel, playlist or account holds. Rejects with a PreviewError. */
-export function fetchPreview(link: string): Promise<LinkPreview> {
-  if (!isTauri()) return standIns.fetchPreview(link)
-  return invoke<LinkPreview>("fetch_preview", { link })
+/** What a link is, read with `password` when it needs one (else the one the history keeps for it). Rejects with a
+ * PreviewError, `passwordNeeded` when it needs a password, `wrong` when the one given didn't open it. */
+export function fetchPreview(link: string, password: string | null = null): Promise<LinkPreview> {
+  if (!isTauri()) return standIns.fetchPreview(link, password)
+  return invoke<LinkPreview>("fetch_preview", { link, password })
 }
 
 export async function cancelPreview(): Promise<void> {
@@ -383,16 +385,21 @@ export function addToQueue(
   presetId: string,
   overwrite: boolean,
   folder: string | null = null,
+  password: string | null = null,
 ): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
-  return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite, folder })
+  return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite, folder, password })
 }
 
 /** Adds a post of images, with the files its `postFiles` tick (all of them when it lists none), into the folder the
  * rules give it. Rejects with a DownloadError, `nothingPicked` when every file is unticked. */
-export function addPostToQueue(video: VideoInfo, folder: string | null = null): Promise<QueueItem> {
+export function addPostToQueue(
+  video: VideoInfo,
+  folder: string | null = null,
+  password: string | null = null,
+): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
-  return invoke<QueueItem>("add_post_to_queue", { video, folder })
+  return invoke<QueueItem>("add_post_to_queue", { video, folder, password })
 }
 
 /** Saves a download that isn't running in a folder picked for it, or back in the usual one (`null`). A stopped one
@@ -478,6 +485,12 @@ export async function retryDownload(id: number): Promise<void> {
 export async function tryDownloadNow(id: number): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("try_download_now", { id })
+}
+
+/** Enter Password, for a download that waits for one: it starts with it. Rejects with a DownloadError. */
+export async function enterDownloadPassword(id: number, password: string): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("enter_download_password", { id, password })
 }
 
 /** Open Check: shows the check a download waits for (a site's check that you're a person) in Tsundoku's check window,
@@ -631,6 +644,12 @@ export async function restoreRemovedPendingLinks(): Promise<void> {
 export async function readPendingLinkAgain(id: number): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("read_pending_link_again", { id })
+}
+
+/** Unlock, for a pending link that needs a password: it's read again with it. Rejects with a DownloadError. */
+export async function unlockPendingLink(id: number, password: string): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("unlock_pending_link", { id, password })
 }
 
 /** Picks which files of a read post one link downloads, by their number in the post. Rejects with a DownloadError. */

@@ -173,7 +173,7 @@ pub(crate) fn needs_person(site: &str) -> PreviewError {
 
 /// Every file of `link` as a check's pages, for a development build to open the check window on a link of its choice.
 pub fn for_link(link: &str, cancel: &CancelToken) -> Result<BrowserCheck, PreviewError> {
-    let share = super::read(link, cancel)?;
+    let share = super::read(link, None, cancel)?;
     let pages: Vec<CheckPage> = share
         .files
         .iter()

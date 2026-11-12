@@ -81,6 +81,11 @@ export function describeToolError(error: unknown, id: ToolId): ErrorDescription 
   }
 }
 
+/** Whether a link's error asks for its password, which the preview card, Pending and the queue ask for. */
+export function needsPassword(error: unknown): error is Extract<PreviewError, { kind: "passwordNeeded" }> {
+  return isCoreError<PreviewError>(error) && error.kind === "passwordNeeded"
+}
+
 export function describePreviewError(error: unknown): ErrorDescription {
   if (!isCoreError<PreviewError>(error)) return unexpected(error)
   const text = strings.preview.errors
@@ -119,6 +124,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.subscribersOnly(error.site) }
     case "passwordProtected":
       return { message: text.passwordProtected(error.site) }
+    case "passwordNeeded":
+      return { message: text.passwordNeeded(error.wrong) }
     case "linkIncomplete":
       return { message: text.linkIncomplete(error.site) }
     case "browserCheck":

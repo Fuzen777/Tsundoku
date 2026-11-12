@@ -30,6 +30,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     page_error: None,
     window_link: None,
     download_file_id: None,
+    unlock: None,
 };
 
 const API: &str = "https://www.transfernow.net/api/transfer/downloads";

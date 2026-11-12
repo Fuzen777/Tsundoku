@@ -42,6 +42,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     page_error: Some(page_error),
     window_link: None,
     download_file_id: None,
+    unlock: None,
 };
 
 const API: &str = "https://cloud-api.yandex.net/v1/disk/public/resources";

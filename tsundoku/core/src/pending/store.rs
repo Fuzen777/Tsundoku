@@ -9,6 +9,7 @@ use super::{Entry, LinkOrigin, PendingState, StartWhenRead};
 use crate::database::Database;
 use crate::downloads::DownloadError;
 use crate::metadata::Fetched;
+use crate::passwords::Password;
 
 pub(crate) struct PendingStore {
     database: Arc<Database>,
@@ -25,7 +26,7 @@ impl PendingStore {
         let mut statement = connection
             .prepare(
                 "SELECT id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught,
-                    folder, rule
+                    folder, rule, password
                 FROM pending_links ORDER BY id",
             )
             .map_err(storage_error)?;
@@ -44,6 +45,7 @@ impl PendingStore {
                     row.get::<_, LinkOrigin>(9)?,
                     row.get::<_, Option<String>>(10)?,
                     row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -63,6 +65,7 @@ impl PendingStore {
                 origin,
                 folder,
                 rule_id,
+                password,
             ) = row.map_err(storage_error)?;
             let fetched = video
                 .and_then(|json| serde_json::from_str(&json).ok())
@@ -75,6 +78,7 @@ impl PendingStore {
             let state = match state_from_name(&state) {
                 Some(PendingState::Ready) if fetched.is_some() => PendingState::Ready,
                 Some(PendingState::Failed) if error.is_some() => PendingState::Failed,
+                Some(PendingState::NeedsPassword) if error.is_some() => PendingState::NeedsPassword,
                 _ => PendingState::Waiting,
             };
             entries.push(Entry {
@@ -89,6 +93,7 @@ impl PendingStore {
                 start_when_read,
                 added_at,
                 origin,
+                password: password.and_then(Password::new),
             });
         }
         Ok(entries)
@@ -118,7 +123,7 @@ impl PendingStore {
         connection
             .execute(
                 "UPDATE pending_links SET state = ?2, video = ?3, missing_js_runtime = ?4, error = ?5, preset = ?6,
-                    start_when_read = ?7, folder = ?8, rule = ?9
+                    start_when_read = ?7, folder = ?8, rule = ?9, password = ?10
                 WHERE id = ?1",
                 params![
                     entry.id,
@@ -130,6 +135,7 @@ impl PendingStore {
                     entry.start_when_read,
                     entry.folder,
                     entry.rule_id,
+                    entry.password.as_ref().map(Password::reveal),
                 ],
             )
             .map_err(storage_error)?;
@@ -150,8 +156,8 @@ fn insert_into(connection: &Connection, entry: &Entry) -> Result<i64, DownloadEr
         .query_row(
             "INSERT INTO pending_links
                 (id, link, state, video, missing_js_runtime, error, preset, start_when_read, added_at, caught, folder,
-                rule)
-            VALUES (?10, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?11, ?12) RETURNING id",
+                rule, password)
+            VALUES (?10, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?11, ?12, ?13) RETURNING id",
             params![
                 entry.link,
                 state_name(entry.state),
@@ -165,6 +171,7 @@ fn insert_into(connection: &Connection, entry: &Entry) -> Result<i64, DownloadEr
                 (entry.id != 0).then_some(entry.id),
                 entry.folder,
                 entry.rule_id,
+                entry.password.as_ref().map(Password::reveal),
             ],
             |row| row.get(0),
         )
@@ -177,6 +184,8 @@ fn state_name(state: PendingState) -> &'static str {
         PendingState::Waiting | PendingState::Reading => "waiting",
         PendingState::Ready => "ready",
         PendingState::Failed => "failed",
+        // An older version reads it as waiting, and finds the link needs a password it can't enter.
+        PendingState::NeedsPassword => "password",
     }
 }
 
@@ -231,6 +240,7 @@ fn state_from_name(name: &str) -> Option<PendingState> {
         "waiting" => PendingState::Waiting,
         "ready" => PendingState::Ready,
         "failed" => PendingState::Failed,
+        "password" => PendingState::NeedsPassword,
         _ => return None,
     })
 }

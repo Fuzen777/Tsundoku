@@ -10,7 +10,11 @@ export type PreviewError = { "kind": "invalidLink" } | { "kind": "playlist" } | 
 /**
  * The site's name, when it's one of `sites::SIGN_IN_SITES`.
  */
-site: string | null, cookies: SignInCookies, } | { "kind": "limitReached", site: string, detail: string, } | { "kind": "waitBetweenDownloads", site: string, seconds: number, } | { "kind": "noSupportedMirror", site: string, mirrors: Array<string>, } | { "kind": "shortLinkPage", site: string, } | { "kind": "shortLinkToUnsupportedSite", site: string, target: string, } | { "kind": "subscribersOnly", site: string, } | { "kind": "passwordProtected", site: string, } | { "kind": "linkIncomplete", site: string, } | { "kind": "browserCheck", site: string, } | { "kind": "linkNotRecognized", site: string, } | { "kind": "nestedFolders", site: string, } | { "kind": "network", detail: string, } | { "kind": "tooManyRequests", detail: string, site: string | null, 
+site: string | null, cookies: SignInCookies, } | { "kind": "limitReached", site: string, detail: string, } | { "kind": "waitBetweenDownloads", site: string, seconds: number, } | { "kind": "noSupportedMirror", site: string, mirrors: Array<string>, } | { "kind": "shortLinkPage", site: string, } | { "kind": "shortLinkToUnsupportedSite", site: string, target: string, } | { "kind": "subscribersOnly", site: string, } | { "kind": "passwordProtected", site: string, } | { "kind": "passwordNeeded", 
+/**
+ * A password the person typed was tried and didn't open it.
+ */
+wrong: boolean, } | { "kind": "linkIncomplete", site: string, } | { "kind": "browserCheck", site: string, } | { "kind": "linkNotRecognized", site: string, } | { "kind": "nestedFolders", site: string, } | { "kind": "network", detail: string, } | { "kind": "tooManyRequests", detail: string, site: string | null, 
 /**
  * In milliseconds since 1970.
  */

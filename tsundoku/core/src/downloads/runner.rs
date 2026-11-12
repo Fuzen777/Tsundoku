@@ -14,6 +14,7 @@ use super::{DownloadError, DownloadProgress, DownloadStage, file_runner, post_ru
 use crate::cancel::CancelToken;
 use crate::hosts::check::BrowserCheck;
 use crate::metadata::{FileContents, PreviewError, classify_failure};
+use crate::passwords::{self, Password};
 use crate::presets::{Preset, PresetError};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::room::SystemDisks;
@@ -63,6 +64,8 @@ pub struct JobSpec {
     pub unpack: Option<UnpackJob>,
     /// The files of an earlier run whose archives weren't all unpacked: this run only unpacks them.
     pub unpack_only: Option<DownloadedFiles>,
+    /// The password that opens the link, given beside it to the file host's reader or to yt-dlp, when it needs one.
+    pub password: Option<Password>,
 }
 
 /// What downloading a post takes beyond a video's needs.
@@ -206,7 +209,11 @@ fn run_yt_dlp(
     let mut log = open_log(&job.log_path);
     write_log(
         &mut log,
-        &format!("=== {} yt-dlp {}", seconds_since_epoch(), args.join(" ")),
+        &format!(
+            "=== {} yt-dlp {}",
+            seconds_since_epoch(),
+            passwords::hidden_in_arguments(&args)
+        ),
     );
     on_progress(DownloadProgress::at(DownloadStage::Starting));
 
@@ -297,6 +304,12 @@ pub(crate) fn arguments(job: &JobSpec, result_file: &Path) -> Result<Vec<String>
     }
     if job.overwrite {
         args.push("--force-overwrites".to_owned());
+    }
+    if let Some(password) = &job.password {
+        args.extend([
+            passwords::VIDEO_PASSWORD_OPTION.to_owned(),
+            password.reveal().to_owned(),
+        ]);
     }
     args.extend(preset.to_args()?);
     // After "--", the link can't be taken for an option.
@@ -411,6 +424,7 @@ mod tests {
             window_offer: None,
             unpack: None,
             unpack_only: None,
+            password: None,
         }
     }
 
@@ -483,6 +497,49 @@ mod tests {
             cookies < preset && limit < preset,
             "so a preset's extra arguments can change them"
         );
+    }
+
+    #[test]
+    fn gives_the_videos_password_but_never_logs_it() {
+        let mut job = job("best-video", false);
+        job.password = Password::new("youtube-dl");
+        let args = arguments(&job, Path::new("result.json")).unwrap();
+        let at = args
+            .iter()
+            .position(|arg| arg == "--video-password")
+            .unwrap();
+        assert_eq!(args[at + 1], "youtube-dl");
+        assert!(
+            at < args.iter().position(|arg| arg == "-f").unwrap(),
+            "before the preset's"
+        );
+
+        // A download's log, as the run writes it, through to Copy Details' report.
+        let folder = tempfile::tempdir().unwrap();
+        job.folder = folder.path().join("Videos");
+        job.temp_folder = job.folder.join(".tsundoku-7");
+        job.log_path = folder.path().join("7.log");
+        job.yt_dlp = Some(folder.path().join("missing yt-dlp.exe"));
+        let outcome = run_yt_dlp(&job, &CancelToken::new(), &mut |_| {});
+        assert!(matches!(outcome, JobOutcome::Failed(_)));
+        let log = fs::read_to_string(&job.log_path).unwrap();
+        assert!(log.contains("--video-password <password>"), "{log}");
+        assert!(!log.contains("youtube-dl"), "{log}");
+        let report = crate::bug_report::DownloadReport {
+            app_version: "0.1.0".to_owned(),
+            windows: "Windows 11".to_owned(),
+            tools: Vec::new(),
+            link: job.url.clone(),
+            error: crate::bug_report::ShownError {
+                message: "This link needs a password.".to_owned(),
+                detail: None,
+            },
+            log: crate::bug_report::log_tail(&job.log_path, crate::bug_report::LOG_LINES),
+            password: job.password.clone(),
+        }
+        .text(&crate::bug_report::UserNames::new(None, []));
+        assert!(report.contains("<password>"), "{report}");
+        assert!(!report.contains("youtube-dl"), "{report}");
     }
 
     #[test]

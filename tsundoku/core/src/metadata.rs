@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::cancel::CancelToken;
+use crate::passwords::{Password, VIDEO_PASSWORD_OPTION};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::room::{self, FormatSize, FormatSizes};
 use crate::tools::{ToolCacheFolder, ToolError, ToolId, start_error};
@@ -196,9 +197,16 @@ pub enum PreviewError {
     /// A file its owner keeps for the host's paying subscribers.
     #[error("{site} file for subscribers only")]
     SubscribersOnly { site: String },
-    /// A link that needs a password, which Tsundoku can't ask for yet.
+    /// A link that needs a password, which Tsundoku can't enter for this site yet (`HostFacts::unlock`).
     #[error("{site} link with a password")]
     PasswordProtected { site: String },
+    /// A link that needs a password Tsundoku can enter: none was given, or the one given didn't open it (`wrong`).
+    /// The preview card, Pending and the queue ask for it.
+    #[error("needs a password")]
+    PasswordNeeded {
+        /// A password the person typed was tried and didn't open it.
+        wrong: bool,
+    },
     /// A link missing part of itself, such as a MEGA link without its key, or with a key that doesn't open it.
     #[error("incomplete {site} link")]
     LinkIncomplete { site: String },
@@ -297,6 +305,15 @@ impl PreviewError {
             until: None,
         }
     }
+
+    /// The error of a read: a link that still needs a password is `wrong` when the person `typed` the one tried. A
+    /// password Tsundoku had saved (or none) failing only asks for one again.
+    pub fn after_password(self, typed: bool) -> Self {
+        match self {
+            Self::PasswordNeeded { .. } => Self::PasswordNeeded { wrong: typed },
+            other => other,
+        }
+    }
 }
 
 /// What yt-dlp's and gallery-dl's errors say when a site answered "too many requests", in lowercase. A message that
@@ -312,6 +329,17 @@ pub(crate) const TOO_MANY_REQUESTS_PHRASES: [&str; 7] = [
     "please wait a few minutes before you try again",
 ];
 
+/// What yt-dlp's extractors say when the video password given didn't open the video, in lowercase. Tsundoku never
+/// gives yt-dlp an account's password (it signs in with cookies), so these are about the video's.
+const WRONG_PASSWORD_PHRASES: [&str; 6] = [
+    "wrong video password",
+    "wrong password",
+    "wrong passcode",
+    "invalid video password",
+    "invalid password",
+    "incorrect password",
+];
+
 /// The programs a fetch runs: yt-dlp, and Deno and ffmpeg when they're set up, and where to read cookies from.
 #[derive(Debug, Clone, Default)]
 pub struct FetchTools<'a> {
@@ -325,6 +353,8 @@ pub struct FetchTools<'a> {
     pub any_page: bool,
     /// Where yt-dlp and its Deno keep their caches, or `None` for their usual folders.
     pub caches: Option<&'a ToolCacheFolder>,
+    /// The video's password (`--video-password`), for a link that needs one.
+    pub password: Option<&'a Password>,
 }
 
 /// What a fetch found.
@@ -468,6 +498,9 @@ fn command(tools: &FetchTools, yt_dlp: &Path, extra: &[&str], link: &str) -> Pro
     if let Some(caches) = tools.caches {
         let (name, folder) = caches.deno_variable();
         command = command.args(caches.yt_dlp_args()).variable(name, folder);
+    }
+    if let Some(password) = tools.password {
+        command = command.arg(VIDEO_PASSWORD_OPTION).arg(password.reveal());
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
     command.args(extra).arg("--").arg(link)
@@ -654,6 +687,12 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
 
     if mentions(&["is not a valid url"]) {
         PreviewError::InvalidLink
+    } else if mentions(&WRONG_PASSWORD_PHRASES) {
+        // Before the sign-in phrases: Screencast-O-Matic's says "Unable to login: Invalid password".
+        PreviewError::PasswordNeeded { wrong: true }
+    } else if mentions(&[VIDEO_PASSWORD_OPTION]) {
+        // yt-dlp names its option only where it can take the video's password ("use the --video-password option").
+        PreviewError::PasswordNeeded { wrong: false }
     } else if mentions(&["unsupported url", "no suitable extractor"]) {
         PreviewError::UnsupportedSite
     } else if mentions(&[
@@ -879,6 +918,87 @@ mod tests {
             failure("no-such-host"),
             PreviewError::Network { .. }
         ));
+        // Vimeo's public test video (player.vimeo.com/video/68375962), without its password and with a wrong one.
+        assert_eq!(
+            failure("password-needed"),
+            PreviewError::PasswordNeeded { wrong: false }
+        );
+        assert_eq!(
+            failure("password-wrong"),
+            PreviewError::PasswordNeeded { wrong: true }
+        );
+    }
+
+    #[test]
+    fn tells_a_video_password_from_an_accounts() {
+        let classify = |line: &str| classify_failure(&[line]);
+        for line in [
+            "ERROR: [wistia] abc: This content is password-protected. Use the --video-password option",
+            "ERROR: [dropbox] abc: Password protected video, use --video-password <password>",
+            "ERROR: [zoom] abc: This video is protected by a passcode, use the --video-password option",
+        ] {
+            assert_eq!(
+                classify(line),
+                PreviewError::PasswordNeeded { wrong: false },
+                "{line}"
+            );
+        }
+        for line in [
+            "ERROR: [loom] abc: Invalid video password",
+            "ERROR: [sproutvideo] abc: Incorrect password",
+            "ERROR: [screencastomatic] abc: Unable to login: Invalid password",
+        ] {
+            assert_eq!(
+                classify(line),
+                PreviewError::PasswordNeeded { wrong: true },
+                "{line}"
+            );
+        }
+        // Vimeo's own sign-in names --password (the account's), which isn't a video password.
+        assert!(matches!(
+            classify(
+                "ERROR: [vimeo] 68375962: The web client only works when logged-in. Use --cookies,                  --cookies-from-browser, --username and --password, --netrc-cmd, or --netrc (vimeo) to provide                  account credentials."
+            ),
+            PreviewError::SignInRequired { .. }
+        ));
+        assert_eq!(
+            PreviewError::PasswordNeeded { wrong: false }.after_password(true),
+            PreviewError::PasswordNeeded { wrong: true }
+        );
+        assert_eq!(
+            PreviewError::PasswordNeeded { wrong: true }.after_password(false),
+            PreviewError::PasswordNeeded { wrong: false },
+            "a saved password that stopped working only asks again"
+        );
+    }
+
+    #[test]
+    fn gives_yt_dlp_the_videos_password_before_the_link() {
+        let password = Password::new("youtube-dl").unwrap();
+        let tools = FetchTools {
+            yt_dlp: Some(Path::new("yt-dlp.exe")),
+            password: Some(&password),
+            ..FetchTools::default()
+        };
+        let args: Vec<String> = command(
+            &tools,
+            Path::new("yt-dlp.exe"),
+            &[],
+            "https://player.vimeo.com/video/1",
+        )
+        .arguments()
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+        let at = args
+            .iter()
+            .position(|arg| arg == "--video-password")
+            .unwrap();
+        assert_eq!(args[at + 1], "youtube-dl");
+        assert_eq!(
+            &args[args.len() - 2..],
+            ["--", "https://player.vimeo.com/video/1"]
+        );
     }
 
     #[test]
@@ -999,6 +1119,7 @@ mod tests {
             cookies: Some("firefox".to_owned()),
             any_page: true,
             caches: None,
+            password: None,
         };
         let command = command(
             &tools,
@@ -1069,6 +1190,7 @@ mod tests {
             cookies: None,
             any_page: false,
             caches: None,
+            password: None,
         };
         let command = command(
             &tools,

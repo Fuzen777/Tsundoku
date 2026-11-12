@@ -27,6 +27,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
     page_error: None,
     window_link: None,
     download_file_id: None,
+    unlock: None,
 };
 
 /// A file to download from upload.ee.

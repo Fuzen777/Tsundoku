@@ -27,6 +27,7 @@ use crate::database::Database;
 use crate::downloads::{DownloadError, DownloadQueue};
 use crate::history::History;
 use crate::metadata::{self, Fetched, PreviewError, VideoInfo};
+use crate::passwords::Password;
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::preview::VideoPreview;
 use crate::rules::{self, RuleSubject};
@@ -51,6 +52,9 @@ pub enum PendingState {
     Ready,
     /// Couldn't be read: `error` says why.
     Failed,
+    /// Its link needs a password, which the person enters on its row (`PendingLinks::unlock`); `error` says whether one
+    /// was tried. It isn't failed: it never leaves by itself, and it starts once a password opens it if it was started.
+    NeedsPassword,
 }
 
 /// A link waiting to be started, as the Pending view shows it.
@@ -141,10 +145,12 @@ pub fn links_in_sent_link(link: &str) -> Vec<String> {
 /// Reads what a link is, as the preview card does (`preview::ToolReader`). Tests use a fake.
 pub trait LinkReader: Send + Sync {
     /// Without `any_page`, yt-dlp reads only sites it knows (`FetchTools::any_page`), turning others down at once.
+    /// `password` opens a link that needs one.
     fn read(
         &self,
         link: &str,
         any_page: bool,
+        password: Option<&Password>,
         cancel: &CancelToken,
     ) -> Result<Fetched, PreviewError>;
 }
@@ -190,6 +196,8 @@ struct Entry {
     start_when_read: StartWhenRead,
     added_at: i64,
     origin: LinkOrigin,
+    /// The password that opens the link: typed on its row, or the history's for the link once it opened it.
+    password: Option<Password>,
 }
 
 /// Where a link came from, which decides how it's read and whether it stays once read (`leaves_once_read`). Kept in
@@ -413,6 +421,7 @@ impl PendingLinks {
                     start_when_read,
                     added_at,
                     origin,
+                    password: None,
                 });
             }
             self.store.insert_all(&mut new)?;
@@ -491,6 +500,25 @@ impl PendingLinks {
             self.notify();
         }
         first_error.map_or(Ok(restored), Err)
+    }
+
+    /// Unlock, for a link that needs a password: it's read again with `password`, before the other links waiting to be
+    /// read. A wrong one has it need a password again, saying so.
+    pub fn unlock(&self, id: i64, password: Password) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let entry = find(&mut state.entries, id)?;
+            if entry.state != PendingState::NeedsPassword {
+                return Err(DownloadError::WrongState);
+            }
+            entry.state = PendingState::Waiting;
+            entry.error = None;
+            entry.password = Some(password);
+            self.store.update(entry)?;
+        }
+        self.wake.notify_all();
+        self.notify();
+        Ok(())
     }
 
     /// Reads a link that couldn't be read again, after a fix such as signing in.
@@ -626,7 +654,7 @@ impl PendingLinks {
                             first_error.get_or_insert(error);
                         }
                     }
-                    PendingState::Failed => {}
+                    PendingState::Failed | PendingState::NeedsPassword => {}
                 }
             }
             for id in &started {
@@ -655,8 +683,9 @@ impl PendingLinks {
             .ok_or(DownloadError::WrongState)?;
         let folder = entry.folder.clone();
         let rule_id = entry.rule_id.clone();
+        let password = entry.password.clone();
         let added = if video.post.is_some() || video.files.is_some() {
-            self.queue.add_post_in(video, folder, rule_id)
+            self.queue.add_post_in(video, folder, rule_id, password)
         } else {
             let preset = self
                 .start_preset(&video, chosen, rule_id.as_deref(), otherwise)
@@ -670,7 +699,7 @@ impl PendingLinks {
                 .flatten()
                 .is_some_and(|last| last.preset == preset.name);
             self.queue
-                .add_in(video, &preset.id, overwrite, folder, rule_id)
+                .add_in(video, &preset.id, overwrite, folder, rule_id, password)
         };
         match added {
             Ok(_) | Err(DownloadError::AlreadyQueued) => Ok(()),
@@ -740,10 +769,17 @@ impl PendingLinks {
         let index = readable(&state, Instant::now(), |link| self.site_waits(link))?;
         let entry = &mut state.entries[index];
         entry.state = PendingState::Reading;
+        let typed = entry.password.is_some();
+        let password = entry
+            .password
+            .clone()
+            .or_else(|| self.history.password_for_link(&entry.link).ok().flatten());
         let turn = Turn {
             id: entry.id,
             link: entry.link.clone(),
             origin: entry.origin,
+            password,
+            typed,
             cancel: CancelToken::new(),
         };
         state.reading = Some((turn.id, turn.cancel.clone()));
@@ -780,7 +816,13 @@ impl PendingLinks {
     fn read(&self, turn: &Turn) {
         let outcome = self
             .reader
-            .read(&turn.link, turn.origin == LinkOrigin::Added, &turn.cancel);
+            .read(
+                &turn.link,
+                turn.origin == LinkOrigin::Added,
+                turn.password.as_ref(),
+                &turn.cancel,
+            )
+            .map_err(|error| error.after_password(turn.typed));
         match &outcome {
             Err(PreviewError::TooManyRequests { .. }) => {
                 self.queue.slow_down(&turn.link);
@@ -835,6 +877,8 @@ impl PendingLinks {
                     entry.state = PendingState::Ready;
                     entry.fetched = Some(self.with_left_out_ticked(fetched));
                     entry.error = None;
+                    // The password that opened it goes with it to the queue.
+                    entry.password.clone_from(&turn.password);
                     let starts = match entry.start_when_read {
                         StartWhenRead::Yes => true,
                         StartWhenRead::IfRightAway => self.downloads_right_away(entry, &video),
@@ -864,6 +908,12 @@ impl PendingLinks {
                         PreviewError::Cancelled | PreviewError::TooManyRequests { .. }
                     ) {
                         entry.state = PendingState::Waiting;
+                    } else if matches!(error, PreviewError::PasswordNeeded { .. }) {
+                        // It waits for a password; one that didn't open it isn't kept. Started, it still starts once
+                        // a password opens it.
+                        entry.state = PendingState::NeedsPassword;
+                        entry.error = Some(error);
+                        entry.password = None;
                     } else {
                         entry.state = PendingState::Failed;
                         entry.error = Some(error);
@@ -1044,8 +1094,10 @@ fn read_links(links: &Weak<PendingLinks>) {
 pub fn starts_with_all(link: &PendingLink) -> bool {
     let checking = (link.caught || link.from_file || link.from_page)
         && matches!(link.state, PendingState::Waiting | PendingState::Reading);
-    link.state != PendingState::Failed
-        && !checking
+    !matches!(
+        link.state,
+        PendingState::Failed | PendingState::NeedsPassword
+    ) && !checking
         && !link.start_when_read
         && link
             .preview
@@ -1058,6 +1110,10 @@ struct Turn {
     id: i64,
     link: String,
     origin: LinkOrigin,
+    /// The password to read it with: the one typed on its row, else the history's for the link.
+    password: Option<Password>,
+    /// `password` was typed on its row, so it's wrong if the link still needs one.
+    typed: bool,
     cancel: CancelToken,
 }
 
@@ -1079,17 +1135,22 @@ fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
     }
 }
 
-/// Where the next link to read is: the oldest waiting one, leaving paced sites for later while their pause runs, and
-/// sites that asked to slow down while they wait (`site_waits`).
+/// Where the next link to read is: one the person just typed a password for, else the oldest waiting one, leaving
+/// paced sites for later while their pause runs, and sites that asked to slow down while they wait (`site_waits`).
 fn readable(state: &Contents, now: Instant, site_waits: impl Fn(&str) -> bool) -> Option<usize> {
     let paced_ready = |link: &str| {
         sites::paced_site(link)
             .and_then(|site| state.paced_until.get(&site))
             .is_none_or(|until| *until <= now)
     };
-    state.entries.iter().position(|entry| {
+    let ready = |entry: &Entry| {
         entry.state == PendingState::Waiting && paced_ready(&entry.link) && !site_waits(&entry.link)
-    })
+    };
+    state
+        .entries
+        .iter()
+        .position(|entry| ready(entry) && entry.password.is_some())
+        .or_else(|| state.entries.iter().position(ready))
 }
 
 fn same_video(first: &VideoInfo, second: &VideoInfo) -> bool {

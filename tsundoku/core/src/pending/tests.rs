@@ -11,6 +11,7 @@ use crate::downloads::{
 };
 use crate::history::NewDownload;
 use crate::metadata::{FileContents, PostContents, SignInCookies};
+use crate::passwords::Password;
 use crate::rules::DownloadKind;
 use crate::settings::ClipboardShortcut;
 use crate::tools::ToolManager;
@@ -23,6 +24,10 @@ struct FakeReader {
     reads: Mutex<Vec<(String, Instant, bool)>>,
     answers: Mutex<HashMap<String, Result<Fetched, PreviewError>>>,
     held: Mutex<HashSet<String>>,
+    /// Links that only open with a password, and the password.
+    locked: Mutex<HashMap<String, String>>,
+    /// The password each read was given, in order.
+    passwords: Mutex<Vec<(String, Option<String>)>>,
 }
 
 impl FakeReader {
@@ -32,6 +37,19 @@ impl FakeReader {
 
     fn hold(&self, link: &str) {
         lock(&self.held).insert(link.to_owned());
+    }
+
+    /// The link needs `password`, as a file host's or a video's that takes one.
+    fn lock_with(&self, link: &str, password: &str) {
+        lock(&self.locked).insert(link.to_owned(), password.to_owned());
+    }
+
+    fn passwords_given(&self, link: &str) -> Vec<Option<String>> {
+        lock(&self.passwords)
+            .iter()
+            .filter(|(read, _)| read == link)
+            .map(|(_, password)| password.clone())
+            .collect()
     }
 
     fn release(&self, link: &str) {
@@ -67,14 +85,29 @@ impl LinkReader for FakeReader {
         &self,
         link: &str,
         any_page: bool,
+        password: Option<&Password>,
         cancel: &CancelToken,
     ) -> Result<Fetched, PreviewError> {
         lock(&self.reads).push((link.to_owned(), Instant::now(), any_page));
+        lock(&self.passwords).push((
+            link.to_owned(),
+            password.map(|password| password.reveal().to_owned()),
+        ));
         while lock(&self.held).contains(link) {
             if cancel.is_cancelled() {
                 return Err(PreviewError::Cancelled);
             }
             thread::sleep(Duration::from_millis(5));
+        }
+        if let Some(needed) = lock(&self.locked).get(link) {
+            match password {
+                Some(given) if given.reveal() == needed => {}
+                given => {
+                    return Err(PreviewError::PasswordNeeded {
+                        wrong: given.is_some(),
+                    });
+                }
+            }
         }
         lock(&self.answers)
             .get(link)
@@ -293,6 +326,27 @@ impl Test {
                 Some(PendingState::Ready | PendingState::Failed)
             )
         });
+    }
+
+    /// Waits until the link was read `reads` times and needs a password, `wrong` when the one tried didn't open it.
+    fn wait_until_locked(&self, link: &str, reads: usize, wrong: bool) {
+        wait_until(&format!("{link} needs a password"), || {
+            self.reader
+                .reads()
+                .iter()
+                .filter(|read| *read == link)
+                .count()
+                == reads
+                && self.link(link).is_some_and(|pending| {
+                    pending.state == PendingState::NeedsPassword
+                        && pending.error == Some(PreviewError::PasswordNeeded { wrong })
+                })
+        });
+    }
+
+    fn unlock(&self, link: &str, password: &str) -> Result<(), DownloadError> {
+        let id = self.link(link).unwrap().id;
+        self.links.unlock(id, Password::new(password).unwrap())
     }
 
     fn queued(&self, video_id: &str) -> Option<QueueItem> {
@@ -1451,4 +1505,142 @@ fn a_burst_of_changes_sends_a_few_notices_and_then_the_last() {
     wait_until("the last notice lists every link", || {
         test.listener.last_count.load(Ordering::SeqCst) == 100 && test.links.list().len() == 100
     });
+}
+
+#[test]
+fn a_link_that_needs_a_password_waits_for_one_and_opens_with_it() {
+    let test = Test::new();
+    test.reader.lock_with(FIRST, "pw");
+    test.reader.lock_with(SECOND, "pw");
+    test.add(&[FIRST]);
+    test.download_right_away(true);
+    test.copy(&[SECOND]);
+    test.wait_until_locked(FIRST, 1, false);
+    test.wait_until_locked(SECOND, 1, false);
+    assert!(
+        test.link(SECOND).unwrap().caught,
+        "a copied link that needs one stays, though Download Right Away is on"
+    );
+    assert!(!starts_with_all(&test.link(FIRST).unwrap()));
+    assert_eq!(test.links.start_all("best-video").unwrap(), 0);
+    assert!(test.queue.items().is_empty(), "Start All leaves it");
+
+    test.unlock(FIRST, "nope").unwrap();
+    test.wait_until_locked(FIRST, 2, true);
+    assert_eq!(
+        test.reader.passwords_given(FIRST),
+        [None, Some("nope".to_owned())]
+    );
+    // It needs a password through a restart, without the wrong one.
+    let reopened = test.reopen();
+    let after_restart = reopened
+        .list()
+        .into_iter()
+        .find(|pending| pending.link == FIRST)
+        .unwrap();
+    assert_eq!(after_restart.state, PendingState::NeedsPassword);
+    drop(reopened);
+
+    test.unlock(FIRST, "pw").unwrap();
+    test.wait_until_read(FIRST);
+    assert_eq!(test.state(FIRST), Some(PendingState::Ready));
+    assert_eq!(
+        test.unlock(FIRST, "pw"),
+        Err(DownloadError::WrongState),
+        "it's open"
+    );
+    let id = test.link(FIRST).unwrap().id;
+    test.links.start(&[id], "best-video").unwrap();
+    wait_until("it's in the queue", || test.queued("first").is_some());
+    assert_eq!(
+        test.queued("first")
+            .unwrap()
+            .password
+            .as_ref()
+            .map(Password::reveal),
+        Some("pw"),
+        "the password goes with it"
+    );
+
+    // The copied one, once opened, downloads right away as Download Right Away says.
+    test.unlock(SECOND, "pw").unwrap();
+    wait_until("it's in the queue", || test.queued("second").is_some());
+    assert_eq!(
+        test.queued("second")
+            .unwrap()
+            .password
+            .as_ref()
+            .map(Password::reveal),
+        Some("pw")
+    );
+}
+
+#[test]
+fn a_started_link_that_needs_a_password_starts_once_one_opens_it() {
+    let test = Test::new();
+    test.reader.lock_with(FIRST, "pw");
+    test.reader.hold(FIRST);
+    test.add(&[FIRST]);
+    wait_until("it's being read", || {
+        test.state(FIRST) == Some(PendingState::Reading)
+    });
+    let id = test.link(FIRST).unwrap().id;
+    test.links.start(&[id], "audio-mp3").unwrap();
+    test.reader.release(FIRST);
+    test.wait_until_locked(FIRST, 1, false);
+    assert!(test.link(FIRST).unwrap().start_when_read, "still started");
+    assert!(test.queued("first").is_none());
+
+    test.unlock(FIRST, "pw").unwrap();
+    wait_until("it's in the queue", || test.queued("first").is_some());
+    let queued = test.queued("first").unwrap();
+    assert_eq!(queued.preset.unwrap().id, "audio-mp3");
+    assert_eq!(queued.password.as_ref().map(Password::reveal), Some("pw"));
+    wait_until("it leaves", || test.link(FIRST).is_none());
+}
+
+#[test]
+fn a_password_typed_for_a_link_is_read_before_the_links_waiting() {
+    let test = Test::new();
+    test.reader.lock_with(FIRST, "pw");
+    test.add(&[FIRST]);
+    test.wait_until_locked(FIRST, 1, false);
+    test.reader.hold(SECOND);
+    test.add(&[SECOND, THIRD]);
+    wait_until("the second is being read", || {
+        test.state(SECOND) == Some(PendingState::Reading)
+    });
+    test.unlock(FIRST, "pw").unwrap();
+    test.reader.release(SECOND);
+    test.wait_until_read(THIRD);
+    assert_eq!(test.reader.reads(), [FIRST, SECOND, FIRST, THIRD]);
+}
+
+#[test]
+fn a_link_downloaded_with_a_password_opens_with_it_again() {
+    let test = Test::new();
+    test.reader.lock_with(FIRST, "pw");
+    test.history
+        .record_opened_with(
+            &video_at(FIRST),
+            &NewDownload {
+                preset: "Best Video".to_owned(),
+                file_path: "first.mkv".to_owned(),
+                files: Vec::new(),
+                file_size: None,
+                format: None,
+                downloaded_at: 1,
+                kind: DownloadKind::Video,
+            },
+            Password::new("pw").as_ref(),
+        )
+        .unwrap();
+    test.add(&[FIRST]);
+    test.wait_until_read(FIRST);
+    assert_eq!(
+        test.state(FIRST),
+        Some(PendingState::Ready),
+        "without asking"
+    );
+    assert_eq!(test.reader.passwords_given(FIRST), [Some("pw".to_owned())]);
 }

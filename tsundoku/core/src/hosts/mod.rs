@@ -39,6 +39,7 @@ use reqwest::{ResponseBuilderExt, StatusCode};
 
 use crate::cancel::CancelToken;
 use crate::metadata::{FileContents, PreviewError, VideoInfo};
+use crate::passwords::Password;
 use crate::rules::safe_folder_name;
 use crate::sites;
 
@@ -104,7 +105,15 @@ pub(crate) struct HostFacts {
     /// The file a download address of the host's own names, by the host's ID: for a download link a person copied
     /// from their browser, which gets a waiting download past its check (MediaFire's `download<n>.mediafire.com/…`).
     pub download_file_id: Option<fn(&str) -> Option<String>>,
+    /// Lists the files behind a link that needs a password, with the one the person typed. Set only once a real
+    /// link that needs one was downloaded through it: without it, such a link says Tsundoku can't enter its password
+    /// yet (`PreviewError::PasswordProtected`). A file whose address needs the password too carries it in its
+    /// `FileSource`, in memory only.
+    pub unlock: Option<Unlock>,
 }
+
+/// A host's reader for a link that needs a password, given the one the person typed (`HostFacts::unlock`).
+pub(crate) type Unlock = fn(&Client, &str, &Password, &CancelToken) -> Result<Share, PreviewError>;
 
 impl Host {
     /// The hosts with a reader of their own.
@@ -234,14 +243,35 @@ impl Host {
         }
     }
 
-    /// Lists the files behind `link`. An empty shared folder has nothing to download.
+    /// Whether the person can enter a password for this host's links that need one (`HostFacts::unlock`).
+    pub fn takes_passwords(self) -> bool {
+        self.facts().unlock.is_some()
+    }
+
+    /// Lists the files behind `link`, opened with `password` when it needs one and the host takes it (`unlock`). A
+    /// link that needs a password the host takes asks for it (`PreviewError::PasswordNeeded`), `wrong` when one was
+    /// given. An empty shared folder has nothing to download.
     pub fn read(
         self,
         client: &Client,
         link: &str,
+        password: Option<&Password>,
         cancel: &CancelToken,
     ) -> Result<Share, PreviewError> {
-        let share = match (self.facts().read)(client, link, cancel) {
+        let unlock = self.facts().unlock;
+        let read = match (password, unlock) {
+            (Some(password), Some(unlock)) => unlock(client, link, password, cancel),
+            _ => (self.facts().read)(client, link, cancel),
+        };
+        let read = read.map_err(|error| match error {
+            PreviewError::PasswordProtected { .. } if unlock.is_some() => {
+                PreviewError::PasswordNeeded {
+                    wrong: password.is_some(),
+                }
+            }
+            other => other,
+        });
+        let share = match read {
             // The link's own page is behind a check: one file the check window gives, named after the link, until
             // the person starts its download there.
             Err(PreviewError::BrowserCheck { .. }) => windowed::share(self, link),
@@ -470,10 +500,14 @@ fn built(builder: reqwest::blocking::ClientBuilder, agent: &str) -> Result<Clien
         })
 }
 
-/// Lists the files behind a host's link, for the preview card.
-pub fn read(link: &str, cancel: &CancelToken) -> Result<Share, PreviewError> {
+/// Lists the files behind a host's link, for the preview card, opened with `password` when it needs one.
+pub fn read(
+    link: &str,
+    password: Option<&Password>,
+    cancel: &CancelToken,
+) -> Result<Share, PreviewError> {
     let host = Host::of(link).ok_or(PreviewError::UnsupportedSite)?;
-    host.read(&client_for(host)?, link, cancel)
+    host.read(&client_for(host)?, link, password, cancel)
 }
 
 /// Form fields as a request's body (`application/x-www-form-urlencoded`).
@@ -939,7 +973,7 @@ mod tests {
             ("https://1drv.ms/", "OneDrive"),
         ] {
             assert_eq!(
-                read(link, &CancelToken::new()).err(),
+                read(link, None, &CancelToken::new()).err(),
                 Some(PreviewError::LinkNotRecognized {
                     site: site.to_owned()
                 }),
@@ -947,7 +981,7 @@ mod tests {
             );
         }
         assert_eq!(
-            read("https://example.com/file.zip", &CancelToken::new()).err(),
+            read("https://example.com/file.zip", None, &CancelToken::new()).err(),
             Some(PreviewError::UnsupportedSite)
         );
     }

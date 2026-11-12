@@ -46,6 +46,7 @@ stateDiagram-v2
     Running --> Failed: yt-dlp failed
     Running --> Waiting: the site asked to slow down
     Running --> Waiting: the connection dropped, or the download limit is used up
+    Running --> Waiting: its link needs a password
     Running --> Stopped: Stop, or the app closed
     Stopped --> Waiting: Resume
     Failed --> Waiting: Retry
@@ -116,6 +117,7 @@ With Settings → Archives' Unpack Archives After Downloading on (`UnpackSetting
 | `-P home:<folder> -P temp:<folder>\.tsundoku-<id>` | Where the file goes, and where yt-dlp works |
 | `--ffmpeg-location`, `--js-runtimes deno:<path>` (or `--no-js-runtimes`) | Tsundoku's tools |
 | `--force-overwrites` | Only for Download Again with the same preset, after the user confirms |
+| `--video-password <password>` | Only for a video whose link needs one; the log writes `<password>` instead |
 | The preset's (`Preset::to_args`) | Formats, conversion, file name, embedding, SponsorBlock, extra arguments |
 | `-- <link>` | After `--`, the link can't be read as an option |
 
@@ -176,6 +178,13 @@ File host downloads (MEGA, MediaFire, Google Drive, Dropbox, OneDrive, pCloud, W
 - Open Check shows those files' pages in the check window, one after another (`src-tauri/src/check_window.rs`). The person does what the check asks and starts the download on the page. The window takes the first download whose address is on the link's site, from the page, one of its frames or a window it opened (others are stopped), holds it, and offers it to the item (`DownloadQueue::offer_window_download`), which starts at once.
 - The item's run asks that address itself, as every download is asked (`file_runner::open_file`). When the answer is strictly the file (a success that isn't a page, its size the one the window saw), the window stops its own download and the run downloads the file with its progress, keeping the address for its next runs (`caught_links`). Otherwise, or when no run takes the offer within 20 seconds, the window saves the file itself into the item's temporary folder and hides; the row shows that download's progress (`Hold::WindowDownload`), and the next run moves the file into place. Stop or Remove stops either; closing the window before the window saves anything puts the item back to waiting for its check.
 - An address that has run out by then sends the run back to the page, which may ask again. Resume and Retry try afresh. Like the other holds, it lives in memory: after a restart, the run finds the check again.
+
+## When a Link Needs a Password
+
+- A run whose link needs a password it doesn't have, or whose password didn't open it (`PreviewError::PasswordNeeded`), goes back to Waiting with `Hold::NeedsPassword` instead of Failed (`wrong` when it had one, which is dropped). Like a check, it never ends by itself and never retries.
+- Enter Password (`DownloadQueue::enter_password`) keeps the password with the item (`queue_items.password`) and starts it. A run gives it beside the link: to a file host's reader (`Host::read`) or to yt-dlp as `--video-password`, never inside the link.
+- A finished download's password goes to the history (`videos.password`), and a new download of the same video, or a link the history has, opens with it, so Retry and Download Again don't ask.
+- The log writes the command with the password blanked (`<password>`), and Copy Details blanks it again.
 
 ## Temporary Folders
 

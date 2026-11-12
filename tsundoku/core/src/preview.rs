@@ -17,6 +17,7 @@ use crate::hosts::{self, Host};
 use crate::listing::{self, Found, Listing};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
+use crate::passwords::Password;
 use crate::pending::LinkReader;
 use crate::settings::{CookiesBrowser, SettingsStore};
 use crate::short_links::{self, ShortLink};
@@ -62,22 +63,34 @@ impl PreviewService {
 
     /// Reads what `text` links to (see `read_with_tools`), asks the history whether it was downloaded before, and the
     /// queue whether it's in it. A site that answered "too many requests" isn't read until its wait ends
-    /// (`DownloadQueue::site_wait`), and an answer of that kind starts one.
+    /// (`DownloadQueue::site_wait`), and an answer of that kind starts one. A link that needs a password is read with
+    /// `password`, the one the person typed, or else the one the history keeps for the link, so Download Again never
+    /// asks twice.
     pub fn fetch(
         &self,
         tools: &ToolManager,
         history: &History,
         queue: &DownloadQueue,
         text: &str,
+        password: Option<Password>,
     ) -> Result<LinkPreview, PreviewError> {
         let link = metadata::normalize_link(text).ok_or(PreviewError::InvalidLink)?;
+        let typed = password.is_some();
+        let password = password.or_else(|| history.password_for_link(&link).ok().flatten());
         let cancel = CancelToken::new();
         if let Some(previous) = lock(&self.current).replace(cancel.clone()) {
             previous.cancel();
         }
         let fetched = match queue.site_wait(&link) {
             Some(_) => Err(PreviewError::too_many_requests(String::new())),
-            None => read_for_preview(tools, queue.options().cookies_browser, &link, &cancel),
+            None => read_for_preview(
+                tools,
+                queue.options().cookies_browser,
+                &link,
+                password.as_ref(),
+                &cancel,
+            )
+            .map_err(|error| error.after_password(typed)),
         };
         {
             let mut current = lock(&self.current);
@@ -119,10 +132,18 @@ impl LinkReader for ToolReader {
         &self,
         link: &str,
         any_page: bool,
+        password: Option<&Password>,
         cancel: &CancelToken,
     ) -> Result<Fetched, PreviewError> {
         let cookies_choice = self.settings.get().downloads.cookies_browser;
-        read_with_tools(&self.tools, cookies_choice, link, any_page, cancel)
+        read_with_tools(
+            &self.tools,
+            cookies_choice,
+            link,
+            any_page,
+            password,
+            cancel,
+        )
     }
 }
 
@@ -130,7 +151,7 @@ impl crate::watched::ListingReader for ToolReader {
     /// A watched source's listing, read as the preview card reads it; anything else is refused as not listable.
     fn read(&self, url: &str, cancel: &CancelToken) -> Result<Listing, PreviewError> {
         let cookies_choice = self.settings.get().downloads.cookies_browser;
-        match read_for_preview(&self.tools, cookies_choice, url, cancel)? {
+        match read_for_preview(&self.tools, cookies_choice, url, None, cancel)? {
             Found::Listing(listing) => Ok(listing),
             Found::One(_) => Err(listing::not_listable(url)),
         }
@@ -193,8 +214,9 @@ impl LinkTools {
         }
     }
 
-    /// yt-dlp's, which only reads sites it knows without `any_page` (`FetchTools::any_page`).
-    fn videos(&self, any_page: bool) -> FetchTools<'_> {
+    /// yt-dlp's, which only reads sites it knows without `any_page` (`FetchTools::any_page`), with the video's
+    /// password when the link needs one.
+    fn videos<'a>(&'a self, any_page: bool, password: Option<&'a Password>) -> FetchTools<'a> {
         FetchTools {
             yt_dlp: self.yt_dlp.as_deref(),
             deno: self.deno.as_deref(),
@@ -202,6 +224,7 @@ impl LinkTools {
             cookies: self.cookies.clone(),
             any_page,
             caches: self.caches.as_ref(),
+            password,
         }
     }
 
@@ -218,12 +241,14 @@ impl LinkTools {
 /// Reads `link` (from `normalize_link`) for a pending link: a file host's itself (`hosts`), any other with the tools
 /// that are set up (`read_link`). A channel, playlist or account is refused as `Playlist` without being read: the
 /// preview card lists it instead. Without `any_page`, yt-dlp only reads sites it knows (`FetchTools::any_page`). When
-/// it needs a signed-in account, the error says which site and whether a browser is signed in to it.
+/// it needs a signed-in account, the error says which site and whether a browser is signed in to it. `password` opens
+/// a link that needs one, a file host's or a video's.
 fn read_with_tools(
     tools: &ToolManager,
     cookies_choice: Option<CookiesBrowser>,
     link: &str,
     any_page: bool,
+    password: Option<&Password>,
     cancel: &CancelToken,
 ) -> Result<Fetched, PreviewError> {
     let followed = follow(link, cancel)?;
@@ -234,7 +259,7 @@ fn read_with_tools(
     let set = LinkTools::new(tools, cookies_choice, link);
     // A file host Tsundoku reads itself goes there first, since its domains are exact, unless it leaves the link to
     // the tools.
-    let fetched = match read_host(link, cancel) {
+    let fetched = match read_host(link, password, cancel) {
         Some(read) => read.map(|share| Fetched {
             video: share.video_info(),
             missing_js_runtime: false,
@@ -242,7 +267,7 @@ fn read_with_tools(
         None => read_link(
             link,
             cancel,
-            |link, cancel| metadata::fetch(&set.videos(any_page), link, cancel),
+            |link, cancel| metadata::fetch(&set.videos(any_page, password), link, cancel),
             |link, cancel| gallery::fetch(&set.images(), link, cancel).map(from_gallery),
             set.gallery_dl.is_some(),
         ),
@@ -256,6 +281,7 @@ fn read_for_preview(
     tools: &ToolManager,
     cookies_choice: Option<CookiesBrowser>,
     link: &str,
+    password: Option<&Password>,
     cancel: &CancelToken,
 ) -> Result<Found, PreviewError> {
     let followed = follow(link, cancel)?;
@@ -264,10 +290,16 @@ fn read_for_preview(
     let host_read = if listing::listing_link(link).is_some() {
         None
     } else {
-        read_host(link, cancel)
+        read_host(link, password, cancel)
     };
     let found = if let Some(listing_link) = listing::listing_link(link) {
-        listing::read(&set.videos(true), &set.images(), &listing_link, cancel).map(Found::Listing)
+        listing::read(
+            &set.videos(true, None),
+            &set.images(),
+            &listing_link,
+            cancel,
+        )
+        .map(Found::Listing)
     } else if let Some(read) = host_read {
         read.map(|share| {
             Found::One(Fetched {
@@ -279,7 +311,7 @@ fn read_for_preview(
         read_link(
             link,
             cancel,
-            |link, cancel| listing::read_any(&set.videos(true), link, cancel),
+            |link, cancel| listing::read_any(&set.videos(true, password), link, cancel),
             |link, cancel| {
                 gallery::fetch(&set.images(), link, cancel)
                     .map(|video| Found::One(from_gallery(video)))
@@ -331,9 +363,13 @@ fn follow(link: &str, cancel: &CancelToken) -> Result<Followed, PreviewError> {
 
 /// Reads `link` as a file host's, or `None` when it isn't one's, or when its host leaves it to the tools: the
 /// Internet Archive declines its video and audio items (`UnsupportedSite`), which yt-dlp reads with the presets.
-fn read_host(link: &str, cancel: &CancelToken) -> Option<Result<hosts::Share, PreviewError>> {
+fn read_host(
+    link: &str,
+    password: Option<&Password>,
+    cancel: &CancelToken,
+) -> Option<Result<hosts::Share, PreviewError>> {
     Host::of(link)?;
-    match hosts::read(link, cancel) {
+    match hosts::read(link, password, cancel) {
         Err(PreviewError::UnsupportedSite) => None,
         read => Some(read),
     }
@@ -428,7 +464,10 @@ mod tests {
             "https://web.archive.org/web/2020/https://example.com/",
             "https://www.youtube.com/watch?v=jNQXAC9IVRw",
         ] {
-            assert!(read_host(link, &CancelToken::new()).is_none(), "{link}");
+            assert!(
+                read_host(link, None, &CancelToken::new()).is_none(),
+                "{link}"
+            );
         }
     }
     use crate::metadata::PostContents;

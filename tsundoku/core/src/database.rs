@@ -138,6 +138,11 @@ const MIGRATIONS: &[&str] = &[
     // other rule (`rules::picked_rule`); NULL when none was.
     "ALTER TABLE pending_links ADD COLUMN rule TEXT;
     ALTER TABLE queue_items ADD COLUMN rule TEXT;",
+    // 15: the password a person typed for a link that needs one (`passwords`): a pending link's, a queue item's, and
+    // the history's for each video, so Retry and Download Again don't ask again. NULL for none.
+    "ALTER TABLE pending_links ADD COLUMN password TEXT;
+    ALTER TABLE queue_items ADD COLUMN password TEXT;
+    ALTER TABLE videos ADD COLUMN password TEXT;",
 ];
 
 pub struct Database {

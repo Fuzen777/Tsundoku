@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { Download, Images, Inbox, Loader2, RefreshCw, X } from "lucide-react"
+import { Download, Images, Inbox, KeyRound, Loader2, RefreshCw, X } from "lucide-react"
 import {
   confirmWithUser,
   readPendingLinkAgain,
+  unlockPendingLink,
   removePendingLinks,
   restoreRemovedPendingLinks,
   setPendingPostFiles,
@@ -28,11 +29,13 @@ import { PostFilesStrip } from "../components/PostFilesStrip"
 import { Checkbox, SelectInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { Page } from "../components/Page"
+import { PasswordForm } from "../components/PasswordForm"
 import { PresetRuleLink } from "../components/PresetRuleLink"
 import { StatusMessage } from "../components/StatusMessage"
+import { classes } from "../components/styles"
 import { Thumbnail } from "../components/Thumbnail"
 import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
-import { describeDownloadError, describePreviewError, fixFor, type ErrorDescription } from "../errors"
+import { describeDownloadError, describePreviewError, fixFor, needsPassword, type ErrorDescription } from "../errors"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { pickedOf, pickSummary } from "../postFiles"
 import { describeSiteWait, useTimeLeft } from "../holds"
@@ -428,6 +431,9 @@ function PendingRow({
             onPick={(picked) => act(() => setPendingPostFiles(link.id, [...picked]))}
           />
         )}
+        {link.state === "needsPassword" && (
+          <PendingPassword link={link} onUnlock={(password) => act(() => unlockPendingLink(link.id, password))} />
+        )}
         {link.state === "failed" && link.error && (
           <StatusMessage tone="danger" {...describePreviewError(link.error)}>
             {fixFor(link.error) && (
@@ -486,6 +492,7 @@ function PendingRow({
             onClick={() => act(() => readPendingLinkAgain(link.id))}
           />
         ) : (
+          link.state !== "needsPassword" &&
           !preview?.inQueue &&
           !link.startWhenRead && (
             <IconButton
@@ -600,9 +607,27 @@ function destinationRequest(
   }
 }
 
+/** For a link that needs a password: why it waits, whether a password tried was wrong, and the field to unlock it,
+ * which reads it again with the password. */
+function PendingPassword({ link, onUnlock }: { link: PendingLink; onUnlock: (password: string) => void }) {
+  const wrong = needsPassword(link.error) && link.error.wrong
+  return (
+    <div className="flex flex-col gap-1.5">
+      <p className={classes("flex items-center gap-1.5 text-xs", wrong ? "text-danger" : "text-fg-secondary")}>
+        <KeyRound size={12} className="shrink-0" />
+        {joinDetails([
+          link.error && describePreviewError(link.error).message,
+          link.startWhenRead && strings.pending.startsWhenUnlocked,
+        ])}
+      </p>
+      <PasswordForm size="sm" autoFocus={false} onUnlock={onUnlock} />
+    </div>
+  )
+}
+
 /** For a link not read yet: whether it waits its turn or is being read, and whether it starts once read. */
 function ReadingStatus({ link }: { link: PendingLink }) {
-  if (link.state === "failed") return null
+  if (link.state === "failed" || link.state === "needsPassword") return null
   return (
     <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
       {link.state === "reading" && <Loader2 size={12} className="shrink-0 animate-spin" />}
@@ -617,10 +642,18 @@ function ReadingStatus({ link }: { link: PendingLink }) {
 type PendingStatus = keyof typeof strings.pending.groups
 
 /** Where links stand, in the order their groups come: those Start All takes first. */
-const PENDING_STATUSES: readonly PendingStatus[] = ["ready", "downloadedBefore", "notRead", "failed", "inQueue"]
+const PENDING_STATUSES: readonly PendingStatus[] = [
+  "ready",
+  "downloadedBefore",
+  "notRead",
+  "needsPassword",
+  "failed",
+  "inQueue",
+]
 
 function pendingStatus(link: PendingLink): PendingStatus {
   if (link.state === "failed") return "failed"
+  if (link.state === "needsPassword") return "needsPassword"
   if (!link.preview) return "notRead"
   if (link.preview.inQueue) return "inQueue"
   return link.preview.lastDownload ? "downloadedBefore" : "ready"
@@ -666,9 +699,16 @@ function pendingGroup(
   return { ...status, rank: AFTER_GROUPS + status.rank }
 }
 
-/** Whether Start All takes the link: not one that couldn't be read, is in the queue, or was downloaded before. */
+/** Whether Start All takes the link: not one that couldn't be read, needs a password, is in the queue, or was
+ * downloaded before. */
 function startsWithAll(link: PendingLink): boolean {
-  return link.state !== "failed" && !link.preview?.inQueue && !link.preview?.lastDownload && !link.startWhenRead
+  return (
+    link.state !== "failed" &&
+    link.state !== "needsPassword" &&
+    !link.preview?.inQueue &&
+    !link.preview?.lastDownload &&
+    !link.startWhenRead
+  )
 }
 
 /** Whether starting the link replaces a file: a video downloaded before with the preset it would start with. A post

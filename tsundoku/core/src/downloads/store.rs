@@ -6,6 +6,7 @@ use rusqlite::params;
 
 use super::{DownloadError, QueueItem, QueueState, Recovery};
 use crate::database::Database;
+use crate::passwords::Password;
 
 pub(crate) struct QueueStore {
     database: Arc<Database>,
@@ -22,7 +23,7 @@ impl QueueStore {
         let mut statement = connection
             .prepare(
                 "SELECT id, video, preset, folder, state, overwrite, added_at, result, error, folder_chosen, file_name,
-                    rule
+                    rule, password
                 FROM queue_items ORDER BY position, id",
             )
             .map_err(storage_error)?;
@@ -41,6 +42,7 @@ impl QueueStore {
                     row.get::<_, bool>(9)?,
                     row.get::<_, Option<String>>(10)?,
                     row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -60,6 +62,7 @@ impl QueueStore {
                 folder_chosen,
                 file_name,
                 rule_id,
+                password,
             ) = row.map_err(storage_error)?;
             // An item that can't be read (from a newer version, say) is skipped rather than blocking the queue.
             let (Ok(video), Ok(preset), Some(state)) = (
@@ -87,6 +90,7 @@ impl QueueStore {
                 recovery: Recovery::default(),
                 caught_links: Vec::new(),
                 unpack_files: None,
+                password: password.and_then(Password::new),
             });
         }
         Ok(items)
@@ -109,8 +113,8 @@ impl QueueStore {
             .query_row(
                 "INSERT INTO queue_items
                     (id, video, preset, folder, state, overwrite, added_at, result, error, position, folder_chosen,
-                    file_name, rule)
-                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13) RETURNING id",
+                    file_name, rule, password)
+                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13, ?14) RETURNING id",
                 params![
                     to_json(&item.video),
                     to_json(&item.preset),
@@ -125,6 +129,7 @@ impl QueueStore {
                     item.folder_chosen,
                     item.file_name,
                     item.rule_id,
+                    item.password.as_ref().map(Password::reveal),
                 ],
                 |row| row.get(0),
             )
@@ -145,6 +150,18 @@ impl QueueStore {
                     // A link read through the check window takes its file's name once downloaded.
                     to_json(&item.video),
                 ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    /// Saves the password an item's link opens with, or that it has none.
+    pub fn set_password(&self, item: &QueueItem) -> Result<(), DownloadError> {
+        self.database
+            .lock()
+            .execute(
+                "UPDATE queue_items SET password = ?2 WHERE id = ?1",
+                params![item.id, item.password.as_ref().map(Password::reveal)],
             )
             .map_err(storage_error)?;
         Ok(())

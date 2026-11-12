@@ -551,6 +551,9 @@ export const standIns = {
         eta: null,
       },
     }),
+    queueStandIn(12, "waiting", "Behind a Password", {
+      hold: { kind: "needsPassword", wrong: false },
+    }),
     queueStandIn(4, "stopped", "Stopped Halfway"),
     queueStandIn(5, "failed", "A Video That Failed", {
       error: { kind: "ytDlp", error: { kind: "unavailable", detail: "[youtube] video5: This video is unavailable" } },
@@ -611,6 +614,10 @@ export const standIns = {
       state: "failed",
       error: { kind: "signInRequired", detail: "login required", site: "Instagram", cookies: "notSignedIn" },
     }),
+    pendingStandIn(12, "https://mega.nz/#P!AgESNFZ4mrwAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eH9VsEHziCLjOu1HNUk6o", {
+      state: "needsPassword",
+      error: { kind: "passwordNeeded", wrong: true },
+    }),
     pendingStandIn(8, "https://www.instagram.com/p/Copied1/", { state: "reading", caught: true }),
     pendingStandIn(9, "https://github.com/Fuzen777/Tsundoku", { state: "waiting", caught: true }),
     pendingStandIn(10, "https://www.bbc.com/news/an-article", { state: "waiting", fromFile: true }),
@@ -640,13 +647,15 @@ export const standIns = {
   /**
    * A downloaded video after a short wait; a post of images for an Instagram link; a shared folder for a MEGA link; a
    * listing for a channel, playlist or account (`listingKind`); or a failure for a link containing "fail", or "images"
-   * (gallery-dl not set up).
+   * (gallery-dl not set up). A link with "#P!" needs a password, "secret".
    */
-  fetchPreview(link: string): Promise<LinkPreview> {
+  fetchPreview(link: string, password: string | null = null): Promise<LinkPreview> {
     const kind = standIns.listingKind(link)
     return new Promise((resolve, reject) =>
       setTimeout(() => {
-        if (link.includes("fail")) {
+        if (link.includes("#P!") && password !== "secret") {
+          reject({ kind: "passwordNeeded", wrong: password !== null })
+        } else if (link.includes("fail")) {
           reject({ kind: "unavailable", detail: "[youtube] aaaaaaaaaaa: This video is unavailable" })
         } else if (link.includes("images")) {
           reject({ kind: "imagesNotSetUp" })

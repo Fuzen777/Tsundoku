@@ -37,6 +37,7 @@ use crate::cancel::CancelToken;
 use crate::database::Database;
 use crate::history::{History, NewDownload, SavedFile};
 use crate::metadata::{PreviewError, VideoInfo};
+use crate::passwords::Password;
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
@@ -121,6 +122,11 @@ pub struct QueueItem {
     #[serde(skip)]
     #[ts(skip)]
     pub unpack_files: Option<DownloadedFiles>,
+    /// The password that opens its link, when it needs one: typed by the person or kept by the history. Saved with the
+    /// item, never sent to the UI.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub password: Option<Password>,
 }
 
 /// How much of a log the Queue's log viewer shows: its end.
@@ -453,11 +459,11 @@ impl DownloadQueue {
         preset_id: &str,
         overwrite: bool,
     ) -> Result<QueueItem, DownloadError> {
-        self.add_in(video, preset_id, overwrite, None, None)
+        self.add_in(video, preset_id, overwrite, None, None, None)
     }
 
     /// `add`, into `folder` when one was picked for it instead of the one the rules give, with the rule picked for it
-    /// (`rule_id`) deciding what it sets before any other.
+    /// (`rule_id`) deciding what it sets before any other, and the `password` that opened its link.
     pub fn add_in(
         &self,
         video: VideoInfo,
@@ -465,8 +471,9 @@ impl DownloadQueue {
         overwrite: bool,
         folder: Option<String>,
         rule_id: Option<String>,
+        password: Option<Password>,
     ) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_video(video, preset_id, overwrite, folder, rule_id)?;
+        let item = self.insert_video(video, preset_id, overwrite, folder, rule_id, password)?;
         self.schedule();
         Ok(item)
     }
@@ -479,6 +486,7 @@ impl DownloadQueue {
         overwrite: bool,
         chosen: Option<String>,
         rule_id: Option<String>,
+        password: Option<Password>,
     ) -> Result<QueueItem, DownloadError> {
         let preset = self.presets.get(preset_id).ok_or(DownloadError::Preset {
             error: PresetError::NotFound,
@@ -496,12 +504,14 @@ impl DownloadQueue {
                 .folder
         });
         let file_name = None;
+        let password = self.password_for(&video, password);
         let mut item = QueueItem {
             id: 0,
             folder,
             folder_chosen,
             rule_id,
             file_name,
+            password,
             video,
             preset: Some(preset),
             state: QueueState::Waiting,
@@ -524,18 +534,19 @@ impl DownloadQueue {
     /// download all its files into the folder the rules give it (a post's by default the site's folder in the
     /// download folder). Files already there are skipped, so adding it again only fetches what's missing.
     pub fn add_post(&self, video: VideoInfo) -> Result<QueueItem, DownloadError> {
-        self.add_post_in(video, None, None)
+        self.add_post_in(video, None, None, None)
     }
 
     /// `add_post`, into `folder` when one was picked for it instead of the one the rules give, with the rule picked for
-    /// it (`rule_id`) deciding what it sets before any other.
+    /// it (`rule_id`) deciding what it sets before any other, and the `password` that opened its link.
     pub fn add_post_in(
         &self,
         video: VideoInfo,
         folder: Option<String>,
         rule_id: Option<String>,
+        password: Option<Password>,
     ) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_post(video, folder, rule_id)?;
+        let item = self.insert_post(video, folder, rule_id, password)?;
         self.schedule();
         Ok(item)
     }
@@ -554,8 +565,10 @@ impl DownloadQueue {
         } in picks
         {
             let inserted = match preset_id {
-                Some(preset_id) => self.insert_video(video, &preset_id, overwrite, folder, None),
-                None => self.insert_post(video, folder, None),
+                Some(preset_id) => {
+                    self.insert_video(video, &preset_id, overwrite, folder, None, None)
+                }
+                None => self.insert_post(video, folder, None, None),
             };
             match inserted {
                 Ok(_) => added += 1,
@@ -577,6 +590,7 @@ impl DownloadQueue {
         video: VideoInfo,
         chosen: Option<String>,
         rule_id: Option<String>,
+        password: Option<Password>,
     ) -> Result<QueueItem, DownloadError> {
         if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
@@ -597,12 +611,14 @@ impl DownloadQueue {
         let folder =
             chosen.unwrap_or_else(|| self.destination(&video, None, rule_id.as_deref()).folder);
         let file_name = self.rule_file_name(&video, rule_id.as_deref());
+        let password = self.password_for(&video, password);
         let mut item = QueueItem {
             id: 0,
             folder,
             folder_chosen,
             rule_id,
             file_name,
+            password,
             video,
             preset: None,
             state: QueueState::Waiting,
@@ -934,6 +950,34 @@ impl DownloadQueue {
         first_error.map_or(Ok(restored), Err)
     }
 
+    /// The password a new download's link opens with: the one given, else the one the history keeps for the video, so
+    /// downloading it again never asks twice.
+    fn password_for(&self, video: &VideoInfo, given: Option<Password>) -> Option<Password> {
+        given.or_else(|| {
+            self.history
+                .password_for(&video.site, &video.video_id)
+                .ok()
+                .flatten()
+        })
+    }
+
+    /// Enter Password, for a download that waits for one (`Hold::NeedsPassword`): it's kept with the download, saved,
+    /// and the download starts with it. A wrong one has it wait for a password again.
+    pub fn enter_password(&self, id: i64, password: Password) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let item = find(&mut state.items, id)?;
+            if item.state != QueueState::Waiting || item.recovery.needs_password.is_none() {
+                return Err(DownloadError::WrongState);
+            }
+            item.password = Some(password);
+            self.store.set_password(item)?;
+            item.recovery.needs_password = None;
+        }
+        self.schedule();
+        Ok(())
+    }
+
     /// How a post's files, or a file host's one file, are named by the rules, the one `picked` for it first
     /// (`rules::file_name`).
     fn rule_file_name(&self, video: &VideoInfo, picked: Option<&str>) -> Option<String> {
@@ -1138,6 +1182,7 @@ impl DownloadQueue {
                 .unpack_files
                 .clone()
                 .filter(|files| files.archives.iter().all(|archive| archive.exists())),
+            password: item.password.clone(),
         }
     }
 
@@ -1224,6 +1269,20 @@ impl DownloadQueue {
                 (_, JobOutcome::Failed(_)) if retry.is_some() => {
                     item.state = QueueState::Waiting;
                 }
+                // Its link needs a password it doesn't have, or the one it had no longer opens it: it waits for the
+                // person to enter one, without retrying by itself. One that failed is dropped, so it's asked again.
+                (
+                    _,
+                    JobOutcome::Failed(DownloadError::YtDlp {
+                        error: PreviewError::PasswordNeeded { .. },
+                    }),
+                ) => {
+                    item.state = QueueState::Waiting;
+                    item.recovery.needs_password = Some(item.password.is_some());
+                    if item.password.take().is_some() {
+                        let _ = self.store.set_password(item);
+                    }
+                }
                 // It waits, with the files it could download saved, until a person opens the check. A file the window
                 // saved meanwhile no longer waits for it.
                 (_, JobOutcome::NeedsCheck(mut check)) => {
@@ -1251,7 +1310,14 @@ impl DownloadQueue {
                         preset: item.preset.as_ref(),
                     }
                     .kind();
-                    match self.record(&item.video, &preset, kind, &files, format) {
+                    match self.record(
+                        &item.video,
+                        &preset,
+                        kind,
+                        &files,
+                        format,
+                        item.password.as_ref(),
+                    ) {
                         Ok(result) => {
                             item.state = QueueState::Done;
                             item.result = Some(result);
@@ -1280,7 +1346,7 @@ impl DownloadQueue {
     }
 
     /// Records a finished download in the history: its file, or every file of a post or a file host's link with the
-    /// size of all of them. Their preset name is empty.
+    /// size of all of them, and the password that opened its link. Their preset name is empty.
     fn record(
         &self,
         video: &VideoInfo,
@@ -1288,6 +1354,7 @@ impl DownloadQueue {
         kind: DownloadKind,
         files: &[PathBuf],
         format: Option<String>,
+        password: Option<&Password>,
     ) -> Result<DownloadResult, DownloadError> {
         let file_path = files.first().ok_or(DownloadError::NoFile)?;
         let saved: Vec<SavedFile> = files
@@ -1314,12 +1381,12 @@ impl DownloadQueue {
             downloaded_at: seconds_since_epoch(),
             kind,
         };
-        let download_id =
-            self.history
-                .record(video, &download)
-                .map_err(|error| DownloadError::Storage {
-                    detail: error.to_string(),
-                })?;
+        let download_id = self
+            .history
+            .record_opened_with(video, &download, password)
+            .map_err(|error| DownloadError::Storage {
+                detail: error.to_string(),
+            })?;
         Ok(DownloadResult {
             file_path: download.file_path,
             file_size,
