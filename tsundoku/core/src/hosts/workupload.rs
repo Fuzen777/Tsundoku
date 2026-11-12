@@ -26,6 +26,7 @@ pub(super) const FACTS: HostFacts = HostFacts {
         takes,
         // Its download server sends the file only to the window's own session.
         download: WindowDownload::SaveInWindow,
+        first_click_ad: false,
     }),
 };
 

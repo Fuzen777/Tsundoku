@@ -29,6 +29,8 @@ pub(crate) struct WindowFacts {
     pub takes: fn(download: &str, id: &str) -> bool,
     /// How the file comes once the person has started its download on the page.
     pub download: WindowDownload,
+    /// The page gives the first click on Download to an advert, so the window's title says to click again.
+    pub first_click_ad: bool,
 }
 
 /// How a file read through the window comes.

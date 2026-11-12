@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.124 · 2026-11-12
+
+### Added
+
+- **Buzzheavier**: pasting a Buzzheavier link (buzzheavier.com/…) shows its ID and "Size unknown" until its file is known, since Buzzheavier answers Tsundoku with a check. Its download waits for you to open its check: click Download on its page, and the window closes and Tsundoku downloads the file with its progress. Buzzheavier's first click on Download can open an advert, so the window's title says to click again if nothing happens.
+
 ## 0.1.123 · 2026-11-12
 
 ### Changed

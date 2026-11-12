@@ -5,6 +5,7 @@
 
 pub mod archive;
 pub mod boxcom;
+pub mod buzzheavier;
 pub mod check;
 pub mod drive;
 pub mod dropbox;
@@ -75,6 +76,7 @@ pub enum Host {
     TransferNow,
     Filemail,
     Workupload,
+    Buzzheavier,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -101,7 +103,7 @@ pub(crate) struct HostFacts {
 }
 
 impl Host {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -120,6 +122,7 @@ impl Host {
         Self::TransferNow,
         Self::Filemail,
         Self::Workupload,
+        Self::Buzzheavier,
     ];
 
     pub(crate) fn facts(self) -> &'static HostFacts {
@@ -137,6 +140,7 @@ impl Host {
             Self::TransferNow => &transfernow::FACTS,
             Self::Filemail => &filemail::FACTS,
             Self::Workupload => &workupload::FACTS,
+            Self::Buzzheavier => &buzzheavier::FACTS,
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,

@@ -89,7 +89,11 @@ impl Visit {
     fn shown(&self) -> Option<(Url, String)> {
         let url = Url::parse(&self.left.first()?.url).ok()?;
         let number = self.total - self.left.len() + 1;
-        Some((url, text::title(&self.site, number, self.total)))
+        let first_click_ad = self.left.first()?.first_click_ad();
+        Some((
+            url,
+            text::title(&self.site, number, self.total, first_click_ad),
+        ))
     }
 }
 
@@ -481,11 +485,16 @@ fn hand_over(app: &AppHandle, visit: Visit) {
 
 /// The window's title, shown outside the UI, so in Rust: "MediaFire Check", or "MediaFire Check, File 2 of 3".
 mod text {
-    pub fn title(site: &str, number: usize, total: usize) -> String {
-        if total > 1 {
+    pub fn title(site: &str, number: usize, total: usize, first_click_ad: bool) -> String {
+        let title = if total > 1 {
             format!("{site} Check, File {number} of {total}")
         } else {
             format!("{site} Check")
+        };
+        if first_click_ad {
+            format!("{title} · If Nothing Happens, Click Download Again")
+        } else {
+            title
         }
     }
 }
@@ -590,10 +599,14 @@ mod tests {
 
     #[test]
     fn titles_say_which_file() {
-        assert_eq!(text::title("MediaFire", 1, 1), "MediaFire Check");
+        assert_eq!(text::title("MediaFire", 1, 1, false), "MediaFire Check");
         assert_eq!(
-            text::title("MediaFire", 2, 3),
+            text::title("MediaFire", 2, 3, false),
             "MediaFire Check, File 2 of 3"
+        );
+        assert_eq!(
+            text::title("Buzzheavier", 1, 1, true),
+            "Buzzheavier Check · If Nothing Happens, Click Download Again"
         );
     }
 }

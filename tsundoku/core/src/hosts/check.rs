@@ -93,6 +93,15 @@ impl CheckPage {
             .is_some_and(|window| window.download == WindowDownload::SaveInWindow)
     }
 
+    /// Whether the page gives the first click on Download to an advert (`WindowFacts::first_click_ad`).
+    pub fn first_click_ad(&self) -> bool {
+        self.host
+            .facts()
+            .window
+            .as_ref()
+            .is_some_and(|window| window.first_click_ad)
+    }
+
     /// The link that hands the download the file the window saved from this page.
     pub fn saved_link(&self, path: &std::path::Path) -> String {
         windowed::saved_link(&self.file_id, path)
@@ -134,7 +143,8 @@ fn caught_file(host: Host, download: &str) -> Option<String> {
         | Host::UploadEe
         | Host::TransferNow
         | Host::Filemail
-        | Host::Workupload => None,
+        | Host::Workupload
+        | Host::Buzzheavier => None,
     }
 }
 
