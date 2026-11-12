@@ -12,8 +12,8 @@ use reqwest::{StatusCode, Url};
 use serde::Deserialize;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, between,
-    check_cancel, code_error, network_error, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share, between,
+    check_cancel, code_error, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -113,8 +113,7 @@ pub(super) fn address(
             "{SITE}/api/1/links/{}/files/{}",
             file.link_id, file.file_id
         ))
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     if let Some(error) = code_error(Host::SwissTransfer, response.status()) {
         return Err(match error {
             PreviewError::Failed { detail } | PreviewError::Unavailable { detail } => {
@@ -269,7 +268,7 @@ impl PageData {
 /// The page at `url` and the data it carries. A link SwissTransfer doesn't know redirects to its "not found" page.
 fn open_page(client: &Client, url: &str, cancel: &CancelToken) -> Result<PageData, PreviewError> {
     check_cancel(cancel)?;
-    let response = client.get(url).send().map_err(network_error)?;
+    let response = client.get(url).send_checked(FACTS.name)?;
     let page = Page::read(response);
     // Its "not found" page answers 404.
     if page.status == StatusCode::NOT_FOUND {

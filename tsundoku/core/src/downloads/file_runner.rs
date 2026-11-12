@@ -299,7 +299,7 @@ fn fetch(
         meter.skip(offset);
         return Ok(());
     }
-    let mut response = send(client, &address.url, offset, cancel)?;
+    let mut response = send(client, host, &address.url, offset, cancel)?;
     if let Some(error) = hosts::status_error(host, &response) {
         return Err(error.into());
     }
@@ -372,10 +372,12 @@ fn fetch(
     Ok(())
 }
 
-/// Asks for a file from `offset`. A server that can't be reached is asked again at once, twice: a host that sends
-/// requests on to its servers (archive.org) may pick another one.
+/// Asks `host` for a file from `offset`. A server that can't be reached is asked again at once, twice: a host that
+/// sends requests on to its servers (archive.org) may pick another one. A check only a person can pass is
+/// `PreviewError::BrowserCheck`, as for every request (`hosts::checked`).
 fn send(
     client: &Client,
+    host: Host,
     url: &str,
     offset: u64,
     cancel: &CancelToken,
@@ -390,7 +392,7 @@ fn send(
             request = request.header(RANGE, format!("bytes={offset}-"));
         }
         match request.send() {
-            Ok(response) => return Ok(response),
+            Ok(response) => return Ok(hosts::checked(host.name(), response)?),
             Err(error) if (error.is_connect() || error.is_timeout()) && tries < CONNECT_RETRIES => {
                 tries += 1;
             }

@@ -14,8 +14,8 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, check_cancel, code_error,
-    network_error, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, SendChecked, Share, check_cancel,
+    code_error, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -218,8 +218,7 @@ fn post<T: DeserializeOwned>(
         .header(ACCEPT, "application/json")
         .header(CONTENT_TYPE, "application/json")
         .body(body.to_string())
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     let status = response.status();
     if status == StatusCode::NOT_FOUND {
         return Err(PreviewError::Unavailable {
@@ -240,8 +239,7 @@ fn resolve(link: &str, cancel: &CancelToken) -> Result<TransferKey, PreviewError
     check_cancel(cancel)?;
     let response = super::client_without_redirects(Host::WeTransfer)?
         .get(link)
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     let location = response
         .headers()
         .get(LOCATION)

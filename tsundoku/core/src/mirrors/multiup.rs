@@ -8,7 +8,7 @@ use reqwest::blocking::Client;
 
 use super::{Mirror, attribute, web_link};
 use crate::cancel::CancelToken;
-use crate::hosts::{Page, check_cancel, html_text, network_error};
+use crate::hosts::{Page, SendChecked, check_cancel, html_text};
 use crate::metadata::PreviewError;
 
 const SITE: &str = "https://multiup.io";
@@ -23,7 +23,11 @@ pub(super) fn mirrors(
         return Ok(None);
     };
     check_cancel(cancel)?;
-    let page = Page::read(client.get(&page_link).send().map_err(network_error)?);
+    let page = Page::read(
+        client
+            .get(&page_link)
+            .send_checked(super::MirrorSite::MultiUp.name())?,
+    );
     if page.status == StatusCode::NOT_FOUND {
         return Err(PreviewError::Unavailable {
             detail: "MultiUp doesn't know this file".to_owned(),

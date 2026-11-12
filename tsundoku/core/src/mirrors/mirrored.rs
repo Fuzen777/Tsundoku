@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 
 use super::{Mirror, attribute, web_link};
 use crate::cancel::CancelToken;
-use crate::hosts::{Page, between, check_cancel, html_text, network_error};
+use crate::hosts::{Page, SendChecked, between, check_cancel, html_text};
 use crate::metadata::PreviewError;
 
 const SITE: &str = "https://www.mirrored.to";
@@ -51,7 +51,11 @@ pub(super) fn mirrors(
 /// A mirrored.to page, as text.
 fn open(client: &Client, url: &str, cancel: &CancelToken) -> Result<String, PreviewError> {
     check_cancel(cancel)?;
-    let page = Page::read(client.get(url).send().map_err(network_error)?);
+    let page = Page::read(
+        client
+            .get(url)
+            .send_checked(super::MirrorSite::MirroredTo.name())?,
+    );
     if page.status == StatusCode::NOT_FOUND {
         return Err(PreviewError::Unavailable {
             detail: "Mirrored.to doesn't know this file".to_owned(),

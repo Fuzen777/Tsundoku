@@ -165,7 +165,7 @@ impl Share {
             let Some(direct) = windowed.direct.clone() else {
                 continue;
             };
-            match probe(client, &direct, cancel)? {
+            match probe(client, windowed.host, &direct, cancel)? {
                 Answer::File(found) => {
                     file.size = found.size;
                     if let Some(name) = found.name {

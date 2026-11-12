@@ -9,7 +9,7 @@ use reqwest::Url;
 use reqwest::blocking::Client;
 
 use super::windowed::{WindowDownload, WindowFacts, WindowLink};
-use super::{Host, HostFacts, Page, Share, check_cancel, network_error};
+use super::{Host, HostFacts, Page, SendChecked, Share, check_cancel};
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
 
@@ -39,7 +39,7 @@ pub(super) fn read(
 ) -> Result<Share, PreviewError> {
     let found = window_link(link).ok_or_else(|| Host::Buzzheavier.link_not_recognized())?;
     check_cancel(cancel)?;
-    let page = Page::read(client.get(&found.page).send().map_err(network_error)?);
+    let page = Page::read(client.get(&found.page).send_checked(FACTS.name)?);
     if page.status == StatusCode::NOT_FOUND {
         return Err(PreviewError::Unavailable {
             detail: "Buzzheavier doesn't know this file".to_owned(),

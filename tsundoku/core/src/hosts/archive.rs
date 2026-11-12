@@ -15,8 +15,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, check_cancel, code_error,
-    network_error, percent_decode, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, SendChecked, Share, check_cancel,
+    code_error, percent_decode, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -249,8 +249,7 @@ fn metadata(client: &Client, identifier: &str, cancel: &CancelToken) -> Result<I
     check_cancel(cancel)?;
     let response = client
         .get(format!("{SITE}/metadata/{identifier}"))
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     if let Some(error) = code_error(Host::ArchiveOrg, response.status()) {
         return Err(error);
     }

@@ -13,8 +13,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{
-    FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel, code_error, date_of,
-    network_error, safe_name,
+    FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share, check_cancel, code_error,
+    date_of, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -197,7 +197,7 @@ struct Entry {
 /// The JSON a Box page carries, or why there's none: a password, or a link removed or not shared.
 fn page_data(client: &Client, url: &str, cancel: &CancelToken) -> Result<Value, PreviewError> {
     check_cancel(cancel)?;
-    let response = client.get(url).send().map_err(network_error)?;
+    let response = client.get(url).send_checked(FACTS.name)?;
     let page = Page::read(response);
     stream_data(&page.html).ok_or_else(|| page_error(&page))
 }

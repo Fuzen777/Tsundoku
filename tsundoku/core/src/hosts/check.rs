@@ -4,6 +4,9 @@
 //! download on the page, the window catches that download's address, which the download then uses as the file's
 //! direct link (MediaFire's `MediaFireFile::direct`).
 
+use reqwest::StatusCode;
+use reqwest::header::HeaderMap;
+
 use super::windowed::{self, WindowDownload};
 use super::{FileSource, Host, Page, Share};
 use crate::cancel::CancelToken;
@@ -210,15 +213,39 @@ impl Share {
     }
 }
 
-/// Whether a page a host answered is Cloudflare's check for a browser ("Just a moment..."). Cloudflare marks its
-/// challenges with `cf-mitigated: challenge`; without the header, a 403 or 503 carrying the challenge's own options
-/// (`_cf_chl_opt`) or its title is one too. Its "challenge-platform" script is on ordinary pages of some sites
-/// (every MediaFire page), so it isn't a sign.
+/// Whether a page a site answered is a check only a person can pass. Only the checking service's own markers count,
+/// never a site's layout: Cloudflare's check for a browser ("Just a moment..."), marked with `cf-mitigated: challenge`
+/// (`is_marked`), or, without the header, a 403 or 503 carrying the challenge's own options or its title
+/// (`is_check_page`). Every request a reader sends goes through `hosts::checked`, which applies the same test.
 pub(crate) fn is_browser_check(page: &Page) -> bool {
-    page.challenged
-        || (matches!(page.status.as_u16(), 403 | 503)
-            && (page.html.contains("_cf_chl_opt")
-                || page.html.contains("<title>Just a moment...</title>")))
+    page.challenged || (may_be_check_page(page.status) && is_check_page(&page.html))
+}
+
+/// Whether an answer's headers mark it as Cloudflare's check (`cf-mitigated: challenge`).
+pub(crate) fn is_marked(headers: &HeaderMap) -> bool {
+    headers
+        .get("cf-mitigated")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("challenge"))
+}
+
+/// Whether an answer with `status` may be a check its headers don't mark: Cloudflare answers its checks with 403 or
+/// 503.
+pub(crate) fn may_be_check_page(status: StatusCode) -> bool {
+    matches!(status.as_u16(), 403 | 503)
+}
+
+/// Whether a page is Cloudflare's check: its challenge's options (`_cf_chl_opt`) or its title. Its "challenge-platform"
+/// script is on ordinary pages of some sites (every MediaFire page), so it isn't a sign.
+pub(crate) fn is_check_page(html: &str) -> bool {
+    html.contains("_cf_chl_opt") || html.contains("<title>Just a moment...</title>")
+}
+
+/// The error for a check on `site`, which a person passes in the check window.
+pub(crate) fn needs_person(site: &str) -> PreviewError {
+    PreviewError::BrowserCheck {
+        site: site.to_owned(),
+    }
 }
 
 /// Every file of `link` as a check's pages, for a development build to open the check window on a link of its choice.
@@ -243,8 +270,6 @@ pub fn for_link(link: &str, cancel: &CancelToken) -> Result<BrowserCheck, Previe
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
-
-    use reqwest::StatusCode;
 
     use super::*;
     use crate::hosts::RemoteFile;

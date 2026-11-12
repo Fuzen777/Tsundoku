@@ -18,6 +18,8 @@ pub mod onedrive;
 pub mod onefichier;
 pub mod pcloud;
 pub mod swisstransfer;
+#[cfg(test)]
+pub(crate) mod test_server;
 pub mod transfernow;
 pub mod uploadee;
 pub mod wetransfer;
@@ -29,12 +31,12 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use reqwest::StatusCode;
-use reqwest::blocking::{Client, Response};
+use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::{
     ACCEPT_LANGUAGE, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_RANGE, HeaderMap, HeaderValue,
     LAST_MODIFIED, RANGE,
 };
+use reqwest::{ResponseBuilderExt, StatusCode};
 
 use crate::cancel::CancelToken;
 use crate::metadata::{FileContents, PreviewError, VideoInfo};
@@ -485,6 +487,56 @@ pub(crate) fn network_error(error: reqwest::Error) -> PreviewError {
     }
 }
 
+/// The one way every reader's requests go to a site: what reaches it, and what doesn't, sorted the same for all.
+pub(crate) trait SendChecked {
+    /// Sends the request to `site` (its name, as people know it). An answer that is a check only a person can pass
+    /// (`check::is_browser_check`) is `PreviewError::BrowserCheck` for `site`, whatever its status, before the reader
+    /// makes anything of it; a request that doesn't reach the site is a network error.
+    fn send_checked(self, site: &str) -> Result<Response, PreviewError>;
+}
+
+impl SendChecked for RequestBuilder {
+    fn send_checked(self, site: &str) -> Result<Response, PreviewError> {
+        checked(site, self.send().map_err(network_error)?)
+    }
+}
+
+/// `response` from `site`, unless it's a check only a person can pass: then `PreviewError::BrowserCheck`. A check the
+/// answer's headers don't mark is told by its page, which only an answer with a check's status is read for; the
+/// reader then gets an answer with the same status, headers and page, to read as it would have.
+pub(crate) fn checked(site: &str, response: Response) -> Result<Response, PreviewError> {
+    if check::is_marked(response.headers()) {
+        return Err(check::needs_person(site));
+    }
+    if !check::may_be_check_page(response.status()) {
+        return Ok(response);
+    }
+    let url = response.url().clone();
+    let status = response.status();
+    let version = response.version();
+    let mut headers = response.headers().clone();
+    let mut page = Vec::new();
+    // A page that doesn't arrive whole still has its status.
+    let _ = response.take(PAGE_LIMIT).read_to_end(&mut page);
+    if check::is_check_page(&String::from_utf8_lossy(&page)) {
+        return Err(check::needs_person(site));
+    }
+    headers.insert(CONTENT_LENGTH, HeaderValue::from(page.len()));
+    let mut again = http::Response::builder()
+        .status(status)
+        .version(version)
+        .url(url);
+    if let Some(all) = again.headers_mut() {
+        *all = headers;
+    }
+    again
+        .body(page)
+        .map(Response::from)
+        .map_err(|error| PreviewError::Failed {
+            detail: error.to_string(),
+        })
+}
+
 /// A host's answer that isn't a success, sorted as a preview's errors are.
 pub(crate) fn status_error(host: Host, response: &Response) -> Option<PreviewError> {
     code_error(host, response.status())
@@ -529,7 +581,7 @@ pub(crate) struct Page {
     pub url: String,
     pub status: StatusCode,
     pub html: String,
-    /// Cloudflare marked it as its check for a browser (`cf-mitigated: challenge`).
+    /// The answer's headers mark it as a check for a browser (`check::is_marked`).
     pub challenged: bool,
 }
 
@@ -538,11 +590,7 @@ impl Page {
     pub(crate) fn read(response: Response) -> Self {
         let url = response.url().to_string();
         let status = response.status();
-        let challenged = response
-            .headers()
-            .get("cf-mitigated")
-            .and_then(|value| value.to_str().ok())
-            .is_some_and(|value| value.trim().eq_ignore_ascii_case("challenge"));
+        let challenged = check::is_marked(response.headers());
         let mut bytes = Vec::new();
         // A page that doesn't arrive whole still has its status.
         let _ = response.take(PAGE_LIMIT).read_to_end(&mut bytes);
@@ -555,9 +603,10 @@ impl Page {
     }
 }
 
-/// Asks for the first byte of the file at `url`, for its name and size, or the page the host answers instead.
+/// Asks `host` for the first byte of the file at `url`, for its name and size, or the page it answers instead.
 pub(crate) fn probe(
     client: &Client,
+    host: Host,
     url: &str,
     cancel: &CancelToken,
 ) -> Result<Answer, PreviewError> {
@@ -565,8 +614,7 @@ pub(crate) fn probe(
     let response = client
         .get(url)
         .header(RANGE, "bytes=0-0")
-        .send()
-        .map_err(network_error)?;
+        .send_checked(host.name())?;
     if let Some(found) = found(response.status(), response.headers()) {
         return Ok(Answer::File(found));
     }
@@ -574,7 +622,7 @@ pub(crate) fn probe(
     // file, which a Google Doc doesn't have.
     if response.status() == StatusCode::RANGE_NOT_SATISFIABLE {
         check_cancel(cancel)?;
-        let whole = client.head(url).send().map_err(network_error)?;
+        let whole = client.head(url).send_checked(host.name())?;
         if let Some(found) = found(whole.status(), whole.headers()) {
             return Ok(Answer::File(found));
         }
@@ -861,6 +909,65 @@ mod tests {
         assert_eq!(
             read("https://example.com/file.zip", &CancelToken::new()).err(),
             Some(PreviewError::UnsupportedSite)
+        );
+    }
+
+    #[test]
+    fn every_request_stops_at_a_check_before_its_reader_reads_it() {
+        use test_server::{Reply, TestServer};
+        let server = TestServer::start(|request| match request.path.as_str() {
+            "/marked" => Reply::new(200, "<html>a page</html>").with("cf-mitigated", "challenge"),
+            "/check" => Reply::new(
+                403,
+                "<title>Just a moment...</title><script>window._cf_chl_opt = {};</script>",
+            ),
+            "/busy" => Reply::new(503, "<script>window._cf_chl_opt={cvId: '3'}</script>"),
+            "/forbidden" => Reply::new(403, r#"{"error": {"code": "accessDenied"}}"#)
+                .with("Content-Type", "application/json"),
+            "/agent" => Reply::new(200, request.header("user-agent").unwrap_or_default()),
+            _ => Reply::new(200, "the file"),
+        });
+        let client = tsundoku_client().unwrap();
+        let send = |path: &str| client.get(server.url(path)).send_checked("Example");
+        let check = PreviewError::BrowserCheck {
+            site: "Example".to_owned(),
+        };
+        for path in ["/marked", "/check", "/busy"] {
+            assert_eq!(send(path).err(), Some(check.clone()), "{path}");
+        }
+
+        let forbidden = send("/forbidden").unwrap();
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+        assert_eq!(forbidden.url().as_str(), server.url("/forbidden"));
+        assert_eq!(
+            forbidden
+                .headers()
+                .get("content-type")
+                .and_then(|value| value.to_str().ok()),
+            Some("application/json"),
+            "the reader gets the answer whole"
+        );
+        let error: serde_json::Value = forbidden.json().unwrap();
+        assert_eq!(error["error"]["code"], "accessDenied");
+
+        let mut file = String::new();
+        send("/file").unwrap().read_to_string(&mut file).unwrap();
+        assert_eq!(file, "the file");
+        let mut agent = String::new();
+        send("/agent").unwrap().read_to_string(&mut agent).unwrap();
+        assert_eq!(agent, HONEST_AGENT, "it says it's Tsundoku");
+        assert_eq!(
+            probe(
+                &client,
+                Host::Dropbox,
+                &server.url("/check"),
+                &CancelToken::new()
+            )
+            .err(),
+            Some(PreviewError::BrowserCheck {
+                site: "Dropbox".to_owned()
+            }),
+            "a probe too"
         );
     }
 

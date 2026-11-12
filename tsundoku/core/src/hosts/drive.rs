@@ -13,8 +13,8 @@ use reqwest::blocking::Client;
 use reqwest::{StatusCode, Url};
 
 use super::{
-    Answer, FileSource, Host, HostFacts, Page, RemoteFile, Share, between, check_cancel,
-    code_error, html_text, network_error, probe, safe_name, title_of,
+    Answer, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share, between,
+    check_cancel, code_error, html_text, network_error, probe, safe_name, title_of,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -58,7 +58,7 @@ pub(super) fn read(
 ) -> Result<Share, PreviewError> {
     match parse_link(link).ok_or_else(|| Host::GoogleDrive.link_not_recognized())? {
         DriveLink::File(file) => {
-            let found = match probe(client, &download_url(&file), cancel)? {
+            let found = match probe(client, Host::GoogleDrive, &download_url(&file), cancel)? {
                 Answer::File(found) => found,
                 Answer::Page(page) => return Err(page_error(&page)),
             };
@@ -180,7 +180,7 @@ fn folder_view(
         url.push_str("&resourcekey=");
         url.push_str(key);
     }
-    let response = client.get(&url).send().map_err(network_error)?;
+    let response = client.get(&url).send_checked(FACTS.name)?;
     let signing_in =
         sites::host(response.url().as_str()).is_some_and(|host| host == "accounts.google.com");
     if !response.status().is_success() || signing_in {
@@ -232,11 +232,12 @@ fn sizes(
                         let Some((_, file)) = files.get(index) else {
                             break;
                         };
-                        let answer = match probe(client, &download_url(file), cancel) {
-                            Ok(Answer::File(found)) => Ok(found.size),
-                            Ok(Answer::Page(page)) => Err(page_error(&page)),
-                            Err(error) => Err(error),
-                        };
+                        let answer =
+                            match probe(client, Host::GoogleDrive, &download_url(file), cancel) {
+                                Ok(Answer::File(found)) => Ok(found.size),
+                                Ok(Answer::Page(page)) => Err(page_error(&page)),
+                                Err(error) => Err(error),
+                            };
                         if answer.is_err() {
                             failed.store(true, Ordering::Relaxed);
                         }

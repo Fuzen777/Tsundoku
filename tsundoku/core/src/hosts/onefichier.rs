@@ -15,8 +15,8 @@ use reqwest::blocking::Client;
 use reqwest::header::{CONTENT_TYPE, COOKIE};
 
 use super::{
-    Address, Answer, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, between,
-    check_cancel, code_error, form, html_text, network_error, probe, safe_name,
+    Address, Answer, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share,
+    between, check_cancel, code_error, form, html_text, network_error, probe, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -62,8 +62,7 @@ pub(super) fn read(
         .post(format!("{SITE}/check_links.pl"))
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
         .body(form(&[("links[]", &page)]))
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     if let Some(error) = code_error(Host::OneFichier, response.status()) {
         return Err(error);
     }
@@ -129,8 +128,7 @@ pub(super) fn address(
                 .header(COOKIE, ENGLISH)
                 .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
                 .body("")
-                .send()
-                .map_err(network_error)?;
+                .send_checked(FACTS.name)?;
             let page = Page::read(response);
             if page.status == StatusCode::NOT_FOUND {
                 return Err(missing());
@@ -159,7 +157,10 @@ fn given_still_works(
     let Some(url) = given(id) else {
         return Ok(false);
     };
-    if matches!(probe(client, &url, cancel)?, Answer::File(_)) {
+    if matches!(
+        probe(client, Host::OneFichier, &url, cancel)?,
+        Answer::File(_)
+    ) {
         return Ok(true);
     }
     forget(id);
@@ -197,8 +198,7 @@ fn open_page(client: &Client, id: &str, cancel: &CancelToken) -> Result<Page, Pr
     let response = client
         .get(page_link(id))
         .header(COOKIE, ENGLISH)
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     let page = Page::read(response);
     if page.status == StatusCode::NOT_FOUND {
         return Err(missing());

@@ -9,8 +9,8 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, between,
-    check_cancel, code_error, date_of, network_error, safe_name, title_of,
+    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share, between,
+    check_cancel, code_error, date_of, safe_name, title_of,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -46,8 +46,7 @@ pub(super) fn read(
     check_cancel(cancel)?;
     let response = client
         .get(format!("{SITE}/s/{code}"))
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     let page = Page::read(response);
     if !page.status.is_success() {
         return Err(unavailable(code_error(Host::Icedrive, page.status)));
@@ -165,8 +164,7 @@ fn download_multi(
     let response = client
         .get(url)
         .header("X-Requested-With", "XMLHttpRequest")
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     if let Some(error) = code_error(Host::Icedrive, response.status()) {
         return Err(error);
     }

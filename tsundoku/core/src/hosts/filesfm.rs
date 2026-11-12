@@ -13,8 +13,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel,
-    client_without_redirects, code_error, network_error, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share,
+    check_cancel, client_without_redirects, code_error, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -106,8 +106,7 @@ pub(super) fn address(
     let response = client_without_redirects(Host::FilesFm)?
         .get(format!("{SITE}/down.php?i={}", file.hash))
         .header(COOKIE, cookies)
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     let location = response
         .headers()
         .get(LOCATION)
@@ -142,7 +141,7 @@ fn open_page(
     cancel: &CancelToken,
 ) -> Result<(Page, String), PreviewError> {
     check_cancel(cancel)?;
-    let response = client.get(url).send().map_err(network_error)?;
+    let response = client.get(url).send_checked(FACTS.name)?;
     let cookies = cookies_set(&response);
     let page = Page::read(response);
     if page.status == StatusCode::NOT_FOUND {

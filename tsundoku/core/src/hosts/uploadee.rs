@@ -10,8 +10,8 @@ use reqwest::Url;
 use reqwest::blocking::Client;
 
 use super::{
-    Address, Answer, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel,
-    code_error, html_text, network_error, percent_decode, probe, safe_name,
+    Address, Answer, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share,
+    check_cancel, code_error, html_text, percent_decode, probe, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -44,7 +44,7 @@ pub(super) fn read(
 ) -> Result<Share, PreviewError> {
     let file = parse_link(link).ok_or_else(|| Host::UploadEe.link_not_recognized())?;
     let download = download_link(client, &file, cancel)?;
-    let found = match probe(client, &download, cancel)? {
+    let found = match probe(client, Host::UploadEe, &download, cancel)? {
         Answer::File(found) => found,
         Answer::Page(page) => return Err(Host::UploadEe.page_error(&page)),
     };
@@ -85,7 +85,7 @@ fn download_link(
     cancel: &CancelToken,
 ) -> Result<String, PreviewError> {
     check_cancel(cancel)?;
-    let response = client.get(&file.page).send().map_err(network_error)?;
+    let response = client.get(&file.page).send_checked(FACTS.name)?;
     let page = Page::read(response);
     if page.status == StatusCode::NOT_FOUND || is_gone(&page.html) {
         return Err(PreviewError::Unavailable {

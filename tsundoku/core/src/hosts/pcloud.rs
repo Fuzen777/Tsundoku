@@ -13,8 +13,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, check_cancel, http_date,
-    network_error, safe_name, status_error,
+    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, SendChecked, Share, check_cancel,
+    http_date, safe_name, status_error,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -195,7 +195,7 @@ fn api<T: DeserializeOwned>(
             detail: error.to_string(),
         }
     })?;
-    let response = client.get(url).send().map_err(network_error)?;
+    let response = client.get(url).send_checked(FACTS.name)?;
     let status = status_error(Host::PCloud, &response);
     let body: Value = match response.json() {
         Ok(body) => body,

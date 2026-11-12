@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.126 · 2026-11-12
+
+### Changed
+
+- **Checks on every site**: a check only a person can pass (Cloudflare's "Just a moment...") is now recognized the same way on every site Tsundoku reads itself, whatever the site answers with, instead of some sites reporting it as a refused or missing file. A file whose download meets one waits for Open Check as MediaFire's do.
+
 ## 0.1.125 · 2026-11-12
 
 ### Changed

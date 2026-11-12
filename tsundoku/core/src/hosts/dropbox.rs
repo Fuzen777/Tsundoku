@@ -15,8 +15,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{
-    Answer, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel, code_error, form,
-    network_error, percent_decode, probe, safe_name, title_of,
+    Answer, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share, check_cancel,
+    code_error, form, percent_decode, probe, safe_name, title_of,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -75,7 +75,7 @@ pub(super) fn read(
         return read_folder(client, link, parsed, cancel);
     }
     let url = download_link(link).ok_or_else(|| Host::Dropbox.link_not_recognized())?;
-    let found = match probe(client, &url, cancel)? {
+    let found = match probe(client, Host::Dropbox, &url, cancel)? {
         Answer::File(found) => found,
         Answer::Page(page) => return Err(page_error(&page)),
     };
@@ -235,7 +235,7 @@ impl FolderLink {
 /// Follows an old folder link to its /scl/fo/ form.
 fn resolve(client: &Client, link: &str, cancel: &CancelToken) -> Result<FolderLink, PreviewError> {
     check_cancel(cancel)?;
-    let response = client.get(link).send().map_err(network_error)?;
+    let response = client.get(link).send_checked(FACTS.name)?;
     match FolderLink::of(response.url().as_str()) {
         Some(folder) => Ok(folder),
         None => Err(page_error(&Page::read(response))),
@@ -312,8 +312,7 @@ fn list(
         .header(COOKIE, format!("t={token}"))
         .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
         .body(form(&fields))
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     let is_json = response
         .headers()
         .get(CONTENT_TYPE)

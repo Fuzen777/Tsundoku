@@ -11,8 +11,8 @@ use reqwest::header::ACCEPT;
 use serde::Deserialize;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, check_cancel, date_of,
-    network_error, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, SendChecked, Share, check_cancel,
+    date_of, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -179,8 +179,7 @@ fn get(client: &Client, id: &str, cancel: &CancelToken) -> Result<Transfer, Prev
     let response = client
         .get(url)
         .header(ACCEPT, "application/json")
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     let status = response.status();
     // An unknown transfer is an answer with an error code, sent with status 500.
     let answer: Answer = response.json().map_err(|error| {

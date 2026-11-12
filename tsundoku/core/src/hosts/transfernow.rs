@@ -12,8 +12,8 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, check_cancel, code_error,
-    network_error, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, SendChecked, Share, check_cancel,
+    code_error, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -201,7 +201,7 @@ fn ask<T: DeserializeOwned>(
             detail: error.to_string(),
         }
     })?;
-    let response = client.get(url).send().map_err(network_error)?;
+    let response = client.get(url).send_checked(FACTS.name)?;
     if response.status() == StatusCode::NOT_FOUND {
         return Err(PreviewError::Unavailable {
             detail: "TransferNow doesn't know this transfer: it expired, or was deleted".to_owned(),

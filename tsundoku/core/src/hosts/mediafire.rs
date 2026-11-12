@@ -14,8 +14,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::{
-    Address, Answer, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel,
-    code_error, network_error, probe, safe_name, status_error,
+    Address, Answer, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share,
+    check_cancel, code_error, probe, safe_name, status_error,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -135,7 +135,7 @@ pub(super) fn address(
         .map_or(FileCheck::None, FileCheck::Sha256);
     if let Some(direct) = &file.direct {
         // Once its token has run out, the link leads back to the file's page, which is asked instead.
-        if let Ok(Answer::File(_)) = probe(client, direct, cancel) {
+        if let Ok(Answer::File(_)) = probe(client, Host::MediaFire, direct, cancel) {
             return Ok(Address {
                 url: direct.clone(),
                 check,
@@ -144,7 +144,7 @@ pub(super) fn address(
     }
     check_cancel(cancel)?;
     let page = file_page(&file.quick_key);
-    let response = client.get(&page).send().map_err(network_error)?;
+    let response = client.get(&page).send_checked(FACTS.name)?;
     if !response.status().is_success() {
         return Err(page_error(&Page::read(response)));
     }
@@ -313,7 +313,7 @@ fn api<T: DeserializeOwned>(
     .map_err(|error| PreviewError::Failed {
         detail: error.to_string(),
     })?;
-    let response = client.get(url).send().map_err(network_error)?;
+    let response = client.get(url).send_checked(FACTS.name)?;
     // MediaFire answers its errors with a JSON body too, which says more than the status.
     let status = status_error(Host::MediaFire, &response);
     let body: Value = match response.json() {

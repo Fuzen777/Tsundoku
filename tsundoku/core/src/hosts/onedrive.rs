@@ -19,8 +19,8 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel,
-    code_error, network_error, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share,
+    check_cancel, code_error, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -349,8 +349,7 @@ fn get<T: DeserializeOwned>(
             .get(url)
             .header(AUTHORIZATION, format!("Badger {token}"))
             .header("Prefer", "autoredeem")
-            .send()
-            .map_err(network_error)?;
+            .send_checked(FACTS.name)?;
         let status = response.status();
         if status.is_success() {
             return response.json().map_err(|error| PreviewError::Failed {
@@ -380,8 +379,7 @@ fn token(client: &Client, cancel: &CancelToken, fresh: bool) -> Result<String, P
     let response = client
         .post(TOKEN_URL)
         .json(&json!({ "appId": APP_ID }))
-        .send()
-        .map_err(network_error)?;
+        .send_checked(FACTS.name)?;
     if let Some(error) = code_error(Host::OneDrive, response.status()) {
         return Err(error);
     }

@@ -21,8 +21,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, check_cancel, date_of,
-    network_error, safe_name, status_error,
+    Address, FileCheck, FileSource, Host, HostFacts, RemoteFile, SendChecked, Share, check_cancel,
+    date_of, safe_name, status_error,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -393,8 +393,7 @@ fn api<T: for<'de> Deserialize<'de>>(
         let response = client
             .post(&url)
             .json(&[&command])
-            .send()
-            .map_err(network_error)?;
+            .send_checked(FACTS.name)?;
         if response.status().as_u16() == 402 && response.headers().contains_key("x-hashcash") {
             return Err(PreviewError::Failed {
                 detail: "MEGA asked for a proof of work, which Tsundoku doesn't solve yet"

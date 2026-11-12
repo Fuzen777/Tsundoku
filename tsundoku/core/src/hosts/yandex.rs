@@ -15,8 +15,8 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
 use super::{
-    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, Share, check_cancel,
-    code_error, network_error, safe_name,
+    Address, FileCheck, FileSource, Host, HostFacts, Page, RemoteFile, SendChecked, Share,
+    check_cancel, code_error, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
@@ -153,7 +153,7 @@ pub(super) fn address(
     .map_err(|error| PreviewError::Failed {
         detail: error.to_string(),
     })?;
-    let answer: DownloadAnswer = answer(client.get(url).send().map_err(network_error)?)?;
+    let answer: DownloadAnswer = answer(client.get(url).send_checked(FACTS.name)?)?;
     Ok(Address {
         url: answer.href,
         check,
@@ -279,7 +279,7 @@ fn get<T: DeserializeOwned>(
     let url = Url::parse_with_params(API, parameters).map_err(|error| PreviewError::Failed {
         detail: error.to_string(),
     })?;
-    answer(client.get(url).send().map_err(network_error)?)
+    answer(client.get(url).send_checked(FACTS.name)?)
 }
 
 /// Everything directly in a folder of the link, a page at a time.
