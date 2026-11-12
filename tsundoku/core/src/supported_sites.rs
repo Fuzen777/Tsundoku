@@ -104,10 +104,11 @@ pub fn supported_sites(yt_dlp: Option<&Path>, gallery_dl: Option<&Path>) -> Supp
     let profiles = BrowserRoots::of_this_user()
         .map(|roots| browsers::find_profiles(&roots))
         .unwrap_or_default();
+    let own_hosts: Vec<&str> = Host::all().map(Host::name).collect();
     SupportedSites {
         sites: merge(
             // Tsundoku's own hosts first, so their names win over a tool's for the same site ("GoogleDrive").
-            Host::ALL.map(Host::name).into_iter().chain(
+            own_hosts.into_iter().chain(
                 yt_dlp_names
                     .iter()
                     .chain(&gallery_dl_names)

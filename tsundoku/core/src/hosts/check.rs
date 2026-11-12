@@ -1,14 +1,18 @@
-//! A check only a person can pass, such as Cloudflare's browser check in front of some MediaFire files' pages.
-//! Tsundoku never tries to get past one itself: the download waits in the queue until the person opens the check in
-//! Tsundoku's check window, a browser view of the site's own page. Once they've done what it asks and started the
-//! download on the page, the window catches that download's address, which the download then uses as the file's
-//! direct link (MediaFire's `MediaFireFile::direct`).
+//! A check only a person can pass, such as Cloudflare's browser check. Tsundoku never tries to get past one itself:
+//! every request a reader sends goes through one step that knows the checking service's markers (`hosts::checked`),
+//! and a file behind one waits in the queue until the person opens the check in Tsundoku's check window, a browser
+//! view of the site's own page. Once they've done what it asks and started the download on the page, the window
+//! offers that download to the queue (`downloads::window_offer`), which hands the file its address or the file the
+//! window saved, by the file's ID (`windowed::caught_link`, `windowed::saved_link`). Nothing here knows a site's
+//! layout: a page is a file's page on the site, and the window takes the download it starts.
+
+use std::path::Path;
 
 use reqwest::StatusCode;
 use reqwest::header::HeaderMap;
 
-use super::windowed::{self, WindowDownload};
-use super::{FileSource, Host, Page, Share};
+use super::windowed::{self, Caught};
+use super::{FileSource, Host, Page, RemoteFile, Share};
 use crate::cancel::CancelToken;
 use crate::metadata::PreviewError;
 
@@ -26,190 +30,109 @@ pub struct CheckPage {
     /// The page to open.
     pub url: String,
     host: Host,
-    /// The host's ID for the file, to know the download the page starts.
+    /// The file's ID, by which what the window gives reaches it: the host's own, or the link's.
     file_id: String,
-    /// Its file is whatever download the page itself starts, saved by the window (`any_download`).
-    any_download: bool,
 }
 
 impl CheckPage {
-    /// The page for a file of a share, if its host has one a person can open: MediaFire's file page.
-    pub(crate) fn of(source: &FileSource) -> Option<Self> {
-        match source {
-            FileSource::MediaFire(file) => Some(Self {
-                url: super::mediafire::file_page(&file.quick_key),
-                host: Host::MediaFire,
-                file_id: file.quick_key.clone(),
-                any_download: false,
-            }),
-            // Its captcha (`yandex::page_error`), on the file's own page.
-            FileSource::YandexDisk(file) => Some(Self {
-                url: file.page(),
-                host: Host::YandexDisk,
-                file_id: file.name.clone(),
-                any_download: false,
-            }),
-            // The link's own page, behind its check.
-            FileSource::Windowed(file) => Some(Self {
-                url: file.page.clone(),
-                host: file.host,
-                file_id: file.id.clone(),
-                any_download: false,
-            }),
-            FileSource::Mega(_)
-            | FileSource::GoogleDrive(_)
-            | FileSource::Dropbox(_)
-            | FileSource::OneDrive(_)
-            | FileSource::Icedrive(_)
-            | FileSource::Box(_)
-            | FileSource::ArchiveOrg(_)
-            | FileSource::WeTransfer(_)
-            | FileSource::PCloud(_)
-            | FileSource::OneFichier(_)
-            | FileSource::SwissTransfer(_)
-            | FileSource::FilesFm(_)
-            | FileSource::UploadEe(_)
-            | FileSource::TransferNow(_)
-            | FileSource::Filemail(_) => None,
-        }
+    /// The page a person opens for `file` of `share`: its own page on the site when the host has one a person can
+    /// open (MediaFire's and Yandex Disk's file pages, a link read through the window), else the link's own for a
+    /// share of one file. `None` for a file of a folder without a page of its own.
+    pub(crate) fn for_file(share: &Share, file: &RemoteFile) -> Option<Self> {
+        let (url, file_id) = match &file.source {
+            FileSource::MediaFire(file) => (
+                super::mediafire::file_page(&file.quick_key),
+                file.quick_key.clone(),
+            ),
+            FileSource::YandexDisk(file) => (file.page(), file.path.clone()),
+            FileSource::Windowed(file) => (file.page.clone(), file.id.clone()),
+            _ if share.files.len() == 1 => (share.url.clone(), share.id.clone()),
+            _ => return None,
+        };
+        Some(Self {
+            url,
+            host: share.host,
+            file_id,
+        })
     }
 
-    /// A page whose file is whatever download it starts itself, saved by the window: for a development build's test
-    /// of the window on a page of its own (`url`, on `host`'s site as far as the window is concerned).
-    pub fn any_download(url: &str, host: Host) -> Self {
-        Self {
-            url: url.to_owned(),
-            host,
-            file_id: String::new(),
-            any_download: true,
-        }
+    /// The page of a known window site's link (`window_sites`), without asking the site: for a development build's
+    /// test of the window on a page of its own (`moved_to`).
+    pub fn of_window_link(link: &str) -> Option<Self> {
+        let host = Host::of(link)?;
+        host.window_link(link)?;
+        let share = windowed::share(host, link);
+        Self::for_file(&share, share.files.first()?)
     }
 
-    /// The same file's page at another address, taking whatever download it starts: for a development build's test
-    /// of a waiting download's window on a page of its own.
+    /// The same file's page at another address: for a development build's test of a waiting download's window on a
+    /// page of its own.
     pub fn moved_to(&self, url: &str) -> Self {
         Self {
             url: url.to_owned(),
-            any_download: true,
             ..self.clone()
         }
     }
 
-    /// Whether `host`, a page's host name, is on the page's site, such as MediaFire's download servers for its file
-    /// pages: the check window doesn't leave the site.
+    /// Whether `host`, a page's or a download's host name, is on the page's site: the check window doesn't leave
+    /// it, and only a download from it is the page's file.
     pub fn on_site(&self, host: &str) -> bool {
         self.host.owns(host)
     }
 
-    /// Whether `download`, the address of a download a page started, is this page's file: anything else (another
-    /// file, an advert's download) is left alone.
-    pub fn takes(&self, download: &str) -> bool {
-        if let Some((id, _)) = windowed::saved_file(download) {
-            return id == self.file_id;
-        }
-        if self.any_download {
-            // Only ever asked about a download the page itself started (`saves_in_window`).
-            return true;
-        }
-        match &self.host.facts().window {
-            Some(window) => (window.takes)(download, &self.file_id),
-            None => caught_file(self.host, download).is_some_and(|id| id == self.file_id),
+    /// The file's ID, by which what the window gives reaches it.
+    pub fn file_id(&self) -> &str {
+        &self.file_id
+    }
+
+    /// The site's name.
+    pub fn site(&self) -> &'static str {
+        self.host.name()
+    }
+
+    /// Whether `link` gets past this page: what the window gave its file (`windowed::caught_link`, `saved_link`), or a
+    /// download address of the host's own a person pasted (MediaFire's `download<n>.mediafire.com/…`).
+    pub fn takes(&self, link: &str) -> bool {
+        match windowed::caught(link) {
+            Some((id, _)) => id == self.file_id,
+            None => self.host.download_file_id(link).as_deref() == Some(self.file_id.as_str()),
         }
     }
 
-    /// Whether the window saves the page's file itself rather than catching its address (`WindowDownload`).
-    pub fn saves_in_window(&self) -> bool {
-        self.any_download
-            || self
-                .host
-                .facts()
-                .window
-                .as_ref()
-                .is_some_and(|window| window.download == WindowDownload::SaveInWindow)
-    }
-
-    /// Whether the page gives the first click on Download to an advert (`WindowFacts::first_click_ad`).
-    pub fn first_click_ad(&self) -> bool {
-        self.host
-            .facts()
-            .window
-            .as_ref()
-            .is_some_and(|window| window.first_click_ad)
+    /// The link that hands the download the address the window caught for this page's file.
+    pub fn caught_link(&self, address: &str) -> String {
+        windowed::caught_link(&self.file_id, address)
     }
 
     /// The link that hands the download the file the window saved from this page.
-    pub fn saved_link(&self, path: &std::path::Path) -> String {
+    pub fn saved_link(&self, path: &Path) -> String {
         windowed::saved_link(&self.file_id, path)
+    }
+
+    /// What `links` give this page's file, the latest first: a file the window saved, or an address.
+    pub(crate) fn caught_in<'a>(&self, links: &'a [String]) -> Option<Caught<'a>> {
+        links
+            .iter()
+            .rev()
+            .find_map(|link| match windowed::caught(link) {
+                Some((id, caught)) if id == self.file_id => Some(caught),
+                Some(_) => None,
+                None => self.takes(link).then_some(Caught::Address(link.as_str())),
+            })
     }
 }
 
 impl BrowserCheck {
-    /// Whether one of its pages takes `download` (`CheckPage::takes`).
-    pub fn takes(&self, download: &str) -> bool {
-        self.pages.iter().any(|page| page.takes(download))
+    /// Whether one of its pages takes `link` (`CheckPage::takes`).
+    pub fn takes(&self, link: &str) -> bool {
+        self.pages.iter().any(|page| page.takes(link))
     }
 
-    /// Leaves out the pages `download` gets past, once it's been caught or pasted. Whether any did.
-    pub fn passed(&mut self, download: &str) -> bool {
+    /// Leaves out the pages `link` gets past, once it's been caught or pasted. Whether any did.
+    pub fn passed(&mut self, link: &str) -> bool {
         let before = self.pages.len();
-        self.pages.retain(|page| !page.takes(download));
+        self.pages.retain(|page| !page.takes(link));
         self.pages.len() < before
-    }
-}
-
-/// The file a download address caught on a host's page gets, by the host's ID for it: MediaFire's Download button
-/// leads to `download<n>.mediafire.com/<token>/<key>/<name>`.
-fn caught_file(host: Host, download: &str) -> Option<String> {
-    match host {
-        Host::MediaFire => super::mediafire::direct_link_key(download),
-        Host::YandexDisk => super::yandex::caught_file(download),
-        Host::Mega
-        | Host::GoogleDrive
-        | Host::Dropbox
-        | Host::OneDrive
-        | Host::Icedrive
-        | Host::Box
-        | Host::ArchiveOrg
-        | Host::WeTransfer
-        | Host::PCloud
-        | Host::OneFichier
-        | Host::SwissTransfer
-        | Host::FilesFm
-        | Host::UploadEe
-        | Host::TransferNow
-        | Host::Filemail
-        | Host::Workupload
-        | Host::Buzzheavier => None,
-    }
-}
-
-impl Share {
-    /// Gives each file the address caught for it in the check window or pasted (`links`), to download from while it
-    /// still leads to the file. A later link for a file replaces an earlier one.
-    pub fn use_caught_links(&mut self, links: &[String]) {
-        for file in &mut self.files {
-            if let FileSource::Windowed(file) = &mut file.source {
-                if let Some(link) = links.iter().rev().find(|link| file.takes(link)) {
-                    match windowed::saved_file(link) {
-                        Some((_, path)) => file.saved = Some(path.to_path_buf()),
-                        None => file.direct = Some(link.clone()),
-                    }
-                }
-                continue;
-            }
-            let (key, direct) = match &mut file.source {
-                FileSource::MediaFire(file) => (file.quick_key.clone(), &mut file.direct),
-                FileSource::YandexDisk(file) => (file.name.clone(), &mut file.direct),
-                _ => continue,
-            };
-            if let Some(link) = links
-                .iter()
-                .rev()
-                .find(|link| caught_file(self.host, link).as_deref() == Some(key.as_str()))
-            {
-                *direct = Some(link.clone());
-            }
-        }
     }
 }
 
@@ -254,7 +177,7 @@ pub fn for_link(link: &str, cancel: &CancelToken) -> Result<BrowserCheck, Previe
     let pages: Vec<CheckPage> = share
         .files
         .iter()
-        .filter_map(|file| CheckPage::of(&file.source))
+        .filter_map(|file| CheckPage::for_file(&share, file))
         .collect();
     if pages.is_empty() {
         return Err(PreviewError::Failed {
@@ -272,19 +195,33 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::hosts::RemoteFile;
     use crate::hosts::mediafire::MediaFireFile;
 
     const PAGE: &str = "https://www.mediafire.com/file/x7k2j9q4zbbwm1n";
     const DOWNLOAD: &str =
         "https://download2390.mediafire.com/gf8b0u3kzm4g/x7k2j9q4zbbwm1n/Pack_v2.zip";
 
-    fn mediafire(key: &str) -> FileSource {
-        FileSource::MediaFire(MediaFireFile {
-            quick_key: key.to_owned(),
-            sha256: None,
-            direct: None,
-        })
+    fn mediafire(key: &str) -> RemoteFile {
+        RemoteFile {
+            path: PathBuf::from(format!("{key}.zip")),
+            size: 1,
+            source: FileSource::MediaFire(MediaFireFile {
+                quick_key: key.to_owned(),
+                sha256: None,
+                direct: None,
+            }),
+        }
+    }
+
+    fn share(host: Host, files: Vec<RemoteFile>) -> Share {
+        Share {
+            host,
+            id: "folder".to_owned(),
+            url: "https://example.com/folder".to_owned(),
+            title: "Folder".to_owned(),
+            upload_date: None,
+            files,
+        }
     }
 
     fn page(status: u16, challenged: bool, html: &str) -> Page {
@@ -322,12 +259,6 @@ mod tests {
         );
         assert!(!is_browser_check(&page(403, false, "Forbidden")));
         assert_eq!(
-            Host::MediaFire.page_error(&page(403, true, "")),
-            PreviewError::BrowserCheck {
-                site: "MediaFire".to_owned()
-            }
-        );
-        assert_eq!(
             Host::GoogleDrive.page_error(&page(503, true, "")),
             PreviewError::BrowserCheck {
                 site: "Google Drive".to_owned()
@@ -337,71 +268,74 @@ mod tests {
     }
 
     #[test]
-    fn a_files_page_takes_only_its_own_download() {
-        let page = CheckPage::of(&mediafire("x7k2j9q4zbbwm1n")).unwrap();
+    fn a_files_page_takes_only_what_reaches_its_own_file() {
+        let folder = share(
+            Host::MediaFire,
+            vec![mediafire("x7k2j9q4zbbwm1n"), mediafire("otherkey123")],
+        );
+        let page = CheckPage::for_file(&folder, &folder.files[0]).unwrap();
         assert_eq!(page.url, PAGE);
         assert!(page.on_site("www.mediafire.com") && page.on_site("download2390.mediafire.com"));
         assert!(!page.on_site("econventa.com") && !page.on_site("notmediafire.com"));
-        assert!(page.takes(DOWNLOAD));
+        let caught = page.caught_link("https://download9.mediafire.com/t/x/Pack.zip");
+        assert!(page.takes(&caught));
+        assert!(
+            page.takes(DOWNLOAD),
+            "a download link of MediaFire's own, pasted"
+        );
         assert!(
             !page.takes("https://download1.mediafire.com/abc/otherkey123/Other.zip"),
             "another file"
         );
-        assert!(
-            !page.takes("https://ads.example.com/x7k2j9q4zbbwm1n/setup.exe"),
-            "an advert"
-        );
         assert!(!page.takes(PAGE), "the page itself");
+        assert!(
+            !page.takes(&windowed::caught_link("otherkey123", DOWNLOAD)),
+            "what the window gave another file"
+        );
         assert_eq!(
-            CheckPage::of(&FileSource::Dropbox(crate::hosts::dropbox::DropboxFile {
-                url: "https://www.dropbox.com/scl/fi/a/b.zip?dl=1".to_owned()
-            })),
+            page.caught_in(&[caught.clone(), DOWNLOAD.to_owned()]),
+            Some(Caught::Address(DOWNLOAD)),
+            "the latest"
+        );
+        assert_eq!(
+            page.caught_in(&[caught]),
+            Some(Caught::Address(
+                "https://download9.mediafire.com/t/x/Pack.zip"
+            ))
+        );
+
+        let dropbox_file = || RemoteFile {
+            path: PathBuf::from("a.zip"),
+            size: 1,
+            source: FileSource::Dropbox(crate::hosts::dropbox::DropboxFile {
+                url: "https://www.dropbox.com/scl/fi/a/a.zip?dl=1".to_owned(),
+            }),
+        };
+        let dropbox_folder = share(Host::Dropbox, vec![dropbox_file(), dropbox_file()]);
+        assert_eq!(
+            CheckPage::for_file(&dropbox_folder, &dropbox_folder.files[0]),
             None,
-            "no page to open"
+            "a folder's file with no page of its own"
+        );
+        let one = share(Host::Dropbox, vec![dropbox_file()]);
+        assert_eq!(
+            CheckPage::for_file(&one, &one.files[0]).map(|page| page.url),
+            Some("https://example.com/folder".to_owned()),
+            "the link's own page, for a share of one file"
         );
 
         let mut check = BrowserCheck {
             site: "MediaFire".to_owned(),
-            pages: ["x7k2j9q4zbbwm1n", "otherkey123"]
-                .map(|key| CheckPage::of(&mediafire(key)).unwrap())
-                .to_vec(),
+            pages: folder
+                .files
+                .iter()
+                .filter_map(|file| CheckPage::for_file(&folder, file))
+                .collect(),
         };
         assert!(check.takes(DOWNLOAD));
         assert!(!check.passed("https://download1.mediafire.com/abc/nokey/None.zip"));
         assert!(check.passed(DOWNLOAD));
         assert_eq!(check.pages.len(), 1);
         assert!(!check.takes(DOWNLOAD), "passed already");
-    }
-
-    #[test]
-    fn a_caught_link_becomes_its_files_direct_link() {
-        let file = |key: &str| RemoteFile {
-            path: PathBuf::from(format!("{key}.zip")),
-            size: 1,
-            source: mediafire(key),
-        };
-        let mut share = Share {
-            host: Host::MediaFire,
-            id: "folder".to_owned(),
-            url: "https://www.mediafire.com/folder/folder".to_owned(),
-            title: "Folder".to_owned(),
-            upload_date: None,
-            files: vec![file("x7k2j9q4zbbwm1n"), file("otherkey123")],
-        };
-        let newer = DOWNLOAD.replace("gf8b0u3kzm4g", "newtoken");
-        share.use_caught_links(&[DOWNLOAD.to_owned(), newer.clone()]);
-        let direct: Vec<Option<String>> = share
-            .files
-            .iter()
-            .map(|file| match &file.source {
-                FileSource::MediaFire(file) => file.direct.clone(),
-                _ => None,
-            })
-            .collect();
-        assert_eq!(
-            direct,
-            [Some(newer), None],
-            "the latest link, for its own file only"
-        );
     }
 }

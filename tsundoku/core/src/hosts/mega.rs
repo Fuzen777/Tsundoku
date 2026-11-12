@@ -35,7 +35,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: None,
-    window: None,
+    window_link: None,
+    download_file_id: None,
 };
 
 const API: &str = "https://g.api.mega.co.nz/cs";

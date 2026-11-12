@@ -10,6 +10,7 @@ mod room_check;
 mod run;
 mod runner;
 mod store;
+mod window_offer;
 
 use std::collections::HashMap;
 use std::fs;
@@ -28,6 +29,7 @@ use self::room_check::Reserved;
 pub use self::run::{Notice, QueueRun, RunEvent, RunSummary, TaskbarProgress, notices};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
+pub use self::window_offer::{JobOffer, OFFER_WAIT, WindowAnswer, WindowOffer, WindowReply};
 use crate::browsers;
 use crate::cancel::CancelToken;
 use crate::database::Database;
@@ -613,8 +615,13 @@ impl DownloadQueue {
             return Err(DownloadError::WrongState);
         }
         item.state = QueueState::Stopped;
+        let offered = item.recovery.offer.take();
         self.store.update(item)?;
         drop(state);
+        // The check window stops the download it offered.
+        if let Some(offered) = offered {
+            offered.refuse();
+        }
         self.notify();
         Ok(())
     }
@@ -625,6 +632,7 @@ impl DownloadQueue {
         let mut state = lock(&self.state);
         let contents = &mut *state;
         let mut saved = Ok(());
+        let mut offers = Vec::new();
         // The waiting ones first: a running one that ends meanwhile waits for this lock, then finds nothing to start.
         for item in contents
             .items
@@ -632,6 +640,7 @@ impl DownloadQueue {
             .filter(|item| item.state == QueueState::Waiting)
         {
             item.state = QueueState::Stopped;
+            offers.extend(item.recovery.offer.take());
             saved = saved.and(self.store.update(item));
         }
         for running in contents
@@ -643,6 +652,9 @@ impl DownloadQueue {
             running.cancel.cancel();
         }
         drop(state);
+        for offered in offers {
+            offered.refuse();
+        }
         self.notify();
         saved
     }
@@ -799,11 +811,15 @@ impl DownloadQueue {
         if item.state == QueueState::Done {
             return Err(DownloadError::WrongState);
         }
+        let offered = item.recovery.offer.take();
         // The files go first, so once the item is gone, they are too.
         remove_folder(&temp_folder(item));
         state.items.retain(|item| item.id != id);
         self.store.delete(id)?;
         drop(state);
+        if let Some(offered) = offered {
+            offered.refuse();
+        }
         // Its partial files are gone: a download waiting for room may fit now.
         self.schedule();
         Ok(())
@@ -999,13 +1015,21 @@ impl DownloadQueue {
                     .filter(|item| item.state == QueueState::Running)
                     .filter_map(|item| paced_site(item, &options))
                     .collect();
-                let Some(item) = contents.items.iter_mut().find(|item| {
+                let may_start = |item: &QueueItem| {
                     item.state == QueueState::Waiting
                         && item.hold.is_none()
                         && paced_site(item, &options).is_none_or(|site| !pacing.contains(&site))
-                }) else {
+                };
+                // A download the person just started in the check window goes first: the window holds it meanwhile.
+                let Some(index) = contents
+                    .items
+                    .iter()
+                    .position(|item| item.recovery.offer.is_some() && may_start(item))
+                    .or_else(|| contents.items.iter().position(may_start))
+                else {
                     break;
                 };
+                let item = &mut contents.items[index];
                 // A download that won't fit waits, held, and the next one is tried.
                 if let Some(hold) = self.room_hold(item, &mut reserved, now_ms()) {
                     item.hold = Some(hold);
@@ -1018,7 +1042,12 @@ impl DownloadQueue {
                     item.error = Some(error);
                     continue;
                 }
-                let job = self.job_for(item);
+                let mut job = self.job_for(item);
+                job.window_offer = item
+                    .recovery
+                    .offer
+                    .take()
+                    .map(|offered| self.job_offer(item.id, offered));
                 let cancel = CancelToken::new();
                 contents.running.insert(
                     item.id,
@@ -1074,6 +1103,7 @@ impl DownloadQueue {
                 .then(|| item.file_name.clone())
                 .flatten(),
             caught_links: item.caught_links.clone(),
+            window_offer: None,
         }
     }
 
@@ -1119,6 +1149,7 @@ impl DownloadQueue {
             .running
             .remove(&job.id)
             .and_then(|running| running.end_request);
+        let stopped = end_request.is_some() || outcome == JobOutcome::Cancelled;
         if end_request == Some(EndRequest::Cancel) {
             // The files go first, so once the item is gone, they are too.
             remove_folder(&job.temp_folder);
@@ -1148,10 +1179,16 @@ impl DownloadQueue {
                 (_, JobOutcome::Failed(_)) if retry.is_some() => {
                     item.state = QueueState::Waiting;
                 }
-                // It waits, with the files it could download saved, until a person opens the check.
-                (_, JobOutcome::NeedsCheck(check)) => {
+                // It waits, with the files it could download saved, until a person opens the check. A file the window
+                // saved meanwhile no longer waits for it.
+                (_, JobOutcome::NeedsCheck(mut check)) => {
                     item.state = QueueState::Waiting;
-                    item.recovery.check = Some(check);
+                    check.pages.retain(|page| {
+                        !item.caught_links.iter().any(|link| {
+                            page.takes(link) && crate::hosts::windowed::is_saved_link(link)
+                        })
+                    });
+                    item.recovery.check = (!check.pages.is_empty()).then_some(check);
                 }
                 (_, JobOutcome::Failed(error)) => {
                     item.state = QueueState::Failed;
@@ -1187,6 +1224,11 @@ impl DownloadQueue {
             }
             let _ = self.store.update(item);
             drop(state);
+        }
+        // A file offered from the check window that the run never answered for: the window saves it, unless the
+        // download was stopped or removed.
+        if let Some(offer) = &job.window_offer {
+            offer.settle(stopped);
         }
         self.schedule();
     }

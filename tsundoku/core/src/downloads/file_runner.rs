@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use md5::Md5;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
-use reqwest::header::RANGE;
+use reqwest::header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, RANGE};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
@@ -21,7 +21,8 @@ use super::runner::{JobOutcome, JobSpec, make_folders, open_log, seconds_since_e
 use super::{DownloadError, DownloadProgress, DownloadStage};
 use crate::cancel::CancelToken;
 use crate::hosts::check::{BrowserCheck, CheckPage};
-use crate::hosts::{self, Address, FileCheck, Host, Page, RemoteFile};
+use crate::hosts::windowed::Caught;
+use crate::hosts::{self, Address, FileCheck, FileSource, Host, Page, RemoteFile};
 use crate::metadata::PreviewError;
 
 /// How much is read from the network or the disk at a time.
@@ -102,9 +103,7 @@ fn download(
 
     let host = Host::of(&job.url).ok_or(PreviewError::UnsupportedSite)?;
     let client = hosts::client_for(host)?;
-    let mut share = host.read(&client, &job.url, cancel)?;
-    share.use_caught_links(&job.caught_links);
-    share.resolve_caught(&client, cancel)?;
+    let share = host.read(&client, &job.url, cancel)?;
     write_log(
         log,
         &format!("{} files, {} bytes", share.files.len(), share.total_bytes()),
@@ -120,27 +119,34 @@ fn download(
         .shared_file_name
         .as_deref()
         .filter(|_| share.files.len() == 1);
-    for (index, file) in share.files.iter().enumerate() {
-        let destination = destination_of(&job.folder, &file.path, single_name);
-        let size_known = file.size > 0 || !matches!(file.source, hosts::FileSource::Windowed(_));
-        if size_known
-            && fs::metadata(&destination)
-                .is_ok_and(|metadata| metadata.is_file() && metadata.len() == file.size)
+    for (index, listed) in share.files.iter().enumerate() {
+        let last = index + 1 == share.files.len();
+        let mut file = listed.clone();
+        // A file read through the window has its size and name once its download answers.
+        let size_known = file.size > 0 || !matches!(file.source, FileSource::Windowed(_));
+        let page = CheckPage::for_file(&share, listed);
+        let offer = job.window_offer.as_ref().filter(|offer| {
+            page.as_ref()
+                .is_some_and(|page| page.file_id() == offer.file_id)
+        });
+        let caught = page
+            .as_ref()
+            .and_then(|page| page.caught_in(&job.caught_links));
+
+        // A file the check window saved only has to be moved into place.
+        if offer.is_none()
+            && let Some(Caught::Saved(window_file)) = caught
+            && let Ok(metadata) = fs::metadata(window_file)
+            && metadata.is_file()
         {
-            write_log(
-                log,
-                &format!("{}: already in the folder", file.path.display()),
-            );
-            meter.skip(file.size);
-            saved.push(destination);
-            continue;
-        }
-        // A file the check window saved (a host whose download runs in the window) only has to be moved into place.
-        if let hosts::FileSource::Windowed(hosts::windowed::WindowedFile {
-            saved: Some(window_file),
-            ..
-        }) = &file.source
-        {
+            if !size_known {
+                file.size = metadata.len();
+                meter.grow(file.size);
+                if let Some(name) = window_file.file_name() {
+                    file.path = PathBuf::from(hosts::safe_name(&name.to_string_lossy()));
+                }
+            }
+            let destination = destination_of(&job.folder, &file.path, single_name);
             write_log(
                 log,
                 &format!(
@@ -150,30 +156,99 @@ fn download(
                 ),
             );
             meter.skip(file.size);
-            if index + 1 == share.files.len() {
+            if last {
                 on_progress(DownloadProgress::at(DownloadStage::Finishing));
             }
             saved.push(place(window_file, &destination)?);
             continue;
         }
+        if size_known && let Some(there) = already_there(job, &file, single_name) {
+            write_log(
+                log,
+                &format!("{}: already in the folder", file.path.display()),
+            );
+            meter.skip(file.size);
+            saved.push(there);
+            continue;
+        }
+
         let part = job.temp_folder.join(format!("{index}.part"));
-        if let Some(countdown) = file.source.countdown(&client, cancel)? {
+        let offset = fs::metadata(&part).map_or(0, |metadata| metadata.len());
+        // The address the window offered, or one it gave before: asked first, and kept only when it's strictly the
+        // file. Anything else leaves an offered file to the window, and a file it gave before to its host.
+        let given = match (offer, caught) {
+            (Some(offer), _) => Some((offer.offer.address.as_str(), offer.offer.total)),
+            (None, Some(Caught::Address(address))) => {
+                Some((address, size_known.then_some(file.size)))
+            }
+            _ => None,
+        };
+        let mut opened = None;
+        if let Some((address, expected)) = given {
+            let answer = open_file(&client, host, address, offset, expected, cancel)?;
+            match (answer, offer) {
+                (Some(answer), Some(offer)) if offer.fetch() => opened = Some(answer),
+                (Some(answer), None) => opened = Some(answer),
+                (answer, Some(offer)) => {
+                    if answer.is_none() {
+                        offer.leave_to_window();
+                    }
+                    write_log(
+                        log,
+                        &format!("{}: left to the check window", file.path.display()),
+                    );
+                    if let Some(page) = page {
+                        behind
+                            .get_or_insert_with(|| BrowserCheck {
+                                site: host.name().to_owned(),
+                                pages: Vec::new(),
+                            })
+                            .pages
+                            .push(page);
+                    }
+                    continue;
+                }
+                (None, None) => {}
+            }
+        }
+        if let Some(answer) = &opened {
             write_log(
                 log,
                 &format!(
-                    "{}: {}'s countdown, {} s",
-                    file.path.display(),
-                    host.name(),
-                    countdown.as_secs()
+                    "{}: the address the check window gave answered with the file",
+                    file.path.display()
                 ),
             );
-            wait_out(countdown, cancel, on_progress)?;
+            if !size_known {
+                file.size = answer.total;
+                meter.grow(file.size);
+                let name = answer
+                    .name
+                    .clone()
+                    .or_else(|| offer.and_then(|offer| offer.offer.name.clone()))
+                    .or_else(|| last_segment(&answer.url));
+                if let Some(name) = name {
+                    file.path = PathBuf::from(hosts::safe_name(&name));
+                }
+                if let Some(there) = already_there(job, &file, single_name) {
+                    write_log(
+                        log,
+                        &format!("{}: already in the folder", file.path.display()),
+                    );
+                    meter.skip(file.size);
+                    saved.push(there);
+                    continue;
+                }
+            }
         }
-        let fetched = file
-            .source
-            .address(&client, cancel)
-            .map_err(Stop::from)
-            .and_then(|address| {
+        let destination = destination_of(&job.folder, &file.path, single_name);
+
+        let fetched = match opened {
+            Some(answer) => {
+                let address = Address {
+                    url: answer.url.clone(),
+                    check: file.source.known_check(),
+                };
                 write_log(
                     log,
                     &format!("{}: {} bytes", file.path.display(), file.size),
@@ -182,19 +257,60 @@ fn download(
                     &client,
                     host,
                     &address,
-                    file,
+                    &file,
                     &part,
+                    Some(answer.response),
                     cancel,
                     &mut meter,
                     log,
                     on_progress,
                 )
                 .map(|()| address)
-            });
+            }
+            None => file
+                .source
+                .countdown(&client, cancel)
+                .map_err(Stop::from)
+                .and_then(|countdown| match countdown {
+                    Some(countdown) => {
+                        write_log(
+                            log,
+                            &format!(
+                                "{}: {}'s countdown, {} s",
+                                file.path.display(),
+                                host.name(),
+                                countdown.as_secs()
+                            ),
+                        );
+                        wait_out(countdown, cancel, on_progress)
+                    }
+                    None => Ok(()),
+                })
+                .and_then(|()| file.source.address(&client, cancel).map_err(Stop::from))
+                .and_then(|address| {
+                    write_log(
+                        log,
+                        &format!("{}: {} bytes", file.path.display(), file.size),
+                    );
+                    fetch(
+                        &client,
+                        host,
+                        &address,
+                        &file,
+                        &part,
+                        None,
+                        cancel,
+                        &mut meter,
+                        log,
+                        on_progress,
+                    )
+                    .map(|()| address)
+                }),
+        };
         let address = match fetched {
             Ok(address) => address,
             Err(stop) => {
-                let page = behind_check(stop, file)?;
+                let page = behind_check(stop, page)?;
                 write_log(
                     log,
                     &format!("{}: behind a check, left for later", file.path.display()),
@@ -210,7 +326,7 @@ fn download(
             }
         };
         // Checking a file and moving it is quick between a folder's files, so only the last one shows Finishing.
-        if index + 1 == share.files.len() {
+        if last {
             on_progress(DownloadProgress::at(DownloadStage::Finishing));
         }
         if !check(&address.check, &part, cancel)? {
@@ -228,6 +344,24 @@ fn download(
     }
     on_progress(DownloadProgress::at(DownloadStage::Finishing));
     Ok(saved)
+}
+
+/// Where `file` already is in the download's folder, with its size: it isn't downloaded again.
+fn already_there(job: &JobSpec, file: &RemoteFile, single_name: Option<&str>) -> Option<PathBuf> {
+    let destination = destination_of(&job.folder, &file.path, single_name);
+    fs::metadata(&destination)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.len() == file.size)
+        .then_some(destination)
+}
+
+/// The last part of an address's path, as a file's name.
+fn last_segment(address: &str) -> Option<String> {
+    reqwest::Url::parse(address)
+        .ok()?
+        .path_segments()?
+        .next_back()
+        .filter(|segment| !segment.is_empty())
+        .map(hosts::percent_decode)
 }
 
 /// Waits out a host's countdown before a free download, showing the seconds left.
@@ -263,8 +397,8 @@ fn wait_out(
 }
 
 /// The page to open for a file the host put behind a check only a person can pass, or the run's end as it was.
-fn behind_check(stop: Stop, file: &RemoteFile) -> Result<CheckPage, Stop> {
-    match (&stop, CheckPage::of(&file.source)) {
+fn behind_check(stop: Stop, page: Option<CheckPage>) -> Result<CheckPage, Stop> {
+    match (&stop, page) {
         (
             Stop::Failed(DownloadError::YtDlp {
                 error: PreviewError::BrowserCheck { .. },
@@ -273,6 +407,73 @@ fn behind_check(stop: Stop, file: &RemoteFile) -> Result<CheckPage, Stop> {
         ) => Ok(page),
         _ => Err(stop),
     }
+}
+
+/// The answer to the run's own first request for an address the check window gave, kept when it's strictly the file.
+struct Opened {
+    response: reqwest::blocking::Response,
+    /// Where it ended up, after redirects.
+    url: String,
+    /// The whole file's size.
+    total: u64,
+    /// From its Content-Disposition.
+    name: Option<String>,
+}
+
+/// Asks `host` for the file at `url`, an address the check window gave, as every request is asked: from `offset`,
+/// saying it's Tsundoku, nothing else changed. `None` unless the answer is strictly the file (`strictly_the_file`):
+/// a check, a page, a refused connection or another size all are, quietly.
+fn open_file(
+    client: &Client,
+    host: Host,
+    url: &str,
+    offset: u64,
+    expected: Option<u64>,
+    cancel: &CancelToken,
+) -> Result<Option<Opened>, Stop> {
+    let answer = send(client, host, url, offset, cancel);
+    // Stopped while asking: nothing is decided, and the window's download stops with the download.
+    if cancel.is_cancelled() {
+        return Err(Stop::Cancelled);
+    }
+    match answer {
+        Ok(response) => Ok(strictly_the_file(response, offset, expected)),
+        Err(Stop::Cancelled) => Err(Stop::Cancelled),
+        Err(_) => Ok(None),
+    }
+}
+
+/// The answer, if it's strictly the file: a success, or the part asked for, that isn't a web page (no check reaches
+/// here: `hosts::checked`), with its whole size given, and that size `expected` when it's known.
+fn strictly_the_file(
+    response: reqwest::blocking::Response,
+    offset: u64,
+    expected: Option<u64>,
+) -> Option<Opened> {
+    let headers = response.headers();
+    let header = |name| headers.get(name).and_then(|value| value.to_str().ok());
+    let total = match response.status() {
+        StatusCode::OK => header(CONTENT_LENGTH).and_then(|value| value.trim().parse().ok()),
+        StatusCode::PARTIAL_CONTENT if offset > 0 => header(CONTENT_RANGE).and_then(|range| {
+            let (start, total) = range.trim().strip_prefix("bytes ")?.split_once('-')?;
+            let total = total.rsplit_once('/')?.1.trim().parse::<u64>().ok()?;
+            (start.trim().parse::<u64>().ok()? == offset).then_some(total)
+        }),
+        _ => None,
+    }?;
+    let is_page = header(CONTENT_TYPE).is_some_and(|kind| {
+        let kind = kind.trim().to_ascii_lowercase();
+        kind.starts_with("text/html") || kind.starts_with("application/xhtml+xml")
+    });
+    if is_page || expected.is_some_and(|expected| expected != total) {
+        return None;
+    }
+    Some(Opened {
+        url: response.url().to_string(),
+        name: header(CONTENT_DISPOSITION).and_then(hosts::attachment_name),
+        total,
+        response,
+    })
 }
 
 /// Downloads a file to `part`, continuing what's already there when the host allows.
@@ -286,6 +487,7 @@ fn fetch(
     address: &Address,
     file: &RemoteFile,
     part: &Path,
+    opened: Option<reqwest::blocking::Response>,
     cancel: &CancelToken,
     meter: &mut Meter,
     log: &mut Option<File>,
@@ -299,14 +501,21 @@ fn fetch(
         meter.skip(offset);
         return Ok(());
     }
-    let mut response = send(client, host, &address.url, offset, cancel)?;
-    if let Some(error) = hosts::status_error(host, &response) {
-        return Err(error.into());
-    }
-    // A page about an error, such as Google Drive's download limit, mustn't be saved as part of the file.
-    if host.sends_attachments() && !hosts::is_attachment(response.headers()) {
-        return Err(host.page_error(&Page::read(response)).into());
-    }
+    let mut response = match opened {
+        // Already strictly the file (`strictly_the_file`).
+        Some(response) => response,
+        None => {
+            let response = send(client, host, &address.url, offset, cancel)?;
+            if let Some(error) = hosts::status_error(host, &response) {
+                return Err(error.into());
+            }
+            // A page about an error, such as Google Drive's download limit, mustn't be saved as part of the file.
+            if host.sends_attachments() && !hosts::is_attachment(response.headers()) {
+                return Err(host.page_error(&Page::read(response)).into());
+            }
+            response
+        }
+    };
     if offset > 0 {
         if response.status() == StatusCode::PARTIAL_CONTENT {
             write_log(log, &format!("continuing at {offset} bytes"));
@@ -546,6 +755,11 @@ impl Meter {
         }
     }
 
+    /// Adds a file whose size became known once its download answered (a file read through the check window).
+    fn grow(&mut self, count: u64) {
+        self.total += count;
+    }
+
     /// Counts bytes that didn't need downloading: a file already there, or the part an earlier run fetched.
     fn skip(&mut self, count: u64) {
         self.done += count;
@@ -703,26 +917,115 @@ mod tests {
             size: 1,
             source,
         };
-        let mediafire = file(FileSource::MediaFire(hosts::mediafire::MediaFireFile {
-            quick_key: "abc123".to_owned(),
-            sha256: None,
-            direct: None,
-        }));
+        let share = |files: Vec<RemoteFile>| hosts::Share {
+            host: Host::MediaFire,
+            id: "folder".to_owned(),
+            url: "https://www.mediafire.com/folder/folder".to_owned(),
+            title: "Folder".to_owned(),
+            upload_date: None,
+            files,
+        };
+        let mediafire = || {
+            file(FileSource::MediaFire(hosts::mediafire::MediaFireFile {
+                quick_key: "abc123".to_owned(),
+                sha256: None,
+                direct: None,
+            }))
+        };
+        let folder = share(vec![mediafire(), mediafire()]);
+        let page = || CheckPage::for_file(&folder, &folder.files[0]);
         assert!(matches!(
-            behind_check(check(), &mediafire),
+            behind_check(check(), page()),
             Ok(page) if page.url == "https://www.mediafire.com/file/abc123"
         ));
-        let dropbox = file(FileSource::Dropbox(hosts::dropbox::DropboxFile {
-            url: "https://www.dropbox.com/scl/fi/a/a.zip?dl=1".to_owned(),
-        }));
+        let dropbox = || {
+            file(FileSource::Dropbox(hosts::dropbox::DropboxFile {
+                url: "https://www.dropbox.com/scl/fi/a/a.zip?dl=1".to_owned(),
+            }))
+        };
+        let dropbox_folder = share(vec![dropbox(), dropbox()]);
         assert!(
-            matches!(behind_check(check(), &dropbox), Err(Stop::Failed(_))),
-            "no page a person could open: it fails"
+            matches!(
+                behind_check(
+                    check(),
+                    CheckPage::for_file(&dropbox_folder, &dropbox_folder.files[0])
+                ),
+                Err(Stop::Failed(_))
+            ),
+            "a folder's file with no page a person could open: it fails"
         );
         assert!(matches!(
-            behind_check(Stop::Failed(DownloadError::NoFile), &mediafire),
+            behind_check(Stop::Failed(DownloadError::NoFile), page()),
             Err(Stop::Failed(DownloadError::NoFile))
         ));
+    }
+
+    #[test]
+    fn keeps_an_address_the_window_gave_only_when_it_answers_strictly_with_the_file() {
+        use hosts::test_server::{Reply, TestServer};
+        let server = TestServer::start(|request| match request.path.as_str() {
+            "/file" => Reply::new(200, "12345")
+                .with("Content-Type", "application/zip")
+                .with(
+                    "Content-Disposition",
+                    "attachment; filename=\"Pack v2.zip\"",
+                ),
+            "/part" if request.header("range") == Some("bytes=2-") => {
+                Reply::new(206, "345").with("Content-Range", "bytes 2-4/5")
+            }
+            "/part" => Reply::new(200, "12345"),
+            "/page" => Reply::new(200, "<html>Download</html>")
+                .with("Content-Type", "text/html; charset=utf-8"),
+            "/check" => Reply::new(403, "<title>Just a moment...</title>"),
+            "/busy" => Reply::new(503, "one download at a time"),
+            _ => Reply::new(404, "Not found"),
+        });
+        let client = hosts::tsundoku_client().unwrap();
+        let cancel = CancelToken::new();
+        let open = |path: &str, offset: u64, expected: Option<u64>| match open_file(
+            &client,
+            Host::MediaFire,
+            &server.url(path),
+            offset,
+            expected,
+            &cancel,
+        ) {
+            Ok(opened) => opened,
+            Err(_) => panic!("only a stop ends it"),
+        };
+
+        let mut file = open("/file", 0, Some(5)).expect("the file");
+        assert_eq!((file.total, file.name.as_deref()), (5, Some("Pack v2.zip")));
+        let mut body = String::new();
+        file.response.read_to_string(&mut body).unwrap();
+        assert_eq!(body, "12345", "its first request's answer is the download");
+        assert!(
+            open("/file", 0, None).is_some(),
+            "the window didn't know its size"
+        );
+        assert!(open("/file", 0, Some(6)).is_none(), "another size");
+        assert_eq!(open("/part", 2, Some(5)).map(|part| part.total), Some(5));
+        for path in ["/page", "/check", "/busy", "/gone"] {
+            assert!(open(path, 0, None).is_none(), "{path}");
+        }
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        assert!(
+            matches!(
+                open_file(
+                    &client,
+                    Host::MediaFire,
+                    &format!("http://{closed}/file"),
+                    0,
+                    None,
+                    &cancel
+                ),
+                Ok(None)
+            ),
+            "a refused connection"
+        );
     }
 
     #[test]
@@ -832,6 +1135,7 @@ mod onedrive_live {
             &address,
             file,
             &part,
+            None,
             &CancelToken::new(),
             &mut meter,
             &mut None,
@@ -869,6 +1173,7 @@ mod onedrive_live {
             files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
             shared_file_name: None,
             caught_links: Vec::new(),
+            window_offer: None,
         };
         let outcome = run(&job, &CancelToken::new(), &mut |_| {});
         println!("{outcome:?}");
@@ -949,6 +1254,7 @@ mod host_live {
             &address,
             file,
             &part,
+            None,
             &cancel,
             &mut meter,
             &mut None,
@@ -988,6 +1294,7 @@ mod host_live {
             files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
             shared_file_name: None,
             caught_links: Vec::new(),
+            window_offer: None,
         };
         let outcome = run(&job, &CancelToken::new(), &mut |_| {});
         println!("{}", fs::read_to_string(&job.log_path).unwrap_or_default());

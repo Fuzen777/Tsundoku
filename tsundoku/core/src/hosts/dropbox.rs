@@ -31,7 +31,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: Some(page_error),
-    window: None,
+    window_link: None,
+    download_file_id: None,
 };
 
 const SITE: &str = "https://www.dropbox.com";

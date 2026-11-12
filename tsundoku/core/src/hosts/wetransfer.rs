@@ -29,7 +29,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: None,
-    window: None,
+    window_link: None,
+    download_file_id: None,
 };
 
 const API: &str = "https://wetransfer.com/api/v4/transfers";

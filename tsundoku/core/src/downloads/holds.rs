@@ -4,8 +4,6 @@
 //! (`hosts::check`), which waits for them. The queue works each waiting item's hold out whenever it schedules, and a
 //! thread schedules again once one ends.
 
-use std::fs;
-use std::path::PathBuf;
 use std::sync::Weak;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -13,6 +11,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::window_offer::Offered;
 use super::{DownloadError, DownloadProgress, DownloadQueue, DownloadStage, QueueItem, QueueState};
 use crate::hosts::check::BrowserCheck;
 use crate::metadata::PreviewError;
@@ -53,16 +52,19 @@ pub struct Recovery {
     /// The pages its last run found behind a check only a person can pass: it waits for them (`Hold::BrowserCheck`)
     /// until the check window or a pasted link gets past them, or Resume or Retry tries afresh.
     pub(super) check: Option<BrowserCheck>,
+    /// The person started a file's download in the check window, which holds it until the download's run answers
+    /// (`window_offer`): it starts at once, whatever its other holds.
+    pub(super) offer: Option<Offered>,
     /// The check window is saving the file of a page of `check` (its site's name): it waits for that
     /// (`Hold::WindowDownload`), and fails if the window's download stops (`window_download_stopped`).
-    window_download: Option<String>,
+    pub(super) window_download: Option<String>,
     /// How far the window's download has got, for its speed: when it started and its last count.
-    window_meter: Option<WindowMeter>,
+    pub(super) window_meter: Option<WindowMeter>,
 }
 
 /// The window's download's progress over time, for its speed and time left.
 #[derive(Debug, Clone, PartialEq)]
-struct WindowMeter {
+pub(super) struct WindowMeter {
     /// When progress was last told, and the bytes then.
     told: Instant,
     told_bytes: u64,
@@ -285,14 +287,15 @@ impl DownloadQueue {
         }
     }
 
-    /// The check window caught `links`, the addresses of downloads a person started past the check: the download
-    /// keeps them to download those files from, stops waiting for the pages they get past, and starts once none is
-    /// left. A download that stopped or failed meanwhile keeps them for when it's resumed.
+    /// The check window gave `links` past the check: files it saved (`windowed::saved_link`) or addresses
+    /// (`windowed::caught_link`). The download keeps them to download those files from, stops waiting for the pages
+    /// they get past, and starts once none is left. A download running meanwhile takes them in its next run; one that
+    /// stopped or failed keeps them for when it's resumed.
     pub fn passed_check(&self, id: i64, links: Vec<String>) -> Result<(), DownloadError> {
         {
             let mut state = lock(&self.state);
             let item = super::find(&mut state.items, id)?;
-            if matches!(item.state, QueueState::Done | QueueState::Running) {
+            if item.state == QueueState::Done {
                 return Err(DownloadError::WrongState);
             }
             take_links(item, links);
@@ -310,49 +313,20 @@ impl DownloadQueue {
                 .items
                 .iter_mut()
                 .find(|item| waits_for_check_on(item, link))?;
-            take_links(item, vec![link.to_owned()]);
+            // Tagged with the file it's for, as the window's are.
+            let tagged = item
+                .recovery
+                .check
+                .as_ref()?
+                .pages
+                .iter()
+                .find(|page| page.takes(link))?
+                .caught_link(link);
+            take_links(item, vec![tagged]);
             item.clone()
         };
         self.schedule();
         Some(item)
-    }
-
-    /// Where the check window saves the file of a download that waits for its check: the download's temporary folder,
-    /// made if it isn't there. The download waits for the window meanwhile (`Hold::WindowDownload`), and a link read
-    /// through the window takes the file's `name` and `size` at once, when the site gives them.
-    pub fn window_download_started(
-        &self,
-        id: i64,
-        name: &str,
-        size: Option<u64>,
-    ) -> Result<PathBuf, DownloadError> {
-        let folder = {
-            let mut state = lock(&self.state);
-            let item = super::find(&mut state.items, id)?;
-            let Some(check) = &item.recovery.check else {
-                return Err(DownloadError::WrongState);
-            };
-            if item.state != QueueState::Waiting {
-                return Err(DownloadError::WrongState);
-            }
-            item.recovery.window_download = Some(check.site.clone());
-            if item.video.files.is_some() && item.video.title == item.video.video_id {
-                item.video.title = name.to_owned();
-                if let (Some(contents), Some(size)) = (&mut item.video.files, size)
-                    && contents.bytes == 0
-                {
-                    contents.bytes = size;
-                }
-                let _ = self.store.update(item);
-            }
-            super::temp_folder(item)
-        };
-        fs::create_dir_all(&folder).map_err(|error| DownloadError::Folder {
-            path: folder.display().to_string(),
-            detail: error.to_string(),
-        })?;
-        self.schedule();
-        Ok(folder)
     }
 
     /// The check window's download stopped before the file arrived: the download fails, saying so, and what the
@@ -444,6 +418,10 @@ impl DownloadQueue {
     fn hold_for(&self, item: &QueueItem, options: &DownloadSettings, now: i64) -> Option<Hold> {
         if let Some(site) = &item.recovery.window_download {
             return Some(Hold::WindowDownload { site: site.clone() });
+        }
+        // Its run answers the check window, which holds the person's download meanwhile.
+        if item.recovery.offer.is_some() {
+            return None;
         }
         if let Some(check) = &item.recovery.check {
             return Some(Hold::BrowserCheck {

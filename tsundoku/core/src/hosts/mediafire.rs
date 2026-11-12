@@ -1,8 +1,8 @@
 //! MediaFire: links to a file or a folder. Its public API (`/api/1.4`) gives a file's name, size and SHA-256 and a
 //! folder's contents without signing in; the address a file downloads from is the Download button on its page.
 //! MediaFire may put that page behind Cloudflare's browser check, which Tsundoku doesn't try to pass: the person opens
-//! the page in the check window (`check`), and the Download button's address caught there, or copied from a browser
-//! (`download<n>.mediafire.com/…`), is used as it is while it still leads to the file.
+//! the page in the check window (`check`). The Download button's own address copied from a browser
+//! (`download<n>.mediafire.com/…`) is used as it is while it still leads to the file.
 
 use std::path::PathBuf;
 
@@ -31,7 +31,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     // Its download addresses are probed with their own pages in mind (`page_error` below); a download's page says
     // no more than its status.
     page_error: None,
-    window: None,
+    window_link: None,
+    download_file_id: Some(direct_link_key),
 };
 
 const SITE: &str = "https://www.mediafire.com";
@@ -423,7 +424,7 @@ pub(super) fn file_page(quick_key: &str) -> String {
 }
 
 /// The file's key in the Download button's own link (`download<n>.mediafire.com/<token>/<key>/<name>`), for a link
-/// caught in the check window or pasted. `None` for any other link.
+/// a person pasted (`HostFacts::download_file_id`). `None` for any other link.
 pub(super) fn direct_link_key(link: &str) -> Option<String> {
     match parse_link(link)? {
         MediaFireLink::File {

@@ -204,9 +204,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Waiting and Retrying
 
-**71. Downloads in the check window** · 0.1.122, 0.1.125
-- [ ] Workupload, a file of a few MB or more: once you click Download in its check window, the row takes the file's name and size, and shows a moving bar with the speed and time left until it's done. Claude saw that on a local test page of its own (200 MB, Stop included), not on Workupload's.
-- [ ] Workupload, with a file big enough to take a few seconds: Open Check → Download on Workupload's page → the window hides and the row says it's downloading in the check window. Stop the row meanwhile → it fails saying the download in the check window stopped, and its folder holds no partial file; Retry → it waits for Open Check again. Claude saw the whole download go through once with your click (file intact, row named after it); stopping midway was only tried in the queue's tests.
+**71. The check window** · 0.1.122, 0.1.125, 0.1.127
+- [ ] Workupload: add a Workupload link (workupload.com/file/…) and Download. The row waits with Open Check; click it, let Workupload's own check finish, then click Download on its page. The window hides, and the row takes the file's name and size and shows a moving bar with the speed and time left until it's done; the file opens fine. (Workupload's file only comes to the window, so the window downloads it.)
+- [ ] Buzzheavier: the same with a Buzzheavier link (buzzheavier.com/…). The first click on Download may open an advert, which the window closes at once: click Download again. The window closes, and the row downloads the file with its progress (Tsundoku downloads it itself this time).
+- Claude ran every case on local pages of its own in a test copy: a file Tsundoku could download itself, one that only came to the window, a server allowing one connection, advert pop-ups and a frame from another site (never counted), a same-site pop-up, a 200 MB file with Stop, and Stop or closing the window right after the click. Only the two real sites, which need your clicks, are left.
 
 **70. 1fichier** · 0.1.114
 - [ ] Paste a 1fichier file link and Download. While 1fichier makes the connection wait, the row says "1fichier's download limit is used up. Continuing at …" with its time; then it says Counting Down with the seconds left for about a minute, then downloads. Claude ran this whole path in a test copy on 2026-11-12 (the wait held it until its time, the countdown ran, the file arrived intact), but didn't see how the row looks.

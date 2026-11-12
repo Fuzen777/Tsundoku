@@ -40,7 +40,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: Some(page_error),
-    window: None,
+    window_link: None,
+    download_file_id: None,
 };
 
 const API: &str = "https://cloud-api.yandex.net/v1/disk/public/resources";
@@ -58,8 +59,6 @@ pub struct YandexFile {
     pub path: String,
     pub name: String,
     pub sha256: Option<String>,
-    /// The address of its download caught in the check window, after Yandex's captcha.
-    pub direct: Option<String>,
 }
 
 impl YandexFile {
@@ -126,7 +125,7 @@ pub(super) fn read(
     })
 }
 
-/// Asks Yandex Disk where a file downloads from now, or uses the address caught past its captcha.
+/// Asks Yandex Disk where a file downloads from now.
 pub(super) fn address(
     client: &Client,
     file: &YandexFile,
@@ -136,12 +135,6 @@ pub(super) fn address(
         .sha256
         .clone()
         .map_or(FileCheck::None, FileCheck::Sha256);
-    if let Some(direct) = &file.direct {
-        return Ok(Address {
-            url: direct.clone(),
-            check,
-        });
-    }
     check_cancel(cancel)?;
     let url = Url::parse_with_params(
         &format!("{API}/download"),
@@ -158,18 +151,6 @@ pub(super) fn address(
         url: answer.href,
         check,
     })
-}
-
-/// The file a download address caught in the check window gets: Yandex's downloader names it in `filename`.
-pub(crate) fn caught_file(download: &str) -> Option<String> {
-    let url = Url::parse(download).ok()?;
-    let host = url.host_str()?.to_ascii_lowercase();
-    if !(host.starts_with("downloader.disk.yandex.") || host.ends_with(".storage.yandex.net")) {
-        return None;
-    }
-    url.query_pairs()
-        .find(|(key, _)| key == "filename")
-        .map(|(_, value)| value.into_owned())
 }
 
 /// Why a download answered with a page: Yandex's captcha ("showcaptcha"), which a person passes in the check window.
@@ -230,7 +211,6 @@ impl Resource {
                             && hash.chars().all(|character| character.is_ascii_hexdigit())
                     })
                     .map(str::to_ascii_lowercase),
-                direct: None,
             }),
         }
     }
@@ -462,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn its_captcha_is_a_check_and_the_download_past_it_is_caught() {
+    fn its_captcha_is_a_check() {
         let page = Page {
             url: "https://disk.yandex.ru/showcaptcha?cc=1&retpath=x".to_owned(),
             status: reqwest::StatusCode::OK,
@@ -474,17 +454,6 @@ mod tests {
             PreviewError::BrowserCheck {
                 site: "Yandex Disk".to_owned()
             }
-        );
-        assert_eq!(
-            caught_file(
-                "https://downloader.disk.yandex.ru/disk/abc/def?uid=0&filename=bair-cpk.pth.tar&disposition=attachment"
-            )
-            .as_deref(),
-            Some("bair-cpk.pth.tar")
-        );
-        assert_eq!(
-            caught_file("https://ads.example.com/?filename=bair-cpk.pth.tar"),
-            None
         );
     }
 }

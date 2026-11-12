@@ -28,7 +28,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: None,
-    window: None,
+    window_link: None,
+    download_file_id: None,
 };
 
 /// The API of each data centre. A link is on one of them; the other answers that its code is invalid.

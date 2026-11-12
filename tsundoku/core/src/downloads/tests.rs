@@ -1787,19 +1787,30 @@ fn a_rule_names_a_shared_file_with_what_its_pattern_captured() {
 
 /// A MediaFire folder's two files behind Cloudflare's check, as a run finds them.
 fn mediafire_check() -> crate::hosts::check::BrowserCheck {
-    let page = |key: &str| {
-        crate::hosts::check::CheckPage::of(&crate::hosts::FileSource::MediaFire(
-            crate::hosts::mediafire::MediaFireFile {
-                quick_key: key.to_owned(),
-                sha256: None,
-                direct: None,
-            },
-        ))
-        .unwrap()
+    let file = |key: &str| crate::hosts::RemoteFile {
+        path: PathBuf::from(format!("{key}.zip")),
+        size: 1024,
+        source: crate::hosts::FileSource::MediaFire(crate::hosts::mediafire::MediaFireFile {
+            quick_key: key.to_owned(),
+            sha256: None,
+            direct: None,
+        }),
+    };
+    let share = crate::hosts::Share {
+        host: crate::hosts::Host::MediaFire,
+        id: "folderkey".to_owned(),
+        url: "https://www.mediafire.com/folder/folderkey/Pack".to_owned(),
+        title: "Pack".to_owned(),
+        upload_date: None,
+        files: vec![file("firstkey1"), file("secondkey2")],
     };
     crate::hosts::check::BrowserCheck {
         site: "MediaFire".to_owned(),
-        pages: vec![page("firstkey1"), page("secondkey2")],
+        pages: share
+            .files
+            .iter()
+            .filter_map(|file| crate::hosts::check::CheckPage::for_file(&share, file))
+            .collect(),
     }
 }
 
@@ -1902,24 +1913,30 @@ fn a_download_behind_a_check_waits_for_a_person_and_continues_with_what_the_wind
     test.cancel_all();
 }
 
-/// A Workupload file read through the check window, whose download the window saves itself.
+/// A Workupload link, read through the check window: one file named after the link, its size unknown.
+const WORKUPLOAD_LINK: &str = "https://workupload.com/file/abcdefgh";
+
+/// The check a Workupload link's run finds: its page.
 fn workupload_check() -> crate::hosts::check::BrowserCheck {
-    let page = crate::hosts::check::CheckPage::of(&crate::hosts::FileSource::Windowed(
-        crate::hosts::windowed::WindowedFile {
-            host: crate::hosts::Host::Workupload,
-            id: "abcdefgh".to_owned(),
-            page: "https://workupload.com/file/abcdefgh".to_owned(),
-            direct: None,
-            saved: None,
-        },
-    ))
-    .unwrap();
-    assert!(page.saves_in_window());
+    let host = crate::hosts::Host::of(WORKUPLOAD_LINK).unwrap();
+    let share = crate::hosts::windowed::share(host, WORKUPLOAD_LINK);
     crate::hosts::check::BrowserCheck {
         site: "Workupload".to_owned(),
-        pages: vec![page],
+        pages: vec![crate::hosts::check::CheckPage::for_file(&share, &share.files[0]).unwrap()],
     }
 }
+
+/// The download the person started on the Workupload page, as the window saw it.
+fn window_offer() -> WindowOffer {
+    WindowOffer {
+        address: "https://f1.workupload.com/download/abcdefgh".to_owned(),
+        name: Some("Sample.png".to_owned()),
+        total: Some(3),
+    }
+}
+
+/// What the window was told about the downloads it offered.
+type Answers = Arc<Mutex<Vec<WindowAnswer>>>;
 
 impl Test {
     /// Adds a Workupload link, and waits until its run is told it needs the check.
@@ -1927,7 +1944,7 @@ impl Test {
         let file = VideoInfo {
             site: "workupload".to_owned(),
             site_name: "workupload.com".to_owned(),
-            url: "https://workupload.com/file/abcdefgh".to_owned(),
+            url: WORKUPLOAD_LINK.to_owned(),
             // Named after the link until its file is known, as a link read through the window is.
             title: "abcdefgh".to_owned(),
             duration_seconds: None,
@@ -1944,30 +1961,104 @@ impl Test {
         });
         id
     }
+
+    /// The person starts the file's download in the check window, which offers it to the download.
+    fn offer(&self, id: i64) -> Answers {
+        let answers = Answers::default();
+        let told = Arc::clone(&answers);
+        self.queue.offer_window_download(
+            id,
+            "abcdefgh",
+            window_offer(),
+            Box::new(move |answer| lock(&told).push(answer)),
+        );
+        answers
+    }
+
+    /// Plays a run that took the offer and found the window's download isn't one Tsundoku can fetch: the window saves
+    /// the file, and the run ends asking for the check. Where the window saves it.
+    fn left_to_window(&self, id: i64, answers: &Answers) -> PathBuf {
+        wait_until("a run takes the offer", || self.times_started(id) == 2);
+        let job = self.runner.last_job(id);
+        let offer = job.window_offer.expect("the run answers the window");
+        offer.leave_to_window();
+        let Some(WindowAnswer::SaveIn(path)) = lock(answers).first().cloned() else {
+            panic!("the window saves the file");
+        };
+        self.runner
+            .complete(id, JobOutcome::NeedsCheck(workupload_check()));
+        wait_until("it waits for the window", || {
+            self.state(id) == Some(QueueState::Waiting)
+        });
+        path
+    }
+}
+
+#[test]
+fn a_download_started_in_the_window_that_tsundoku_can_fetch_is_fetched() {
+    let test = Test::new();
+    let id = test.held_for_window();
+    let answers = test.offer(id);
+    wait_until("it runs at once", || test.times_started(id) == 2);
+    let offer = test.runner.last_job(id).window_offer.unwrap();
+    assert_eq!(offer.file_id, "abcdefgh");
+    assert_eq!(offer.offer, window_offer());
+    assert!(
+        offer.fetch(),
+        "the run's first request answered with the file"
+    );
+    assert_eq!(
+        *lock(&answers),
+        [WindowAnswer::Fetching],
+        "the window stops its own"
+    );
+    assert!(!offer.fetch(), "answered once");
+    let caught = crate::hosts::windowed::caught_link("abcdefgh", &window_offer().address);
+    assert_eq!(
+        test.item(id).caught_links,
+        std::slice::from_ref(&caught),
+        "kept for its next runs"
+    );
+
+    // It lost its connection: the next run tries the address again, without waiting for the check.
+    test.runner.complete(id, lost_connection());
+    wait_until("it waits to try again", || {
+        matches!(test.item(id).hold, Some(Hold::Retry { .. }))
+    });
+    test.queue.try_now(id).unwrap();
+    wait_until("it runs again", || test.times_started(id) == 3);
+    let job = test.runner.last_job(id);
+    assert_eq!(job.caught_links, [caught]);
+    assert!(job.window_offer.is_none());
+    test.runner.complete(id, test.finished_file("Sample.png"));
+    wait_until("it's done", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(
+        *lock(&answers),
+        [WindowAnswer::Fetching],
+        "nothing more told"
+    );
 }
 
 #[test]
 fn a_file_the_window_saves_is_handed_to_its_download() {
     let test = Test::new();
     let id = test.held_for_window();
-    let folder = test
-        .queue
-        .window_download_started(id, "Sample.png", Some(3))
-        .unwrap();
+    let answers = test.offer(id);
+    let path = test.left_to_window(id, &answers);
+    let folder = path.parent().unwrap();
     assert!(
-        folder.is_dir(),
+        folder.is_dir() && folder == test.runner.last_job(id).temp_folder,
         "the window saves into the temporary folder"
+    );
+    assert_eq!(
+        path.file_name().unwrap(),
+        "Sample.png",
+        "under the site's name"
     );
     assert_eq!(test.item(id).video.title, "Sample.png", "named at once");
     assert_eq!(
         test.item(id).video.files.map(|contents| contents.bytes),
         Some(3)
-    );
-    test.queue.window_download_progress(id, 1, Some(3));
-    let progress = test.item(id).progress.unwrap();
-    assert_eq!(
-        (progress.downloaded_bytes, progress.total_bytes),
-        (Some(1), Some(3))
     );
     assert_eq!(
         test.held(id),
@@ -1975,12 +2066,149 @@ fn a_file_the_window_saves_is_handed_to_its_download() {
             site: "Workupload".to_owned()
         }
     );
-    let saved = folder.join("Sample.png");
-    std::fs::write(&saved, "png").unwrap();
-    let link = crate::hosts::windowed::saved_link("abcdefgh", &saved);
+    assert!(test.queue.waits_for_window(id));
+    test.queue.window_download_progress(id, 1, Some(3));
+    let progress = test.item(id).progress.unwrap();
+    assert_eq!(
+        (progress.downloaded_bytes, progress.total_bytes),
+        (Some(1), Some(3))
+    );
+    std::fs::write(&path, "png").unwrap();
+    let link = crate::hosts::windowed::saved_link("abcdefgh", &path);
     test.queue.passed_check(id, vec![link.clone()]).unwrap();
-    wait_until("it runs again", || test.times_started(id) == 2);
+    wait_until("it runs again", || test.times_started(id) == 3);
     assert_eq!(test.runner.last_job(id).caught_links, [link]);
+    assert!(!test.queue.waits_for_window(id));
+    test.cancel_all();
+}
+
+#[test]
+fn a_file_saved_while_its_run_still_runs_is_kept() {
+    let test = Test::new();
+    let id = test.held_for_window();
+    let answers = test.offer(id);
+    wait_until("a run takes the offer", || test.times_started(id) == 2);
+    test.runner
+        .last_job(id)
+        .window_offer
+        .unwrap()
+        .leave_to_window();
+    let Some(WindowAnswer::SaveIn(path)) = lock(&answers).first().cloned() else {
+        panic!("the window saves the file");
+    };
+    // The window's download ends before the run does.
+    std::fs::write(&path, "png").unwrap();
+    let link = crate::hosts::windowed::saved_link("abcdefgh", &path);
+    test.queue.passed_check(id, vec![link.clone()]).unwrap();
+    test.runner
+        .complete(id, JobOutcome::NeedsCheck(workupload_check()));
+    wait_until("it runs again, without waiting for the check", || {
+        test.times_started(id) == 3
+    });
+    assert_eq!(test.runner.last_job(id).caught_links, [link]);
+    test.cancel_all();
+}
+
+#[test]
+fn an_offer_no_run_takes_in_time_is_left_to_the_window() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let id = test.held_for_window();
+    let busy = test.add("busy");
+    wait_until("the other runs", || test.runner.started().contains(&busy));
+    let answers = test.offer(id);
+    assert_eq!(test.times_started(id), 1, "no room");
+    wait_until("the wait runs out", || !lock(&answers).is_empty());
+    assert!(matches!(
+        lock(&answers).first(),
+        Some(WindowAnswer::SaveIn(path)) if path.ends_with("Sample.png")
+    ));
+    assert_eq!(
+        test.held(id),
+        Hold::WindowDownload {
+            site: "Workupload".to_owned()
+        }
+    );
+    test.cancel_all();
+}
+
+#[test]
+fn stopping_a_download_refuses_what_the_window_offered() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let id = test.held_for_window();
+    let busy = test.add("busy");
+    wait_until("the other runs", || test.runner.started().contains(&busy));
+    let answers = test.offer(id);
+    test.queue.stop(id).unwrap();
+    assert_eq!(*lock(&answers), [WindowAnswer::Refuse], "at once");
+
+    // Stopped while its run had the offer.
+    test.queue.resume(id).unwrap();
+    test.runner.complete(busy, test.finished_file("busy.mp4"));
+    wait_until("it runs again", || test.times_started(id) == 2);
+    test.runner
+        .complete(id, JobOutcome::NeedsCheck(workupload_check()));
+    wait_until("it waits for the check", || {
+        test.queue.check_for(id).is_ok()
+    });
+    let answers = test.offer(id);
+    wait_until("a run takes the offer", || test.times_started(id) == 3);
+    test.queue.stop(id).unwrap();
+    wait_until("the window is told", || !lock(&answers).is_empty());
+    assert_eq!(*lock(&answers), [WindowAnswer::Refuse]);
+    assert_eq!(test.state(id), Some(QueueState::Stopped));
+
+    let other = test.add("other");
+    let refused = Answers::default();
+    let told = Arc::clone(&refused);
+    test.queue.offer_window_download(
+        other,
+        "abcdefgh",
+        window_offer(),
+        Box::new(move |answer| lock(&told).push(answer)),
+    );
+    assert_eq!(
+        *lock(&refused),
+        [WindowAnswer::Refuse],
+        "a download that doesn't wait for that file"
+    );
+    test.cancel_all();
+}
+
+#[test]
+fn closing_the_window_before_it_saves_anything_waits_for_the_check_again() {
+    let test = Test::new();
+    let id = test.held_for_window();
+    let answers = test.offer(id);
+    wait_until("a run takes the offer", || test.times_started(id) == 2);
+    // Closed while the run asks: the offer is the run's, so the window's close changes nothing yet.
+    test.queue.withdraw_window_offer(id);
+    assert!(lock(&answers).is_empty());
+    test.runner
+        .last_job(id)
+        .window_offer
+        .unwrap()
+        .leave_to_window();
+    // The window, gone, can't save it.
+    test.queue.window_download_withdrawn(id);
+    test.runner
+        .complete(id, JobOutcome::NeedsCheck(workupload_check()));
+    wait_until("it waits for the check again", || {
+        test.queue.check_for(id).is_ok()
+    });
+    assert_eq!(
+        test.held(id),
+        Hold::BrowserCheck {
+            site: "Workupload".to_owned(),
+            files: 1
+        }
+    );
+    assert_eq!(test.item(id).error, None, "it didn't fail");
     test.cancel_all();
 }
 
@@ -1988,11 +2216,9 @@ fn a_file_the_window_saves_is_handed_to_its_download() {
 fn a_window_download_that_stops_fails_its_download_and_leaves_nothing() {
     let test = Test::new();
     let id = test.held_for_window();
-    let folder = test
-        .queue
-        .window_download_started(id, "Sample.png", None)
-        .unwrap();
-    std::fs::write(folder.join("Sample.png.crdownload"), "half").unwrap();
+    let answers = test.offer(id);
+    let path = test.left_to_window(id, &answers);
+    std::fs::write(path.with_extension("png.crdownload"), "half").unwrap();
     test.queue.window_download_stopped(id);
     assert_eq!(test.state(id), Some(QueueState::Failed));
     assert_eq!(
@@ -2001,14 +2227,16 @@ fn a_window_download_that_stops_fails_its_download_and_leaves_nothing() {
             site: "Workupload".to_owned()
         })
     );
-    assert!(!folder.exists(), "what the window left is deleted");
-    assert_eq!(
-        test.queue.check_for(id),
-        Err(DownloadError::WrongState),
+    assert!(
+        !path.parent().unwrap().exists(),
+        "what the window left is deleted"
+    );
+    assert!(
+        !test.queue.waits_for_window(id),
         "the window's watch sees it no longer waits, and closes"
     );
     test.queue.retry(id).unwrap();
-    wait_until("Retry runs it again", || test.times_started(id) == 2);
+    wait_until("Retry runs it again", || test.times_started(id) == 3);
     test.cancel_all();
 }
 
@@ -2016,16 +2244,13 @@ fn a_window_download_that_stops_fails_its_download_and_leaves_nothing() {
 fn removing_a_download_while_the_window_saves_it_cleans_up() {
     let test = Test::new();
     let id = test.held_for_window();
-    let folder = test
-        .queue
-        .window_download_started(id, "Sample.png", None)
-        .unwrap();
-    std::fs::write(folder.join("Sample.png.crdownload"), "half").unwrap();
+    let answers = test.offer(id);
+    let path = test.left_to_window(id, &answers);
+    std::fs::write(path.with_extension("png.crdownload"), "half").unwrap();
     test.queue.cancel(id).unwrap();
-    assert!(!folder.exists());
-    assert_eq!(
-        test.queue.check_for(id),
-        Err(DownloadError::NotFound),
+    assert!(!path.parent().unwrap().exists());
+    assert!(
+        !test.queue.waits_for_window(id),
         "the window's watch sees it's gone, and closes"
     );
     // The window's own end of the download comes too late to change anything.
@@ -2071,8 +2296,11 @@ fn a_pasted_download_link_gets_a_waiting_download_past_its_check() {
     wait_until("it runs again", || test.times_started(id) == 2);
     assert_eq!(
         test.runner.last_job(id).caught_links,
-        [direct_link("firstkey1")],
-        "keeping what was caught"
+        [crate::hosts::windowed::caught_link(
+            "firstkey1",
+            &direct_link("firstkey1")
+        )],
+        "keeping what was given, for its own file"
     );
     test.cancel_all();
 }

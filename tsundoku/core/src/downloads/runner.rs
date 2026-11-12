@@ -52,9 +52,11 @@ pub struct JobSpec {
     /// A file host's link of one file named by a rule (`rules::file_name`): its name without the extension, which the
     /// file keeps.
     pub shared_file_name: Option<String>,
-    /// Addresses of a file host's files caught in the check window or pasted, to download those files from
-    /// (`Share::use_caught_links`).
+    /// What the check window gave a file host's files, by each file's ID (`windowed::caught_link`, `saved_link`), or a
+    /// download address pasted: the files saved, or the addresses to try first.
     pub caught_links: Vec<String>,
+    /// The download the person just started in the check window, which this run answers for (`window_offer`).
+    pub window_offer: Option<super::JobOffer>,
 }
 
 /// What downloading a post takes beyond a video's needs.
@@ -361,6 +363,7 @@ mod tests {
             files: None,
             shared_file_name: None,
             caught_links: Vec::new(),
+            window_offer: None,
         }
     }
 

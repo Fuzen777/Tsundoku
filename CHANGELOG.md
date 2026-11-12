@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.127 · 2026-11-12
+
+### Changed
+
+- **One check window for every site**: the check window no longer knows any site's pages, so a site changing its layout changes nothing. On any site Tsundoku reads itself, a check (Cloudflare's "Just a moment...") holds the download for Open Check, even when it's in front of the link itself, which then shows the end of its address and "Size unknown". In the window, the first download you start from the site is offered to Tsundoku: if Tsundoku can download it on its own, the window stops and the row downloads it with its progress; if not, the window downloads it and the row shows its progress. Downloads from other sites, in an advert's frame or pop-up, never count. The window's title now always says to click Download again if nothing happens, since a site's first click can go to an advert.
+- **What the check window can't do**: it can't know a file's name or size before you click Download, takes one file per click, can't list a folder whose page asks for a check, and leaves a site's timers and captchas to you. Its sign-ins stay in it. Links from sites Tsundoku doesn't support still say so: the window isn't offered for them.
+
 ## 0.1.126 · 2026-11-12
 
 ### Changed

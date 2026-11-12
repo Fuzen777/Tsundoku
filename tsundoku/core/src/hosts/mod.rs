@@ -5,7 +5,6 @@
 
 pub mod archive;
 pub mod boxcom;
-pub mod buzzheavier;
 pub mod check;
 pub mod drive;
 pub mod dropbox;
@@ -23,8 +22,8 @@ pub(crate) mod test_server;
 pub mod transfernow;
 pub mod uploadee;
 pub mod wetransfer;
+pub mod window_sites;
 pub mod windowed;
-pub mod workupload;
 pub mod yandex;
 
 use std::io::Read;
@@ -77,8 +76,8 @@ pub enum Host {
     UploadEe,
     TransferNow,
     Filemail,
-    Workupload,
-    Buzzheavier,
+    /// A site read only through the check window (`window_sites`).
+    Window(window_sites::WindowSite),
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -100,12 +99,16 @@ pub(crate) struct HostFacts {
     pub read: fn(&Client, &str, &CancelToken) -> Result<Share, PreviewError>,
     /// Why it answered with a page instead of a file, when its pages say more than their status.
     pub page_error: Option<fn(&Page) -> PreviewError>,
-    /// For a host whose link's own page is behind a check: how the check window reads its links (`windowed`).
-    pub window: Option<windowed::WindowFacts>,
+    /// For a site read only through the check window (`window_sites`): the shape of its file links.
+    pub window_link: Option<&'static window_sites::LinkShape>,
+    /// The file a download address of the host's own names, by the host's ID: for a download link a person copied
+    /// from their browser, which gets a waiting download past its check (MediaFire's `download<n>.mediafire.com/…`).
+    pub download_file_id: Option<fn(&str) -> Option<String>>,
 }
 
 impl Host {
-    pub const ALL: [Self; 19] = [
+    /// The hosts with a reader of their own.
+    pub const BUILT_IN: [Self; 17] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -123,9 +126,15 @@ impl Host {
         Self::UploadEe,
         Self::TransferNow,
         Self::Filemail,
-        Self::Workupload,
-        Self::Buzzheavier,
     ];
+
+    /// Every host: those with a reader of their own, then the sites read only through the check window.
+    pub fn all() -> impl Iterator<Item = Self> {
+        Self::BUILT_IN.into_iter().chain(
+            (0..window_sites::LIST.len())
+                .map(|index| Self::Window(window_sites::WindowSite(index))),
+        )
+    }
 
     pub(crate) fn facts(self) -> &'static HostFacts {
         match self {
@@ -141,8 +150,7 @@ impl Host {
             Self::UploadEe => &uploadee::FACTS,
             Self::TransferNow => &transfernow::FACTS,
             Self::Filemail => &filemail::FACTS,
-            Self::Workupload => &workupload::FACTS,
-            Self::Buzzheavier => &buzzheavier::FACTS,
+            Self::Window(site) => &window_sites::LIST[site.0],
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
             Self::ArchiveOrg => &archive::FACTS,
@@ -154,9 +162,7 @@ impl Host {
     /// The host a link belongs to, by its domain. `link` must come from `metadata::normalize_link`.
     pub fn of(link: &str) -> Option<Self> {
         let host = sites::host(link)?;
-        Self::ALL
-            .into_iter()
-            .find(|candidate| candidate.owns(&host))
+        Self::all().find(|candidate| candidate.owns(&host))
     }
 
     /// Whether `host`, a link's host name, is on one of this host's domains.
@@ -169,6 +175,16 @@ impl Host {
     /// The name people know it by, shown in Supported Sites and used for its folder.
     pub fn name(self) -> &'static str {
         self.facts().name
+    }
+
+    /// The file a link names, for a site read only through the check window (`window_sites`).
+    pub(crate) fn window_link(self, link: &str) -> Option<windowed::WindowLink> {
+        window_sites::link_of(self.facts().window_link?, link)
+    }
+
+    /// The file a download address of the host's own names, by the host's ID (`HostFacts::download_file_id`).
+    pub(crate) fn download_file_id(self, link: &str) -> Option<String> {
+        (self.facts().download_file_id?)(link)
     }
 
     /// The error for a link on this host that isn't to a file or folder Tsundoku can read.
@@ -226,10 +242,9 @@ impl Host {
         cancel: &CancelToken,
     ) -> Result<Share, PreviewError> {
         let share = match (self.facts().read)(client, link, cancel) {
-            // A host read through the check window: what the link names, until the window gives the rest.
-            Err(PreviewError::BrowserCheck { site }) => {
-                windowed::share(self, link).ok_or(PreviewError::BrowserCheck { site })?
-            }
+            // The link's own page is behind a check: one file the check window gives, named after the link, until
+            // the person starts its download there.
+            Err(PreviewError::BrowserCheck { .. }) => windowed::share(self, link),
             read => read?,
         };
         if share.files.is_empty() {
@@ -373,6 +388,22 @@ impl FileSource {
             Self::TransferNow(file) => transfernow::address(client, file, cancel),
             Self::Filemail(file) => filemail::address(client, file, cancel),
             Self::Windowed(file) => windowed::address(file),
+        }
+    }
+
+    /// How to check the file once it arrives, as far as the host said when it was read: for an address the check
+    /// window gave, which `address` isn't asked for.
+    pub fn known_check(&self) -> FileCheck {
+        match self {
+            Self::MediaFire(mediafire::MediaFireFile {
+                sha256: Some(sha256),
+                ..
+            })
+            | Self::YandexDisk(yandex::YandexFile {
+                sha256: Some(sha256),
+                ..
+            }) => FileCheck::Sha256(sha256.clone()),
+            _ => FileCheck::None,
         }
     }
 

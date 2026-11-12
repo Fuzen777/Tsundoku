@@ -28,7 +28,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
     browser_agent: false,
     read,
     page_error: None,
-    window: None,
+    window_link: None,
+    download_file_id: None,
 };
 
 const SITE: &str = "https://www.swisstransfer.com";
