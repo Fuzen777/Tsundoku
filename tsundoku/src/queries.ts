@@ -44,6 +44,7 @@ import {
   saveAddingOptions,
   saveAppearanceOptions,
   saveBackgroundOptions,
+  saveDownloadOptions,
   saveListArrangements,
 } from "./api"
 import { ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
@@ -52,6 +53,7 @@ import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
+import type { DownloadSettings } from "./bindings/DownloadSettings"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListArrangements } from "./bindings/ListArrangements"
@@ -362,6 +364,26 @@ export function useDefaultDownloadFolder() {
 
 export function useDownloadOptions() {
   return useQuery({ queryKey: queryKeys.downloadOptions, queryFn: getDownloadOptions, staleTime: Infinity })
+}
+
+/** Saves download options as they change (Settings → Downloads, Archives, Posts of Images, Pacing, Cookies), with the
+ * error if it failed. Each place shows its own error. `save` answers whether it saved. */
+export function useSaveDownloadOptions() {
+  const queryClient = useQueryClient()
+  const { data: options } = useDownloadOptions()
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const save = async (changes: Partial<DownloadSettings>) => {
+    if (!options) return false
+    setError(null)
+    try {
+      queryClient.setQueryData(queryKeys.downloadOptions, await saveDownloadOptions({ ...options, ...changes }))
+      return true
+    } catch (caught) {
+      setError(describeDownloadError(caught))
+      return false
+    }
+  }
+  return { options, save, error }
 }
 
 export function useAddingOptions() {

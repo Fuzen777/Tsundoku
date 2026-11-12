@@ -415,6 +415,7 @@ export const standIns = {
     postPause: { min: 5, max: 10 },
     sitePauses: { x: { min: 2, max: 5 }, pixiv: null, tumblr: null },
     hourlyFileLimit: null,
+    unpack: { enabled: true, after: "recycleBin", passwords: [] },
   } satisfies DownloadSettings,
   addingOptions: {
     watchClipboard: true,
@@ -540,9 +541,22 @@ export const standIns = {
     queueStandIn(9, "waiting", "Behind a Check", {
       hold: { kind: "browserCheck", site: "MediaFire", files: 1 },
     }),
+    queueStandIn(10, "running", "An Album Being Unpacked", {
+      progress: {
+        stage: "unpacking",
+        fraction: 0.63,
+        downloadedBytes: 1_352_663_040,
+        totalBytes: 2_147_483_648,
+        speed: null,
+        eta: null,
+      },
+    }),
     queueStandIn(4, "stopped", "Stopped Halfway"),
     queueStandIn(5, "failed", "A Video That Failed", {
       error: { kind: "ytDlp", error: { kind: "unavailable", detail: "[youtube] video5: This video is unavailable" } },
+    }),
+    queueStandIn(11, "failed", "An Archive With a Password", {
+      error: { kind: "unpack", archive: "Album.part1.rar", problem: { kind: "wrongPassword", tried: 2 } },
     }),
     queueStandIn(6, "done", "Finished Already", {
       result: {

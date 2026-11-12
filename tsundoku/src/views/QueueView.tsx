@@ -240,7 +240,13 @@ function QueueRow({ item }: { item: QueueItem }) {
         )}
         {item.state === "failed" && item.error && (
           <StatusMessage tone="danger" {...describeDownloadError(item.error)}>
-            {fixFor(item.error) && <FailureFixes error={item.error} />}
+            {fixFor(item.error) && (
+              <FailureFixes
+                error={item.error}
+                // An archive's password, once added, retries at once: it only unpacks.
+                onRetry={item.error.kind === "unpack" ? () => act(retryDownload) : undefined}
+              />
+            )}
           </StatusMessage>
         )}
         {actionError && <StatusMessage tone="danger" {...actionError} />}

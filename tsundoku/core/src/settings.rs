@@ -278,6 +278,56 @@ pub struct DownloadSettings {
     /// The most files from that site (Instagram) downloaded in an hour, or `None` for no limit: once the past hour
     /// holds this many, its next download waits (`site_limits::hourly_limit_end`).
     pub hourly_file_limit: Option<u32>,
+    /// Unpacking the archives downloads bring (Settings → Archives).
+    pub unpack: UnpackSettings,
+}
+
+/// Unpacking the zip, 7z and rar archives downloads bring, beside them (`unpack`). Settings → Archives edits it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct UnpackSettings {
+    pub enabled: bool,
+    /// What happens to an archive once unpacked.
+    pub after: AfterUnpacking,
+    /// Tried in order on an archive with a password: no blank one, none twice.
+    pub passwords: Vec<String>,
+}
+
+impl Default for UnpackSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            after: AfterUnpacking::RecycleBin,
+            passwords: Vec::new(),
+        }
+    }
+}
+
+impl UnpackSettings {
+    /// The passwords as they're tried: trimmed of the line breaks around them (not of spaces, which a password may
+    /// hold), without blank ones or one twice.
+    pub fn normalized_passwords(passwords: Vec<String>) -> Vec<String> {
+        let mut kept: Vec<String> = Vec::new();
+        for password in passwords {
+            let password = password.trim_matches(['\r', '\n']).to_owned();
+            if !password.trim().is_empty() && !kept.contains(&password) {
+                kept.push(password);
+            }
+        }
+        kept
+    }
+}
+
+/// What happens to an archive's parts once what it holds is beside them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum AfterUnpacking {
+    Keep,
+    /// Where they can be put back from.
+    RecycleBin,
+    Delete,
 }
 
 impl Default for DownloadSettings {
@@ -291,6 +341,7 @@ impl Default for DownloadSettings {
             post_pause: PauseRange::default(),
             site_pauses: SitePauses::default(),
             hourly_file_limit: None,
+            unpack: UnpackSettings::default(),
         }
     }
 }

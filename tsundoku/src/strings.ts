@@ -145,6 +145,7 @@ export const strings = {
       processing: "Processing",
       finishing: "Finishing",
       countdown: "Counting Down",
+      unpacking: "Unpacking",
       done: "Done",
       stopped: "Stopped",
       failed: "Failed",
@@ -221,6 +222,19 @@ export const strings = {
       invalidRateLimit: "Use a number of bytes per second, with K, M or G after it if you like, such as 500K or 2M.",
       nothingPicked: "Tick at least one file of the post to download it.",
       shortcutTaken: (keys: string) => `Another app already uses ${keys}. Pick another shortcut.`,
+      unpack: {
+        needsPassword: (archive: string) =>
+          `${archive} has a password. Add it here or in Settings → Archives, then Retry: it's unpacked without downloading again.`,
+        wrongPassword: (archive: string, tried: number) =>
+          `None of your ${tried === 1 ? "password" : `${tried} passwords`} opens ${archive}. Add the right one here or in Settings → Archives, then Retry.`,
+        missingPart: (archive: string, part: string) =>
+          `${archive} goes on in ${part}, which isn't in its folder. Once it is, Retry unpacks it without downloading again.`,
+        damaged: (archive: string) => `${archive} is damaged, so it can't be unpacked. It's kept as it is.`,
+        unsupported: (archive: string) => `Tsundoku can't unpack ${archive}. It's kept as it is.`,
+        noRoom: (archive: string, drive: string, needed: string, free: string) =>
+          `${archive} holds ${needed}, and ${drive} has ${free} free. Make room, then Retry: it's unpacked without downloading again.`,
+        write: (archive: string) => `Couldn't write what ${archive} holds. Retry unpacks it without downloading again.`,
+      },
     },
     fixes: {
       updateYtDlp: "Update yt-dlp",
@@ -233,6 +247,9 @@ export const strings = {
       cookieSettings: "Cookie Settings",
       updated: (version: string | null) =>
         version === null ? "yt-dlp is updated. Try again." : `yt-dlp is now version ${version}. Try again.`,
+      password: "Password",
+      addPasswordAndRetry: "Add and Retry",
+      archiveSettings: "Archive Settings",
     },
   },
   history: {
@@ -1155,6 +1172,23 @@ export const strings = {
     chooseFolder: "Choose Folder…",
     useDefaultFolder: "Use Default",
     defaultFolder: (path: string) => `The default: ${path}`,
+    archives: "Archives",
+    unpackArchives: "Unpack Archives After Downloading",
+    unpackArchivesHint:
+      "Zip, 7z and rar archives, in one file or split into parts, are unpacked beside them: one file or folder as it is, several in a folder named after the archive. An archive split over several links is unpacked once its last part is downloaded.",
+    afterUnpacking: "After Unpacking",
+    afterUnpackingHint: "What happens to the archive, all its parts, once what it holds is beside it.",
+    afterUnpackingChoices: {
+      recycleBin: "Move the Archive to the Recycle Bin",
+      delete: "Delete the Archive",
+      keep: "Keep the Archive",
+    },
+    archivePasswords: "Passwords",
+    archivePasswordsHint:
+      "One per line, tried in order on an archive that has a password until one opens it. They're kept in Tsundoku's settings as they are, not hidden.",
+    archivePasswordsPlaceholder: "One password per line",
+    archivePasswordsSaved: (count: number) =>
+      count === 0 ? "Saved: no passwords." : count === 1 ? "Saved: 1 password." : `Saved: ${count} passwords.`,
     pacing: "Pacing",
     pacingIntro: (longest: number) =>
       `Some sites block accounts that read too fast. For these, Tsundoku waits a random time in a range before each file of a post, and between the site's links in Pending, up to ${longest} seconds, and downloads one of the site's posts at a time.`,

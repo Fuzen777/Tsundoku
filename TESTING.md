@@ -149,6 +149,11 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Pending and the Queue
 
+**72. Unpacking archives** · 0.1.130
+- [ ] Settings → Archives' Passwords empty. Download a zip, 7z or rar with a password from one of your shares → the row fails saying the archive has a password, with a Password field. Type it, Add and Retry → it unpacks without downloading again (Show Log has no new download line), and Settings → Archives now lists the password.
+- [ ] An archive split over two of your links (`.part1.rar` and `.part2.rar`, or `.7z.001` and `.7z.002`): paste the first part's link alone → it finishes with the part left as it is, and Show Log says it's "left as it is until" the next part is in its folder. Paste the other part's link → that download unpacks the whole archive, and both parts go to the Recycle Bin.
+- Claude tried, in a test copy: zip and 7z archives made with 7-Zip (plain, ZipCrypto and AES with a password from Settings, 7z with hidden names, 1 MB pieces, a missing piece), identical to their sources; from archive.org, a 3 MB zip (Recycle Bin), a 7z (Keep the Archive) and a 141 MB zip stopped while Unpacking, then resumed (only unpacked again, into "… (3)"), each identical to 7-Zip's own unpacking. No rar archive was made, since WinRAR isn't on this PC; the tests' real rar archives pass.
+
 **19. Group and sort** · 0.1.33
 - [ ] Pending's toolbar groups by Folder, Site or Status, or not at all, each group under a heading with its count (a folder group shows its path), and sorts by Date Added, Title, Uploader or Site, either way.
 - [ ] The Queue has the same toolbar (status groups: Downloading, Waiting, Stopped, Failed, Done). Sorting doesn't change the order downloads start in.

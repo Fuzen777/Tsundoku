@@ -458,6 +458,71 @@ fn a_failed_download_can_be_retried() {
 }
 
 #[test]
+fn an_archive_that_wasnt_unpacked_is_only_unpacked_again() {
+    let test = Test::new();
+    let id = test.add("a");
+    wait_until("it runs", || test.runner.started().len() == 1);
+    assert!(
+        test.runner.job(id).unpack.is_some(),
+        "unpacking is on by default"
+    );
+    assert_eq!(test.runner.job(id).unpack_only, None);
+    let archive = test.folder.path().join("downloads").join("Album.rar");
+    // The runner makes this folder only after it has noted the start, so it may not be there yet.
+    fs::create_dir_all(archive.parent().unwrap()).unwrap();
+    fs::write(&archive, b"rar").unwrap();
+    let files = DownloadedFiles {
+        settled: Vec::new(),
+        archives: vec![archive.clone()],
+    };
+    let problem = crate::unpack::UnpackProblem::NeedsPassword;
+    test.runner.complete(
+        id,
+        JobOutcome::NotUnpacked {
+            files: files.clone(),
+            error: Some(DownloadError::Unpack {
+                archive: "Album.rar".to_owned(),
+                problem: problem.clone(),
+            }),
+        },
+    );
+    wait_until("it fails", || test.state(id) == Some(QueueState::Failed));
+    let item = test
+        .queue
+        .items()
+        .into_iter()
+        .find(|item| item.id == id)
+        .unwrap();
+    assert_eq!(
+        item.error,
+        Some(DownloadError::Unpack {
+            archive: "Album.rar".to_owned(),
+            problem,
+        })
+    );
+
+    test.queue.retry(id).unwrap();
+    wait_until("it runs again", || test.runner.started().len() == 2);
+    let second = lock(&test.runner.jobs)[1].clone();
+    assert_eq!(second.unpack_only, Some(files.clone()), "only unpacks");
+
+    // Stopped while unpacking, it resumes unpacking; once the archive is gone, it downloads again.
+    test.runner.complete(
+        id,
+        JobOutcome::NotUnpacked {
+            files: files.clone(),
+            error: None,
+        },
+    );
+    wait_until("it stops", || test.state(id) == Some(QueueState::Stopped));
+    fs::remove_file(&archive).unwrap();
+    test.queue.resume(id).unwrap();
+    wait_until("it runs a third time", || test.runner.started().len() == 3);
+    let third = lock(&test.runner.jobs)[2].clone();
+    assert_eq!(third.unpack_only, None);
+}
+
+#[test]
 fn pause_all_stops_running_downloads_and_holds_waiting_ones_until_resume_all() {
     let test = Test::new();
     let [first, second, third] = ["a", "b", "c"].map(|id| test.add(id));
@@ -583,6 +648,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         hold: None,
         recovery: Recovery::default(),
         caught_links: Vec::new(),
+        unpack_files: None,
     }
 }
 
@@ -788,10 +854,23 @@ fn checks_and_saves_the_options() {
                 tumblr: None,
             },
             hourly_file_limit: Some(0),
+            unpack: crate::settings::UnpackSettings {
+                enabled: false,
+                after: crate::settings::AfterUnpacking::Delete,
+                passwords: ["", "  ", "one", " two ", "one", "three\r\n"]
+                    .map(str::to_owned)
+                    .to_vec(),
+            },
         })
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
     assert_eq!(saved.hourly_file_limit, None, "0 is no limit");
+    assert_eq!(
+        saved.unpack.passwords,
+        ["one", " two ", "three"],
+        "blank ones and repeats dropped, spaces kept"
+    );
+    assert!(!saved.unpack.enabled);
     assert_eq!(saved.post_file_name, "{site} {post} {number}", "trimmed");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
     assert_eq!(saved.folder, None, "blank is the default folder");

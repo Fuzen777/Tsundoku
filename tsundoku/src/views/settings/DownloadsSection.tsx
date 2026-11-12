@@ -1,8 +1,7 @@
 import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { pickFolder, queryKeys, saveDownloadOptions, setDefaultPreset } from "../../api"
+import { pickFolder, queryKeys, setDefaultPreset } from "../../api"
 import type { CookiesBrowser } from "../../bindings/CookiesBrowser"
-import type { DownloadSettings } from "../../bindings/DownloadSettings"
 import type { PauseRange } from "../../bindings/PauseRange"
 import type { SitePauses } from "../../bindings/SitePauses"
 import { Button } from "../../components/Button"
@@ -11,8 +10,8 @@ import { Field, SelectInput, TextInput } from "../../components/Field"
 import { DEFAULT_POST_FILE_NAME, PostNameInput } from "../../components/PostNameInput"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
-import { describeDownloadError, describePresetError, type ErrorDescription } from "../../errors"
-import { useDefaultDownloadFolder, useDownloadOptions, usePresets, useStorePresets } from "../../queries"
+import { describePresetError, type ErrorDescription } from "../../errors"
+import { useDefaultDownloadFolder, usePresets, useSaveDownloadOptions, useStorePresets } from "../../queries"
 import { strings } from "../../strings"
 import { useOpenDownloadFolder } from "../../useOpenDownloadFolder"
 
@@ -42,29 +41,10 @@ const BROWSERS: readonly CookiesBrowser[] = [
 /** Browsers that keep Firefox's cookie database, which can be read while they run. */
 const FIREFOX_FAMILY: readonly CookiesBrowser[] = ["automatic", "firefox", "zen", "libreWolf", "floorp", "waterfox"]
 
-/** Saves download options as they change. Each section shows its own error. */
-function useSaveOptions() {
-  const queryClient = useQueryClient()
-  const { data: options } = useDownloadOptions()
-  const [error, setError] = useState<ErrorDescription | null>(null)
-  const save = async (changes: Partial<DownloadSettings>) => {
-    if (!options) return false
-    setError(null)
-    try {
-      queryClient.setQueryData(queryKeys.downloadOptions, await saveDownloadOptions({ ...options, ...changes }))
-      return true
-    } catch (caught) {
-      setError(describeDownloadError(caught))
-      return false
-    }
-  }
-  return { options, save, error }
-}
-
 /** Settings → Downloads: the download folder, how many at once, the speed limit, the default preset. */
 export function DownloadsSection() {
   const queryClient = useQueryClient()
-  const { options, save, error } = useSaveOptions()
+  const { options, save, error } = useSaveDownloadOptions()
   const { data: defaultFolder } = useDefaultDownloadFolder()
   const { data: presets } = usePresets()
   const storePresets = useStorePresets()
@@ -189,7 +169,7 @@ export function DownloadsSection() {
 
 /** Settings → Posts of Images: how the files of a post are named, with a live example under the field. */
 export function PostsSection() {
-  const { options, save, error } = useSaveOptions()
+  const { options, save, error } = useSaveDownloadOptions()
   // The name is saved when the field is left or Enter is pressed, not at every key.
   const [name, setName] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -258,7 +238,7 @@ const OTHER_PACED_SITES: readonly { key: keyof SitePauses; name: string }[] = [
 /** Settings → Pacing: Instagram's pause before each file and between its links in Pending, and its hourly limit; then
  * the same pause for X, Pixiv and Tumblr, none until one is set. */
 export function PacingSection() {
-  const { options, save, error } = useSaveOptions()
+  const { options, save, error } = useSaveDownloadOptions()
   const sitePauses = options?.sitePauses ?? { x: null, pixiv: null, tumblr: null }
 
   // The hourly limit is saved when the field is left or Enter is pressed, not at every key; empty for none.
@@ -383,7 +363,7 @@ function PauseFields({
 
 /** Settings → Cookies: where cookies are read from, for links that need a signed-in account. */
 export function CookiesSection() {
-  const { options, save, error } = useSaveOptions()
+  const { options, save, error } = useSaveDownloadOptions()
   const browser = options?.cookiesBrowser ?? null
   return (
     <Section title={text.cookies}>

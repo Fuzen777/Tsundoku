@@ -4,3 +4,7 @@
 *.icns binary
 *.png binary
 *.zip binary
+# The unpacking tests' archives (tsundoku/core/tests/fixtures/archives).
+*.rar binary
+*.r[0-9][0-9] binary
+*.7z binary

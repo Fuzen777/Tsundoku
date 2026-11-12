@@ -2,6 +2,7 @@
 import type { CookiesBrowser } from "./CookiesBrowser";
 import type { PauseRange } from "./PauseRange";
 import type { SitePauses } from "./SitePauses";
+import type { UnpackSettings } from "./UnpackSettings";
 
 /**
  * How downloads run. Settings → Downloads edits it.
@@ -44,4 +45,8 @@ sitePauses: SitePauses,
  * The most files from that site (Instagram) downloaded in an hour, or `None` for no limit: once the past hour
  * holds this many, its next download waits (`site_limits::hourly_limit_end`).
  */
-hourlyFileLimit: number | null, };
+hourlyFileLimit: number | null, 
+/**
+ * Unpacking the archives downloads bring (Settings → Archives).
+ */
+unpack: UnpackSettings, };

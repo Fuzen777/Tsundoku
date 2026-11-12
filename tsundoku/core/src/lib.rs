@@ -42,4 +42,5 @@ mod sync;
 pub mod system;
 pub mod thumbnails;
 pub mod tools;
+pub mod unpack;
 pub mod watched;

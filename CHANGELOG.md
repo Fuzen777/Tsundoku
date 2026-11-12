@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.130 · 2026-11-12
+
+### Added
+
+- **Unpacking archives**: a zip, 7z or rar archive a download brings is unpacked beside it once it's downloaded, in one file or split into parts (`.part1.rar`, `.r00`, `.7z.001`, `.zip.001`), shown as Unpacking with its progress. One file or folder inside comes out as it is; several go in a folder named after the archive, "(2)" added when that name is taken. An archive split over several links is unpacked by the download that brings its last part. Names that would leave its folder and links inside it are left out. Afterwards the archive moves to the Recycle Bin, or is deleted or kept, as Settings → Archives says. Unpacking is on to start with.
+- **Settings → Archives**: Unpack Archives After Downloading, After Unpacking, and Passwords: one per line, tried in order on an archive that has a password until one opens it.
+- **An archive that wasn't unpacked**: the download fails saying why (a password, a missing part, damage, not enough room) and keeps every file; Retry only unpacks it, without downloading again. For a password, the row has a field to add it to the list, with Add and Retry.
+
 ## 0.1.129 · 2026-11-12
 
 ### Added

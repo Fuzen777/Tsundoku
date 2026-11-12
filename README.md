@@ -70,6 +70,10 @@ npm run tauri dev
 
 Tsundoku is built with [Tauri](https://tauri.app/) and downloads with [yt-dlp](https://github.com/yt-dlp/yt-dlp), [gallery-dl](https://codeberg.org/mikf/gallery-dl), [FFmpeg](https://ffmpeg.org/) (through [yt-dlp's builds](https://github.com/yt-dlp/FFmpeg-Builds)) and [Deno](https://deno.com/).
 
+Archives are unpacked with [zip](https://github.com/zip-rs/zip2), [sevenz-rust2](https://github.com/hasenbanck/sevenz-rust) and RARLAB's [UnRAR](https://www.rarlab.com/rar_add.htm) source, built in through [unrar.rs](https://github.com/muja/unrar.rs) and used only to read rar archives. Tsundoku doesn't change the UnRAR source; its licence says:
+
+> UnRAR source code may be used in any software to handle RAR archives without limitations free of charge, but cannot be used to develop RAR (WinRAR) compatible archiver and to re-create RAR compression algorithm, which is proprietary. Distribution of modified UnRAR source code in separate form or as a part of other software is permitted, provided that full text of this paragraph, starting from "UnRAR source code" words, is included in license, or in documentation if license is not available, and in source code comments of resulting package.
+
 ## License
 
 [MIT](LICENSE)

@@ -11,6 +11,7 @@ import { scrollWithin } from "../scrollWithin"
 import { strings } from "../strings"
 import { AddingSection } from "./settings/AddingSection"
 import { AppearanceSection } from "./settings/AppearanceSection"
+import { ArchivesSection } from "./settings/ArchivesSection"
 import { BackgroundSection } from "./settings/BackgroundSection"
 import { BackupRow } from "./settings/BackupRow"
 import { CookiesSection, DownloadsSection, PacingSection, PostsSection } from "./settings/DownloadsSection"
@@ -100,6 +101,7 @@ const SECTION_REACHED_TOP = 48
 /** What each of Settings' sections shows; their order and titles are `SETTINGS_SECTIONS`'. */
 const SECTION_CONTENTS: Record<SettingsSectionId, () => ReactNode> = {
   "settings-downloads": DownloadsSection,
+  "settings-archives": ArchivesSection,
   "settings-adding": AddingSection,
   "settings-background": BackgroundSection,
   "settings-appearance": AppearanceSection,

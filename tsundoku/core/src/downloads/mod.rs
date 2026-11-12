@@ -10,6 +10,7 @@ mod room_check;
 mod run;
 mod runner;
 mod store;
+mod unpacking;
 mod window_offer;
 
 use std::collections::HashMap;
@@ -29,6 +30,7 @@ use self::room_check::Reserved;
 pub use self::run::{Notice, QueueRun, RunEvent, RunSummary, TaskbarProgress, notices};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
+pub use self::unpacking::{DownloadedFiles, UnpackJob};
 pub use self::window_offer::{JobOffer, OFFER_WAIT, WindowAnswer, WindowOffer, WindowReply};
 use crate::browsers;
 use crate::cancel::CancelToken;
@@ -39,11 +41,12 @@ use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
 use crate::rules::{self, Destination, DownloadKind, RuleSubject};
-use crate::settings::{DownloadSettings, SettingsStore};
+use crate::settings::{DownloadSettings, SettingsStore, UnpackSettings};
 use crate::site_limits::{SiteLimits, now_ms};
 use crate::sites::{self, PacedSite};
 use crate::sync::lock;
 use crate::tools::{ToolId, ToolManager};
+use crate::unpack::UnpackProblem;
 
 /// Logs older than this are deleted at startup.
 const LOG_LIFETIME: Duration = Duration::from_secs(30 * 24 * 60 * 60);
@@ -113,6 +116,11 @@ pub struct QueueItem {
     #[serde(skip)]
     #[ts(skip)]
     pub caught_links: Vec<String>,
+    /// Its files when its archives weren't all unpacked (stopped while unpacking, or one failed), so Resume or Retry
+    /// only unpacks them. In memory only: after a restart, a run finds its files already there.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub unpack_files: Option<DownloadedFiles>,
 }
 
 /// How much of a log the Queue's log viewer shows: its end.
@@ -216,6 +224,8 @@ pub enum DownloadStage {
     Finishing,
     /// A file host's countdown before a free download (1fichier's), with the seconds left as `eta`.
     Countdown,
+    /// Unpacking an archive the download brought (`unpacking`), with the bytes written of what it holds.
+    Unpacking,
 }
 
 /// Why a download, or an action on the queue, failed.
@@ -267,6 +277,13 @@ pub enum DownloadError {
     /// Tsundoku.
     #[error("{keys} is taken by another app")]
     ShortcutTaken { keys: String },
+    /// An archive the download brought couldn't be unpacked (Settings → Archives); the files are kept, and Retry
+    /// unpacks again without downloading.
+    #[error("couldn't unpack {archive}: {problem}")]
+    Unpack {
+        archive: String,
+        problem: UnpackProblem,
+    },
     #[error("unexpected error: {detail}")]
     Unexpected { detail: String },
 }
@@ -496,6 +513,7 @@ impl DownloadQueue {
             hold: None,
             recovery: Recovery::default(),
             caught_links: Vec::new(),
+            unpack_files: None,
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -596,6 +614,7 @@ impl DownloadQueue {
             hold: None,
             recovery: Recovery::default(),
             caught_links: Vec::new(),
+            unpack_files: None,
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -762,6 +781,8 @@ impl DownloadQueue {
             };
             if folder != item.folder {
                 remove_folder(&temp_folder(item));
+                // It starts over there, archives and all.
+                item.unpack_files = None;
             }
             item.folder = folder;
             item.folder_chosen = folder_chosen;
@@ -970,6 +991,10 @@ impl DownloadQueue {
             post_pause: options.post_pause.normalized(),
             site_pauses: options.site_pauses.normalized(),
             hourly_file_limit: DownloadSettings::normalized_hourly_limit(options.hourly_file_limit),
+            unpack: UnpackSettings {
+                passwords: UnpackSettings::normalized_passwords(options.unpack.passwords),
+                ..options.unpack
+            },
         };
         self.settings
             .update(|settings| settings.downloads = options.clone())
@@ -1104,6 +1129,15 @@ impl DownloadQueue {
                 .flatten(),
             caught_links: item.caught_links.clone(),
             window_offer: None,
+            unpack: options.unpack.enabled.then(|| UnpackJob {
+                after: options.unpack.after,
+                passwords: options.unpack.passwords.clone(),
+            }),
+            // Downloaded before: unpacked again while the archives are all still there, else downloaded again.
+            unpack_only: item
+                .unpack_files
+                .clone()
+                .filter(|files| files.archives.iter().all(|archive| archive.exists())),
         }
     }
 
@@ -1164,6 +1198,17 @@ impl DownloadQueue {
                 _ => None,
             };
             match (end_request, outcome) {
+                // Downloaded: Resume or Retry only unpacks.
+                (end_request, JobOutcome::NotUnpacked { files, error }) => {
+                    item.unpack_files = Some(files);
+                    match error {
+                        Some(error) if end_request.is_none() => {
+                            item.state = QueueState::Failed;
+                            item.error = Some(error);
+                        }
+                        _ => item.state = QueueState::Stopped,
+                    }
+                }
                 (Some(EndRequest::Stop), _) | (_, JobOutcome::Cancelled) => {
                     item.state = QueueState::Stopped
                 }
@@ -1214,6 +1259,7 @@ impl DownloadQueue {
                             self.site_worked(&item.video.url);
                             item.recovery = Recovery::default();
                             item.caught_links.clear();
+                            item.unpack_files = None;
                         }
                         Err(error) => {
                             item.state = QueueState::Failed;

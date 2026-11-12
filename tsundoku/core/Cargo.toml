@@ -22,6 +22,8 @@ md-5 = "0.11"
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "native-tls", "system-proxy"] }
 rusqlite = { version = "0.41", features = ["bundled"] }
+# 7z archives a download brings (unpack/sevenz.rs): LZMA, LZMA2, PPMd, bzip2, deflate, and AES for passwords.
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["aes256", "bzip2", "deflate", "ppmd", "util"] }
 serde.workspace = true
 serde_json.workspace = true
 # OneDrive gives each file's SHA-1, MediaFire its SHA-256, to check a download by (downloads/file_runner.rs).
@@ -29,8 +31,12 @@ sha1 = "0.11"
 sha2 = "0.11"
 thiserror = "2"
 ts-rs = "12.0.1"
+# Rar archives (unpack/rar.rs), through UnRAR's own library built from its source. Its licence lets any software
+# read rar archives with it, but not make them: README's credits carry it.
+unrar_sys = "0.5.8"
 which = "8"
-zip = { version = "9", default-features = false, features = ["deflate"] }
+# Tool downloads (tools/), and zip archives a download brings (unpack/zips.rs), with ZipCrypto's or AES's password.
+zip = { version = "9", default-features = false, features = ["aes-crypto", "bzip2", "deflate", "deflate64", "lzma", "ppmd", "xz"] }
 
 # Job objects, so ending a program also ends everything it started (process.rs), the clipboard the clipboard
 # watcher reads (clipboard.rs), the local time an automatic backup is named after (backup.rs), Windows' version for
@@ -48,8 +54,12 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Registry",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
+    "Win32_System_Time",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
 
 [dev-dependencies]
+# Making 7z archives for the unpacking tests.
+sevenz-rust2 = { version = "0.25", default-features = false, features = ["aes256", "compress", "util"] }
 tempfile = "3"

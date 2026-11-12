@@ -183,6 +183,8 @@ mod tests {
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
+            unpack: None,
+            unpack_only: None,
         };
         let post = PostJob {
             gallery_dl: Some(PathBuf::from("gallery-dl.exe")),

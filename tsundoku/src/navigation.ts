@@ -31,6 +31,7 @@ export const settingsNavItem: NavItem = {
 /** Settings' sections in order, as the sidebar lists them under Settings: each one's heading, or a shorter name. */
 export const SETTINGS_SECTIONS = [
   { id: "settings-downloads", title: strings.settings.downloads },
+  { id: "settings-archives", title: strings.settings.archives },
   { id: "settings-adding", title: strings.settings.adding },
   { id: "settings-background", title: strings.settings.backgroundShort },
   { id: "settings-appearance", title: strings.settings.appearance },

@@ -9,12 +9,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 
+use super::unpacking::{self, DownloadedFiles, UnpackJob};
 use super::{DownloadError, DownloadProgress, DownloadStage, file_runner, post_runner, progress};
 use crate::cancel::CancelToken;
 use crate::hosts::check::BrowserCheck;
 use crate::metadata::{FileContents, PreviewError, classify_failure};
 use crate::presets::{Preset, PresetError};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
+use crate::room::SystemDisks;
 use crate::settings::PauseRange;
 use crate::tools::{ToolCacheFolder, ToolError, start_error};
 
@@ -57,6 +59,10 @@ pub struct JobSpec {
     pub caught_links: Vec<String>,
     /// The download the person just started in the check window, which this run answers for (`window_offer`).
     pub window_offer: Option<super::JobOffer>,
+    /// Unpack the archives among the files once downloaded (Settings → Archives), `None` when that's off.
+    pub unpack: Option<UnpackJob>,
+    /// The files of an earlier run whose archives weren't all unpacked: this run only unpacks them.
+    pub unpack_only: Option<DownloadedFiles>,
 }
 
 /// What downloading a post takes beyond a video's needs.
@@ -86,6 +92,12 @@ pub enum JobOutcome {
     /// A file host's files that need a person to open its check (`hosts::check`): the download waits for them, with
     /// the files it could download already saved.
     NeedsCheck(BrowserCheck),
+    /// Downloaded, but its archives weren't all unpacked: it was stopped while unpacking (`error` is `None`), or one
+    /// couldn't be. Resume or Retry unpacks the rest of `files` without downloading again.
+    NotUnpacked {
+        files: DownloadedFiles,
+        error: Option<DownloadError>,
+    },
 }
 
 pub trait JobRunner: Send + Sync {
@@ -108,10 +120,43 @@ impl JobRunner for ToolRunner {
         cancel: &CancelToken,
         on_progress: &mut dyn FnMut(DownloadProgress),
     ) -> JobOutcome {
-        match (&job.post, &job.files) {
+        if let Some(files) = &job.unpack_only {
+            return match &job.unpack {
+                Some(unpack) => unpacking::run(
+                    job,
+                    unpack,
+                    files.clone(),
+                    None,
+                    &SystemDisks,
+                    cancel,
+                    on_progress,
+                ),
+                // Unpacking was turned off since: the files are done as they are.
+                None => JobOutcome::Finished {
+                    files: files.clone().all(),
+                    format: None,
+                },
+            };
+        }
+        let outcome = match (&job.post, &job.files) {
             (Some(post), _) => post_runner::run(job, post, cancel, on_progress),
             (None, Some(_)) => file_runner::run(job, cancel, on_progress),
             (None, None) => run_yt_dlp(job, cancel, on_progress),
+        };
+        match (outcome, &job.unpack) {
+            (JobOutcome::Finished { files, format }, Some(unpack)) => unpacking::run(
+                job,
+                unpack,
+                DownloadedFiles {
+                    settled: Vec::new(),
+                    archives: files,
+                },
+                format,
+                &SystemDisks,
+                cancel,
+                on_progress,
+            ),
+            (outcome, _) => outcome,
         }
     }
 }
@@ -364,6 +409,8 @@ mod tests {
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
+            unpack: None,
+            unpack_only: None,
         }
     }
 

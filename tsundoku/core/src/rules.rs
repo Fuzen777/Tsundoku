@@ -1048,8 +1048,18 @@ fn local_date() -> String {
 /// `name` made safe as one folder's name: characters Windows refuses in names, separators included, become "_", and
 /// dots and spaces at its ends go. `fallback` when nothing is left.
 pub fn safe_folder_name(name: &str, fallback: &str) -> String {
-    let name: String = name
-        .chars()
+    let name = without_refused_characters(name);
+    let name = name.trim_matches(['.', ' ']);
+    if name.is_empty() {
+        fallback.to_owned()
+    } else {
+        name.to_owned()
+    }
+}
+
+/// `name` with each character Windows refuses in a name, separators included, as "_".
+pub fn without_refused_characters(name: &str) -> String {
+    name.chars()
         .map(|character| {
             if character.is_control() || r#"<>:"/\|?*"#.contains(character) {
                 '_'
@@ -1057,13 +1067,7 @@ pub fn safe_folder_name(name: &str, fallback: &str) -> String {
                 character
             }
         })
-        .collect();
-    let name = name.trim_matches(['.', ' ']);
-    if name.is_empty() {
-        fallback.to_owned()
-    } else {
-        name.to_owned()
-    }
+        .collect()
 }
 
 /// The rules, saved to `settings.json` as they change.

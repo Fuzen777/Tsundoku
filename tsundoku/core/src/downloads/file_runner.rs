@@ -1174,6 +1174,8 @@ mod onedrive_live {
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
+            unpack: None,
+            unpack_only: None,
         };
         let outcome = run(&job, &CancelToken::new(), &mut |_| {});
         println!("{outcome:?}");
@@ -1295,6 +1297,8 @@ mod host_live {
             shared_file_name: None,
             caught_links: Vec::new(),
             window_offer: None,
+            unpack: None,
+            unpack_only: None,
         };
         let outcome = run(&job, &CancelToken::new(), &mut |_| {});
         println!("{}", fs::read_to_string(&job.log_path).unwrap_or_default());

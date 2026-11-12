@@ -133,6 +133,8 @@ type: Features
 - **Stop and Resume**: Stop ends the download and keeps what it got; Resume continues from there. Stopping one that's waiting holds it.
 - **Cancel**: removes the download and its partial files.
 - **Failed downloads**: the reason, in plain words with yt-dlp's error under it, and Retry, which continues where it failed. A dropped connection or a used-up download limit is tried again by itself first (see above).
+- **Archives unpacked**: a zip, 7z or rar archive a download brings is unpacked beside it once downloaded (Unpacking, with its progress), in one file or split into parts: `.part1.rar`, `.rar` with `.r00`, `.7z.001` or `.zip.001`. One file or folder inside comes out as it is; several go in a folder named after the archive, with "(2)" when that name is taken. A part that another link brings waits for it: the download that brings the last part unpacks the archive. Names that would leave its folder and links inside are left out, and names Windows refuses are made safe. A zip spanned over `.z01` files is left as it is. Then the archive's parts go to the Recycle Bin, or are deleted or kept (Settings → Archives); the History lists what it held.
+- **An archive that wasn't unpacked**: the download fails saying why (it has a password, none of the passwords opens it, a part is missing, it's damaged, its drive hasn't the room), keeping every file it downloaded. Retry and Resume only unpack it, without downloading again. Stop while unpacking stops it the same way.
 - **Finished downloads**: Open File, Show in Folder and Show Log, until Clear Finished or the row's own Remove from Queue (×), which offers Undo too. They stay in the history. Clear Finished shows "Cleared 3 finished downloads" with Undo for 8 seconds, as Pending's Remove does, which puts them back in their places, unless the same video is in the queue again by then.
 - **Show Log**: every download that has started has Show Log, which opens its log under the row, in the app: the log's end (its last 256 KB), following along every second while it downloads unless you scroll up, with Copy Log and Open in Editor beside it.
 - **Logs**: each download keeps yt-dlp's full output, kept for 30 days.
@@ -187,6 +189,7 @@ type: Features
 
 - **Jump to a section**: while Settings is open, the sidebar lists its sections under it (Downloads, Adding Links… About); clicking one scrolls straight to it, and the one at the top is marked as you scroll.
 - **Download Folder**: the folder downloads go in, each site's in a folder of its own by the first rule, unless another rule or the preset picks another folder: picked at the first-run setup, a Tsundoku folder in Downloads by default, with Choose Folder…, Open Folder (which opens it in File Explorer, making it first if nothing was downloaded yet) and Use Default. Rules' folders that aren't full paths go inside it. A portable copy's Downloads folder beside it is saved without the copy's own folder, so it follows the copy to another drive.
+- **Archives**: Unpack Archives After Downloading, on to start with; After Unpacking, Move the Archive to the Recycle Bin (the default), Delete the Archive or Keep the Archive; and Passwords, one per line, tried in order on an archive that has a password until one opens it, saved when the field is left (blank lines and repeats dropped). The passwords are kept in Tsundoku's settings as they are.
 - **Downloads at Once**: one to five, two by default. Raising it starts waiting downloads right away.
 - **Speed Limit**: for each download, such as 500K or 2M, or none. A value yt-dlp wouldn't understand is refused with an explanation.
 - **Default Preset**: the one the preview card picks, also settable in the presets view.
@@ -204,6 +207,7 @@ type: Features
 - **A site's page couldn't be read**: Update yt-dlp, and Try Nightly when Tsundoku's copy is on Stable, right under the error, on the preview card or the queue row.
 - **The video needs a signed-in account**: with cookies off, Set Up Cookies opens Settings. With cookies on, the preview names the site and says whether a browser is signed in to it: "Instagram needs you signed in. Sign in to Instagram in your browser, then try again." or that the site refused the browser's sign-in, with Try Again and Cookie Settings.
 - **A post of images while gallery-dl isn't set up**: Set Up Image Downloads sets it up and fetches the post again. A site gallery-dl couldn't read offers Update gallery-dl, which updates Tsundoku's copy (or sets it up in place of yours).
+- **An archive with a password**: when it has one and no password on the list opens it, the row has a Password field with Add and Retry, which adds it to Settings → Archives' list and unpacks the archive again, and Archive Settings, which opens that section.
 
 ## Tools
 

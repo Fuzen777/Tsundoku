@@ -9,6 +9,7 @@ import type { RuleError } from "./bindings/RuleError"
 import type { SignInCookies } from "./bindings/SignInCookies"
 import type { ToolError } from "./bindings/ToolError"
 import type { ToolId } from "./bindings/ToolId"
+import type { UnpackProblem } from "./bindings/UnpackProblem"
 import type { WatchedError } from "./bindings/WatchedError"
 import { formatBytes, formatClockTime } from "./format"
 import { strings } from "./strings"
@@ -245,8 +246,31 @@ export function describeDownloadError(error: unknown): ErrorDescription {
       return { message: text.nothingPicked }
     case "shortcutTaken":
       return { message: text.shortcutTaken(error.keys) }
+    case "unpack":
+      return describeUnpackProblem(error.archive, error.problem)
     case "unexpected":
       return { message: strings.errors.unexpected, detail: error.detail }
+  }
+}
+
+/** Why an archive a download brought wasn't unpacked; its files are kept, and Retry only unpacks. */
+function describeUnpackProblem(archive: string, problem: UnpackProblem): ErrorDescription {
+  const text = strings.queue.errors.unpack
+  switch (problem.kind) {
+    case "needsPassword":
+      return { message: text.needsPassword(archive) }
+    case "wrongPassword":
+      return { message: text.wrongPassword(archive, problem.tried) }
+    case "missingPart":
+      return { message: text.missingPart(archive, problem.part) }
+    case "damaged":
+      return { message: text.damaged(archive), detail: problem.detail }
+    case "unsupported":
+      return { message: text.unsupported(archive), detail: problem.detail }
+    case "noRoom":
+      return { message: text.noRoom(archive, problem.drive, formatBytes(problem.needed), formatBytes(problem.free)) }
+    case "write":
+      return { message: text.write(archive), detail: `${problem.path}: ${problem.detail}` }
   }
 }
 
@@ -311,11 +335,15 @@ export function describePostNameError(error: PostNameError): ErrorDescription {
 }
 
 /** What may fix a failed preview or download: updating the tool that couldn't read a site's page, reading browser
- * cookies when a signed-in account is needed, signing in to the site in a browser and trying again, or setting up
- * gallery-dl for a post of images. */
-export type FailureFix = "updateYtDlp" | "updateGalleryDl" | "cookies" | "signIn" | "setUpImages"
+ * cookies when a signed-in account is needed, signing in to the site in a browser and trying again, setting up
+ * gallery-dl for a post of images, or adding the password of an archive the download brought. */
+export type FailureFix = "updateYtDlp" | "updateGalleryDl" | "cookies" | "signIn" | "setUpImages" | "archivePassword"
 
 export function fixFor(error: unknown): FailureFix | null {
+  if (isCoreError<DownloadError>(error) && error.kind === "unpack") {
+    const { kind } = error.problem
+    return kind === "needsPassword" || kind === "wrongPassword" ? "archivePassword" : null
+  }
   const failure = isCoreError<DownloadError>(error) && error.kind === "ytDlp" ? error.error : error
   if (!isCoreError<PreviewError>(failure)) return null
   switch (failure.kind) {
