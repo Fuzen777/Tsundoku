@@ -5053,7 +5053,7 @@ dependencies = [
 
 [[package]]
 name = "tsundoku"
-version = "0.1.124"
+version = "0.1.125"
 dependencies = [
  "serde_json",
  "tauri",
@@ -5069,13 +5069,15 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tsundoku-core",
+ "webview2-com",
  "window-vibrancy",
+ "windows",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "tsundoku-core"
-version = "0.1.124"
+version = "0.1.125"
 dependencies = [
  "aes",
  "base64 0.23.1",

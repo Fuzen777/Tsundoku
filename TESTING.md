@@ -204,7 +204,8 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Waiting and Retrying
 
-**71. Downloads in the check window** · 0.1.122
+**71. Downloads in the check window** · 0.1.122, 0.1.125
+- [ ] Workupload, a file of a few MB or more: once you click Download in its check window, the row takes the file's name and size, and shows a moving bar with the speed and time left until it's done. Claude saw that on a local test page of its own (200 MB, Stop included), not on Workupload's.
 - [ ] Workupload, with a file big enough to take a few seconds: Open Check → Download on Workupload's page → the window hides and the row says it's downloading in the check window. Stop the row meanwhile → it fails saying the download in the check window stopped, and its folder holds no partial file; Retry → it waits for Open Check again. Claude saw the whole download go through once with your click (file intact, row named after it); stopping midway was only tried in the queue's tests.
 
 **70. 1fichier** · 0.1.114

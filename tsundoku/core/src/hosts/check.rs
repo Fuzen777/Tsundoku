@@ -25,6 +25,8 @@ pub struct CheckPage {
     host: Host,
     /// The host's ID for the file, to know the download the page starts.
     file_id: String,
+    /// Its file is whatever download the page itself starts, saved by the window (`any_download`).
+    any_download: bool,
 }
 
 impl CheckPage {
@@ -35,18 +37,21 @@ impl CheckPage {
                 url: super::mediafire::file_page(&file.quick_key),
                 host: Host::MediaFire,
                 file_id: file.quick_key.clone(),
+                any_download: false,
             }),
             // Its captcha (`yandex::page_error`), on the file's own page.
             FileSource::YandexDisk(file) => Some(Self {
                 url: file.page(),
                 host: Host::YandexDisk,
                 file_id: file.name.clone(),
+                any_download: false,
             }),
             // The link's own page, behind its check.
             FileSource::Windowed(file) => Some(Self {
                 url: file.page.clone(),
                 host: file.host,
                 file_id: file.id.clone(),
+                any_download: false,
             }),
             FileSource::Mega(_)
             | FileSource::GoogleDrive(_)
@@ -66,6 +71,27 @@ impl CheckPage {
         }
     }
 
+    /// A page whose file is whatever download it starts itself, saved by the window: for a development build's test
+    /// of the window on a page of its own (`url`, on `host`'s site as far as the window is concerned).
+    pub fn any_download(url: &str, host: Host) -> Self {
+        Self {
+            url: url.to_owned(),
+            host,
+            file_id: String::new(),
+            any_download: true,
+        }
+    }
+
+    /// The same file's page at another address, taking whatever download it starts: for a development build's test
+    /// of a waiting download's window on a page of its own.
+    pub fn moved_to(&self, url: &str) -> Self {
+        Self {
+            url: url.to_owned(),
+            any_download: true,
+            ..self.clone()
+        }
+    }
+
     /// Whether `host`, a page's host name, is on the page's site, such as MediaFire's download servers for its file
     /// pages: the check window doesn't leave the site.
     pub fn on_site(&self, host: &str) -> bool {
@@ -78,6 +104,10 @@ impl CheckPage {
         if let Some((id, _)) = windowed::saved_file(download) {
             return id == self.file_id;
         }
+        if self.any_download {
+            // Only ever asked about a download the page itself started (`saves_in_window`).
+            return true;
+        }
         match &self.host.facts().window {
             Some(window) => (window.takes)(download, &self.file_id),
             None => caught_file(self.host, download).is_some_and(|id| id == self.file_id),
@@ -86,11 +116,13 @@ impl CheckPage {
 
     /// Whether the window saves the page's file itself rather than catching its address (`WindowDownload`).
     pub fn saves_in_window(&self) -> bool {
-        self.host
-            .facts()
-            .window
-            .as_ref()
-            .is_some_and(|window| window.download == WindowDownload::SaveInWindow)
+        self.any_download
+            || self
+                .host
+                .facts()
+                .window
+                .as_ref()
+                .is_some_and(|window| window.download == WindowDownload::SaveInWindow)
     }
 
     /// Whether the page gives the first click on Download to an advert (`WindowFacts::first_click_ad`).

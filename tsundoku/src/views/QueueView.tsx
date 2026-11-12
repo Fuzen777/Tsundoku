@@ -186,8 +186,10 @@ function QueueRow({ item }: { item: QueueItem }) {
   const progress = useDownloadProgress(item)
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const [showsLog, setShowsLog] = useState(false)
-  const stage = stageLabel(item, progress)
   const hold = item.state === "waiting" ? item.hold : null
+  // The check window saving the file shows as a download, with its progress.
+  const savingInWindow = hold?.kind === "windowDownload"
+  const stage = savingInWindow ? strings.queue.stages.downloading : stageLabel(item, progress)
   const holdTimeLeft = useTimeLeft(hold ? holdEnd(hold) : null)
   const offerUndo = useOfferUndo()
 
@@ -224,7 +226,9 @@ function QueueRow({ item }: { item: QueueItem }) {
             ...sizeDetails(item, progress),
           ])}
         </p>
-        {item.state === "running" && <ProgressBar value={progress?.fraction ?? undefined} label={stage} />}
+        {(item.state === "running" || savingInWindow) && (
+          <ProgressBar value={progress?.fraction ?? undefined} label={stage} />
+        )}
         {hold && (
           <StatusMessage tone="neutral" message={describeHold(hold)} detail={holdTimeLeft ?? undefined}>
             {hold.kind === "browserCheck" && (
@@ -251,7 +255,7 @@ function QueueRow({ item }: { item: QueueItem }) {
             onClick={() => act(stopDownload)}
           />
         )}
-        {hold && hold.kind !== "hourlyLimit" && hold.kind !== "browserCheck" && (
+        {hold && hold.kind !== "hourlyLimit" && hold.kind !== "browserCheck" && hold.kind !== "windowDownload" && (
           <IconButton label={strings.queue.tryNow} icon={RefreshCw} onClick={() => act(tryDownloadNow)} />
         )}
         {item.state === "stopped" && (

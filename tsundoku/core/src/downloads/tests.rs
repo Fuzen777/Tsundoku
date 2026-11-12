@@ -1928,6 +1928,8 @@ impl Test {
             site: "workupload".to_owned(),
             site_name: "workupload.com".to_owned(),
             url: "https://workupload.com/file/abcdefgh".to_owned(),
+            // Named after the link until its file is known, as a link read through the window is.
+            title: "abcdefgh".to_owned(),
             duration_seconds: None,
             best_height: None,
             files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
@@ -1948,10 +1950,24 @@ impl Test {
 fn a_file_the_window_saves_is_handed_to_its_download() {
     let test = Test::new();
     let id = test.held_for_window();
-    let folder = test.queue.window_download_started(id).unwrap();
+    let folder = test
+        .queue
+        .window_download_started(id, "Sample.png", Some(3))
+        .unwrap();
     assert!(
         folder.is_dir(),
         "the window saves into the temporary folder"
+    );
+    assert_eq!(test.item(id).video.title, "Sample.png", "named at once");
+    assert_eq!(
+        test.item(id).video.files.map(|contents| contents.bytes),
+        Some(3)
+    );
+    test.queue.window_download_progress(id, 1, Some(3));
+    let progress = test.item(id).progress.unwrap();
+    assert_eq!(
+        (progress.downloaded_bytes, progress.total_bytes),
+        (Some(1), Some(3))
     );
     assert_eq!(
         test.held(id),
@@ -1972,7 +1988,10 @@ fn a_file_the_window_saves_is_handed_to_its_download() {
 fn a_window_download_that_stops_fails_its_download_and_leaves_nothing() {
     let test = Test::new();
     let id = test.held_for_window();
-    let folder = test.queue.window_download_started(id).unwrap();
+    let folder = test
+        .queue
+        .window_download_started(id, "Sample.png", None)
+        .unwrap();
     std::fs::write(folder.join("Sample.png.crdownload"), "half").unwrap();
     test.queue.window_download_stopped(id);
     assert_eq!(test.state(id), Some(QueueState::Failed));
@@ -1997,7 +2016,10 @@ fn a_window_download_that_stops_fails_its_download_and_leaves_nothing() {
 fn removing_a_download_while_the_window_saves_it_cleans_up() {
     let test = Test::new();
     let id = test.held_for_window();
-    let folder = test.queue.window_download_started(id).unwrap();
+    let folder = test
+        .queue
+        .window_download_started(id, "Sample.png", None)
+        .unwrap();
     std::fs::write(folder.join("Sample.png.crdownload"), "half").unwrap();
     test.queue.cancel(id).unwrap();
     assert!(!folder.exists());

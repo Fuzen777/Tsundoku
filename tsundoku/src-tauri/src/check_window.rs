@@ -21,21 +21,22 @@
 
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread;
 use std::time::Duration;
 
-use tauri::webview::{
-    DownloadEvent, NewWindowFeatures, NewWindowResponse, PermissionKind, PermissionResponse,
-};
+use tauri::webview::{NewWindowFeatures, NewWindowResponse, PermissionKind, PermissionResponse};
 use tauri::{AppHandle, Manager, State, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 use tsundoku_core::data_folder::DataPaths;
 use tsundoku_core::downloads::{DownloadError, DownloadQueue};
 use tsundoku_core::hosts::check::{BrowserCheck, CheckPage};
 
 use crate::DataFolder;
+
+#[cfg(windows)]
+mod watch;
 
 /// The window's label: there's one at a time.
 const LABEL: &str = "check";
@@ -162,29 +163,14 @@ fn build(app: &AppHandle, url: Url, title: &str) -> tauri::Result<()> {
             note_address(&guard, "went to", url.as_str());
             !take(&guard, url.as_str()) && stays_on_site(&guard, url)
         })
-        // A download that starts anyway stops before a byte is saved, and is caught if it's the page's file, unless
-        // the window saves the page's file itself.
-        .on_download(move |_, event| match event {
-            DownloadEvent::Requested { url, destination } => {
-                note_address(&catcher, "started a download from", url.as_str());
-                if let Some(path) = save_in_window(&catcher, url.as_str(), destination) {
-                    *destination = path;
-                    return true;
-                }
-                if !take(&catcher, url.as_str()) {
-                    development::log(&format!("stopped a download: {url}"));
-                }
-                false
-            }
-            DownloadEvent::Finished { path, success, .. } => {
-                window_download_finished(&catcher, path, success);
-                false
-            }
-            _ => false,
-        })
+        // Its downloads go through WebView2's own download operation (`watch`), not a hook of Tauri's.
         .on_permission_request(|_, kind| permission(kind))
         .on_new_window(move |_, features| open_catcher(&opener, features));
     let window = development::with_debugging(builder).build()?;
+    #[cfg(windows)]
+    watch::watch(&window, downloads(&catcher))?;
+    #[cfg(not(windows))]
+    let _ = catcher;
     let closer = app.clone();
     window.on_window_event(move |event| {
         if matches!(event, WindowEvent::Destroyed) {
@@ -201,8 +187,56 @@ fn bring_forward(window: &tauri::WebviewWindow) {
     let _ = window.set_focus();
 }
 
+/// What the window does with a download its page starts: saves it, for a page whose file it saves itself, telling its
+/// progress to the download's row; catches it, for one whose address Tsundoku downloads; or stops it before a byte is
+/// saved.
+#[cfg(windows)]
+fn downloads(app: &AppHandle) -> watch::Callbacks {
+    let decider = app.clone();
+    let teller = app.clone();
+    let ender = app.clone();
+    watch::Callbacks {
+        decide: Box::new(move |started| {
+            note_address(&decider, "started a download from", &started.address);
+            if let Some(path) = save_in_window(&decider, started) {
+                // Its size shows on its row from the start, when the site gives it.
+                window_download_progress(&decider, 0, started.total);
+                return watch::Decision::Save(path);
+            }
+            if !take(&decider, &started.address) {
+                development::log(&format!("stopped a download: {}", started.address));
+            }
+            watch::Decision::Refuse
+        }),
+        progress: Box::new(move |received, total| {
+            window_download_progress(&teller, received, total)
+        }),
+        finished: Box::new(move |success| window_download_finished(&ender, None, success)),
+    }
+}
+
+/// Tells the download's row how far the window's download has got.
+fn window_download_progress(app: &AppHandle, received: u64, total: Option<u64>) {
+    let item = app
+        .state::<CheckWindow>()
+        .lock()
+        .as_ref()
+        .filter(|visit| visit.saving.is_some())
+        .map(|visit| visit.item);
+    match item {
+        Some(Some(id)) => app
+            .state::<Arc<DownloadQueue>>()
+            .window_download_progress(id, received, total),
+        Some(None) => development::log(&format!("received {received} of {total:?} bytes")),
+        None => {}
+    }
+}
+
 /// Whether the check window may go to `url`: a page on the check's site (`is_web_page`), not an advert's.
 fn stays_on_site(app: &AppHandle, url: &Url) -> bool {
+    if development::is_test_page(url) {
+        return true;
+    }
     let on_site = url.scheme() == "about"
         || url.host_str().is_some_and(|host| {
             app.state::<CheckWindow>()
@@ -342,7 +376,9 @@ fn move_on(app: &AppHandle, mut current: MutexGuard<'_, Option<Visit>>) {
 /// Where the window saves `download` itself, if it's the file of the page shown and its host's download runs in the
 /// window (`CheckPage::saves_in_window`): the download's temporary folder, under the name the site gives it. The window
 /// then hides, and a watch closes it, stopping the download, once the download is stopped or removed.
-fn save_in_window(app: &AppHandle, download: &str, suggested: &Path) -> Option<PathBuf> {
+#[cfg(windows)]
+fn save_in_window(app: &AppHandle, started: &watch::Started) -> Option<PathBuf> {
+    let download = started.address.as_str();
     let state = app.state::<CheckWindow>();
     let (id, page) = {
         let current = state.lock();
@@ -351,15 +387,30 @@ fn save_in_window(app: &AppHandle, download: &str, suggested: &Path) -> Option<P
         if visit.saving.is_some() || !page.saves_in_window() || !page.takes(download) {
             return None;
         }
-        (visit.item?, page.clone())
+        (visit.item, page.clone())
     };
-    let folder = app
-        .state::<Arc<DownloadQueue>>()
-        .window_download_started(id)
-        .ok()?;
-    let name = suggested
-        .file_name()
-        .map_or_else(|| "download".into(), std::ffi::OsStr::to_os_string);
+    // The name the site gives it, made safe, else the address's last part: never one the browser numbered after what
+    // a Downloads folder holds.
+    let name = started
+        .name
+        .clone()
+        .or_else(|| {
+            Url::parse(download)
+                .ok()?
+                .path_segments()?
+                .next_back()
+                .filter(|segment| !segment.is_empty())
+                .map(tsundoku_core::hosts::percent_decode)
+        })
+        .unwrap_or_else(|| "download".to_owned());
+    let name = tsundoku_core::rules::safe_folder_name(&name, "download");
+    let folder = match id {
+        Some(id) => app
+            .state::<Arc<DownloadQueue>>()
+            .window_download_started(id, &name, started.total)
+            .ok()?,
+        None => development::test_folder()?,
+    };
     let path = folder.join(name);
     let _ = std::fs::remove_file(&path);
     state.lock().as_mut()?.saving = Some((page, path.clone()));
@@ -369,7 +420,9 @@ fn save_in_window(app: &AppHandle, download: &str, suggested: &Path) -> Option<P
         if let Some(window) = app.get_webview_window(LABEL) {
             let _ = window.hide();
         }
-        watch_window_download(&app, id);
+        if let Some(id) = id {
+            watch_window_download(&app, id);
+        }
     });
     Some(path)
 }
@@ -388,7 +441,11 @@ fn watch_window_download(app: &AppHandle, id: i64) {
             return;
         }
         if app.state::<Arc<DownloadQueue>>().check_for(id).is_err() {
-            development::log("the download was stopped: closing the window");
+            development::log("the download was stopped: stopping the window's");
+            #[cfg(windows)]
+            watch::cancel(app);
+            // Its end closes the window; this is in case it never comes.
+            thread::sleep(Duration::from_secs(2));
             if let Some(window) = app.get_webview_window(LABEL) {
                 let _ = window.destroy();
             }
@@ -420,9 +477,13 @@ fn window_download_finished(app: &AppHandle, path: Option<PathBuf>, success: boo
     let item = visit.item;
     current.take();
     drop(current);
-    if let Some(id) = item {
-        app.state::<Arc<DownloadQueue>>()
-            .window_download_stopped(id);
+    match item {
+        Some(id) => app
+            .state::<Arc<DownloadQueue>>()
+            .window_download_stopped(id),
+        None => {
+            let _ = std::fs::remove_file(&saved);
+        }
     }
     let app = app.clone();
     thread::spawn(move || {
@@ -502,34 +563,66 @@ mod text {
 /// Development builds only: `TSUNDOKU_CHECK_LINK=<link>` opens the check window on every file of a link at startup,
 /// writing what it catches to the console instead of giving it to a download; `TSUNDOKU_CHECK_LINK=<queue ID>` opens
 /// it for that download once it waits for a check, as Open Check does; and `TSUNDOKU_CHECK_DEBUG_PORT=<port>` lets
-/// DevTools connect to its pages.
+/// DevTools connect to its pages. `TSUNDOKU_CHECK_TEST_PAGE=<address>` with `TSUNDOKU_CHECK_TEST_FOLDER=<folder>`
+/// opens it on a page of the developer's own (on this PC, which the window otherwise refuses), whose file is whatever
+/// download the page starts: the window saves it in that folder and writes its progress to the console, to test its
+/// downloads without any site's check.
 #[cfg(debug_assertions)]
 mod development {
+    use std::path::PathBuf;
     use std::sync::Arc;
     use std::time::Duration;
 
-    use tauri::{AppHandle, Manager, Runtime, WebviewWindowBuilder};
+    use tauri::{AppHandle, Manager, Runtime, Url, WebviewWindowBuilder};
     use tsundoku_core::cancel::CancelToken;
     use tsundoku_core::downloads::DownloadQueue;
-    use tsundoku_core::hosts::check;
+    use tsundoku_core::hosts::Host;
+    use tsundoku_core::hosts::check::{self, BrowserCheck, CheckPage};
 
     pub fn open_from_environment(app: &AppHandle) {
+        if let Ok(page) = std::env::var("TSUNDOKU_CHECK_TEST_PAGE") {
+            let item = std::env::var("TSUNDOKU_CHECK_TEST_ITEM")
+                .ok()
+                .and_then(|id| id.parse::<i64>().ok());
+            let app = app.clone();
+            std::thread::spawn(move || {
+                let opened = match item {
+                    // A waiting download's own check, its page moved to the test page.
+                    Some(id) => wait_for_check(&app, id).and_then(|check| {
+                        let moved = BrowserCheck {
+                            site: check.site,
+                            pages: check
+                                .pages
+                                .iter()
+                                .map(|first| first.moved_to(&page))
+                                .collect(),
+                        };
+                        super::open(&app, Some(id), moved)
+                    }),
+                    None => super::open(
+                        &app,
+                        None,
+                        BrowserCheck {
+                            site: "Test".to_owned(),
+                            pages: vec![CheckPage::any_download(&page, Host::Workupload)],
+                        },
+                    ),
+                };
+                if let Err(error) = opened {
+                    log(&error);
+                }
+            });
+            return;
+        }
         let Ok(link) = std::env::var("TSUNDOKU_CHECK_LINK") else {
             return;
         };
         let app = app.clone();
         std::thread::spawn(move || {
             let opened = match link.parse::<i64>() {
-                Ok(id) => (0..60)
-                    .find_map(|_| {
-                        let check = app.state::<Arc<DownloadQueue>>().check_for(id).ok();
-                        if check.is_none() {
-                            std::thread::sleep(Duration::from_secs(1));
-                        }
-                        check
-                    })
-                    .ok_or_else(|| format!("download {id} doesn't wait for a check"))
-                    .and_then(|check| super::open(&app, Some(id), check)),
+                Ok(id) => {
+                    wait_for_check(&app, id).and_then(|check| super::open(&app, Some(id), check))
+                }
                 Err(_) => check::for_link(&link, &CancelToken::new())
                     .map_err(|error| error.to_string())
                     .and_then(|check| super::open(&app, None, check)),
@@ -538,6 +631,19 @@ mod development {
                 log(&error);
             }
         });
+    }
+
+    /// The check download `id` waits for, once it does, within a minute.
+    fn wait_for_check(app: &AppHandle, id: i64) -> Result<BrowserCheck, String> {
+        (0..60)
+            .find_map(|_| {
+                let check = app.state::<Arc<DownloadQueue>>().check_for(id).ok();
+                if check.is_none() {
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+                check
+            })
+            .ok_or_else(|| format!("download {id} doesn't wait for a check"))
     }
 
     pub fn with_debugging<'a, R: Runtime, M: tauri::Manager<R>>(
@@ -555,13 +661,38 @@ mod development {
     pub fn log(message: &str) {
         eprintln!("check window: {message}");
     }
+
+    /// Whether `url` is on the host of the developer's own test page (`TSUNDOKU_CHECK_TEST_PAGE`).
+    pub fn is_test_page(url: &Url) -> bool {
+        std::env::var("TSUNDOKU_CHECK_TEST_PAGE")
+            .ok()
+            .and_then(|page| Url::parse(&page).ok())
+            .is_some_and(|page| page.host_str().is_some() && page.host_str() == url.host_str())
+    }
+
+    /// Where the window saves the test page's download (`TSUNDOKU_CHECK_TEST_FOLDER`).
+    pub fn test_folder() -> Option<PathBuf> {
+        let folder = PathBuf::from(std::env::var("TSUNDOKU_CHECK_TEST_FOLDER").ok()?);
+        std::fs::create_dir_all(&folder).ok()?;
+        Some(folder)
+    }
 }
 
 #[cfg(not(debug_assertions))]
 mod development {
-    use tauri::{AppHandle, Runtime, WebviewWindowBuilder};
+    use std::path::PathBuf;
+
+    use tauri::{AppHandle, Runtime, Url, WebviewWindowBuilder};
 
     pub fn open_from_environment(_app: &AppHandle) {}
+
+    pub fn is_test_page(_url: &Url) -> bool {
+        false
+    }
+
+    pub fn test_folder() -> Option<PathBuf> {
+        None
+    }
 
     pub fn with_debugging<'a, R: Runtime, M: tauri::Manager<R>>(
         builder: WebviewWindowBuilder<'a, R, M>,

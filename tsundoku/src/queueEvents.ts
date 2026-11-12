@@ -70,8 +70,9 @@ export function trackQueue(queryClient: QueryClient): void {
   })
 }
 
-/** A running item's latest progress. */
+/** A running item's latest progress, or that of the file the check window saves for a waiting one. */
 export function useDownloadProgress(item: QueueItem): DownloadProgress | null {
   const live = progress.useValue(item.id)
-  return item.state === "running" ? (live ?? item.progress) : null
+  const saving = item.state === "waiting" && item.hold?.kind === "windowDownload"
+  return item.state === "running" || saving ? (live ?? item.progress) : null
 }

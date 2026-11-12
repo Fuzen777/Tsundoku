@@ -135,12 +135,14 @@ impl QueueStore {
         let connection = self.database.lock();
         connection
             .execute(
-                "UPDATE queue_items SET state = ?2, result = ?3, error = ?4 WHERE id = ?1",
+                "UPDATE queue_items SET state = ?2, result = ?3, error = ?4, video = ?5 WHERE id = ?1",
                 params![
                     item.id,
                     state_name(item.state),
                     item.result.as_ref().map(to_json),
                     item.error.as_ref().map(to_json),
+                    // A link read through the check window takes its file's name once downloaded.
+                    to_json(&item.video),
                 ],
             )
             .map_err(storage_error)?;

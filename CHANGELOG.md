@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.125 · 2026-11-12
+
+### Changed
+
+- **Downloads in the check window**: a file the check window downloads itself (Workupload's) now shows on its row like any download: the file's name and size as soon as it starts, then a moving bar with the speed and time left. Stop stops it at once and leaves nothing behind, and the file keeps the name the site gives it, without a number added.
+
 ## 0.1.124 · 2026-11-12
 
 ### Added

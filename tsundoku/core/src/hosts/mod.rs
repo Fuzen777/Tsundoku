@@ -619,7 +619,7 @@ fn range_total(value: &str) -> Option<u64> {
 
 /// The file name in a Content-Disposition: `filename*=UTF-8''<percent-encoded>` when there is one, since `filename`
 /// may have lost its non-ASCII characters, or else `filename="<name>"`.
-pub(crate) fn attachment_name(header: &str) -> Option<String> {
+pub fn attachment_name(header: &str) -> Option<String> {
     let mut plain = None;
     for parameter in parameters(header) {
         let Some((key, value)) = parameter.split_once('=') else {
@@ -688,7 +688,7 @@ fn unquote(value: &str) -> String {
 }
 
 /// Text with its "%xx" escapes turned back into the UTF-8 they stand for.
-pub(crate) fn percent_decode(text: &str) -> String {
+pub fn percent_decode(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;

@@ -8,12 +8,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Weak;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use super::{DownloadError, DownloadQueue, QueueItem, QueueState};
+use super::{DownloadError, DownloadProgress, DownloadQueue, DownloadStage, QueueItem, QueueState};
 use crate::hosts::check::BrowserCheck;
 use crate::metadata::PreviewError;
 use crate::settings::DownloadSettings;
@@ -56,7 +56,24 @@ pub struct Recovery {
     /// The check window is saving the file of a page of `check` (its site's name): it waits for that
     /// (`Hold::WindowDownload`), and fails if the window's download stops (`window_download_stopped`).
     window_download: Option<String>,
+    /// How far the window's download has got, for its speed: when it started and its last count.
+    window_meter: Option<WindowMeter>,
 }
+
+/// The window's download's progress over time, for its speed and time left.
+#[derive(Debug, Clone, PartialEq)]
+struct WindowMeter {
+    /// When progress was last told, and the bytes then.
+    told: Instant,
+    told_bytes: u64,
+    /// Bytes a second, smoothed.
+    speed: Option<f64>,
+}
+
+impl Eq for WindowMeter {}
+
+/// How often a window download's progress is told.
+const WINDOW_PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 
 impl Recovery {
     /// Whether a run that failed with `error` at `now` is tried again by itself, and when: a lost connection after
@@ -301,8 +318,14 @@ impl DownloadQueue {
     }
 
     /// Where the check window saves the file of a download that waits for its check: the download's temporary folder,
-    /// made if it isn't there. The download waits for the window meanwhile (`Hold::WindowDownload`).
-    pub fn window_download_started(&self, id: i64) -> Result<PathBuf, DownloadError> {
+    /// made if it isn't there. The download waits for the window meanwhile (`Hold::WindowDownload`), and a link read
+    /// through the window takes the file's `name` and `size` at once, when the site gives them.
+    pub fn window_download_started(
+        &self,
+        id: i64,
+        name: &str,
+        size: Option<u64>,
+    ) -> Result<PathBuf, DownloadError> {
         let folder = {
             let mut state = lock(&self.state);
             let item = super::find(&mut state.items, id)?;
@@ -313,6 +336,15 @@ impl DownloadQueue {
                 return Err(DownloadError::WrongState);
             }
             item.recovery.window_download = Some(check.site.clone());
+            if item.video.files.is_some() && item.video.title == item.video.video_id {
+                item.video.title = name.to_owned();
+                if let (Some(contents), Some(size)) = (&mut item.video.files, size)
+                    && contents.bytes == 0
+                {
+                    contents.bytes = size;
+                }
+                let _ = self.store.update(item);
+            }
             super::temp_folder(item)
         };
         fs::create_dir_all(&folder).map_err(|error| DownloadError::Folder {
@@ -334,13 +366,68 @@ impl DownloadQueue {
             let Some(site) = item.recovery.window_download.take() else {
                 return;
             };
+            item.recovery.window_meter = None;
+            item.progress = None;
             super::remove_folder(&super::temp_folder(item));
-            item.recovery.check = None;
-            item.state = QueueState::Failed;
-            item.error = Some(DownloadError::WindowDownloadStopped { site });
+            // Stopped from its row, it stays stopped; otherwise the window's download ended on its own, and it fails.
+            if item.state == QueueState::Waiting {
+                item.recovery.check = None;
+                item.state = QueueState::Failed;
+                item.error = Some(DownloadError::WindowDownloadStopped { site });
+            }
             let _ = self.store.update(item);
         }
         self.schedule();
+    }
+
+    /// How far the check window's download of a download's file has got: its row shows the bytes, the speed and the
+    /// time left, as for any download, at most every `WINDOW_PROGRESS_INTERVAL`.
+    pub fn window_download_progress(&self, id: i64, received: u64, total: Option<u64>) {
+        let progress = {
+            let mut state = lock(&self.state);
+            let Ok(item) = super::find(&mut state.items, id) else {
+                return;
+            };
+            if item.recovery.window_download.is_none() {
+                return;
+            }
+            let now = Instant::now();
+            let meter = item.recovery.window_meter.get_or_insert(WindowMeter {
+                told: now,
+                told_bytes: 0,
+                speed: None,
+            });
+            let since = now.duration_since(meter.told);
+            let done = total.is_some_and(|total| received >= total);
+            if since < WINDOW_PROGRESS_INTERVAL && !done && item.progress.is_some() {
+                return;
+            }
+            if !since.is_zero() {
+                let latest = received.saturating_sub(meter.told_bytes) as f64 / since.as_secs_f64();
+                meter.speed = Some(match meter.speed {
+                    Some(speed) => speed * 0.7 + latest * 0.3,
+                    None => latest,
+                });
+            }
+            meter.told = now;
+            meter.told_bytes = received;
+            let speed = meter.speed.filter(|speed| *speed > 0.0);
+            let progress = DownloadProgress {
+                fraction: total
+                    .filter(|total| *total > 0)
+                    .map(|total| (received as f64 / total as f64).min(1.0)),
+                downloaded_bytes: Some(received),
+                total_bytes: total,
+                speed,
+                eta: total.zip(speed).map(|(total, speed)| {
+                    (total.saturating_sub(received) as f64 / speed).round() as u64
+                }),
+                ..DownloadProgress::at(DownloadStage::Downloading)
+            };
+            item.progress = Some(progress.clone());
+            progress
+        };
+        self.listener.progress(id, &progress);
     }
 
     /// Whether a download waits for a check that `link` gets past (`pass_check_with`).
@@ -428,6 +515,8 @@ fn waits_for_check_on(item: &QueueItem, link: &str) -> bool {
 fn take_links(item: &mut QueueItem, links: Vec<String>) {
     // A file the window saved has arrived.
     item.recovery.window_download = None;
+    item.recovery.window_meter = None;
+    item.progress = None;
     if let Some(check) = &mut item.recovery.check {
         for link in &links {
             check.passed(link);
