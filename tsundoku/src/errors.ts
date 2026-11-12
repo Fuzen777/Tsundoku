@@ -110,6 +110,10 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.waitBetweenDownloads(error.site, formatClockTime(Date.now() + error.seconds * 1000)) }
     case "noSupportedMirror":
       return { message: text.noSupportedMirror(error.site, error.mirrors) }
+    case "shortLinkPage":
+      return { message: text.shortLinkPage(error.site) }
+    case "shortLinkToUnsupportedSite":
+      return { message: text.shortLinkToUnsupportedSite(error.site, error.target) }
     case "subscribersOnly":
       return { message: text.subscribersOnly(error.site) }
     case "passwordProtected":

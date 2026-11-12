@@ -446,6 +446,15 @@ pub(crate) fn client_without_redirects(host: Host) -> Result<Client, PreviewErro
     )
 }
 
+/// A client saying it's Tsundoku, answering redirects instead of following them: for a short-link site's link
+/// (`short_links`), whose redirect names where it leads.
+pub(crate) fn tsundoku_client_without_redirects() -> Result<Client, PreviewError> {
+    built(
+        Client::builder().redirect(reqwest::redirect::Policy::none()),
+        HONEST_AGENT,
+    )
+}
+
 fn built(builder: reqwest::blocking::ClientBuilder, agent: &str) -> Result<Client, PreviewError> {
     builder
         .user_agent(agent)

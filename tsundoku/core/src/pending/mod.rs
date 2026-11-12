@@ -1051,6 +1051,8 @@ fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
     match error {
         PreviewError::InvalidLink
         | PreviewError::UnsupportedSite
+        // A short link to such a site, as the site's own link would be.
+        | PreviewError::ShortLinkToUnsupportedSite { .. }
         | PreviewError::NoVideo { .. }
         | PreviewError::Playlist
         | PreviewError::NotListable { .. } => true,

@@ -1057,6 +1057,14 @@ fn a_copied_link_with_nothing_to_download_leaves_quietly() {
         }),
     );
     test.reader.answer(channel, Err(PreviewError::Playlist));
+    let short_link = "https://bit.ly/an-article";
+    test.reader.answer(
+        short_link,
+        Err(PreviewError::ShortLinkToUnsupportedSite {
+            site: "Bitly".to_owned(),
+            target: "example.com".to_owned(),
+        }),
+    );
     let account = "https://x.com/NASA";
     test.reader.answer(
         account,
@@ -1064,8 +1072,8 @@ fn a_copied_link_with_nothing_to_download_leaves_quietly() {
             site: "X".to_owned(),
         }),
     );
-    test.copy(&[unsupported, article, channel, account, FIRST]);
-    for link in [unsupported, article, channel, account] {
+    test.copy(&[unsupported, article, channel, short_link, account, FIRST]);
+    for link in [unsupported, article, channel, short_link, account] {
         test.wait_until_gone(link);
     }
     test.wait_until_read(FIRST);

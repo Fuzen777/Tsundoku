@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.128 · 2026-11-12
+
+### Added
+
+- **Short links**: a short link from Bitly (bit.ly), TinyURL, is.gd, X (t.co), Cuttly, RB.GY, Tiny.cc, T.LY, Google (goo.gl), Ow.ly or Buffer (buff.ly) now opens to where it leads, and reads as that link would: the preview, the download, the history and the folder rules all go by the address it leads to, and a short link to a MultiUp or Mirrored.to page works too. Tsundoku asks the short-link site once where the link leads and never opens a page on it: a short link that shows a page before leading anywhere (a preview or a warning) says so, so you can open it in your browser and add the link it ends on. A short link to a site Tsundoku can't download from names that site, and a copied one leaves quietly, as that site's own link would.
+
 ## 0.1.127 · 2026-11-12
 
 ### Changed

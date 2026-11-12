@@ -581,6 +581,10 @@ export const strings = {
         mirrors.length === 0
           ? `This ${site} page lists no mirrors.`
           : `None of this ${site} page's mirrors is on a site Tsundoku downloads from: ${mirrors.join(", ")}.`,
+      shortLinkPage: (site: string) =>
+        `This ${site} link shows a page before leading anywhere, so Tsundoku can't follow it. Open it in your browser, then copy the link it ends on and add that instead.`,
+      shortLinkToUnsupportedSite: (site: string, target: string) =>
+        `This ${site} link leads to ${target}, which Tsundoku can't download from.`,
       subscribersOnly: (site: string) => `The owner of this ${site} file keeps it for ${site}'s subscribers.`,
       passwordProtected: (site: string) => `This ${site} link needs a password, which Tsundoku can't enter yet.`,
       linkIncomplete: (site: string) =>

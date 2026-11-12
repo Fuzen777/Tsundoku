@@ -184,6 +184,15 @@ pub enum PreviewError {
     /// names them.
     #[error("{site} page with no mirror Tsundoku reads")]
     NoSupportedMirror { site: String, mirrors: Vec<String> },
+    /// A short link (`short_links`) whose site answers with a page (a preview, a warning) instead of leading to its
+    /// address. Tsundoku doesn't read a page for where it leads, so the person opens it in a browser and copies the
+    /// link it ends on.
+    #[error("{site} link that shows a page before leading anywhere")]
+    ShortLinkPage { site: String },
+    /// A short link leading to a site nothing downloads from: `site` is the short-link site's name, `target` the host
+    /// it leads to.
+    #[error("{site} link leading to {target}, which nothing downloads from")]
+    ShortLinkToUnsupportedSite { site: String, target: String },
     /// A file its owner keeps for the host's paying subscribers.
     #[error("{site} file for subscribers only")]
     SubscribersOnly { site: String },

@@ -32,6 +32,7 @@ pub mod relocate;
 pub mod room;
 pub mod rules;
 pub mod settings;
+pub mod short_links;
 pub mod site_limits;
 pub mod sites;
 pub mod supported_sites;

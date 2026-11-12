@@ -126,6 +126,15 @@ describe("file host errors", () => {
     expect(
       describePreviewError({ kind: "noSupportedMirror", site: "MultiUp", mirrors: ["clicknupload.click"] }).message,
     ).toBe(strings.preview.errors.noSupportedMirror("MultiUp", ["clicknupload.click"]))
+    expect(describePreviewError({ kind: "shortLinkPage", site: "Bitly" })).toEqual({
+      message:
+        "This Bitly link shows a page before leading anywhere, so Tsundoku can't follow it. Open it in your browser, then copy the link it ends on and add that instead.",
+    })
+    expect(
+      describePreviewError({ kind: "shortLinkToUnsupportedSite", site: "Bitly", target: "example.com" }),
+    ).toEqual({
+      message: "This Bitly link leads to example.com, which Tsundoku can't download from.",
+    })
     expect(describePreviewError({ kind: "subscribersOnly", site: "1fichier" })).toEqual({
       message: strings.preview.errors.subscribersOnly("1fichier"),
     })

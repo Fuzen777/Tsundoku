@@ -19,6 +19,7 @@ use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
 use crate::pending::LinkReader;
 use crate::settings::{CookiesBrowser, SettingsStore};
+use crate::short_links::{self, ShortLink};
 use crate::sites;
 use crate::sync::lock;
 use crate::tools::{ToolCacheFolder, ToolId, ToolManager};
@@ -225,8 +226,8 @@ fn read_with_tools(
     any_page: bool,
     cancel: &CancelToken,
 ) -> Result<Fetched, PreviewError> {
-    let mirror = mirrors::resolve(link, cancel).transpose()?;
-    let link = mirror.as_deref().unwrap_or(link);
+    let followed = follow(link, cancel)?;
+    let link = followed.link.as_str();
     if listing::listing_link(link).is_some() {
         return Err(PreviewError::Playlist);
     }
@@ -246,7 +247,7 @@ fn read_with_tools(
             set.gallery_dl.is_some(),
         ),
     };
-    fetched.map_err(|error| with_sign_in_state(error, cookies_choice, link))
+    fetched.map_err(|error| followed.explain(with_sign_in_state(error, cookies_choice, link)))
 }
 
 /// Reads `link` (from `normalize_link`) for the preview card: as `read_with_tools` does, except that a channel,
@@ -257,8 +258,8 @@ fn read_for_preview(
     link: &str,
     cancel: &CancelToken,
 ) -> Result<Found, PreviewError> {
-    let mirror = mirrors::resolve(link, cancel).transpose()?;
-    let link = mirror.as_deref().unwrap_or(link);
+    let followed = follow(link, cancel)?;
+    let link = followed.link.as_str();
     let set = LinkTools::new(tools, cookies_choice, link);
     let host_read = if listing::listing_link(link).is_some() {
         None
@@ -286,7 +287,46 @@ fn read_for_preview(
             set.gallery_dl.is_some(),
         )
     };
-    found.map_err(|error| with_sign_in_state(error, cookies_choice, link))
+    found.map_err(|error| followed.explain(with_sign_in_state(error, cookies_choice, link)))
+}
+
+/// The address a link is read at: where a short link leads, then the mirror a mirror page names.
+#[derive(Debug, PartialEq, Eq)]
+struct Followed {
+    link: String,
+    /// The short link it came through, if any.
+    short_link: Option<ShortLink>,
+}
+
+impl Followed {
+    /// The error for reading the address, naming the short link it came through when nothing downloads from where
+    /// it leads.
+    fn explain(&self, error: PreviewError) -> PreviewError {
+        match (error, &self.short_link) {
+            (PreviewError::UnsupportedSite, Some(short_link)) => {
+                PreviewError::ShortLinkToUnsupportedSite {
+                    site: short_link.site.to_owned(),
+                    target: short_link.target_site(),
+                }
+            }
+            (error, _) => error,
+        }
+    }
+}
+
+/// Where `link` (from `normalize_link`) is read: a short link's target (`short_links`), then, when that or the link
+/// itself is a mirror page, its mirror's link (`mirrors`). Everything after sees only that address, as if it had
+/// been pasted.
+fn follow(link: &str, cancel: &CancelToken) -> Result<Followed, PreviewError> {
+    let short_link = short_links::resolve(link, cancel).transpose()?;
+    let link = short_link
+        .as_ref()
+        .map_or(link, |short_link| short_link.target.as_str());
+    let mirror = mirrors::resolve(link, cancel).transpose()?;
+    Ok(Followed {
+        link: mirror.unwrap_or_else(|| link.to_owned()),
+        short_link,
+    })
 }
 
 /// Reads `link` as a file host's, or `None` when it isn't one's, or when its host leaves it to the tools: the
@@ -522,6 +562,58 @@ mod tests {
         );
         assert_eq!(result.unwrap_err(), PreviewError::UnsupportedSite);
         assert_eq!(asked, ["yt-dlp", "gallery-dl"]);
+    }
+
+    #[test]
+    fn a_short_link_to_an_unknown_site_says_where_it_leads() {
+        let followed = Followed {
+            link: "https://www.example.com/page".to_owned(),
+            short_link: Some(ShortLink {
+                site: "Bitly",
+                target: "https://www.example.com/page".to_owned(),
+            }),
+        };
+        let (result, _) = read(
+            &followed.link,
+            Err(PreviewError::UnsupportedSite),
+            Some(Err(PreviewError::UnsupportedSite)),
+        );
+        assert_eq!(
+            followed.explain(result.unwrap_err()),
+            PreviewError::ShortLinkToUnsupportedSite {
+                site: "Bitly".to_owned(),
+                target: "example.com".to_owned(),
+            }
+        );
+        let unavailable = PreviewError::Unavailable {
+            detail: "Video unavailable".to_owned(),
+        };
+        assert_eq!(
+            followed.explain(unavailable.clone()),
+            unavailable,
+            "the target's other errors stay as they are"
+        );
+
+        let pasted = Followed {
+            link: followed.link.clone(),
+            short_link: None,
+        };
+        assert_eq!(
+            pasted.explain(PreviewError::UnsupportedSite),
+            PreviewError::UnsupportedSite
+        );
+    }
+
+    #[test]
+    fn a_link_that_is_neither_a_short_link_nor_a_mirror_page_is_read_as_it_is() {
+        let link = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+        assert_eq!(
+            follow(link, &CancelToken::new()),
+            Ok(Followed {
+                link: link.to_owned(),
+                short_link: None,
+            })
+        );
     }
 
     #[test]
