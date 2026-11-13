@@ -40,7 +40,9 @@ title: AGENTS
 | Script | What it does |
 | --- | --- |
 | `Scripts\Dev.cmd` | Starts the app with `tauri dev`: the UI reloads live, and Rust changes rebuild and restart the app |
-| `Scripts\Check.cmd` | `cargo fmt --check`, Clippy with warnings as errors, `cargo test` (which also regenerates `src/bindings`), then `tsc`, ESLint with no warnings allowed, and Vitest. Run it before every commit. |
+| `Scripts\Check.cmd` | `cargo fmt --check`, Clippy with warnings as errors, `cargo test` (which also regenerates `src/bindings`), then `tsc`, ESLint with no warnings allowed, and Vitest. Run it before every commit. Passed or not, it then runs `Prune-Build.ps1` (below) on the build folder it used |
+| `Scripts\Prune-Build.ps1` | Deletes old builds of our own crates from the build folder: see Build Folders and Worktrees. `-TargetDir <folder>` for another one, `-WhatIf` to only list |
+| `Scripts\Remove-Worktree.ps1 <worktree>` | Removes a worktree whose work is on main, with its build folder: see Build Folders and Worktrees |
 | `Scripts\Build.cmd` | Builds the release app and its NSIS installer |
 | `Scripts\Build-Portable.cmd` | Builds the release app without an installer and puts it, with `.portable.txt`, in a portable copy's folder: the first argument, or `portable` beside the Rust build folder (`D:\Dev\tsundoku\portable` on this PC). The copy's `data` folder is kept. A copy running from that folder is quit (its tools stop with it) and started again once replaced |
 | `Scripts\Test-Send-Buttons-YouTube.py`, `Scripts\Test-Send-Buttons-Instagram-X.py` | Load the sites with the send buttons' userscript injected (Python Playwright, with the network) and check its buttons: YouTube signed out (`light` or `dark`), Instagram's public post and reel pages, and its feed and X on markup shaped like theirs. Run them when a site changes |
@@ -53,6 +55,14 @@ title: AGENTS
 - The UI alone runs in a browser with `npm run dev` in `tsundoku/` (port 1420), which helps check layouts: outside Tauri, `api.ts` returns the stand-ins in `standIns.ts`, and actions fail. Adding `?setup` to the address shows the first-run setup, `portable` (`?setup&portable`, `?portable`) a portable copy, `?history=5000` that many videos in the history, to check how it copes, and `?empty` an empty Queue and Pending, with their ways to add links. In this workspace, the Coding root's `.claude/launch.json` has it as `tsundoku-ui`.
 - To drive the real app's UI from a script, start it with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` set: its WebView then takes DevTools Protocol connections on that port (`http://127.0.0.1:9223/json` lists the page), for evaluating JavaScript and taking screenshots.
 - The project is its own git repository (`github.com/Fuzen777/Tsundoku`, private until it's ready to share); the Coding monorepo ignores this folder. Commits use the GitHub noreply address set in this repository's git config. Commit subjects follow `Title | description`. `README.md`, `CHANGELOG.md` and the other files GitHub shows stay plain GFM, without Obsidian admonitions.
+
+### Build Folders and Worktrees
+
+- A build folder only grows: every version bump gives our crates (`tsundoku_core`, `tsundoku_lib`, `tsundoku`) new build hashes, one each for the build, the tests and Clippy, and Cargo never deletes the old ones (0.3 to 1 GB each in `debug\incremental`, plus their files in `debug\deps`). The shared `D:\Dev\tsundoku\target` reached 231 GB on 2026-11-12.
+- `Check.cmd` therefore ends with `Prune-Build.ps1`: in the build folder (cargo metadata's `target_directory`), it deletes our crates' entries in `deps`, `incremental`, `.fingerprint` and `build` that are more than an hour older than that crate's newest, never a third-party crate's or the files at the top of `debug\`. A profile whose Cargo lock a build holds is left alone, and it holds the lock itself while deleting. Versions built within the same hour (a rebase) are all kept.
+- `tsundoku_lib` is an rlib only: the `staticlib` and `cdylib` of Tauri's template are for iOS and Android, and cost a 1.3 GB `.lib` per build.
+- A thread working in a worktree lets it build into its own `tsundoku\target` (no `.cargo\config.toml` in it) rather than making a new `D:\Dev\tsundoku\target-*` folder.
+- Once its work is on main, the thread runs `Scripts\Remove-Worktree.ps1 <worktree>`. It refuses the main checkout, a worktree whose HEAD isn't in main and one with uncommitted changes. Otherwise it removes the links in it (only the links: `node_modules` is the checkout's), deletes its build folder when that's inside it or a `target-*` folder beside the checkout's that no other worktree builds into (never the checkout's own), then runs `git worktree remove` and `git worktree prune`.
 
 ## Data and Testing
 
