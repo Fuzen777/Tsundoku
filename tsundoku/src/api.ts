@@ -26,6 +26,7 @@ import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryPage } from "./bindings/HistoryPage"
 import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListArrangements } from "./bindings/ListArrangements"
+import type { PickerLayouts } from "./bindings/PickerLayouts"
 import type { ListingKind } from "./bindings/ListingKind"
 import type { MovedFiles } from "./bindings/MovedFiles"
 import type { PastDownload } from "./bindings/PastDownload"
@@ -79,6 +80,7 @@ export const queryKeys = {
   pending: ["pending"],
   watched: ["watched"],
   listArrangements: ["list-arrangements"],
+  pickerLayouts: ["picker-layouts"],
   history: ["history"],
   historyFilters: ["history-filters"],
   videoDownloads: ["video-downloads"],
@@ -1017,6 +1019,19 @@ export function getListArrangements(): Promise<ListArrangements> {
 export function saveListArrangements(arrangements: ListArrangements): Promise<ListArrangements> {
   if (!isTauri()) return Promise.resolve(arrangements)
   return invoke<ListArrangements>("save_list_arrangements", { arrangements })
+}
+
+/** How the pickers show a listing's items and a post's files. */
+export function getPickerLayouts(): Promise<PickerLayouts> {
+  if (!isTauri()) return Promise.resolve(standIns.pickerLayouts)
+  return invoke<PickerLayouts>("picker_layouts")
+}
+
+/** Saves how the pickers show what they offer, and resolves to it as saved. Rejects with a DownloadError. In a
+ * browser, the choice lasts until the page reloads. */
+export function savePickerLayouts(layouts: PickerLayouts): Promise<PickerLayouts> {
+  if (!isTauri()) return Promise.resolve(layouts)
+  return invoke<PickerLayouts>("save_picker_layouts", { layouts })
 }
 
 /** A newer release of Tsundoku, found on GitHub. */

@@ -18,7 +18,8 @@ import { FailureFixes } from "../components/FailureFixes"
 import { Field, SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { ExpandToggle } from "../components/LinkButton"
-import { ListedRow, ListingPicture } from "../components/ListingPicker"
+import { ListedItems, ListingPicture } from "../components/ListingPicker"
+import { PickerViewControls } from "../components/PickerViewControls"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
 import { StatusMessage } from "../components/StatusMessage"
@@ -33,7 +34,7 @@ import {
   joinDetails,
 } from "../format"
 import { isQueued, itemKey } from "../listingPicker"
-import { usePresets, useWatchedSources } from "../queries"
+import { usePickerLayout, usePresets, useWatchedSources } from "../queries"
 import { strings } from "../strings"
 
 const text = strings.watched
@@ -213,6 +214,7 @@ function NewItems({ source }: { source: WatchedSource }) {
   const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
+  const { layout, change: changeLayout } = usePickerLayout("items")
   const isTicked = (item: WatchedItem) => !isQueued(item) && !item.lastDownload && !unticked.has(itemKey(item))
   const picked = items.filter(isTicked)
   const selectable = items.filter((item) => !isQueued(item))
@@ -245,35 +247,34 @@ function NewItems({ source }: { source: WatchedSource }) {
   }))
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-3">
-      <label className="flex items-center gap-2 self-start text-fg-secondary">
-        <input
-          type="checkbox"
-          className="size-4 accent-accent"
-          aria-label={text.selectAll}
-          title={text.selectAll}
-          checked={allTicked}
-          ref={(box) => {
-            if (box) box.indeterminate = picked.length > 0 && !allTicked
-          }}
-          disabled={busy || selectable.length === 0}
-          onChange={(event) =>
-            setUnticked(event.target.checked ? new Set() : new Set(items.map((item) => itemKey(item))))
-          }
-        />
-        <span className="tabular-nums">{text.selected(picked.length, items.length)}</span>
-      </label>
-      <ul className="-mx-2 flex max-h-[min(28rem,50vh)] flex-col overflow-y-auto">
-        {items.map((item) => (
-          <ListedRow
-            key={itemKey(item)}
-            item={item}
-            showUploader={source.kind === "playlist"}
-            selected={isTicked(item)}
-            disabled={busy}
-            onSelect={(on) => tick(item, on)}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <label className="flex items-center gap-2 text-fg-secondary">
+          <input
+            type="checkbox"
+            className="size-4 accent-accent"
+            aria-label={text.selectAll}
+            title={text.selectAll}
+            checked={allTicked}
+            ref={(box) => {
+              if (box) box.indeterminate = picked.length > 0 && !allTicked
+            }}
+            disabled={busy || selectable.length === 0}
+            onChange={(event) =>
+              setUnticked(event.target.checked ? new Set() : new Set(items.map((item) => itemKey(item))))
+            }
           />
-        ))}
-      </ul>
+          <span className="whitespace-nowrap tabular-nums">{text.selected(picked.length, items.length)}</span>
+        </label>
+        <PickerViewControls layout={layout} onChange={changeLayout} />
+      </div>
+      <ListedItems
+        items={items}
+        layout={layout}
+        showUploader={source.kind === "playlist"}
+        isSelected={isTicked}
+        disabled={busy}
+        onSelect={tick}
+      />
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" disabled={busy} onClick={() => void run(() => skipWatchedItems(source.id))}>

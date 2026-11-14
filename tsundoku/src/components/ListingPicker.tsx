@@ -1,8 +1,9 @@
 import { useState } from "react"
-import { X } from "lucide-react"
+import { Film, Images, Play, X } from "lucide-react"
 import { addManyToQueue, confirmWithUser } from "../api"
 import type { ListedItem } from "../bindings/ListedItem"
 import type { Listing } from "../bindings/Listing"
+import type { PickerLayout } from "../bindings/PickerLayout"
 import { describeDownloadError, type ErrorDescription } from "../errors"
 import {
   formatCalendarDate,
@@ -25,11 +26,13 @@ import {
   withItem,
   type PickedPreset,
 } from "../listingPicker"
-import { usePresets, useRulePresets } from "../queries"
+import { usePickerLayout, usePresets, useRulePresets } from "../queries"
 import { strings } from "../strings"
 import { Button } from "./Button"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
+import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
+import { PickerViewControls } from "./PickerViewControls"
 import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
 import { Thumbnail } from "./Thumbnail"
@@ -56,6 +59,7 @@ export function ListingPicker({ listing, onClose, onAdded }: ListingPickerProps)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [watching, setWatching] = useState(false)
+  const { layout, change: changeLayout } = usePickerLayout("items")
   const presetId = chosenId ?? presets?.defaultId ?? null
 
   const picked = selectedItems(items, selection)
@@ -120,33 +124,32 @@ export function ListingPicker({ listing, onClose, onAdded }: ListingPickerProps)
         <p className="text-fg-secondary">{strings.picker.empty}</p>
       ) : (
         <>
-          <label className="flex items-center gap-2 self-start text-fg-secondary">
-            <input
-              type="checkbox"
-              className="size-4 accent-accent"
-              aria-label={strings.picker.selectAll}
-              title={strings.picker.selectAll}
-              checked={allSelected}
-              ref={(box) => {
-                if (box) box.indeterminate = picked.length > 0 && !allSelected
-              }}
-              disabled={adding || selectable === 0}
-              onChange={(event) => setSelection(selectEvery(items, event.target.checked))}
-            />
-            <span className="tabular-nums">{strings.picker.selected(picked.length, items.length)}</span>
-          </label>
-          <ul className="-mx-2 flex max-h-[min(28rem,50vh)] flex-col overflow-y-auto">
-            {items.map((item) => (
-              <ListedRow
-                key={itemKey(item)}
-                item={item}
-                showUploader={listing.kind === "playlist"}
-                selected={selection.has(itemKey(item))}
-                disabled={adding}
-                onSelect={(ticked) => setSelection((current) => withItem(current, item, ticked))}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <label className="flex items-center gap-2 text-fg-secondary">
+              <input
+                type="checkbox"
+                className="size-4 accent-accent"
+                aria-label={strings.picker.selectAll}
+                title={strings.picker.selectAll}
+                checked={allSelected}
+                ref={(box) => {
+                  if (box) box.indeterminate = picked.length > 0 && !allSelected
+                }}
+                disabled={adding || selectable === 0}
+                onChange={(event) => setSelection(selectEvery(items, event.target.checked))}
               />
-            ))}
-          </ul>
+              <span className="whitespace-nowrap tabular-nums">{strings.picker.selected(picked.length, items.length)}</span>
+            </label>
+            <PickerViewControls layout={layout} onChange={changeLayout} />
+          </div>
+          <ListedItems
+            items={items}
+            layout={layout}
+            showUploader={listing.kind === "playlist"}
+            isSelected={(item) => selection.has(itemKey(item))}
+            disabled={adding}
+            onSelect={(item, ticked) => setSelection((current) => withItem(current, item, ticked))}
+          />
           {watching ? (
             <WatchForm listing={listing} onCancel={() => setWatching(false)} onWatched={onClose} />
           ) : (
@@ -242,9 +245,6 @@ export function ListedRow({ item, showUploader, selected, disabled, onSelect }: 
   const { video, lastDownload } = item
   const known = isKnown(item)
   const queued = isQueued(item)
-  const date = video.uploadDate
-    ? formatCalendarDate(video.uploadDate)
-    : item.approximateDate && formatRoughAge(item.approximateDate)
   return (
     <li className="[contain-intrinsic-size:auto_4.25rem] [content-visibility:auto]">
       <label
@@ -266,14 +266,7 @@ export function ListedRow({ item, showUploader, selected, disabled, onSelect }: 
           <p className={classes("truncate", known && "text-fg-muted")} title={video.title}>
             {video.title}
           </p>
-          <p className="truncate text-xs text-fg-secondary tabular-nums">
-            {joinDetails([
-              showUploader && video.uploader,
-              date,
-              video.durationSeconds !== null && formatDuration(video.durationSeconds),
-              formatContents(video),
-            ])}
-          </p>
+          <p className="truncate text-xs text-fg-secondary tabular-nums">{listedDetails(item, showUploader)}</p>
         </div>
         {queued ? (
           <span
@@ -295,4 +288,112 @@ export function ListedRow({ item, showUploader, selected, disabled, onSelect }: 
       </label>
     </li>
   )
+}
+
+/** "uploader · date · length" or what a post holds, under an item's title in List and in its hover text elsewhere. */
+function listedDetails({ video, approximateDate }: ListedItem, showUploader: boolean): string {
+  const date = video.uploadDate
+    ? formatCalendarDate(video.uploadDate)
+    : approximateDate && formatRoughAge(approximateDate)
+  return joinDetails([
+    showUploader && video.uploader,
+    date,
+    video.durationSeconds !== null && formatDuration(video.durationSeconds),
+    formatContents(video),
+  ])
+}
+
+interface ListedItemsProps<Item extends ListedItem> {
+  items: readonly Item[]
+  layout: PickerLayout
+  /** A playlist's items may come from several uploaders; a channel's or an account's all come from it. */
+  showUploader: boolean
+  isSelected: (item: Item) => boolean
+  disabled: boolean
+  onSelect: (item: Item, ticked: boolean) => void
+}
+
+/**
+ * A listing's items as the picker's view shows them: a row each (List), or their pictures (Masonry, Gallery), each with
+ * its box. Gallery cuts a video's picture to 16:9 and a post's to a square.
+ */
+export function ListedItems<Item extends ListedItem>({
+  items,
+  layout,
+  showUploader,
+  isSelected,
+  disabled,
+  onSelect,
+}: ListedItemsProps<Item>) {
+  if (layout.view === "list") {
+    return (
+      <ul className="-mx-2 flex max-h-[min(28rem,50vh)] flex-col overflow-y-auto">
+        {items.map((item) => (
+          <ListedRow
+            key={itemKey(item)}
+            item={item}
+            showUploader={showUploader}
+            selected={isSelected(item)}
+            disabled={disabled}
+            onSelect={(ticked) => onSelect(item, ticked)}
+          />
+        ))}
+      </ul>
+    )
+  }
+  const posts = items.some((item) => item.video.post !== null)
+  return (
+    <MediaTiles
+      tiles={items.map((item) => listedTile(item, showUploader, isSelected(item), (ticked) => onSelect(item, ticked)))}
+      view={layout.view}
+      size={layout.size}
+      galleryRatio={posts ? 1 : 16 / 9}
+      disabled={disabled}
+      className="-mx-1 max-h-[min(28rem,50vh)]"
+    />
+  )
+}
+
+/** An item as a picture: its title and details as its hover text, its length or what a post holds in its corner, and
+ * Downloaded or In Queue under it. */
+function listedTile(item: ListedItem, showUploader: boolean, selected: boolean, onToggle: (ticked: boolean) => void): MediaTile {
+  const { video, lastDownload } = item
+  const queued = isQueued(item)
+  const post = video.post
+  const fileCount = post ? post.images + post.videos + post.others : 0
+  const onlyVideo = post !== null && fileCount === 1 && post.videos === 1
+  const known = queued
+    ? strings.picker.inQueueHint
+    : lastDownload && strings.preview.alreadyDownloaded(formatDay(lastDownload.downloadedAt), lastDownload.preset)
+  return {
+    key: itemKey(item),
+    thumbnailUrl: video.thumbnailUrl,
+    fallbackIcon: post && !onlyVideo ? Images : Film,
+    label: video.title,
+    hint: [video.title, listedDetails(item, showUploader), known].filter(Boolean).join("\n"),
+    picked: selected,
+    locked: queued,
+    ratio: post ? 4 / 5 : 16 / 9,
+    corner:
+      video.durationSeconds !== null ? (
+        <TileLabel>{formatDuration(video.durationSeconds)}</TileLabel>
+      ) : fileCount > 1 ? (
+        <TileLabel>
+          <span className="flex items-center gap-1">
+            <Images size={12} />
+            {fileCount}
+          </span>
+        </TileLabel>
+      ) : onlyVideo ? (
+        <span className="block rounded bg-accent-fill p-1 text-on-accent">
+          <Play size={10} fill="currentColor" />
+        </span>
+      ) : null,
+    mark: queued
+      ? { text: strings.picker.inQueue, tone: "plain" }
+      : lastDownload
+        ? { text: strings.picker.downloaded, tone: "done" }
+        : null,
+    onToggle,
+  }
 }

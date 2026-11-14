@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, Film, Image as ImageIcon, Play } from "lucide-react"
 import type { PostFile } from "../bindings/PostFile"
+import { formatBytes } from "../format"
+import { usePickerLayout } from "../queries"
 import { strings } from "../strings"
+import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
+import { PickerViewControls } from "./PickerViewControls"
 import { classes } from "./styles"
 
 const text = strings.postFiles
 
-/** What a tile says about a post downloaded before: taken then, or left out. */
+/** What a file says about a post downloaded before: taken then, or left out. */
 type Mark = "downloaded" | "notPicked"
 
 export interface PostFilesStripProps {
@@ -22,12 +26,14 @@ export interface PostFilesStripProps {
 }
 
 /**
- * A post's images and videos as small tiles, each with a box to tick it, a play mark on videos, and its number in the
- * post. Above them, a box for all of them with how many are ticked. For a post downloaded before, each tile says
- * whether it was downloaded or not picked then. The tiles wrap, and scroll past a few rows.
+ * A post's images and videos to pick from, in the view its picker keeps: as pictures (Gallery, cut square, or Masonry,
+ * in their own shapes), each with a box, a play mark on videos and its number in the post, or as rows (List). Above
+ * them, a box for all of them with how many are ticked, and the view's controls. For a post downloaded before, each
+ * file says whether it was downloaded or not picked then.
  */
 export function PostFilesStrip({ files, picked, leftOut, downloadedBefore, disabled, onChange }: PostFilesStripProps) {
   const allBox = useRef<HTMLInputElement>(null)
+  const { layout, change: changeLayout } = usePickerLayout("postFiles")
   const count = files.filter((file) => picked.has(file.number)).length
   const some = count > 0 && count < files.length
 
@@ -49,36 +55,77 @@ export function PostFilesStrip({ files, picked, leftOut, downloadedBefore, disab
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="flex w-fit items-center gap-2 text-fg-secondary">
-        <input
-          ref={allBox}
-          type="checkbox"
-          className="size-4 accent-accent"
-          aria-label={text.selectAll}
-          title={text.selectAll}
-          checked={count === files.length}
-          disabled={disabled}
-          onChange={(event) => onChange(new Set(event.target.checked ? files.map((file) => file.number) : []))}
-        />
-        <span className="tabular-nums">{text.count(count, files.length)}</span>
-      </label>
-      <ul className="flex max-h-64 flex-wrap gap-2 overflow-y-auto p-0.5">
-        {files.map((file) => (
-          <PostFileTile
-            key={file.number}
-            file={file}
-            picked={picked.has(file.number)}
-            mark={markOf(file.number)}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <label className="flex w-fit items-center gap-2 text-fg-secondary">
+          <input
+            ref={allBox}
+            type="checkbox"
+            className="size-4 accent-accent"
+            aria-label={text.selectAll}
+            title={text.selectAll}
+            checked={count === files.length}
             disabled={disabled}
-            onToggle={(on) => toggle(file.number, on)}
+            onChange={(event) => onChange(new Set(event.target.checked ? files.map((file) => file.number) : []))}
           />
-        ))}
-      </ul>
+          <span className="whitespace-nowrap tabular-nums">{text.count(count, files.length)}</span>
+        </label>
+        <PickerViewControls layout={layout} onChange={changeLayout} />
+      </div>
+      {layout.view === "list" ? (
+        <ul className="-mx-2 flex max-h-[min(28rem,50vh)] flex-col overflow-y-auto">
+          {files.map((file) => (
+            <PostFileRow
+              key={file.number}
+              file={file}
+              picked={picked.has(file.number)}
+              mark={markOf(file.number)}
+              disabled={disabled}
+              onToggle={(on) => toggle(file.number, on)}
+            />
+          ))}
+        </ul>
+      ) : (
+        <MediaTiles
+          tiles={files.map((file) => fileTile(file, picked.has(file.number), markOf(file.number), (on) => toggle(file.number, on)))}
+          view={layout.view}
+          size={layout.size}
+          galleryRatio={1}
+          disabled={disabled}
+          className="-mx-1 max-h-[min(28rem,50vh)]"
+        />
+      )}
     </div>
   )
 }
 
-interface PostFileTileProps {
+/** A file as a picture: its number at the bottom left, a play mark on a video, and its mark under it. */
+function fileTile(file: PostFile, picked: boolean, mark: Mark | null, onToggle: (picked: boolean) => void): MediaTile {
+  const name = text.file(file.number, file.video)
+  return {
+    key: String(file.number),
+    thumbnailUrl: file.thumbnailUrl,
+    fallbackIcon: file.video ? Film : ImageIcon,
+    label: name,
+    hint: mark === "notPicked" ? text.notPickedHint : mark === "downloaded" ? text.downloadedHint : name,
+    picked,
+    ratio: 1,
+    badge: <TileLabel>{file.number}</TileLabel>,
+    corner: file.video && (
+      <span className="block rounded bg-accent-fill p-1 text-on-accent">
+        <Play size={10} fill="currentColor" />
+      </span>
+    ),
+    mark:
+      mark === "notPicked"
+        ? { text: text.notPicked, tone: "notPicked" }
+        : mark === "downloaded"
+          ? { text: text.downloaded, tone: "done" }
+          : null,
+    onToggle,
+  }
+}
+
+interface PostFileRowProps {
   file: PostFile
   picked: boolean
   mark: Mark | null
@@ -86,68 +133,71 @@ interface PostFileTileProps {
   onToggle: (picked: boolean) => void
 }
 
-/** One file: its picture (or an icon when there's none, such as an X video), dimmed while unticked. */
-function PostFileTile({ file, picked, mark, disabled, onToggle }: PostFileTileProps) {
+/** A file as a row: its box, a small square of its picture, "Image 3" (its file name as the hover text), its mark and
+ * its size. */
+function PostFileRow({ file, picked, mark, disabled, onToggle }: PostFileRowProps) {
   const [failed, setFailed] = useState(false)
-  const name = text.file(file.number, file.video)
-  const hint = mark === "notPicked" ? text.notPickedHint : mark === "downloaded" ? text.downloadedHint : name
+  const label = text.file(file.number, file.video)
   const FallbackIcon = file.video ? Film : ImageIcon
   return (
-    <li className="w-22">
+    <li>
       <label
-        title={hint}
+        title={mark === "notPicked" ? text.notPickedHint : mark === "downloaded" ? text.downloadedHint : undefined}
         className={classes(
-          "relative block size-22 overflow-hidden rounded-md bg-input",
-          "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent",
-          disabled ? "cursor-default" : "cursor-pointer",
-          mark === "notPicked" && "ring-2 ring-accent",
+          "flex items-center gap-3 rounded-md px-2 py-1 transition-colors",
+          disabled ? "cursor-default" : "cursor-pointer hover:bg-input",
         )}
       >
-        {file.thumbnailUrl && !failed ? (
-          <img
-            src={file.thumbnailUrl}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className={classes("size-full object-cover transition-opacity", !picked && "opacity-35")}
-            onError={() => setFailed(true)}
-          />
-        ) : (
-          <span
-            className={classes(
-              "flex size-full items-center justify-center text-fg-muted transition-opacity",
-              !picked && "opacity-35",
-            )}
-          >
-            <FallbackIcon size={24} />
-          </span>
-        )}
         <input
           type="checkbox"
-          className="absolute top-1.5 left-1.5 size-4 accent-accent"
-          aria-label={name}
+          className="size-4 shrink-0 accent-accent"
+          aria-label={label}
           checked={picked}
           disabled={disabled}
           onChange={(event) => onToggle(event.target.checked)}
         />
-        <span className="absolute bottom-1 left-1 rounded bg-bg/85 px-1 text-xs text-fg tabular-nums">{file.number}</span>
-        {file.video && (
-          <span className="absolute right-1 bottom-1 rounded bg-accent-fill p-1 text-on-accent">
-            <Play size={10} fill="currentColor" />
-          </span>
-        )}
-      </label>
-      {mark && (
-        <p
+        <span
           className={classes(
-            "mt-1 flex items-center gap-1 truncate text-xs",
-            mark === "notPicked" ? "font-medium text-accent" : "text-fg-muted",
+            "relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded bg-input text-fg-muted",
+            mark === "notPicked" && "ring-2 ring-accent",
           )}
         >
-          {mark === "downloaded" && <Check size={12} className="shrink-0 text-success" />}
-          {mark === "notPicked" ? text.notPicked : text.downloaded}
-        </p>
-      )}
+          {file.thumbnailUrl && !failed ? (
+            <img
+              src={file.thumbnailUrl}
+              alt=""
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              className="size-full object-cover"
+              onError={() => setFailed(true)}
+            />
+          ) : (
+            <FallbackIcon size={16} />
+          )}
+          {file.video && (
+            <span className="absolute right-0.5 bottom-0.5 rounded bg-accent-fill p-0.5 text-on-accent">
+              <Play size={8} fill="currentColor" />
+            </span>
+          )}
+        </span>
+        <span className={classes("min-w-0 flex-1 truncate", !picked && "text-fg-muted")} title={file.name}>
+          {label}
+        </span>
+        {mark && (
+          <span
+            className={classes(
+              "flex shrink-0 items-center gap-1 text-xs",
+              mark === "notPicked" ? "font-medium text-accent" : "text-fg-muted",
+            )}
+          >
+            {mark === "downloaded" && <Check size={12} className="shrink-0 text-success" />}
+            {mark === "notPicked" ? text.notPicked : text.downloaded}
+          </span>
+        )}
+        {file.size !== undefined && (
+          <span className="w-16 shrink-0 text-right text-xs text-fg-secondary tabular-nums">{formatBytes(file.size)}</span>
+        )}
+      </label>
     </li>
   )
 }

@@ -396,6 +396,8 @@ pub fn run() {
             whats_new::dismiss_whats_new,
             downloads::list_arrangements,
             downloads::save_list_arrangements,
+            downloads::picker_layouts,
+            downloads::save_picker_layouts,
             pending::pending_links,
             watched::watched_sources,
             watched::add_watched_source,

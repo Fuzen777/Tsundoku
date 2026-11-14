@@ -496,6 +496,14 @@ export const strings = {
     videosStartAsHint: "For videos no rule picks a preset for.",
     downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count})`),
   },
+  /** How a picker lays out what it offers: a listing's items, a post's files (PickerViewControls.tsx). */
+  pickerView: {
+    view: "View",
+    views: { list: "List", masonry: "Masonry", gallery: "Gallery" },
+    size: "Picture Size",
+    smaller: "Smaller Pictures",
+    larger: "Larger Pictures",
+  },
   /** The Watched view: channels, playlists and accounts checked for what's new, and Watch on the picker. */
   watched: {
     watch: "Watch",

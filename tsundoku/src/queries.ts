@@ -26,6 +26,7 @@ import {
   getFirstRunOptions,
   getFolderRules,
   getListArrangements,
+  getPickerLayouts,
   getSupportedSites,
   getHistoryFilters,
   getHistoryPage,
@@ -48,8 +49,10 @@ import {
   saveBackgroundOptions,
   saveDownloadOptions,
   saveListArrangements,
+  savePickerLayouts,
 } from "./api"
 import { ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
+import { DEFAULT_PICKER_LAYOUTS, sizeStep } from "./pickerLayout"
 import { ruleLabel } from "./views/rules/ruleLabels"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
@@ -59,6 +62,8 @@ import type { DownloadSettings } from "./bindings/DownloadSettings"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListArrangements } from "./bindings/ListArrangements"
+import type { PickerLayout } from "./bindings/PickerLayout"
+import type { PickerLayouts } from "./bindings/PickerLayouts"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { RulePreset } from "./bindings/RulePreset"
@@ -324,6 +329,32 @@ export function useListArrangement(list: keyof ListArrangements) {
     }
   }
   return { arrangement: arrangements?.[list] ?? STORED_ORDER, ready: arrangements !== undefined, change, error }
+}
+
+/** The pickers' layouts being saved, one after another, so quick clicks on the size buttons are saved in order. */
+let pickerSaves: Promise<unknown> = Promise.resolve()
+
+/** How one picker shows what it offers (as the core starts it until the settings are read), and a change to it, made
+ * from the latest layout so quick clicks build on each other, which takes effect at once and is saved. A change that can't be saved still lasts while the app runs: the picker works
+ * the same either way, so it isn't worth a message. */
+export function usePickerLayout(picker: keyof PickerLayouts) {
+  const queryClient = useQueryClient()
+  const { data: layouts } = useQuery({
+    queryKey: queryKeys.pickerLayouts,
+    queryFn: getPickerLayouts,
+    staleTime: Infinity,
+  })
+  const change = useCallback(
+    (update: (layout: PickerLayout) => PickerLayout) => {
+      const current = queryClient.getQueryData<PickerLayouts>(queryKeys.pickerLayouts) ?? DEFAULT_PICKER_LAYOUTS
+      const changed = { ...current, [picker]: update({ ...current[picker], size: sizeStep(current[picker].size) }) }
+      queryClient.setQueryData(queryKeys.pickerLayouts, changed)
+      pickerSaves = pickerSaves.then(() => savePickerLayouts(changed)).catch(() => undefined)
+    },
+    [picker, queryClient],
+  )
+  const layout = layouts?.[picker] ?? DEFAULT_PICKER_LAYOUTS[picker]
+  return { layout: { ...layout, size: sizeStep(layout.size) }, change }
 }
 
 /** How many videos the history view reads at a time. */

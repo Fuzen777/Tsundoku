@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest"
+import { columnsFor, intoColumns, resized, sizeStep, TILE_GAP, TILE_WIDTHS, tileWidthIn } from "./pickerLayout"
+
+describe("sizeStep", () => {
+  it("keeps a size within the steps", () => {
+    expect(sizeStep(2)).toBe(2)
+    expect(sizeStep(-3)).toBe(0)
+    expect(sizeStep(99)).toBe(TILE_WIDTHS.length - 1)
+    expect(sizeStep(1.6)).toBe(2)
+    expect(sizeStep(Number.NaN)).toBe(0)
+  })
+})
+
+describe("resized", () => {
+  it("goes one step smaller or larger, keeping the view", () => {
+    expect(resized({ view: "masonry", size: 2 }, 1)).toEqual({ view: "masonry", size: 3 })
+    expect(resized({ view: "gallery", size: 2 }, -1)).toEqual({ view: "gallery", size: 1 })
+  })
+
+  it("stops at either end", () => {
+    expect(resized({ view: "gallery", size: 0 }, -1)).toBeNull()
+    expect(resized({ view: "gallery", size: TILE_WIDTHS.length - 1 }, 1)).toBeNull()
+  })
+
+  it("steps from a size another version kept", () => {
+    expect(resized({ view: "gallery", size: 40 }, -1)).toEqual({ view: "gallery", size: TILE_WIDTHS.length - 2 })
+  })
+})
+
+describe("columnsFor", () => {
+  it("fits as many pictures as their narrowest width allows", () => {
+    const width = TILE_WIDTHS[2]
+    expect(columnsFor(width * 4 + TILE_GAP * 3, 2)).toBe(4)
+    expect(columnsFor(width * 4 + TILE_GAP * 3 - 1, 2)).toBe(3)
+  })
+
+  it("fits fewer as the pictures grow", () => {
+    expect(columnsFor(800, 0)).toBeGreaterThan(columnsFor(800, 3))
+    expect(columnsFor(800, 3)).toBeGreaterThan(columnsFor(800, TILE_WIDTHS.length - 1))
+  })
+
+  it("always has a column, even before the picker is measured", () => {
+    expect(columnsFor(0, 2)).toBe(1)
+    expect(columnsFor(50, TILE_WIDTHS.length - 1)).toBe(1)
+  })
+})
+
+describe("tileWidthIn", () => {
+  it("shares what the gaps leave between the columns", () => {
+    expect(tileWidthIn(100 * 3 + TILE_GAP * 2, 3)).toBe(100)
+    expect(tileWidthIn(90, 1)).toBe(90)
+  })
+})
+
+describe("intoColumns", () => {
+  it("deals the items left to right, a row at a time", () => {
+    expect(intoColumns([1, 2, 3, 4, 5, 6, 7], 3)).toEqual([
+      [1, 4, 7],
+      [2, 5],
+      [3, 6],
+    ])
+  })
+
+  it("leaves columns empty when there are fewer items", () => {
+    expect(intoColumns(["a"], 3)).toEqual([["a"], [], []])
+  })
+
+  it("puts everything in one column when asked for none", () => {
+    expect(intoColumns([1, 2], 0)).toEqual([[1, 2]])
+  })
+})

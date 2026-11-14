@@ -18,6 +18,7 @@ import type { HistoryVideo } from "./bindings/HistoryVideo"
 import type { LinkFileError } from "./bindings/LinkFileError"
 import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListArrangements } from "./bindings/ListArrangements"
+import type { PickerLayouts } from "./bindings/PickerLayouts"
 import type { ListedItem } from "./bindings/ListedItem"
 import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
@@ -757,6 +758,10 @@ export const standIns = {
     pending: { group: "none", byStatus: false, sort: "added", descending: false },
     queue: { group: "none", byStatus: false, sort: "added", descending: false },
   } satisfies ListArrangements,
+  pickerLayouts: {
+    items: { view: "gallery", size: 2 },
+    postFiles: { view: "gallery", size: 1 },
+  } satisfies PickerLayouts,
   /** Words that start with http:// or https://, each once: the core also takes links without them. */
   linksInText(text: string): string[] {
     const links = text.split(/\s+/).filter((word) => /^https?:\/\//i.test(word))
@@ -878,6 +883,7 @@ function listingStandIn(kind: ListingKind): Listing {
         videoId: `listed${index}`,
         url: `${base.url}#${index}`,
         title: posts ? `Post number ${index + 1}, with a caption long enough to need cutting short` : `Video number ${index + 1}`,
+        thumbnailUrl: posts ? standInPicture(index) : base.thumbnailUrl,
         durationSeconds: posts ? null : 45 + index * 97,
         uploadDate: posts ? daysAgo(index * 3) : null,
       },
@@ -897,4 +903,23 @@ function listingStandIn(kind: ListingKind): Listing {
     newestOnly: kind !== "playlist",
     items,
   }
+}
+
+/** The shapes an account's posts come in (square, portrait, a reel's, landscape), as width over height. */
+const STAND_IN_SHAPES = [1, 4 / 5, 9 / 16, 1.91, 3 / 4, 4 / 5, 1, 16 / 9]
+
+/** A picture made here, numbered and in one of the shapes posts come in, so Masonry and Gallery can be checked in a
+ * browser without the network. */
+function standInPicture(index: number): string {
+  const ratio = STAND_IN_SHAPES[index % STAND_IN_SHAPES.length]
+  const width = 400
+  const height = Math.round(width / ratio)
+  const hue = (index * 47) % 360
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="hsl(${hue} 55% 62%)"/><stop offset="1" stop-color="hsl(${(hue + 60) % 360} 50% 38%)"/>` +
+    `</linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/>` +
+    `<text x="50%" y="50%" font-family="sans-serif" font-size="96" fill="white" text-anchor="middle" dominant-baseline="central">${index + 1}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }

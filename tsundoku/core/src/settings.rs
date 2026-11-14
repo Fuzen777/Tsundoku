@@ -29,6 +29,9 @@ pub struct Settings {
     /// A choice from a newer version, which this one can't read, only resets the lists' arrangements.
     #[serde(deserialize_with = "default_if_unreadable")]
     pub lists: ListArrangements,
+    /// A view from a newer version, which this one can't read, only resets the pickers' layouts.
+    #[serde(deserialize_with = "default_if_unreadable")]
+    pub pickers: PickerLayouts,
     pub adding: AddingSettings,
     pub background: BackgroundSettings,
     pub appearance: AppearanceSettings,
@@ -732,6 +735,62 @@ impl From<StoredListArrangement> for ListArrangement {
     }
 }
 
+/// How the pickers show what they offer, each chosen with the picker's own toggle and size buttons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct PickerLayouts {
+    /// A channel's, playlist's or account's items, on the preview card and under a watched source.
+    pub items: PickerLayout,
+    /// A post's pictures and videos, on the preview card and in Pending.
+    pub post_files: PickerLayout,
+}
+
+impl Default for PickerLayouts {
+    fn default() -> Self {
+        Self {
+            items: PickerLayout::default(),
+            post_files: PickerLayout {
+                view: PickerView::Gallery,
+                size: 1,
+            },
+        }
+    }
+}
+
+/// One picker's view, and how big its pictures are in Masonry and Gallery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct PickerLayout {
+    pub view: PickerView,
+    /// A step of the UI's sizes, from 0, the smallest. The UI keeps it within its steps.
+    pub size: u8,
+}
+
+impl Default for PickerLayout {
+    fn default() -> Self {
+        Self {
+            view: PickerView::Gallery,
+            size: 2,
+        }
+    }
+}
+
+/// How a picker lays out what it offers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PickerView {
+    /// A row each: the picture, the title and its details.
+    List,
+    /// Pictures as they are, in columns.
+    Masonry,
+    /// Pictures cut to the same shape, in a grid.
+    #[default]
+    Gallery,
+}
+
 /// What a list's items are sorted by, within their groups.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -917,6 +976,76 @@ mod tests {
                 ..ListArrangement::default()
             }
         );
+    }
+
+    #[test]
+    fn reads_picker_layouts() {
+        let folder = tempfile::tempdir().unwrap();
+        assert_eq!(
+            store_in(&folder).get().pickers,
+            PickerLayouts {
+                items: PickerLayout {
+                    view: PickerView::Gallery,
+                    size: 2,
+                },
+                post_files: PickerLayout {
+                    view: PickerView::Gallery,
+                    size: 1,
+                },
+            }
+        );
+
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "pickers": { "items": { "view": "masonry", "size": 4 }, "postFiles": { "view": "list" } } }"#,
+        )
+        .unwrap();
+        let pickers = store_in(&folder).get().pickers;
+        assert_eq!(
+            pickers.items,
+            PickerLayout {
+                view: PickerView::Masonry,
+                size: 4,
+            }
+        );
+        assert_eq!(pickers.post_files.view, PickerView::List);
+    }
+
+    #[test]
+    fn a_picker_view_from_a_newer_version_resets_only_the_pickers() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{
+                "pickers": { "items": { "view": "fromTheFuture" } },
+                "adding": { "watchClipboard": true }
+            }"#,
+        )
+        .unwrap();
+
+        let settings = store_in(&folder).get();
+        assert_eq!(settings.pickers, PickerLayouts::default());
+        assert!(settings.adding.watch_clipboard);
+        assert!(!folder.path().join("settings.invalid.json").exists());
+    }
+
+    #[test]
+    fn saved_picker_layouts_come_back() {
+        let folder = tempfile::tempdir().unwrap();
+        let layouts = PickerLayouts {
+            items: PickerLayout {
+                view: PickerView::List,
+                size: 0,
+            },
+            post_files: PickerLayout {
+                view: PickerView::Masonry,
+                size: 5,
+            },
+        };
+        store_in(&folder)
+            .update(|settings| settings.pickers = layouts)
+            .unwrap();
+        assert_eq!(store_in(&folder).get().pickers, layouts);
     }
 
     #[test]

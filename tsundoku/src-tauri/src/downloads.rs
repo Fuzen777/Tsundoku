@@ -16,7 +16,7 @@ use tsundoku_core::rules::{
     self, Destination, FolderRule, RightAwayRule, RuleError, RuleManager, RulePreset, RuleSubject,
     UnpackingRule,
 };
-use tsundoku_core::settings::{DownloadSettings, ListArrangements, SettingsStore};
+use tsundoku_core::settings::{DownloadSettings, ListArrangements, PickerLayouts, SettingsStore};
 
 use crate::queue_status::QueueStatus;
 
@@ -349,6 +349,25 @@ pub fn save_list_arrangements(
             detail: error.to_string(),
         })?;
     Ok(arrangements)
+}
+
+/// How the pickers show what they offer: a listing's items and a post's files.
+#[tauri::command]
+pub fn picker_layouts(settings: State<'_, Arc<SettingsStore>>) -> PickerLayouts {
+    settings.get().pickers
+}
+
+#[tauri::command]
+pub fn save_picker_layouts(
+    settings: State<'_, Arc<SettingsStore>>,
+    layouts: PickerLayouts,
+) -> Result<PickerLayouts, DownloadError> {
+    settings
+        .update(|settings| settings.pickers = layouts)
+        .map_err(|error| DownloadError::Storage {
+            detail: error.to_string(),
+        })?;
+    Ok(layouts)
 }
 
 /// Opens the download's log in the default text editor.

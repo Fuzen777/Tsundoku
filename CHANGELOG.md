@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.138 · 2026-11-14
+
+### Added
+
+- **Gallery and masonry in the picker**: a channel's, playlist's or account's list, the new items of a watched source and a post's files now have three buttons beside their select-all box: List, Masonry (the pictures in their own shapes, in columns) and Gallery (a grid of pictures cut to one shape). In Masonry and Gallery, − and + make the pictures smaller or larger. Ticking works the same in every view: click a picture to tick or untick it, and an unticked one is dimmed. Each picker remembers its view and size; both start in Gallery.
+
 ## 0.1.137 · 2026-11-14
 
 ### Changed
