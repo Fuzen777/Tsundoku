@@ -487,21 +487,12 @@ pub(crate) fn run(
             },
         });
     };
-    let output =
-        process::run_collecting_with_cancel(&command(tools, yt_dlp, extra, link), cancel, timeout)
-            .map_err(|error| match error {
-                RunError::Start { source, .. } => PreviewError::Tool {
-                    tool: ToolId::YtDlp,
-                    error: start_error(source, yt_dlp),
-                },
-                RunError::Cancelled => PreviewError::Cancelled,
-                RunError::TimedOut => PreviewError::Network {
-                    detail: format!("no answer within {} seconds", timeout.as_secs()),
-                },
-                RunError::Wait(source) => PreviewError::Failed {
-                    detail: source.to_string(),
-                },
-            })?;
+    let output = process::run_collecting_with_cancel(
+        &command(tools, yt_dlp, Output::Whole, extra, link),
+        cancel,
+        timeout,
+    )
+    .map_err(|error| run_failed(error, yt_dlp, timeout))?;
 
     let stderr: Vec<&str> = output
         .lines
@@ -522,14 +513,90 @@ pub(crate) fn run(
     })
 }
 
-fn command(tools: &FetchTools, yt_dlp: &Path, extra: &[&str], link: &str) -> ProgramCommand {
+/// Runs yt-dlp on a listing's page as `run` does, but hands each of its entries to `on_entry` as soon as yt-dlp has read
+/// it, as a line of JSON (`--lazy-playlist --dump-json`), rather than all of them at the end: for a channel too long to
+/// wait for. An entry's line has the listing's own fields too, prefixed `playlist_`. `link` must come from
+/// `normalize_link`.
+pub(crate) fn run_entries(
+    tools: &FetchTools,
+    link: &str,
+    extra: &[&str],
+    timeout: Duration,
+    cancel: &CancelToken,
+    on_entry: &mut dyn FnMut(&str),
+) -> Result<(), PreviewError> {
+    let Some(yt_dlp) = tools.yt_dlp else {
+        return Err(PreviewError::Tool {
+            tool: ToolId::YtDlp,
+            error: ToolError::FileMissing {
+                path: "yt-dlp".to_owned(),
+            },
+        });
+    };
+    let mut stderr = Vec::new();
+    let status = process::run(
+        &command(tools, yt_dlp, Output::Entries, extra, link),
+        cancel,
+        Some(timeout),
+        |line| match line {
+            OutputLine::Stdout(text) => on_entry(&text),
+            OutputLine::Stderr(text) => stderr.push(text),
+        },
+    )
+    .map_err(|error| run_failed(error, yt_dlp, timeout))?;
+    if !status.success() {
+        let stderr: Vec<&str> = stderr.iter().map(String::as_str).collect();
+        return Err(classify_failure(&stderr));
+    }
+    Ok(())
+}
+
+/// Why yt-dlp couldn't be run to its end.
+fn run_failed(error: RunError, yt_dlp: &Path, timeout: Duration) -> PreviewError {
+    match error {
+        RunError::Start { source, .. } => PreviewError::Tool {
+            tool: ToolId::YtDlp,
+            error: start_error(source, yt_dlp),
+        },
+        RunError::Cancelled => PreviewError::Cancelled,
+        RunError::TimedOut => PreviewError::Network {
+            detail: format!("no answer within {} seconds", timeout.as_secs()),
+        },
+        RunError::Wait(source) => PreviewError::Failed {
+            detail: source.to_string(),
+        },
+    }
+}
+
+/// How yt-dlp writes what it read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Output {
+    /// One JSON answer at the end, a listing's entries inside it.
+    Whole,
+    /// A listing's entries one per line, each as soon as it's read.
+    Entries,
+}
+
+fn command(
+    tools: &FetchTools,
+    yt_dlp: &Path,
+    output: Output,
+    extra: &[&str],
+    link: &str,
+) -> ProgramCommand {
     let mut command = ProgramCommand::new(yt_dlp).args([
         "--ignore-config",
         // A watch?v=…&list=… link means the video, not its playlist.
         "--no-playlist",
         // A playlist or a channel is listed without reading each of its videos.
         "--flat-playlist",
-        "--dump-single-json",
+    ]);
+    command = match output {
+        Output::Whole => command.arg("--dump-single-json"),
+        // Without --lazy-playlist, yt-dlp reads every entry before it writes the first.
+        Output::Entries => command.args(["--lazy-playlist", "--dump-json"]),
+    };
+    command = command.args([
         // yt-dlp's messages in UTF-8 rather than the Windows code page.
         "--encoding",
         "utf-8",
@@ -1045,6 +1112,7 @@ mod tests {
         let args: Vec<String> = command(
             &tools,
             Path::new("yt-dlp.exe"),
+            Output::Whole,
             &[],
             "https://player.vimeo.com/video/1",
         )
@@ -1193,6 +1261,7 @@ mod tests {
         let command = command(
             &tools,
             Path::new("yt-dlp.exe"),
+            Output::Whole,
             &[],
             "https://example.com/v",
         );
@@ -1223,6 +1292,7 @@ mod tests {
         let command = command(
             &tools,
             Path::new("yt-dlp.exe"),
+            Output::Whole,
             &["--playlist-end", "50"],
             "https://www.youtube.com/@jawed/videos",
         );
@@ -1240,6 +1310,35 @@ mod tests {
                 "https://www.youtube.com/@jawed/videos"
             ]
         );
+    }
+
+    #[test]
+    fn lists_entries_one_per_line_as_they_are_read() {
+        let tools = FetchTools {
+            yt_dlp: Some(Path::new("yt-dlp.exe")),
+            ..FetchTools::default()
+        };
+        let arguments = |output| -> Vec<String> {
+            command(
+                &tools,
+                Path::new("yt-dlp.exe"),
+                output,
+                &[],
+                "https://www.youtube.com/@jawed/videos",
+            )
+            .arguments()
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+        };
+        let whole = arguments(Output::Whole);
+        assert!(whole.contains(&"--dump-single-json".to_owned()));
+        assert!(!whole.contains(&"--lazy-playlist".to_owned()));
+        let entries = arguments(Output::Entries);
+        assert!(entries.contains(&"--lazy-playlist".to_owned()));
+        assert!(entries.contains(&"--dump-json".to_owned()));
+        assert!(!entries.contains(&"--dump-single-json".to_owned()));
+        assert!(entries.contains(&"--flat-playlist".to_owned()));
     }
 
     #[test]
@@ -1264,6 +1363,7 @@ mod tests {
         let command = command(
             &tools,
             Path::new("yt-dlp.exe"),
+            Output::Whole,
             &[],
             "https://example.com/v",
         );
@@ -1290,6 +1390,7 @@ mod tests {
         let command = command(
             &tools,
             Path::new("yt-dlp.exe"),
+            Output::Whole,
             &[],
             "https://example.com/v",
         );

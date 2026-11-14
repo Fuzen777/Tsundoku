@@ -14,7 +14,7 @@ use crate::downloads::DownloadQueue;
 use crate::gallery::{self, GalleryTools};
 use crate::history::{History, PastDownload};
 use crate::hosts::{self, Host};
-use crate::listing::{self, Found, Listing};
+use crate::listing::{self, Found, Listing, ListingMore, MoreItems};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
 use crate::passwords::Password;
@@ -31,9 +31,10 @@ use crate::tools::{ToolCacheFolder, ToolId, ToolManager};
 #[ts(export)]
 pub enum LinkPreview {
     Video(Box<VideoPreview>),
-    /// Its items marked with what the history and the queue have (`listing::mark`).
+    /// Its items marked with what the history and the queue have (`listing::mark`). Boxed, as `Video`, since a
+    /// listing is much bigger than the enum's other variant.
     Listing {
-        listing: Listing,
+        listing: Box<Listing>,
     },
 }
 
@@ -50,10 +51,13 @@ pub struct VideoPreview {
     pub missing_js_runtime: bool,
 }
 
-/// Fetches previews one at a time: starting one cancels the one before, so only the latest link is ever shown.
+/// Fetches previews one at a time: starting one cancels the one before, so only the latest link is ever shown. A
+/// listing's next items (`fetch_more`) are read one read at a time too, and a new preview cancels them.
 #[derive(Debug, Default)]
 pub struct PreviewService {
     current: Mutex<Option<CancelToken>>,
+    /// The listing's next items being read, if any.
+    more: Mutex<Option<CancelToken>>,
 }
 
 impl PreviewService {
@@ -81,6 +85,7 @@ impl PreviewService {
         if let Some(previous) = lock(&self.current).replace(cancel.clone()) {
             previous.cancel();
         }
+        self.cancel_more();
         let fetched = match queue.site_wait(&link) {
             Some(_) => Err(PreviewError::too_many_requests(String::new())),
             None => read_for_preview(
@@ -98,26 +103,102 @@ impl PreviewService {
                 *current = None;
             }
         }
-        let fetched = fetched.map_err(|error| match error {
-            PreviewError::TooManyRequests { detail, .. } => {
-                let wait = queue.site_wait(&link).or_else(|| queue.slow_down(&link));
-                PreviewError::TooManyRequests {
-                    detail,
-                    site: wait.as_ref().map(|wait| wait.site.clone()),
-                    until: wait.map(|wait| wait.until),
-                }
-            }
-            other => other,
-        })?;
+        let fetched = fetched.map_err(|error| with_site_wait(error, queue, &link))?;
         queue.site_worked(&link);
         preview_of(fetched, history, queue)
     }
 
-    /// Stops the preview being fetched, if any.
+    /// Reads the items after those a listing on the preview card has (`more`): the next ones for Load More, or all the
+    /// rest for Load All (`all`), handing each batch to `on_batch` with its items marked as `fetch` marks a listing's.
+    /// Starting it stops the read before; a site that asked to slow down isn't read until its wait ends, and Load All
+    /// stops once a download from the site starts such a wait (`listing::read_more`).
+    pub fn fetch_more(
+        &self,
+        tools: &ToolManager,
+        history: &History,
+        queue: &DownloadQueue,
+        more: &ListingMore,
+        all: bool,
+        on_batch: &mut dyn FnMut(MoreItems),
+    ) -> Result<(), PreviewError> {
+        let link = more.link.as_str();
+        let cancel = CancelToken::new();
+        if let Some(previous) = lock(&self.more).replace(cancel.clone()) {
+            previous.cancel();
+        }
+        let cookies_choice = queue.options().cookies_browser;
+        let read = match queue.site_wait(link) {
+            Some(_) => Err(PreviewError::too_many_requests(String::new())),
+            None => {
+                let set = LinkTools::new(tools, cookies_choice, link);
+                listing::read_more(
+                    &set.videos(true, None),
+                    &set.images(),
+                    more,
+                    all,
+                    &cancel,
+                    &mut |mut batch| {
+                        listing::mark_items(
+                            &mut batch.items,
+                            |site, id| history.last_download(site, id),
+                            |site, id| queue.contains(site, id),
+                        )
+                        .map_err(|error| PreviewError::Failed {
+                            detail: error.to_string(),
+                        })?;
+                        let more_to_come = batch.more.is_some();
+                        on_batch(batch);
+                        match queue.site_wait(link) {
+                            Some(_) if more_to_come => {
+                                Err(PreviewError::too_many_requests(String::new()))
+                            }
+                            _ => Ok(()),
+                        }
+                    },
+                )
+                .map_err(|error| with_sign_in_state(error, cookies_choice, link))
+            }
+        };
+        {
+            let mut current = lock(&self.more);
+            if current.as_ref().is_some_and(|token| token.is_same(&cancel)) {
+                *current = None;
+            }
+        }
+        read.map_err(|error| with_site_wait(error, queue, link))?;
+        queue.site_worked(link);
+        Ok(())
+    }
+
+    /// Stops the preview being fetched, if any, and the listing's next items being read.
     pub fn cancel(&self) {
         if let Some(current) = lock(&self.current).take() {
             current.cancel();
         }
+        self.cancel_more();
+    }
+
+    /// Stops the listing's next items being read, if any (`fetch_more`), keeping what was read.
+    pub fn cancel_more(&self) {
+        if let Some(more) = lock(&self.more).take() {
+            more.cancel();
+        }
+    }
+}
+
+/// A site's "too many requests" with when its wait ends, starting one when none is running (`DownloadQueue::slow_down`),
+/// for the preview card to say when to try again.
+fn with_site_wait(error: PreviewError, queue: &DownloadQueue, link: &str) -> PreviewError {
+    match error {
+        PreviewError::TooManyRequests { detail, .. } => {
+            let wait = queue.site_wait(link).or_else(|| queue.slow_down(link));
+            PreviewError::TooManyRequests {
+                detail,
+                site: wait.as_ref().map(|wait| wait.site.clone()),
+                until: wait.map(|wait| wait.until),
+            }
+        }
+        other => other,
     }
 }
 
@@ -187,7 +268,9 @@ fn preview_of(
                 |site, id| queue.contains(site, id),
             )
             .map_err(history_failed)?;
-            Ok(LinkPreview::Listing { listing })
+            Ok(LinkPreview::Listing {
+                listing: Box::new(listing),
+            })
         }
     }
 }

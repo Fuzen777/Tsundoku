@@ -7,7 +7,7 @@ import type { ListSort } from "../bindings/ListSort"
 import { strings } from "../strings"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
-import { SegmentedControl } from "./SegmentedControl"
+import { SegmentedControl, ToggleButton } from "./SegmentedControl"
 
 const text = strings.lists
 
@@ -32,20 +32,13 @@ export function ArrangeControls({ arrangement, onChange, disabled = false }: Arr
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-fg-secondary">{text.groupBy}</span>
-      <div className="inline-flex rounded-md border border-line bg-input p-0.5">
-        <button
-          type="button"
-          aria-pressed={byStatus}
-          title={text.byStatusHint}
-          disabled={disabled}
-          onClick={() => onChange({ byStatus: !byStatus })}
-          className={`h-6 rounded px-3 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${
-            byStatus ? "bg-accent-fill text-on-accent" : "text-fg-secondary hover:text-fg"
-          }`}
-        >
-          {text.byStatus}
-        </button>
-      </div>
+      <ToggleButton
+        label={text.byStatus}
+        hint={text.byStatusHint}
+        pressed={byStatus}
+        disabled={disabled}
+        onChange={(pressed) => onChange({ byStatus: pressed })}
+      />
       <SegmentedControl
         label={text.groupBy}
         options={GROUP_OPTIONS}

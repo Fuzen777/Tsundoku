@@ -1,5 +1,6 @@
 import type { ListedItem } from "./bindings/ListedItem"
 import type { Listing } from "./bindings/Listing"
+import type { ListingKind } from "./bindings/ListingKind"
 import type { QueuePick } from "./bindings/QueuePick"
 import { strings } from "./strings"
 
@@ -83,6 +84,66 @@ export function picksFor(
     })
   }
   return picks
+}
+
+/** A picker's items and which of them are ticked, kept together so items loaded later can be ticked as they arrive. */
+export interface PickerItems {
+  items: readonly ListedItem[]
+  selection: ReadonlySet<string>
+}
+
+/** The items to start with, the new ones ticked. */
+export function pickerItems(items: readonly ListedItem[]): PickerItems {
+  return { items, selection: initialSelection(items) }
+}
+
+/**
+ * The picker with items loaded later (Load More, Load All) added: each kept once, the first time it's met, since a read
+ * may start with items listed before. An account's posts are put in date order with the others, newest first, since a
+ * pinned post among the first ones may be older than those loaded. The ticks made stay; an added item that's new is
+ * ticked when `tickNew` (anything was ticked when the load started), as the first ones were.
+ */
+export function withMoreItems(
+  current: PickerItems,
+  more: readonly ListedItem[],
+  kind: ListingKind,
+  tickNew: boolean,
+): PickerItems {
+  const known = new Set(current.items.map(itemKey))
+  const added = more.filter((item) => {
+    const key = itemKey(item)
+    if (known.has(key)) return false
+    known.add(key)
+    return true
+  })
+  if (added.length === 0) return current
+  const merged = [...current.items, ...added]
+  const ticked = tickNew ? added.filter((item) => !isKnown(item)).map(itemKey) : []
+  return {
+    items: kind === "account" ? newestFirst(merged) : merged,
+    selection: ticked.length > 0 ? new Set([...current.selection, ...ticked]) : current.selection,
+  }
+}
+
+/** Items by their day, newest first, those without one last; items of one day keep their order. */
+function newestFirst(items: readonly ListedItem[]): ListedItem[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((first, second) => {
+      const [a, b] = [first.item.video.uploadDate, second.item.video.uploadDate]
+      if (a !== b) {
+        if (a === null) return 1
+        if (b === null) return -1
+        return a < b ? 1 : -1
+      }
+      return first.index - second.index
+    })
+    .map(({ item }) => item)
+}
+
+/** The items the picker shows: all of them, or with Hide Downloaded, those neither the history nor the queue has. */
+export function shownItems(items: readonly ListedItem[], hideDownloaded: boolean): readonly ListedItem[] {
+  return hideDownloaded ? items.filter((item) => !isKnown(item)) : items
 }
 
 /** What a listing's items are called: an account's posts, YouTube's videos, anything else's items. */

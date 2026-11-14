@@ -494,20 +494,38 @@ export const strings = {
     },
     /** How many it lists: "Newest 50 videos", "Newest 50 of 8,634 posts", "95 videos". */
     listed: (count: number, noun: readonly [string, string], newestOnly: boolean, total: number | null) => {
-      if (!newestOnly) return `${count} ${count === 1 ? noun[0] : noun[1]}`
+      if (!newestOnly) return `${count.toLocaleString()} ${count === 1 ? noun[0] : noun[1]}`
       const all = total !== null && total > count ? ` of ${total.toLocaleString()}` : ""
-      return `Newest ${count}${all} ${(total ?? count) === 1 ? noun[0] : noun[1]}`
+      return `Newest ${count.toLocaleString()}${all} ${(total ?? count) === 1 ? noun[0] : noun[1]}`
     },
     empty: "There's nothing to download here yet.",
     selectAll: "Select All",
     select: "Select",
-    selected: (selected: number, count: number) => `${selected} of ${count} selected`,
+    selected: (selected: number, count: number) => `${selected.toLocaleString()} of ${count.toLocaleString()} selected`,
+    /** After the count, while Hide Downloaded leaves some out. */
+    hidden: (count: number) => `${count.toLocaleString()} hidden`,
+    hideDownloaded: "Hide Downloaded",
+    hideDownloadedHint: "Hides what's downloaded or already in the queue.",
+    allHidden: "Everything listed so far is downloaded or in the queue.",
+    loadMore: "Load More",
+    loadMoreHint: (noun: readonly [string, string]) => `Lists the next ${noun[1]}, older than these.`,
+    /** "Load All (8,634)", with how many the site says it holds, when it says. */
+    loadAll: (total: number | null) => (total === null ? "Load All" : `Load All (${total.toLocaleString()})`),
+    loadAllHint: "Lists everything, a page at a time. Stop keeps what's listed by then.",
+    /** While Load All reads: "Listing… 150 of 8,634 posts". */
+    loadingAll: (count: number, total: number | null, noun: readonly [string, string]) =>
+      total !== null && total > count
+        ? `Listing… ${count.toLocaleString()} of ${total.toLocaleString()} ${noun[1]}`
+        : `Listing… ${count.toLocaleString()} ${count === 1 ? noun[0] : noun[1]}`,
+    /** Under Load All's count on Instagram, which asks to slow down when read quickly. */
+    loadingSlowly: "Instagram is read a page of 12 at a time, about 10 seconds apart, so it doesn't ask to slow down.",
+    stopLoading: "Stop",
     downloaded: "Downloaded",
     inQueue: "In Queue",
     inQueueHint: "Already in the queue.",
     videosStartAs: "Videos Start As",
     videosStartAsHint: "For videos no rule picks a preset for.",
-    downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count})`),
+    downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count.toLocaleString()})`),
   },
   /** How a picker lays out what it offers: a listing's items, a post's files (PickerViewControls.tsx). */
   pickerView: {
@@ -559,7 +577,7 @@ export const strings = {
     noneNew: "Nothing new since the last check.",
     selectAll: "Select All",
     selected: (selected: number, count: number) => `${selected} of ${count} selected`,
-    downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count})`),
+    downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count.toLocaleString()})`),
     downloadSelectedHint: "The new items you leave unticked are skipped, and never come back as new.",
     skipAll: "Skip All",
     skipped: (count: number) => `Skipped Before (${count})`,

@@ -59,3 +59,32 @@ export function SegmentedControl<Value extends string>({
     </div>
   )
 }
+
+interface ToggleButtonProps {
+  label: string
+  /** What it does, as its hover text. */
+  hint?: string
+  pressed: boolean
+  onChange: (pressed: boolean) => void
+  disabled?: boolean
+}
+
+/** One choice that is on or off, such as grouping by status, drawn like a segmented control's option in its frame. */
+export function ToggleButton({ label, hint, pressed, onChange, disabled = false }: ToggleButtonProps) {
+  return (
+    <div className="inline-flex w-fit rounded-md border border-line bg-input p-0.5">
+      <button
+        type="button"
+        aria-pressed={pressed}
+        title={hint}
+        disabled={disabled}
+        onClick={() => onChange(!pressed)}
+        className={`h-6 rounded px-3 text-xs font-medium whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${
+          pressed ? "bg-accent-fill text-on-accent" : "text-fg-secondary hover:text-fg"
+        }`}
+      >
+        {label}
+      </button>
+    </div>
+  )
+}

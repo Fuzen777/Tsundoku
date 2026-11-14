@@ -8,4 +8,8 @@ export type PickerLayout = { view: PickerView,
 /**
  * A step of the UI's sizes, from 0, the smallest. The UI keeps it within its steps.
  */
-size: number, };
+size: number, 
+/**
+ * What the history or the queue has is hidden: the listing picker's Hide Downloaded.
+ */
+hideDownloaded: boolean, };

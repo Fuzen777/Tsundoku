@@ -52,6 +52,7 @@ impl ListingReader for FakeReader {
                     in_queue: false,
                 })
                 .collect(),
+            more: None,
         })
     }
 }

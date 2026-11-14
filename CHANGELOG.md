@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.140 · 2026-11-14
+
+### Added
+
+- **Load More and Load All**: a channel's or an account's list in the preview card no longer stops at its newest 50. Under the items, Load More lists the next ones (50 more videos or X posts, 48 more Instagram posts), and Load All lists everything, with how many there are when the site says ("Load All (8,634)"). While Load All runs, the card counts what's listed so far ("Listing… 150 of 8,634 posts") and adds the items as they come; Stop ends it and keeps what's listed, and Load More or Load All carries on from there. What you ticked stays ticked, and new items that arrive are ticked as the first ones were (unless you unticked everything first). Instagram is read a page of 12 at a time with pauses between, so a big account takes a while; if Instagram asks to slow down anyway, the card says when to try again. Closing the card or reading another link stops it. Once everything is listed, the card says how many there are ("8,634 posts") instead of "Newest".
+- **Hide Downloaded**: a button beside the picker's views hides what's downloaded or already in the queue, so only the new items show, with how many are hidden after the count ("12 of 40 selected · 10 hidden"). Select All and Download Selected then take only what's shown. It's remembered.
+
 ## 0.1.139 · 2026-11-14
 
 ### Added

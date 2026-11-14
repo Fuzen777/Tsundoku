@@ -753,6 +753,7 @@ impl Default for PickerLayouts {
             post_files: PickerLayout {
                 view: PickerView::Gallery,
                 size: 1,
+                hide_downloaded: false,
             },
         }
     }
@@ -766,6 +767,8 @@ pub struct PickerLayout {
     pub view: PickerView,
     /// A step of the UI's sizes, from 0, the smallest. The UI keeps it within its steps.
     pub size: u8,
+    /// What the history or the queue has is hidden: the listing picker's Hide Downloaded.
+    pub hide_downloaded: bool,
 }
 
 impl Default for PickerLayout {
@@ -773,6 +776,7 @@ impl Default for PickerLayout {
         Self {
             view: PickerView::Gallery,
             size: 2,
+            hide_downloaded: false,
         }
     }
 }
@@ -987,17 +991,19 @@ mod tests {
                 items: PickerLayout {
                     view: PickerView::Gallery,
                     size: 2,
+                    hide_downloaded: false,
                 },
                 post_files: PickerLayout {
                     view: PickerView::Gallery,
                     size: 1,
+                    hide_downloaded: false,
                 },
             }
         );
 
         fs::write(
             folder.path().join("settings.json"),
-            r#"{ "pickers": { "items": { "view": "masonry", "size": 4 }, "postFiles": { "view": "list" } } }"#,
+            r#"{ "pickers": { "items": { "view": "masonry", "size": 4, "hideDownloaded": true }, "postFiles": { "view": "list" } } }"#,
         )
         .unwrap();
         let pickers = store_in(&folder).get().pickers;
@@ -1006,9 +1012,14 @@ mod tests {
             PickerLayout {
                 view: PickerView::Masonry,
                 size: 4,
+                hide_downloaded: true,
             }
         );
         assert_eq!(pickers.post_files.view, PickerView::List);
+        assert!(
+            !pickers.post_files.hide_downloaded,
+            "settings from before Hide Downloaded show everything"
+        );
     }
 
     #[test]
@@ -1036,10 +1047,12 @@ mod tests {
             items: PickerLayout {
                 view: PickerView::List,
                 size: 0,
+                hide_downloaded: false,
             },
             post_files: PickerLayout {
                 view: PickerView::Masonry,
                 size: 5,
+                hide_downloaded: false,
             },
         };
         store_in(&folder)

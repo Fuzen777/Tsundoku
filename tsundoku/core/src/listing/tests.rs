@@ -164,6 +164,16 @@ fn reads_a_youtube_channels_newest_videos() {
     assert!(listing.newest_only);
     assert_eq!(listing.total, None);
     assert_eq!(listing.items.len(), 50);
+    assert_eq!(
+        listing.more,
+        Some(ListingMore {
+            link: "https://www.youtube.com/@NASA/videos".to_owned(),
+            title: "NASA".to_owned(),
+            read: 50,
+            cursor: None,
+        }),
+        "50 answered of the 50 asked: there may be more"
+    );
     assert!(
         listing
             .thumbnail_url
@@ -362,6 +372,60 @@ fn refuses_items_without_a_link_of_their_own() {
 }
 
 #[test]
+fn a_later_window_of_a_channel_says_where_the_next_one_starts() {
+    let link = "https://www.youtube.com/@NASA/videos";
+    let read = |start, count| {
+        from_yt_dlp_window(
+            &fixture("youtube-channel.json"),
+            Some(ListingKind::Channel),
+            link,
+            Some(Window { start, count }),
+        )
+        .unwrap()
+        .more
+    };
+    assert_eq!(read(50, 50).map(|more| more.read), Some(100));
+    assert_eq!(read(50, 60), None, "fewer than asked: the channel's end");
+
+    let playlist = from_yt_dlp(
+        &fixture("youtube-playlist.json"),
+        Some(ListingKind::Playlist),
+        "https://www.youtube.com/playlist?list=PLx",
+    )
+    .unwrap();
+    assert_eq!(playlist.more, None, "a playlist is read whole");
+}
+
+#[test]
+fn reads_a_channels_video_from_its_own_line() {
+    // As `--lazy-playlist --dump-json` writes each of a channel's videos (`run_entries`), trimmed.
+    let line = r#"{"_type": "url", "ie_key": "Youtube", "id": "Zezt6EsG9WE",
+        "url": "https://www.youtube.com/watch?v=Zezt6EsG9WE", "webpage_url": "https://www.youtube.com/watch?v=Zezt6EsG9WE",
+        "title": "A Video", "duration": 558.0, "timestamp": 1792800000, "upload_date": "20261023",
+        "channel": null, "uploader": null, "playlist_channel": "NASA", "playlist_uploader": "NASA",
+        "playlist_uploader_id": "@NASA", "playlist": "NASA - Videos"}"#;
+    let item = channel_entry(serde_json::from_str(line).unwrap(), "NASA").unwrap();
+    assert_eq!(
+        (item.video.site.as_str(), item.video.video_id.as_str()),
+        ("youtube", "Zezt6EsG9WE")
+    );
+    assert_eq!(
+        item.video.upload_date, None,
+        "yt-dlp's day of the rough date isn't the upload's"
+    );
+    assert_eq!(item.approximate_date.as_deref(), Some("2026-10-24"));
+    assert_eq!(item.video.uploader.as_deref(), Some("NASA"));
+    assert_eq!(item.video.account.as_deref(), Some("NASA"));
+    assert_eq!(item.video.playlist.as_deref(), Some("NASA"));
+
+    let live: Value = serde_json::from_str(
+        r#"{"_type": "url", "ie_key": "Youtube", "id": "b", "url": "https://www.youtube.com/watch?v=b", "live_status": "is_live"}"#,
+    )
+    .unwrap();
+    assert!(channel_entry(live, "NASA").is_none());
+}
+
+#[test]
 fn leaves_out_premieres_and_live_streams() {
     let json = r#"{"_type": "playlist", "title": "Channel - Videos", "channel": "Channel", "extractor_key": "YoutubeTab",
         "entries": [
@@ -399,6 +463,7 @@ fn reads_an_instagram_accounts_newest_posts() {
     assert!(listing.newest_only);
     assert!(listing.thumbnail_url.is_some(), "the account's picture");
     assert_eq!(listing.items.len(), 12);
+    assert_eq!(listing.more, None, "fewer than the 50 asked");
 
     let first = &listing.items[0].video;
     // Keyed as reading the reel's own link, with either tool, would key it.

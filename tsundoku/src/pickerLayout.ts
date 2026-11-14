@@ -20,8 +20,8 @@ export const TILE_GAP = 8
 
 /** The layouts until the settings are read, as the core starts them. */
 export const DEFAULT_PICKER_LAYOUTS: PickerLayouts = {
-  items: { view: "gallery", size: 2 },
-  postFiles: { view: "gallery", size: 1 },
+  items: { view: "gallery", size: 2, hideDownloaded: false },
+  postFiles: { view: "gallery", size: 1, hideDownloaded: false },
 }
 
 /** A size kept by an older or newer version, brought within this one's steps. */

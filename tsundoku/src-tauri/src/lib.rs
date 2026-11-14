@@ -337,6 +337,8 @@ pub fn run() {
             tools::supported_sites,
             history::fetch_preview,
             history::cancel_preview,
+            history::load_more_of_listing,
+            history::cancel_loading_more,
             history::left_out_files,
             history::left_out_shared_files,
             history::listing_kind,

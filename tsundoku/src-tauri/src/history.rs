@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::http::{Request, Response, StatusCode, header};
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
 use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::DownloadQueue;
@@ -13,7 +14,7 @@ use tsundoku_core::history::{
     History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, PastDownload,
     folder_count,
 };
-use tsundoku_core::listing::{self, ListingKind};
+use tsundoku_core::listing::{self, ListingKind, ListingMore, MoreItems};
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::passwords::Password;
 use tsundoku_core::preview::{LinkPreview, PreviewService};
@@ -72,6 +73,45 @@ pub fn left_out_shared_files(
 #[tauri::command]
 pub fn cancel_preview(previews: State<'_, Arc<PreviewService>>) {
     previews.cancel();
+}
+
+/// The items after those a listing on the preview card has: the next ones (Load More), or all the rest (Load All,
+/// `all`), sent over `on_items` a batch at a time as they're read. Ends once they're all read, or with why it stopped.
+#[tauri::command]
+pub async fn load_more_of_listing(
+    tools: State<'_, Arc<ToolManager>>,
+    history: State<'_, Arc<History>>,
+    previews: State<'_, Arc<PreviewService>>,
+    queue: State<'_, Arc<DownloadQueue>>,
+    more: ListingMore,
+    all: bool,
+    on_items: Channel<MoreItems>,
+) -> Result<(), PreviewError> {
+    let (tools, history, previews, queue) = (
+        Arc::clone(&tools),
+        Arc::clone(&history),
+        Arc::clone(&previews),
+        Arc::clone(&queue),
+    );
+    // Reading takes seconds to hours: off the async runtime's threads, which must never block.
+    tauri::async_runtime::spawn_blocking(move || {
+        previews.fetch_more(&tools, &history, &queue, &more, all, &mut |batch| {
+            // Only fails once the window is gone, which ends the app.
+            let _ = on_items.send(batch);
+        })
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(PreviewError::Failed {
+            detail: error.to_string(),
+        })
+    })
+}
+
+/// Stops Load More or Load All, keeping what was read.
+#[tauri::command]
+pub fn cancel_loading_more(previews: State<'_, Arc<PreviewService>>) {
+    previews.cancel_more();
 }
 
 /// Whether a link is a channel, playlist or account, from its address alone, for the preview card to say what it's

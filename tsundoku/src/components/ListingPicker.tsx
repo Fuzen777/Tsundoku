@@ -1,10 +1,11 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Film, Images, Play, X } from "lucide-react"
-import { addManyToQueue, confirmWithUser } from "../api"
+import { addManyToQueue, cancelLoadingMore, confirmWithUser, loadMoreOfListing } from "../api"
 import type { ListedItem } from "../bindings/ListedItem"
 import type { Listing } from "../bindings/Listing"
+import type { ListingMore } from "../bindings/ListingMore"
 import type { PickerLayout } from "../bindings/PickerLayout"
-import { describeDownloadError, type ErrorDescription } from "../errors"
+import { describeDownloadError, describePreviewError, isCancelled, type ErrorDescription } from "../errors"
 import {
   formatCalendarDate,
   formatContents,
@@ -14,16 +15,18 @@ import {
   joinDetails,
 } from "../format"
 import {
-  initialSelection,
   isKnown,
   isQueued,
   itemKey,
   nounOf,
+  pickerItems,
   picksFor,
   selectedItems,
   selectEvery,
+  shownItems,
   takesPreset,
   withItem,
+  withMoreItems,
   type PickedPreset,
 } from "../listingPicker"
 import { usePickerLayout, usePresets, useRulePresets } from "../queries"
@@ -33,6 +36,7 @@ import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
 import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
 import { PickerViewControls } from "./PickerViewControls"
+import { ToggleButton } from "./SegmentedControl"
 import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
 import { Thumbnail } from "./Thumbnail"
@@ -47,14 +51,22 @@ interface ListingPickerProps {
   onWatched: () => void
 }
 
+/** What the picker is loading: the next items (Load More) or all the rest (Load All). */
+type Loading = "more" | "all"
+
 /**
  * The preview card for a channel, playlist or account: what it is, its items with a box each (the new ones ticked,
- * those downloaded before or in the queue greyed), and Download Selected, which queues each ticked item as its own
- * download. A video starts with the preset a rule picks for it, else the one picked here.
+ * those downloaded before or in the queue greyed, or hidden with Hide Downloaded), Load More and Load All when only the
+ * newest were listed, and Download Selected, which queues each ticked item shown as its own download. A video starts
+ * with the preset a rule picks for it, else the one picked here.
  */
 export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingPickerProps) {
-  const { items } = listing
-  const [selection, setSelection] = useState(() => initialSelection(items))
+  const [{ items, selection }, setPicker] = useState(() => pickerItems(listing.items))
+  const [more, setMore] = useState<ListingMore | null>(listing.more)
+  const [total, setTotal] = useState(listing.total)
+  const [loading, setLoading] = useState<Loading | null>(null)
+  const [stopping, setStopping] = useState(false)
+  const [loadError, setLoadError] = useState<ErrorDescription | null>(null)
   const { data: presets } = usePresets()
   const rulePresets = useRulePresets(items.map((item) => item.video))
   const [chosenId, setChosenId] = useState<string | null>(null)
@@ -63,9 +75,22 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
   const [watching, setWatching] = useState(false)
   const { layout, change: changeLayout } = usePickerLayout("items")
   const presetId = chosenId ?? presets?.defaultId ?? null
+  // Batches that arrive after the card closed are dropped; closing it stops the load.
+  const open = useRef(true)
+  useEffect(() => {
+    open.current = true
+    return () => {
+      open.current = false
+      void cancelLoadingMore()
+    }
+  }, [])
 
-  const picked = selectedItems(items, selection)
-  const selectable = items.filter((item) => !isQueued(item)).length
+  const setSelection = (update: (selection: ReadonlySet<string>) => ReadonlySet<string>) =>
+    setPicker((current) => ({ ...current, selection: update(current.selection) }))
+  const shown = shownItems(items, layout.hideDownloaded)
+  const hidden = items.length - shown.length
+  const picked = selectedItems(shown, selection)
+  const selectable = shown.filter((item) => !isQueued(item)).length
   const allSelected = selectable > 0 && picked.length === selectable
   const hasVideos = items.some(takesPreset)
   const placeOf = new Map(items.map((item, index) => [itemKey(item), index]))
@@ -76,7 +101,35 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
     const preset = presets?.presets.find((candidate) => candidate.id === (byRule?.presetId ?? presetId))
     return preset ? { id: preset.id, name: preset.name } : null
   }
-  const picks = presets ? picksFor(items, selection, presetFor) : null
+  const picks = presets ? picksFor(shown, selection, presetFor) : null
+
+  /** Lists the next items, or all the rest, adding each batch as it comes; new ones are ticked if anything is. */
+  async function load(all: boolean) {
+    if (!more || loading) return
+    setLoading(all ? "all" : "more")
+    setLoadError(null)
+    const tickNew = selection.size > 0
+    try {
+      await loadMoreOfListing(more, all, (batch) => {
+        if (!open.current) return
+        setPicker((current) => withMoreItems(current, batch.items, listing.kind, tickNew))
+        setMore(batch.more)
+        if (batch.total !== null) setTotal(batch.total)
+      })
+    } catch (caught) {
+      if (open.current && !isCancelled(caught)) setLoadError(describePreviewError(caught))
+    } finally {
+      if (open.current) {
+        setLoading(null)
+        setStopping(false)
+      }
+    }
+  }
+
+  function stop() {
+    setStopping(true)
+    void cancelLoadingMore()
+  }
 
   async function download() {
     if (!picks || picks.length === 0) return
@@ -104,6 +157,21 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
   }
 
   const noun = strings.picker.nouns[nounOf(listing)]
+  const loadRow = (more !== null || loading !== null || loadError !== null) && (
+    <LoadRow
+      loading={loading}
+      stopping={stopping}
+      canLoad={more !== null}
+      count={items.length}
+      total={total}
+      noun={noun}
+      slowly={listing.kind === "account" && listing.siteName === "instagram.com"}
+      error={loadError}
+      disabled={adding}
+      onLoad={(all) => void load(all)}
+      onStop={stop}
+    />
+  )
   return (
     <>
       <div className="flex gap-4">
@@ -116,7 +184,7 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
           <p className="text-xs text-fg-secondary tabular-nums">
             {joinDetails([
               strings.picker.kinds[listing.kind],
-              strings.picker.listed(items.length, noun, listing.newestOnly, listing.total),
+              strings.picker.listed(items.length, noun, listing.newestOnly && more !== null, total),
             ])}
           </p>
         </div>
@@ -138,22 +206,43 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
                   if (box) box.indeterminate = picked.length > 0 && !allSelected
                 }}
                 disabled={adding || selectable === 0}
-                onChange={(event) => setSelection(selectEvery(items, event.target.checked))}
+                onChange={(event) => {
+                  const ticked = event.target.checked
+                  setSelection(() => selectEvery(shown, ticked))
+                }}
               />
-              <span className="whitespace-nowrap tabular-nums">{strings.picker.selected(picked.length, items.length)}</span>
+              <span className="whitespace-nowrap tabular-nums">
+                {joinDetails([
+                  strings.picker.selected(picked.length, shown.length),
+                  hidden > 0 && strings.picker.hidden(hidden),
+                ])}
+              </span>
             </label>
-            <PickerViewControls layout={layout} onChange={changeLayout} />
+            <div className="flex items-center gap-2">
+              <ToggleButton
+                label={strings.picker.hideDownloaded}
+                hint={strings.picker.hideDownloadedHint}
+                pressed={layout.hideDownloaded}
+                onChange={(hideDownloaded) => changeLayout((latest) => ({ ...latest, hideDownloaded }))}
+              />
+              <PickerViewControls layout={layout} onChange={changeLayout} />
+            </div>
           </div>
-          <ListedItems
-            items={items}
-            layout={layout}
-            showUploader={listing.kind === "playlist"}
-            isSelected={(item) => selection.has(itemKey(item))}
-            disabled={adding}
-            onSelect={(item, ticked) => setSelection((current) => withItem(current, item, ticked))}
-          />
+          {shown.length === 0 ? (
+            <p className="text-fg-secondary">{strings.picker.allHidden}</p>
+          ) : (
+            <ListedItems
+              items={shown}
+              layout={layout}
+              showUploader={listing.kind === "playlist"}
+              isSelected={(item) => selection.has(itemKey(item))}
+              disabled={adding}
+              onSelect={(item, ticked) => setSelection((current) => withItem(current, item, ticked))}
+            />
+          )}
+          {loadRow}
           {watching ? (
-            <WatchForm listing={listing} onCancel={() => setWatching(false)} onWatched={onWatched} />
+            <WatchForm listing={{ ...listing, items: [...items] }} onCancel={() => setWatching(false)} onWatched={onWatched} />
           ) : (
             <div className="flex flex-col items-end gap-2">
               {error && <StatusMessage tone="danger" {...error} />}
@@ -199,6 +288,83 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
         </>
       )}
     </>
+  )
+}
+
+interface LoadRowProps {
+  loading: Loading | null
+  stopping: boolean
+  /** There's more to list. */
+  canLoad: boolean
+  /** How many are listed so far, and how many there are in all when the site says. */
+  count: number
+  total: number | null
+  noun: readonly [string, string]
+  /** Instagram: Load All goes a page at a time, slowly, which a line under it says. */
+  slowly: boolean
+  error: ErrorDescription | null
+  disabled: boolean
+  onLoad: (all: boolean) => void
+  onStop: () => void
+}
+
+/**
+ * Under the items: Load More and Load All (with how many there are, when the site says), or while Load All lists them,
+ * how many are listed so far and Stop. What went wrong shows over them, and they stay to try again.
+ */
+function LoadRow({
+  loading,
+  stopping,
+  canLoad,
+  count,
+  total,
+  noun,
+  slowly,
+  error,
+  disabled,
+  onLoad,
+  onStop,
+}: LoadRowProps) {
+  const text = strings.picker
+  return (
+    <div className="flex flex-col items-center gap-2">
+      {error && <StatusMessage tone="danger" {...error} />}
+      {loading === "all" ? (
+        <>
+          <div className="flex items-center gap-3">
+            <p className="text-fg-secondary tabular-nums" role="status">
+              {text.loadingAll(count, total, noun)}
+            </p>
+            <Button size="sm" disabled={stopping} onClick={onStop}>
+              {text.stopLoading}
+            </Button>
+          </div>
+          {slowly && <p className="text-center text-xs text-fg-secondary">{text.loadingSlowly}</p>}
+        </>
+      ) : (
+        canLoad && (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              loading={loading === "more"}
+              disabled={disabled}
+              title={text.loadMoreHint(noun)}
+              onClick={() => onLoad(false)}
+            >
+              {text.loadMore}
+            </Button>
+            <Button
+              size="sm"
+              disabled={disabled || loading !== null}
+              title={text.loadAllHint}
+              onClick={() => onLoad(true)}
+            >
+              {text.loadAll(total)}
+            </Button>
+          </div>
+        )
+      )}
+    </div>
   )
 }
 

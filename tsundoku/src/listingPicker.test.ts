@@ -5,10 +5,13 @@ import {
   initialSelection,
   isKnown,
   itemKey,
+  pickerItems,
   picksFor,
   selectedItems,
   selectEvery,
+  shownItems,
   withItem,
+  withMoreItems,
   type PickedPreset,
 } from "./listingPicker"
 
@@ -110,5 +113,49 @@ describe("what Download Selected queues", () => {
   it("waits while a ticked video's preset isn't known", () => {
     expect(picksFor(items, selectEvery(items, true), () => null)).toBeNull()
     expect(picksFor(items, new Set([itemKey(items[3])]), () => null)).toHaveLength(1)
+  })
+})
+
+describe("withMoreItems", () => {
+  const ids = (list: readonly ListedItem[]) => list.map((entry) => entry.video.videoId)
+
+  it("adds the items after the first ones once each, ticking the new ones when anything was ticked", () => {
+    const start = pickerItems([item("a"), item("b")])
+    const more = [item("b"), item("c"), item("d", { lastDownload: downloadedWith("Best Video") }), item("c")]
+    const next = withMoreItems(start, more, "channel", true)
+    expect(ids(next.items)).toEqual(["a", "b", "c", "d"])
+    expect([...next.selection].sort()).toEqual([itemKey(item("a")), itemKey(item("b")), itemKey(item("c"))].sort())
+  })
+
+  it("keeps the ticks made, and leaves added items unticked when nothing was ticked", () => {
+    const start = withItem(pickerItems([item("a"), item("b")]).selection, item("a"), false)
+    const next = withMoreItems({ items: [item("a"), item("b")], selection: start }, [item("c")], "channel", true)
+    expect(next.selection.has(itemKey(item("a")))).toBe(false)
+    expect(next.selection.has(itemKey(item("c")))).toBe(true)
+    const none = withMoreItems({ items: [item("a")], selection: new Set() }, [item("c")], "channel", false)
+    expect(none.selection.size).toBe(0)
+  })
+
+  it("puts an account's posts in date order, newest first, those without a date last", () => {
+    const dated = (videoId: string, uploadDate: string | null) => {
+      const post = item(videoId, {}, true)
+      return { ...post, video: { ...post.video, uploadDate } }
+    }
+    // A pinned post comes first, older than the newest.
+    const start = pickerItems([dated("pinned", "2024-01-01"), dated("new", "2026-11-01"), dated("older", "2026-10-01")])
+    const next = withMoreItems(start, [dated("oldest", "2023-05-05"), dated("undated", null)], "account", true)
+    expect(ids(next.items)).toEqual(["new", "older", "pinned", "oldest", "undated"])
+  })
+
+  it("answers the same picker when nothing new came", () => {
+    const start = pickerItems([item("a")])
+    expect(withMoreItems(start, [item("a")], "channel", true)).toBe(start)
+  })
+})
+
+describe("shownItems", () => {
+  it("hides what the history or the queue has only when asked", () => {
+    expect(shownItems(items, false)).toBe(items)
+    expect(shownItems(items, true).map((entry) => entry.video.videoId)).toEqual(["new", "post"])
   })
 })

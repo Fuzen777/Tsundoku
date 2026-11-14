@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
+import type { PickerLayout } from "./bindings/PickerLayout"
+import type { PickerView } from "./bindings/PickerView"
 import { columnsFor, intoColumns, resized, sizeStep, TILE_GAP, TILE_WIDTHS, tileWidthIn } from "./pickerLayout"
+
+function layout(view: PickerView, size: number): PickerLayout {
+  return { view, size, hideDownloaded: false }
+}
 
 describe("sizeStep", () => {
   it("keeps a size within the steps", () => {
@@ -13,17 +19,17 @@ describe("sizeStep", () => {
 
 describe("resized", () => {
   it("goes one step smaller or larger, keeping the view", () => {
-    expect(resized({ view: "masonry", size: 2 }, 1)).toEqual({ view: "masonry", size: 3 })
-    expect(resized({ view: "gallery", size: 2 }, -1)).toEqual({ view: "gallery", size: 1 })
+    expect(resized(layout("masonry", 2), 1)).toEqual(layout("masonry", 3))
+    expect(resized(layout("gallery", 2), -1)).toEqual(layout("gallery", 1))
   })
 
   it("stops at either end", () => {
-    expect(resized({ view: "gallery", size: 0 }, -1)).toBeNull()
-    expect(resized({ view: "gallery", size: TILE_WIDTHS.length - 1 }, 1)).toBeNull()
+    expect(resized(layout("gallery", 0), -1)).toBeNull()
+    expect(resized(layout("gallery", TILE_WIDTHS.length - 1), 1)).toBeNull()
   })
 
   it("steps from a size another version kept", () => {
-    expect(resized({ view: "gallery", size: 40 }, -1)).toEqual({ view: "gallery", size: TILE_WIDTHS.length - 2 })
+    expect(resized(layout("gallery", 40), -1)).toEqual(layout("gallery", TILE_WIDTHS.length - 2))
   })
 })
 

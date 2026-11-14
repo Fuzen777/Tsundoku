@@ -67,6 +67,26 @@ pub(crate) fn run(
     timeout: Duration,
     cancel: &CancelToken,
 ) -> Result<String, PreviewError> {
+    run_logged(tools, link, extra, timeout, cancel).map(|answer| answer.json)
+}
+
+/// What gallery-dl answered for a link, and what it logged meanwhile.
+pub(crate) struct LoggedAnswer {
+    /// Its `--dump-json`.
+    pub json: String,
+    /// What it wrote to stderr: with `--verbose`, its debug lines too, such as where it is in an account's posts
+    /// (`last_cursor`).
+    pub log: Vec<String>,
+}
+
+/// As `run`, with what gallery-dl logged.
+pub(crate) fn run_logged(
+    tools: &GalleryTools,
+    link: &str,
+    extra: &[&str],
+    timeout: Duration,
+    cancel: &CancelToken,
+) -> Result<LoggedAnswer, PreviewError> {
     let Some(gallery_dl) = tools.gallery_dl else {
         return Err(PreviewError::ImagesNotSetUp);
     };
@@ -89,18 +109,44 @@ pub(crate) fn run(
         },
     })?;
 
+    let stderr: Vec<&str> = output
+        .lines
+        .iter()
+        .filter_map(|line| match line {
+            OutputLine::Stderr(text) => Some(text.as_str()),
+            OutputLine::Stdout(_) => None,
+        })
+        .collect();
     if !output.status.success() {
-        let stderr: Vec<&str> = output
-            .lines
-            .iter()
-            .filter_map(|line| match line {
-                OutputLine::Stderr(text) => Some(text.as_str()),
-                OutputLine::Stdout(_) => None,
-            })
-            .collect();
         return Err(classify_exit(output.status.code(), &stderr));
     }
-    Ok(output.stdout().collect())
+    Ok(LoggedAnswer {
+        json: output.stdout().collect(),
+        log: stderr.into_iter().map(str::to_owned).collect(),
+    })
+}
+
+/// The longest cursor taken from gallery-dl's log.
+const CURSOR_LENGTH: usize = 1024;
+
+/// Where gallery-dl was in an account's posts when it stopped, from the last "Cursor: …" line it logged with
+/// `--verbose`: Instagram logs it each time it moves on to the next page of 12, so it's the page after the last one
+/// read whole. `-o cursor=<it>` starts a later read on that page. `None` when it logged none, or one that doesn't look
+/// like a cursor (letters, digits and `-_=+/.:%`), which isn't passed on.
+pub(crate) fn last_cursor(log: &[String]) -> Option<String> {
+    let cursor = log
+        .iter()
+        .rev()
+        .find_map(|line| line.split_once("[debug] Cursor: "))?
+        .1
+        .trim();
+    let looks_like_one = !cursor.is_empty()
+        && cursor != "None"
+        && cursor.len() <= CURSOR_LENGTH
+        && cursor
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "-_=+/.:%".contains(character));
+    looks_like_one.then(|| cursor.to_owned())
 }
 
 fn command(tools: &GalleryTools, gallery_dl: &Path, extra: &[&str], link: &str) -> ProgramCommand {
@@ -162,6 +208,8 @@ pub(crate) struct AccountInfo {
 pub(crate) struct FoundPosts {
     pub posts: Vec<VideoInfo>,
     pub account: Option<AccountInfo>,
+    /// How many posts gallery-dl answered, those without a file to download included, as `--post-range` counts them.
+    pub answered: usize,
 }
 
 /// A post of gallery-dl's answer: its metadata (`[2, metadata]`, or its first file's when there's none) and its files.
@@ -175,6 +223,8 @@ struct SortedAnswer<'a> {
     posts: Vec<PostMessages<'a>>,
     /// `[6, url, metadata]` messages: links to other pages, such as a profile's posts.
     links_elsewhere: usize,
+    /// How many posts the answer described, those left out for having no file included.
+    answered: usize,
 }
 
 /// Reads gallery-dl's answer: a list of messages, each `[2, metadata]` for a post, `[3, url, metadata]` for one of
@@ -208,7 +258,11 @@ pub(crate) fn parse_posts(json: &str, link: &str) -> Result<FoundPosts, PreviewE
         .iter()
         .map(|post| video_of(post, link))
         .collect::<Result<_, _>>()?;
-    Ok(FoundPosts { posts, account })
+    Ok(FoundPosts {
+        posts,
+        account,
+        answered: answer.answered,
+    })
 }
 
 /// The account whose posts are listed, from a post's `user`, in each site's fields: Instagram's `username`,
@@ -281,10 +335,12 @@ fn sort_answer(messages: &[Value]) -> Result<SortedAnswer<'_>, PreviewError> {
             _ => {}
         }
     }
+    let answered = posts.len();
     posts.retain(|post| !post.files.is_empty());
     Ok(SortedAnswer {
         posts,
         links_elsewhere,
+        answered,
     })
 }
 
@@ -630,6 +686,37 @@ mod tests {
             env!("CARGO_MANIFEST_DIR")
         );
         std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{path}: {error}"))
+    }
+
+    #[test]
+    fn takes_the_last_cursor_logged() {
+        let log = |lines: &[&str]| -> Vec<String> {
+            lines.iter().map(|line| (*line).to_owned()).collect()
+        };
+        assert_eq!(
+            last_cursor(&log(&[
+                "[instagram][debug] Cursor: QVFDaWRf-first_page==",
+                "[urllib3.connectionpool][debug] https://www.instagram.com:443 \"GET /api/v1/feed/user/1/ HTTP/1.1\" 200 None",
+                "[instagram][debug] Cursor: 3511227538461587341_25025320",
+                "[instagram][debug] Cursor: None",
+                "[instagram][debug] Cursor: 3502010472215348212_25025320",
+            ]))
+            .as_deref(),
+            Some("3502010472215348212_25025320")
+        );
+        assert_eq!(
+            last_cursor(&log(&["[instagram][debug] Cursor: None"])),
+            None
+        );
+        assert_eq!(
+            last_cursor(&log(&["[gallery-dl][debug] Version 1.32.19"])),
+            None
+        );
+        assert_eq!(
+            last_cursor(&log(&["[instagram][debug] Cursor: a b\"; rm"])),
+            None,
+            "not a cursor"
+        );
     }
 
     #[test]

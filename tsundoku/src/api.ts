@@ -1,4 +1,4 @@
-import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core"
+import { Channel, convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { ask, open, save } from "@tauri-apps/plugin-dialog"
@@ -28,6 +28,8 @@ import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PickerLayouts } from "./bindings/PickerLayouts"
 import type { ListingKind } from "./bindings/ListingKind"
+import type { ListingMore } from "./bindings/ListingMore"
+import type { MoreItems } from "./bindings/MoreItems"
 import type { MovedFiles } from "./bindings/MovedFiles"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
@@ -297,6 +299,28 @@ export function fetchPreview(link: string, password: string | null = null): Prom
 export async function cancelPreview(): Promise<void> {
   if (!isTauri()) return
   await invoke("cancel_preview")
+}
+
+/**
+ * Reads the items after those a listing on the preview card has: the next ones (Load More), or all the rest (`all`,
+ * Load All), calling `onItems` with each batch as it's read. Resolves once they're read; rejects with a PreviewError,
+ * `cancelled` after `cancelLoadingMore` or once another preview starts. A batch may still arrive just after.
+ */
+export async function loadMoreOfListing(
+  more: ListingMore,
+  all: boolean,
+  onItems: (batch: MoreItems) => void,
+): Promise<void> {
+  if (!isTauri()) return standIns.loadMoreOfListing(more, all, onItems)
+  const channel = new Channel<MoreItems>()
+  channel.onmessage = onItems
+  await invoke("load_more_of_listing", { more, all, onItems: channel })
+}
+
+/** Stops Load More or Load All, keeping what was read. */
+export async function cancelLoadingMore(): Promise<void> {
+  if (!isTauri()) return standIns.cancelLoadingMore()
+  await invoke("cancel_loading_more")
 }
 
 /** Whether a link is a channel, playlist or account, from its address alone, or null. */
