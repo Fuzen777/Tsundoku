@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.135 · 2026-11-14
+
+### Changed
+
+- **Words that fit everything you download**: more messages and hints stop calling everything a video or a post, since playlists hold songs and shared folders hold files. A channel or account link among several now says it lists several items, and a page Tsundoku can't list says it holds several items. Watch and Watched say Check Now lists what's new. In Rules, a rule that names files says "Names files", and the hints of {title}, {id} and a file name's {post} cover shared files too. Settings → Tools says yt-dlp downloads videos and audio, and gallery-dl posts of images and files on sites such as Gofile and Pixeldrain.
+
 ## 0.1.134 · 2026-11-14
 
 ### Added

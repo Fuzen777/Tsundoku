@@ -29,12 +29,12 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 ### History
 
 - **Every download in a searchable list**, with site and preset filters and sorting. A post lists every file it saved.
-- **Open File, Show in Folder, Download Again** and **Forget**, which lets a video be downloaded again without the warning. A file that was moved or deleted is marked as missing.
-- **A standard archive file**: `archive.txt` lists every downloaded video in yt-dlp's archive format, so command-line downloads with `--download-archive` skip them too.
+- **Open File, Show in Folder, Download Again** and **Forget**, which lets it be downloaded again without the warning. A file that was moved or deleted is marked as missing.
+- **A standard archive file**: `archive.txt` lists everything downloaded in yt-dlp's archive format, so command-line downloads with `--download-archive` skip them too.
 
 ### Signed-In Sites
 
-- **Cookies from your browser**, for videos and posts that need you signed in or an age check. Set to Automatic, Tsundoku finds the browser profiles on your PC and uses, for each link, the one signed in to its site. It only checks which cookies exist, never what they hold.
+- **Cookies from your browser**, for links that need you signed in or an age check. Set to Automatic, Tsundoku finds the browser profiles on your PC and uses, for each link, the one signed in to its site. It only checks which cookies exist, never what they hold.
 - **Plain advice when a site needs you signed in**: the preview says which site and whether a browser is signed in to it, with Try Again once you've signed in.
 
 ### Taken Care Of
@@ -45,7 +45,7 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 - **Your data in one place**: the history, settings and tools live in one folder, which Settings → About opens.
 - **Fits Windows**: Windows 11's Mica backdrop, light and dark themes that follow Windows unless you pick one, and the window's size and position remembered.
 
-One video or post at a time for now: playlists, channels, profiles and live streams are refused with a plain message. Picking videos from a playlist is planned, along with a clipboard watcher. See [TODO](TODO.md) for what's next and the [changelog](CHANGELOG.md) for what each version added.
+A YouTube channel or playlist, or an Instagram or X account, lists its newest items to pick from. Live streams are refused with a plain message for now. See [TODO](TODO.md) for what's next and the [changelog](CHANGELOG.md) for what each version added.
 
 ## Install
 

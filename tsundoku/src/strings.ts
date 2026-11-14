@@ -500,9 +500,9 @@ export const strings = {
   watched: {
     watch: "Watch",
     watchTitle: "Watch This Source",
-    watchHint: "Keeps it in Watched, where Check Now lists what it posts next.",
+    watchHint: "Keeps it in Watched, where Check Now lists what's new on it.",
     firstItems: "What Counts as New Now",
-    fromNow: "Nothing yet: only what it posts from now on",
+    fromNow: "Nothing yet: only what's added from now on",
     latest: "Its latest",
     latestItems: (noun: string) => noun,
     all: (count: number, noun: string) => `Everything listed here (${count} ${noun})`,
@@ -519,7 +519,7 @@ export const strings = {
     open: "Open Watched",
     emptyTitle: "Nothing Watched",
     emptyBody:
-      "Paste a channel, playlist or account link, then Watch on its list. Watched sources stay here, and Check Now lists what they post next.",
+      "Paste a channel, playlist or account link, then Watch on its list. Watched sources stay here, and Check Now lists what's new on them.",
     checkNow: "Check Now",
     checking: "Checking…",
     edit: "Edit",
@@ -620,9 +620,9 @@ export const strings = {
     setUpDeno: "Set Up Deno",
     errors: {
       invalidLink: "That isn't a link. Paste a link that starts with https://.",
-      playlist: "This link holds several videos or posts. Paste it in the add bar to pick which to download.",
+      playlist: "This link lists several items. Paste it in the add bar to pick which to download.",
       notListable: (site: string) =>
-        `This ${site || "site's"} page holds several videos or posts, which Tsundoku can't list yet. Paste a link to a single one instead.`,
+        `This ${site || "site's"} page holds several items, which Tsundoku can't list yet. Paste a link to a single one instead.`,
       liveStream: "This is a live stream, which can't be downloaded yet.",
       upcoming: "This video hasn't started yet. Try again once it has.",
       unsupportedSite: "This site isn't supported.",
@@ -729,7 +729,7 @@ export const strings = {
         opus: "Opus, converted only when the site has none.",
         flac: "Converted to FLAC.",
       },
-      fileName: "yt-dlp's output template. The video's ID in the name lets Tsundoku recognize the file later.",
+      fileName: "yt-dlp's output template. The ID in the name lets Tsundoku recognize the file later.",
       defaultFolder: (path: string) => `The download folder, set in Settings: ${path}`,
       subtitleLanguages: "yt-dlp's language codes, separated by commas, such as en.*,ja.",
       extraArguments: "Added after Tsundoku's own, so they can change them.",
@@ -767,7 +767,7 @@ export const strings = {
         `A folder that isn't a full path goes inside the download folder, ${downloadFolder}. Leave it empty to let a rule above pick the folder.`,
       ],
       fileName: [
-        "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (MEGA, MediaFire, Google Drive, Dropbox, OneDrive) when it's a single file. Videos keep their preset's name.",
+        "How the files of matching posts are named, as in Settings → Posts of Images, and a matching shared file (from MEGA, Google Drive or another file host) when it's a single file. Videos and audio keep their preset's name.",
         "{1}, {2}… are what the rule's Matches pattern captured in parentheses. A post's name gets {post} and {number} added when it lacks them, so no two files share a name; the extension is added, or kept for a shared file. Leave it empty to let a rule above name them, else Settings or the file's own name.",
       ],
       missingValues: [
@@ -840,8 +840,8 @@ export const strings = {
       uploader: "The uploader's name, such as National Geographic, or Unknown when there's none.",
       account: "The uploader's handle, such as natgeo, or their name on a site without handles.",
       playlist: "The playlist, channel or account you picked it from, or No Playlist.",
-      title: "The title of the video or post, or the shared file's name, cut to 80 characters.",
-      id: "The video's or post's ID on its site, such as jNQXAC9IVRw.",
+      title: "The download's title, or a shared file or folder's name, cut to 80 characters.",
+      id: "The ID its site gives it, such as jNQXAC9IVRw.",
       kind: "Videos, Audio, Posts or Files.",
       preset: "The preset's name. Posts and shared files have none, so they get Posts or Files.",
       year: "The year it was uploaded, such as 2026, or Unknown.",
@@ -869,7 +869,7 @@ export const strings = {
     on: "On",
     /** What a rule does besides picking a folder, under its folder in the list. */
     actions: {
-      namesFiles: (name: string) => `Names posts' files “${name}”`,
+      namesFiles: (name: string) => `Names files “${name}”`,
       leavesOut: "Leaves out placeholders without a value",
       startsAs: (preset: string) => `Starts as ${preset}`,
       presetDeleted: "Starts with the default preset, since the one it picked was deleted",
@@ -956,10 +956,10 @@ export const strings = {
       galleryDl: "gallery-dl",
     },
     descriptions: {
-      ytDlp: "Downloads the videos.",
+      ytDlp: "Downloads videos and audio.",
       ffmpeg: "Merges video and audio, and converts formats. Comes with ffprobe.",
       deno: "Runs YouTube's player code for yt-dlp. Without it, some YouTube formats may be missing.",
-      galleryDl: "Downloads image posts, such as Instagram photos and carousels.",
+      galleryDl: "Downloads posts of images, such as Instagram's and X's, and files on sites such as Gofile and Pixeldrain.",
     },
     /** Where each tool's official builds come from (the core's `catalog`). */
     hosts: {
@@ -1191,7 +1191,8 @@ export const strings = {
     postNamePlaceholderHints: {
       account: "The account that posted, such as natgeo.",
       date: "The day it was posted, such as 2026-11-04.",
-      post: "The post's ID on its site.",
+      /** A rule's file name shows it too, for a shared file's ID. */
+      post: "The ID its site gives it, such as DfPQchkG1tg.",
       number: "The file's place in the post: 1 for the first.",
       numberIfMany:
         "The file's place in the post, only when several of its files are downloaded: a post of one file, or one file picked from it, gets none.",
@@ -1254,7 +1255,7 @@ export const strings = {
     cookiesBrowser: "Read Cookies From",
     cookiesNone: "None",
     cookiesHint:
-      "For links that need you signed in or old enough: Tsundoku reads your browser's cookies, as if you were watching there. Automatic picks the browser profile signed in to each site.",
+      "For links that need you signed in or old enough: Tsundoku reads your browser's cookies, as if you were browsing there. Automatic picks the browser profile signed in to each site.",
     chromiumWarning:
       "Chrome, Edge and other Chromium browsers lock their cookies on Windows while they're open, and often encrypt them, so they often can't be read. Firefox and Zen work.",
     browsers: {

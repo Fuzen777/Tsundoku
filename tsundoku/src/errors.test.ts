@@ -41,14 +41,17 @@ describe("describePreviewError", () => {
   })
 })
 
-describe("pages of several videos or posts", () => {
+describe("pages of several items", () => {
   it("points a listing in Pending to the add bar, and names a site that can't be listed, without naming a tool", () => {
-    expect(describePreviewError({ kind: "playlist" }).message).toContain("add bar")
+    const listing = describePreviewError({ kind: "playlist" }).message
+    expect(listing).toContain("add bar")
     const refused = describePreviewError({ kind: "notListable", site: "X" }).message
     expect(refused).toBe(
-      "This X page holds several videos or posts, which Tsundoku can't list yet. Paste a link to a single one instead.",
+      "This X page holds several items, which Tsundoku can't list yet. Paste a link to a single one instead.",
     )
     expect(refused).not.toMatch(/yt-dlp|gallery-dl/)
+    // Either may be a playlist of songs or a folder of files, so neither calls what it holds videos or posts.
+    expect([listing, refused].join(" ")).not.toMatch(/videos|posts/)
   })
 })
 

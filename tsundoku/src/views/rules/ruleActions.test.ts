@@ -15,7 +15,7 @@ describe("describeActions", () => {
 
   it("quotes the file name", () => {
     expect(describeActions({ ...newRule(), fileName: " {post} {number} " }, [audioMp3])).toEqual([
-      "Names posts' files “{post} {number}”",
+      "Names files “{post} {number}”",
     ])
   })
 
