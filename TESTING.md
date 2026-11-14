@@ -113,7 +113,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] A playlist is listed whole, in its own order. A `watch?v=…&list=…` link is still that one video.
 - [ ] An Instagram account (`https://www.instagram.com/natgeo/`) lists its newest 50 posts and reels; it can take a minute.
 - [ ] The box at the top ticks all or none and counts them. Download Selected queues each ticked item as its own download, with a rule's preset or the one in Videos Start As.
-- [ ] An X account's media page says plainly that Tsundoku can't list it yet. A channel link pasted with others waits in Pending, saying to paste it in the add bar.
+- [ ] A channel link pasted with others waits in Pending, saying to paste it in the add bar. (X accounts are listed since 0.1.134, which Claude tried in the real app.)
 
 **15. Pick which files of a post to download** · 0.1.55
 - [ ] Paste the Instagram carousel → a strip of 6 small pictures with their numbers and a play mark on videos, all ticked. Untick 2 to 5 and Download → the queue row says "2 of 6 files", and only files 1 and 6 arrive.

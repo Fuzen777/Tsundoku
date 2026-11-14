@@ -70,7 +70,18 @@ fn a_video_stays_a_video() {
         "https://www.instagram.com/stories/instagram/",
         "https://www.instagram.com/instagram/tagged/",
         "https://www.instagram.com/explore/",
-        "https://x.com/NASA",
+        "https://x.com/NASA/status/2105698284354367897",
+        "https://x.com/NASA/status/2105698284354367897/photo/1",
+        "https://x.com/i/status/2105698284354367897",
+        "https://x.com/NASA/likes",
+        "https://x.com/NASA/followers",
+        "https://x.com/home",
+        "https://x.com/Explore",
+        "https://x.com/search?q=nasa",
+        "https://x.com/i/lists/1",
+        "https://x.com/a_name_too_long_for_x",
+        "https://x.com/not-a-handle",
+        "https://fxtwitter.com/NASA",
         "https://soundcloud.com/the-concept-band/sets/the-royal-concept-ep",
     ] {
         assert_eq!(listing_of(link), None, "{link}");
@@ -106,8 +117,30 @@ fn lists_an_instagram_accounts_posts() {
 }
 
 #[test]
+fn lists_an_x_accounts_media_whatever_tab_the_link_opens() {
+    let media = |name: &str| Some((ListingKind::Account, format!("https://x.com/{name}/media")));
+    assert_eq!(listing_of("https://x.com/NASA"), media("NASA"));
+    assert_eq!(listing_of("https://x.com/NASA/"), media("NASA"));
+    assert_eq!(listing_of("https://x.com/NASA/media"), media("NASA"));
+    assert_eq!(
+        listing_of("https://twitter.com/NASA_Webb?s=20&t=abc"),
+        media("NASA_Webb")
+    );
+    assert_eq!(
+        listing_of("https://mobile.twitter.com/nasa/with_replies"),
+        media("nasa")
+    );
+    assert_eq!(
+        listing_of("https://www.x.com/NASA/highlights"),
+        media("NASA")
+    );
+    assert_eq!(listing_of("https://x.com/a"), media("a"));
+}
+
+#[test]
 fn tells_the_kind_of_pasted_text() {
     assert_eq!(kind_of("  youtube.com/@NASA "), Some(ListingKind::Channel));
+    assert_eq!(kind_of("x.com/NASA"), Some(ListingKind::Account));
     assert_eq!(kind_of("youtu.be/jNQXAC9IVRw"), None);
     assert_eq!(kind_of("not a link"), None);
 }
@@ -412,6 +445,93 @@ fn reads_an_instagram_accounts_newest_posts() {
 }
 
 #[test]
+fn reads_an_x_accounts_newest_posts() {
+    let listing = from_gallery_dl(&fixture("x-account.json"), "https://x.com/NASA/media").unwrap();
+    assert_eq!(listing.kind, ListingKind::Account);
+    assert_eq!(listing.title, "NASA");
+    assert_eq!(listing.uploader, None);
+    assert_eq!(listing.site_name, "x.com");
+    assert_eq!(listing.url, "https://x.com/NASA");
+    assert_eq!(
+        listing_of(&listing.url),
+        Some((ListingKind::Account, "https://x.com/NASA/media".to_owned())),
+        "its own page lists it again, as a watched source's check does"
+    );
+    assert_eq!(
+        listing.total, None,
+        "X's count may be of pictures and videos rather than posts"
+    );
+    assert!(listing.newest_only);
+    assert_eq!(
+        listing.thumbnail_url.as_deref(),
+        Some("https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB.jpg"),
+        "the account's picture"
+    );
+    assert_eq!(listing.items.len(), 12);
+
+    let first = &listing.items[0].video;
+    // Keyed as reading the post's own link would key it.
+    assert_eq!(
+        (first.site.as_str(), first.video_id.as_str()),
+        ("twitter", "2121280846183137564")
+    );
+    assert_eq!(
+        first.url, "https://x.com/NASA/status/2121280846183137564",
+        "each post downloads from its own page, not the account's"
+    );
+    assert_eq!(first.site_name, "x.com");
+    assert_eq!(first.upload_date.as_deref(), Some("2026-11-13"));
+    assert_eq!(first.title, "Let's talk about Voyager 1 and 2!");
+    assert_eq!(first.uploader.as_deref(), Some("NASA"));
+    assert_eq!(first.account.as_deref(), Some("NASA"));
+    assert_eq!(first.playlist.as_deref(), Some("NASA"));
+
+    let urls: std::collections::HashSet<&str> = listing
+        .items
+        .iter()
+        .map(|item| item.video.url.as_str())
+        .collect();
+    assert_eq!(urls.len(), 12, "every post has a page of its own");
+
+    let images = listing
+        .items
+        .iter()
+        .find(|item| item.video.video_id == "2119846862286930036")
+        .unwrap();
+    assert_eq!(
+        images.video.post,
+        Some(PostContents {
+            images: 4,
+            videos: 0,
+            others: 0,
+        })
+    );
+    assert_eq!(images.video.post_files.len(), 4);
+    let video = listing
+        .items
+        .iter()
+        .find(|item| item.video.video_id == "2119833829389041896")
+        .unwrap();
+    assert_eq!(
+        video.video.post,
+        Some(PostContents {
+            images: 0,
+            videos: 1,
+            others: 0,
+        })
+    );
+
+    let dates: Vec<_> = listing
+        .items
+        .iter()
+        .map(|item| item.video.upload_date.clone().unwrap())
+        .collect();
+    let mut newest_first = dates.clone();
+    newest_first.sort_by(|first, second| second.cmp(first));
+    assert_eq!(dates, newest_first);
+}
+
+#[test]
 fn puts_pinned_posts_where_their_date_goes() {
     let post = |id: &str, date: &str| {
         format!(
@@ -476,6 +596,11 @@ fn an_empty_account_is_an_empty_listing() {
     let listing = from_gallery_dl("[]", "https://www.instagram.com/someone/posts/").unwrap();
     assert!(listing.items.is_empty());
     assert_eq!(listing.title, "someone");
+
+    let listing = from_gallery_dl("[]", "https://x.com/someone/media").unwrap();
+    assert!(listing.items.is_empty());
+    assert_eq!(listing.title, "someone");
+    assert_eq!(listing.site_name, "x.com");
 }
 
 #[test]

@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.134 · 2026-11-14
+
+### Added
+
+- **X accounts**: an X profile link (`x.com/name` or `twitter.com/name`, or its Replies, Highlights or Media tab) now lists the account's newest 50 posts with pictures or videos in the preview card, as an Instagram account does, with the account's picture. Tick the ones you want and Download Selected: each downloads as if its own link had been pasted, named with the account's handle. Downloaded and queued posts are marked, and Watch keeps the account in Watched, where Check Now lists what it posts next. Like X's posts, accounts need a browser signed in to X.
+
+### Changed
+
+- **An X post's link** in the history is now the post's own address (`x.com/name/status/…`), whichever link to it was pasted.
+
 ## 0.1.133 · 2026-11-12
 
 ### Added

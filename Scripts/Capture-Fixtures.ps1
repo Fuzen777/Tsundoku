@@ -8,13 +8,15 @@
   - instagram-account.json: with -InstagramCookies, gallery-dl's answer for an Instagram account's newest 12 posts
     (the app asks for 50; fewer asks Instagram less), trimmed by Trim-Gallery-Fixtures.py. Instagram needs a signed-in
     browser's cookies, given as gallery-dl's --cookies-from-browser takes them ("firefox:<profile folder>").
+  - x-account.json: with -XCookies, the same for an X account's newest 12 posts on its Media tab (X needs a sign-in too).
   -Capture Metadata or Listings saves only those. Run it again when yt-dlp's or gallery-dl's output changes. It uses
   the tools in the dev data folder, or those on PATH.
 #>
 param(
     [string] $ToolsFolder = "D:\Dev\tsundoku\data\tools",
     [ValidateSet("All", "Metadata", "Listings")] [string] $Capture = "All",
-    [string] $InstagramCookies = ""
+    [string] $InstagramCookies = "",
+    [string] $XCookies = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -167,15 +169,20 @@ if ($Capture -ne "Metadata") {
         Save-Listing $name $trimmed
     }
 
-    if ($InstagramCookies) {
+    # Accounts, as core\src\listing.rs asks for them: the account's page, newest posts first.
+    $accounts = @(
+        @{ Cookies = $InstagramCookies; Name = "instagram-account"; Url = "https://www.instagram.com/instagram/posts/" },
+        @{ Cookies = $XCookies; Name = "x-account"; Url = "https://x.com/NASA/media" }
+    ) | Where-Object { $_.Cookies }
+    foreach ($account in $accounts) {
         $galleryDl = Find-Tool "gallery-dl" "gallery-dl"
-        $json = & $galleryDl --config-ignore --dump-json --cookies-from-browser $InstagramCookies --post-range 1-12 `
-            -- "https://www.instagram.com/instagram/posts/"
-        if ($LASTEXITCODE -ne 0) { throw "gallery-dl failed for the Instagram account" }
-        Set-Content -Path (Join-Path $listingFixtures "instagram-account.json") -Value ($json -join "`n") `
+        $json = & $galleryDl --config-ignore --dump-json --cookies-from-browser $account.Cookies --post-range 1-12 `
+            -- $account.Url
+        if ($LASTEXITCODE -ne 0) { throw "gallery-dl failed for $($account.Name)" }
+        Set-Content -Path (Join-Path $listingFixtures "$($account.Name).json") -Value ($json -join "`n") `
             -Encoding utf8NoBOM
-        & python (Join-Path $PSScriptRoot "Trim-Gallery-Fixtures.py")
     }
+    if ($accounts) { & python (Join-Path $PSScriptRoot "Trim-Gallery-Fixtures.py") }
 }
 
 # The failures above set $LASTEXITCODE on purpose; the script itself succeeded.

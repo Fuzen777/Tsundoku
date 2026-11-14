@@ -1,9 +1,10 @@
 //! Channels, playlists and accounts: links that hold many videos or posts, which the preview card lists for the user to
 //! pick from. `listing_link` tells one from its address and gives the page to read (a YouTube channel's Videos tab, an
-//! Instagram account's posts); `read` lists what it holds without reading each item, newest first for a channel or an
-//! account, in its own order for a playlist. `mark` says which items the history or the queue has. Another site's
-//! playlist is listed when yt-dlp answers one with a link and ID for each item (`from_yt_dlp`); otherwise, and for image
-//! sites' accounts other than Instagram's, the link is refused as `PreviewError::NotListable`.
+//! Instagram account's posts, an X account's Media tab); `read` lists what it holds without reading each item, newest
+//! first for a channel or an account, in its own order for a playlist. `mark` says which items the history or the queue
+//! has. Another site's playlist is listed when yt-dlp answers one with a link and ID for each item (`from_yt_dlp`);
+//! otherwise, and for image sites' accounts other than Instagram's and X's, the link is refused as
+//! `PreviewError::NotListable`.
 //!
 //! Tested against real answers saved under `tests/fixtures/listing`.
 
@@ -57,6 +58,44 @@ const INSTAGRAM_RESERVED: [&str; 17] = [
     "share",
 ];
 
+/// X's first path segments that aren't an account's name, lowercase. Its handles are 1 to 15 letters, digits or "_",
+/// so pages with a "-" or a "." in their name never look like one.
+const X_RESERVED: [&str; 26] = [
+    "home",
+    "explore",
+    "notifications",
+    "messages",
+    "i",
+    "settings",
+    "search",
+    "compose",
+    "login",
+    "logout",
+    "signup",
+    "tos",
+    "privacy",
+    "hashtag",
+    "intent",
+    "share",
+    "account",
+    "jobs",
+    "about",
+    "download",
+    "lists",
+    "bookmarks",
+    "communities",
+    "premium",
+    "rules",
+    "help",
+];
+
+/// X's account tabs whose link lists the account: its posts, its replies, its highlights and its media. Its likes and
+/// who it follows aren't its own posts.
+const X_ACCOUNT_TABS: [&str; 3] = ["media", "with_replies", "highlights"];
+
+/// The longest X handle.
+const X_HANDLE_LENGTH: usize = 15;
+
 /// What a listing is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -66,7 +105,8 @@ pub enum ListingKind {
     Channel,
     /// A playlist, in its own order, on YouTube or another site.
     Playlist,
-    /// An Instagram account's posts and reels, as on its grid.
+    /// An Instagram account's posts and reels, as on its grid, or an X account's posts with pictures or videos, as on
+    /// its Media tab.
     Account,
 }
 
@@ -178,7 +218,44 @@ pub fn listing_link(link: &str) -> Option<ListingLink> {
             link: format!("https://www.instagram.com/{account}/posts/"),
         });
     }
+
+    if on_x(&host) {
+        let account = match segments.as_slice() {
+            [name] => *name,
+            [name, tab] if X_ACCOUNT_TABS.contains(tab) => *name,
+            _ => return None,
+        };
+        // Whatever tab the link opens, the Media tab is listed: the account's own posts that have something to
+        // download, without its text-only posts or what it reposted.
+        return is_x_handle(account).then(|| ListingLink {
+            kind: ListingKind::Account,
+            link: format!("https://x.com/{account}/media"),
+        });
+    }
     None
+}
+
+/// Whether a host is X's, under either of its domains.
+fn on_x(host: &str) -> bool {
+    sites::on_domain(host, "x.com") || sites::on_domain(host, "twitter.com")
+}
+
+/// An account's own page, on the site of its listing's page (`link`).
+fn account_page(link: &str, name: &str) -> String {
+    if sites::host(link).is_some_and(|host| on_x(&host)) {
+        format!("https://x.com/{name}")
+    } else {
+        format!("https://www.instagram.com/{name}/")
+    }
+}
+
+/// Whether a link's first path segment is an X handle rather than one of X's own pages.
+fn is_x_handle(name: &str) -> bool {
+    (1..=X_HANDLE_LENGTH).contains(&name.len())
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_')
+        && !X_RESERVED.contains(&name.to_ascii_lowercase().as_str())
 }
 
 /// The listing kind of `text`'s link, for the preview card to say what it's reading meanwhile.
@@ -188,7 +265,7 @@ pub fn kind_of(text: &str) -> Option<ListingKind> {
 }
 
 /// Lists what a listing link holds, with the tool that reads it: yt-dlp for a channel or a playlist, gallery-dl for an
-/// account.
+/// account, which asks for its newest posts only (`--post-range`).
 pub fn read(
     videos: &FetchTools,
     images: &GalleryTools,
@@ -563,10 +640,10 @@ pub(crate) fn from_gallery_dl(json: &str, link: &str) -> Result<Listing, Preview
         title,
         uploader: None,
         site_name: site_name(link).unwrap_or_default(),
-        url: account.username.as_ref().map_or_else(
-            || link.to_owned(),
-            |name| format!("https://www.instagram.com/{name}/"),
-        ),
+        url: account
+            .username
+            .as_ref()
+            .map_or_else(|| link.to_owned(), |name| account_page(link, name)),
         thumbnail_url: account.picture,
         total: account
             .post_count

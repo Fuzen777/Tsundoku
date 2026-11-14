@@ -1,4 +1,4 @@
-"""Trims gallery-dl's raw answers in tsundoku/core/tests/fixtures/gallery, and the Instagram accounts' in
+"""Trims gallery-dl's raw answers in tsundoku/core/tests/fixtures/gallery, and the Instagram and X accounts' in
 tsundoku/core/tests/fixtures/listing, to what the tests read.
 
 gallery-dl's `-j` answers carry everything it knows, including fields about the account that fetched them (whether it
@@ -12,7 +12,11 @@ import json
 import pathlib
 
 FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "tsundoku" / "core" / "tests" / "fixtures"
-FILES = sorted((FIXTURES / "gallery").glob("*.json")) + sorted((FIXTURES / "listing").glob("instagram-*.json"))
+FILES = (
+    sorted((FIXTURES / "gallery").glob("*.json"))
+    + sorted((FIXTURES / "listing").glob("instagram-*.json"))
+    + sorted((FIXTURES / "listing").glob("x-*.json"))
+)
 
 # The keys gallery.rs reads, on posts and files alike, plus a few that say what the file is.
 KEPT_KEYS = {
@@ -21,8 +25,9 @@ KEPT_KEYS = {
     "display_url", "width", "height", "type", "error", "message", "user",
 }
 KEPT_AUTHOR_KEYS = {"name", "nick"}
-# The account an account's posts are from, which listing.rs reads (not what it says about the account fetching them).
-KEPT_USER_KEYS = {"username", "full_name", "profile_pic_url", "media_count"}
+# The account an account's posts are from, which listing.rs reads (not what it says about the account fetching them):
+# Instagram's fields, then X's.
+KEPT_USER_KEYS = {"username", "full_name", "profile_pic_url", "media_count", "name", "nick", "profile_image"}
 
 
 def strip_query(value):

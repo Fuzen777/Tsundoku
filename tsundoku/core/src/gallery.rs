@@ -202,23 +202,37 @@ pub(crate) fn parse_posts(json: &str, link: &str) -> Result<FoundPosts, PreviewE
     let account = answer
         .posts
         .first()
-        .and_then(|first| first.post.get("user"))
-        .filter(|user| user.is_object())
-        .map(|user| AccountInfo {
-            username: text(user, "username"),
-            full_name: text(user, "full_name"),
-            picture: text(user, "profile_pic_url"),
-            post_count: user
-                .get("media_count")
-                .and_then(Value::as_u64)
-                .and_then(|count| u32::try_from(count).ok()),
-        });
+        .and_then(|first| account_info(first.post));
     let posts = answer
         .posts
         .iter()
         .map(|post| video_of(post, link))
         .collect::<Result<_, _>>()?;
     Ok(FoundPosts { posts, account })
+}
+
+/// The account whose posts are listed, from a post's `user`, in each site's fields: Instagram's `username`,
+/// `full_name`, `profile_pic_url` and `media_count` (its posts), X's `name` (the handle), `nick` and `profile_image`.
+/// X's `media_count` is left out: whether it counts posts or the pictures and videos in them isn't known, and the
+/// listing calls its total posts.
+fn account_info(post: &Value) -> Option<AccountInfo> {
+    let user = post.get("user").filter(|user| user.is_object())?;
+    let on_x = text(post, "category").as_deref() == Some("twitter");
+    let (username, full_name, picture) = if on_x {
+        ("name", "nick", "profile_image")
+    } else {
+        ("username", "full_name", "profile_pic_url")
+    };
+    Some(AccountInfo {
+        username: text(user, username),
+        full_name: text(user, full_name),
+        picture: text(user, picture),
+        post_count: user
+            .get("media_count")
+            .and_then(Value::as_u64)
+            .and_then(|count| u32::try_from(count).ok())
+            .filter(|_| !on_x),
+    })
 }
 
 fn read_messages(json: &str) -> Result<Vec<Value>, PreviewError> {
@@ -320,7 +334,7 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
 
     Ok(VideoInfo {
         site_name: site_name(link).unwrap_or_else(|| site.clone()),
-        url: text(post, "post_url").unwrap_or_else(|| link.to_owned()),
+        url: post_page(&site, post, &post_id).unwrap_or_else(|| link.to_owned()),
         thumbnail_url: thumbnail(files),
         upload_date: text(post, "date")
             .and_then(|date| date.get(..10).map(str::to_owned))
@@ -439,6 +453,19 @@ fn post_id(site: &str, post: &Value) -> Option<String> {
     fields.iter().find_map(|field| text(post, field))
 }
 
+/// The post's own page: gallery-dl's `post_url` (Instagram's), or on X, whose answer has none, the address made from
+/// its author's handle and its ID, so a post listed from an account downloads from its own page. `None` keeps the link
+/// that was read.
+fn post_page(site: &str, post: &Value, post_id: &str) -> Option<String> {
+    text(post, "post_url").or_else(|| {
+        (site == "twitter").then(|| {
+            // X opens a post at /i/status/<ID> whoever posted it.
+            let author = account(site, post).unwrap_or_else(|| "i".to_owned());
+            format!("https://x.com/{author}/status/{post_id}")
+        })
+    })
+}
+
 /// The handle of who posted, apart from their display name: Instagram's `username`, X's `author.name` (its `nick` is
 /// the display name), and on other sites the first field they give one in. The same fields as `{account}` in post
 /// file names (`post_names`).
@@ -493,11 +520,12 @@ fn caption_title(post: &Value) -> Option<String> {
     })
 }
 
-/// The first image, or a video's poster (Instagram gives one as `display_url`). A file of another kind has none: its
-/// address is the file itself, which may be gigabytes.
+/// The first image (X's at its small size, since an X account's list shows 50 of them), or a video's poster
+/// (Instagram gives one as `display_url`). A file of another kind has none: its address is the file itself, which may
+/// be gigabytes.
 fn thumbnail(files: &[(&str, &Value)]) -> Option<String> {
     files.iter().find_map(|(url, file)| match kind_of(file) {
-        FileKind::Image => Some((*url).to_owned()),
+        FileKind::Image => Some(small_image(url)),
         FileKind::Video => text(file, "display_url"),
         FileKind::Other => None,
     })
@@ -646,6 +674,11 @@ mod tests {
             images.post_files[0].thumbnail_url.as_deref(),
             Some("https://pbs.twimg.com/media/A?format=jpg&name=small")
         );
+        assert_eq!(
+            images.thumbnail_url.as_deref(),
+            Some("https://pbs.twimg.com/media/A?format=jpg&name=small"),
+            "the post's picture too, as an account's list shows many"
+        );
     }
 
     #[test]
@@ -741,6 +774,32 @@ mod tests {
                 others: 0,
             })
         );
+    }
+
+    #[test]
+    fn an_x_post_is_at_its_own_page() {
+        // X's answer has no post_url: the post's page is made from its author and ID, whatever link was read.
+        let images = parse_answer(
+            &fixture("twitter-images.json"),
+            "https://twitter.com/NASA/status/2105698284354367897/photo/2?s=20",
+        )
+        .unwrap();
+        assert_eq!(images.url, "https://x.com/NASA/status/2105698284354367897");
+        let without_author = parse_answer(
+            r#"[[2, {"category": "twitter", "tweet_id": 1}],
+                [3, "https://pbs.twimg.com/media/A?format=jpg&name=orig", {"extension": "jpg"}]]"#,
+            "https://x.com/someone/status/1",
+        )
+        .unwrap();
+        assert_eq!(without_author.url, "https://x.com/i/status/1");
+
+        // Another site without post_url keeps the link that was read.
+        let other = parse_answer(
+            r#"[[2, {"category": "example", "id": "1"}], [3, "https://cdn.example/1.png", {"extension": "png"}]]"#,
+            "https://example.com/post/1",
+        )
+        .unwrap();
+        assert_eq!(other.url, "https://example.com/post/1");
     }
 
     #[test]
