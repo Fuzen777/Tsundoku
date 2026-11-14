@@ -137,7 +137,7 @@ pub async fn open_download(
     .await
 }
 
-/// Opens the download's folder in File Explorer, with the file selected.
+/// Opens the download's folder in the default folder app, with the file selected (`shell::show_in_folders`).
 #[tauri::command]
 pub async fn show_download_in_folder(
     history: State<'_, Arc<History>>,
@@ -183,7 +183,7 @@ pub async fn open_download_file(
     .await
 }
 
-/// Opens one file's folder in File Explorer, with the file selected.
+/// Opens one file's folder in the default folder app, with the file selected.
 #[tauri::command]
 pub async fn show_download_file_in_folder(
     history: State<'_, Arc<History>>,
@@ -283,7 +283,8 @@ pub async fn history_folder_count(
     .await
 }
 
-/// Opens each folder holding the videos' files in File Explorer once, with the first of those files selected.
+/// Opens each folder holding the videos' files once, with those files selected (only the first when it falls back to
+/// File Explorer: `shell::show_in_folders`).
 #[tauri::command]
 pub async fn show_videos_in_folders(
     history: State<'_, Arc<History>>,

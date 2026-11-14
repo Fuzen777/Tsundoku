@@ -38,6 +38,14 @@ tauri-plugin-deep-link = "2.6.3"
 # color input.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Controls_Dialogs"] }
-# The check window's downloads, through WebView2's own download operation (the versions wry uses).
+# The check window's downloads, through WebView2's own download operation (the versions wry uses), and opening folders
+# in the default folder app without its dialogs (shell.rs).
 webview2-com = "0.39"
-windows = "0.62"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_System_Com",
+  "Win32_System_Registry",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_Common",
+  "Win32_UI_WindowsAndMessaging",
+] }

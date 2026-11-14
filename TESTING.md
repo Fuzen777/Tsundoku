@@ -328,12 +328,16 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 **32. Filters and acting on several** · 0.1.54
 - [ ] Filter by kind (Videos, Audio, Posts, Shared Files), by date (Today, 7 days, 30 days, the year, or between two dates) and Only Missing Files (rename a downloaded file to see one).
-- [ ] Tick rows, or every row the search and filters show with the box above the list. Forget Selected asks once and keeps the files; Show Selected in Folder opens each folder once with the first of its files selected (since 0.1.143), asking first above 5 folders. Changing a filter clears the ticks.
+- [ ] Tick rows, or every row the search and filters show with the box above the list. Forget Selected asks once and keeps the files; Show Selected in Folder opens each folder once with its ticked files selected (see 75), asking first above 5 folders. Changing a filter clears the ticks.
 - [ ] Both Forget dialogs read well, and neither mentions yt-dlp's archive any more.
 
 **74. Show in Folder comes to the front** · 0.1.143
 - [ ] Click Show in Folder (on a Queue row, in a picture's right-click menu, in History, on a post's file) or one of Settings' Open Folder buttons → a File Explorer window opens on the folder in front of Tsundoku, with the file selected for Show in Folder, and no "Application not found" message.
 - Tried in a test copy driven over DevTools: each opened File Explorer on the right folder with the file selected, with no message, and Tsundoku answered within 10 ms while Windows opened it (0.1.142 froze until the message was closed). A game had the focus the whole time, so whether the window comes in front when you click in Tsundoku yourself couldn't be seen.
+
+**75. Folders in your folder app** · 0.1.144
+- [ ] Once Windows opens folders properly again (the leftover "Open in Directory Opus" setting removed): Show in Folder and the Open Folder buttons open the folder as a double-click on a folder would, and History → tick a post of several files (or two videos in one folder) → Show Selected in Folder → every one of them is selected, not only the first.
+- Tried in a test copy with the leftover setting still there: every Show in Folder and Open Folder opened File Explorer on the right folder with the file selected, with no message, Tsundoku answering within 11 ms, and its output saying each time that the folder app is gone. With Windows' own folder setting (for a test process only, the registry unchanged), the same code selected both files of a folder and opened another, with no message. Not tried in the app itself with a working folder setting, which this PC doesn't have yet.
 
 **44. Only Existing Files** · 0.1.66
 - [ ] History: the checkbox is now a Files list. Rename a downloaded file → Only Missing Files shows it, Only Existing Files hides it and shows the rest; All Files shows both. The count follows, and Select All ticks only what the list shows.

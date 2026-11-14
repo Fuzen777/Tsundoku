@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.144 · 2026-11-15
+
+### Changed
+
+- **Folders open in your folder app**: Show in Folder and every Open Folder button open the folder in the app Windows opens folders with (File Explorer, or another file manager you set), and fall back to File Explorer only when that app is gone, still with no "Application not found" message and without Tsundoku stopping.
+- **Show Selected in Folder** in History selects every ticked file in each folder again, unless it had to fall back to File Explorer, which selects only the first.
+
 ## 0.1.143 · 2026-11-14
 
 ### Fixed
