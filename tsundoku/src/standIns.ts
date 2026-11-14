@@ -359,6 +359,7 @@ function pendingStandIn(id: number, link: string, fields: Partial<PendingLink> =
     fromFile: false,
     fromPage: false,
     hold: null,
+    listing: null,
     ...fields,
   }
 }
@@ -749,6 +750,9 @@ export const standIns = {
       state: "needsPassword",
       error: { kind: "passwordNeeded", wrong: true },
     }),
+    pendingStandIn(16, "https://www.youtube.com/@NASA", { state: "needsPicking", caught: true, listing: "channel" }),
+    pendingStandIn(17, "https://x.com/NASA", { state: "needsPicking", caught: true, listing: "account" }),
+    pendingStandIn(18, "https://soundcloud.com/someone/sets/an-album", { state: "needsPicking" }),
     pendingStandIn(15, "https://www.instagram.com/p/Copied1/", { state: "reading", caught: true }),
     pendingStandIn(9, "https://github.com/Fuzen777/Tsundoku", { state: "waiting", caught: true }),
     pendingStandIn(10, "https://www.bbc.com/news/an-article", { state: "waiting", fromFile: true }),

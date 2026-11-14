@@ -43,6 +43,8 @@ interface ListingPickerProps {
   onClose: () => void
   /** The picked items joined the queue. */
   onAdded: () => void
+  /** It's watched now: the card closes, and the Watched view opens. */
+  onWatched: () => void
 }
 
 /**
@@ -50,7 +52,7 @@ interface ListingPickerProps {
  * those downloaded before or in the queue greyed), and Download Selected, which queues each ticked item as its own
  * download. A video starts with the preset a rule picks for it, else the one picked here.
  */
-export function ListingPicker({ listing, onClose, onAdded }: ListingPickerProps) {
+export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingPickerProps) {
   const { items } = listing
   const [selection, setSelection] = useState(() => initialSelection(items))
   const { data: presets } = usePresets()
@@ -151,7 +153,7 @@ export function ListingPicker({ listing, onClose, onAdded }: ListingPickerProps)
             onSelect={(item, ticked) => setSelection((current) => withItem(current, item, ticked))}
           />
           {watching ? (
-            <WatchForm listing={listing} onCancel={() => setWatching(false)} onWatched={onClose} />
+            <WatchForm listing={listing} onCancel={() => setWatching(false)} onWatched={onWatched} />
           ) : (
             <div className="flex flex-col items-end gap-2">
               {error && <StatusMessage tone="danger" {...error} />}

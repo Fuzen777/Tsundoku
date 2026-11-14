@@ -22,6 +22,7 @@ use tsundoku_core::data_folder;
 use tsundoku_core::downloads::{
     DownloadError, DownloadQueue, QueueItem, RunEvent, WholeQueueAction, notices,
 };
+use tsundoku_core::listing::ListingKind;
 use tsundoku_core::pending::{self, PendingLink, PendingLinks};
 use tsundoku_core::presets::PresetManager;
 use tsundoku_core::settings::{BackgroundSettings, ClipboardShortcut, SettingsStore};
@@ -54,6 +55,8 @@ const QUIT_ID: &str = "quit";
 /// What the tray, the question before quitting and the notifications say. The UI's own texts are in strings.ts;
 /// these show outside it, so they live here, in the same voice.
 mod text {
+    use tsundoku_core::listing::ListingKind;
+
     pub const TOOLTIP: &str = "Tsundoku";
     pub const OPEN: &str = "Open Tsundoku";
     pub const WATCH_CLIPBOARD: &str = "Watch Clipboard";
@@ -86,6 +89,17 @@ mod text {
 
     pub const DOWNLOADING: &str = "Downloading";
     pub const ADDED_TO_PENDING: &str = "Added to Pending";
+
+    /// A copied link that lists several items, which waits in Pending's Needs Attention to be picked from.
+    pub fn to_pick_from(listing: Option<ListingKind>, link: &str) -> String {
+        let what = match listing {
+            Some(ListingKind::Channel) => "A channel",
+            Some(ListingKind::Playlist) => "A playlist",
+            Some(ListingKind::Account) => "An account",
+            None => "A page of several items",
+        };
+        format!("{what} to pick from: {link}")
+    }
     pub const NOTHING_TO_ADD: &str = "Nothing to Add";
     pub const NO_LINKS: &str = "There's no link on the clipboard.";
     pub const STARTED: &str = "Started";
@@ -586,6 +600,16 @@ pub fn copied_link_read(app: &AppHandle, title: &str, started: bool) {
         text::ADDED_TO_PENDING
     };
     announce(app, heading, title);
+}
+
+/// A link copied in another app lists several items and waits in Pending to be picked from: the user hears of it
+/// unless the window is in front, where the Pending view shows it.
+pub fn copied_link_to_pick(app: &AppHandle, link: &str, listing: Option<ListingKind>) {
+    announce(
+        app,
+        text::ADDED_TO_PENDING,
+        &text::to_pick_from(listing, link),
+    );
 }
 
 /// A Windows notification about links added, when Settings → Adding Links has them on and the window isn't in front.

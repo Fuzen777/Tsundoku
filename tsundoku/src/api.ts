@@ -666,6 +666,13 @@ export async function readPendingLinkAgain(id: number): Promise<void> {
   await invoke("read_pending_link_again", { id })
 }
 
+/** A pending link that lists several items was dealt with in the preview card's picker (items picked from it joined
+ * the queue, or it's watched now): it leaves Pending. Rejects with a DownloadError. */
+export async function pendingLinkPicked(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("pending_link_picked", { id })
+}
+
 /** Unlock, for a pending link that needs a password: it's read again with it. Rejects with a DownloadError. */
 export async function unlockPendingLink(id: number, password: string): Promise<void> {
   if (!isTauri()) return outsideTauri()

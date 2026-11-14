@@ -33,7 +33,7 @@ A channel, playlist or account isn't downloaded as one: the preview card lists i
 3. Each item is a `VideoInfo` keyed as reading its own link would key it (yt-dlp's `ie_key` and `id`, gallery-dl's post shortcode or tweet ID), with its own page as its link (Instagram's `post_url`; on X, whose answer has none, `x.com/<author>/status/<ID>`), so `listing::mark` finds it in the history (`last_download`) and the queue (`contains`) as the duplicate check does.
 4. Download Selected sends a `QueuePick` per ticked item to `DownloadQueue::add_many`: a video with the preset a rule picks for it or else Videos Start As, and `overwrite` when it was downloaded before with that preset (the UI asks first); a post without one. `add_many` saves them all, then schedules once, so the UI gets one `queue-changed` for the batch. From there each is an ordinary item: rules pick its folder, Instagram's posts are paced, and a finished one goes to the history and `archive.txt`.
 
-Downloads don't pass `--download-archive`, which would make Download Again skip a video it has. A pending link that's a listing is refused as `Playlist` before any tool runs.
+Downloads don't pass `--download-archive`, which would make Download Again skip a video it has. A pending link that's a listing is refused as `Playlist` before any tool runs, and waits in Pending as `NeedsPicking` (Needs Attention), which nothing starts, until it's picked from in the preview card.
 
 ## States
 

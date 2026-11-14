@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { addPendingLinks, addPendingLinksFromFiles, confirmWithUser, linksInText, showMainWindow } from "./api"
+import {
+  addPendingLinks,
+  addPendingLinksFromFiles,
+  confirmWithUser,
+  linksInText,
+  pendingLinkPicked,
+  showMainWindow,
+} from "./api"
 import { AddBar } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
 import { Button } from "./components/Button"
@@ -59,14 +66,30 @@ export function App() {
     return () => cancelAnimationFrame(frame)
   }, [startedInTray])
 
+  // The pending link whose items the preview card shows, opened from its row in Pending's Needs Attention: it leaves
+  // Pending once items picked from it join the queue or it's watched. Any other link shown forgets it.
+  const pickingFor = useRef<number | null>(null)
   // A dropped link, or Download Again in the history, goes in the add bar and is fetched right away.
   const showLink = useCallback(
     (shown: string) => {
+      pickingFor.current = null
       setLink(shown)
       void showPreview(shown)
     },
     [showPreview],
   )
+  const pickFromPending = useCallback(
+    (id: number, shown: string) => {
+      showLink(shown)
+      pickingFor.current = id
+    },
+    [showLink],
+  )
+  const donePicking = useCallback(() => {
+    const id = pickingFor.current
+    pickingFor.current = null
+    if (id !== null) pendingLinkPicked(id).catch((error: unknown) => setAddError(describeDownloadError(error)))
+  }, [])
   // Text pasted or dropped with one link in it is previewed as before. Several links wait in Pending instead, where
   // they're read one at a time.
   const addText = useCallback(
@@ -161,10 +184,11 @@ export function App() {
     () => ({
       navigate,
       showLink,
+      pickFromPending,
       addText: takeText,
       addFileLinks: (read: LinkFilesRead) => void addFileLinks(read),
     }),
-    [navigate, showLink, takeText, addFileLinks],
+    [navigate, showLink, pickFromPending, takeText, addFileLinks],
   )
 
   if (needsSetup) return <SetupView />
@@ -221,8 +245,13 @@ export function App() {
               onRetry={(retryLink, password) => void preview.show(retryLink, password)}
               onUnlock={(password) => void preview.unlock(password)}
               onAdded={() => {
+                donePicking()
                 preview.close()
                 setLink("")
+              }}
+              onWatched={() => {
+                donePicking()
+                preview.close()
               }}
             />
           )}

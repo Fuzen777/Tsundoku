@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Emitter, State};
 use tsundoku_core::downloads::DownloadError;
+use tsundoku_core::listing::ListingKind;
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::passwords::Password;
 use tsundoku_core::pending::files::{self, LinkFileError};
@@ -35,6 +36,10 @@ impl PendingListener for EventListener {
 
     fn copied_link_read(&self, video: &VideoInfo, started: bool) {
         background::copied_link_read(&self.app, &video.title, started);
+    }
+
+    fn copied_link_to_pick(&self, link: &str, listing: Option<ListingKind>) {
+        background::copied_link_to_pick(&self.app, link, listing);
     }
 
     fn options_changed(&self, options: &AddingSettings) {
@@ -144,6 +149,13 @@ pub fn unlock_pending_link(
 ) -> Result<(), DownloadError> {
     let password = Password::new(password).ok_or(DownloadError::WrongState)?;
     pending.unlock(id, password)
+}
+
+/// A link that needs picking was dealt with in the preview card's picker (items picked from it joined the queue, or
+/// it's watched now): it leaves Pending.
+#[tauri::command]
+pub fn pending_link_picked(pending: Pending<'_>, id: i64) -> Result<(), DownloadError> {
+    pending.picked(id)
 }
 
 /// Picks which files of a read post one link downloads, by their number in the post.

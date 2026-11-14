@@ -454,6 +454,15 @@ export const strings = {
     reading: "Reading…",
     startsWhenRead: "Starts once it's read",
     startsWhenUnlocked: "Starts once it's unlocked",
+    /** A link that lists several items, under Needs Attention: what it is, by its address, and what to do. */
+    toPick: {
+      channel: "This is a channel. Pick which of its videos to download.",
+      playlist: "This is a playlist. Pick which of its videos to download.",
+      account: "This is an account. Pick which of its posts to download.",
+      /** Reading it said it lists several items, but its address doesn't say what it is. */
+      other: "This link lists several items. Pick which to download.",
+    },
+    pick: "Pick What to Download",
     inQueue: "Already in the queue.",
     overwriteTitle: "Download Again?",
     overwriteMessage: (count: number) =>
@@ -462,6 +471,8 @@ export const strings = {
         : `${count} of these were already downloaded with the same preset, so their new files will replace the ones made before.`,
     overwriteConfirm: "Replace",
     groups: {
+      /** Channels, playlists and accounts to pick from, above the rest whatever the grouping. */
+      needsAttention: "Needs Attention",
       ready: "Ready to Start",
       downloadedBefore: "Downloaded Before",
       notRead: "Not Read Yet",
@@ -469,6 +480,8 @@ export const strings = {
       failed: "Couldn't Be Read",
       inQueue: "In the Queue",
     },
+    /** The heading over the links that don't need attention, while some do and the list isn't grouped. */
+    otherLinks: "Other Links",
   },
   /** The preview card's list of a channel's, playlist's or account's items. */
   picker: {

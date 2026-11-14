@@ -417,6 +417,7 @@ pub fn run() {
             pending::restore_removed_pending_links,
             pending::read_pending_link_again,
             pending::unlock_pending_link,
+            pending::pending_link_picked,
             pending::set_pending_preset,
             pending::set_pending_folder,
             pending::set_pending_rule,

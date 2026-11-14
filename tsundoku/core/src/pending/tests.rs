@@ -144,6 +144,8 @@ struct CountingListener {
     last_count: AtomicUsize,
     /// The copied links announced as read: the video's ID, and whether it started.
     copied: Mutex<Vec<(String, bool)>>,
+    /// The copied links announced as needing picking, and what their address says they are.
+    to_pick: Mutex<Vec<(String, Option<ListingKind>)>>,
     /// The options as each change saved them.
     options: Mutex<Vec<AddingSettings>>,
 }
@@ -156,6 +158,10 @@ impl PendingListener for CountingListener {
 
     fn copied_link_read(&self, video: &VideoInfo, started: bool) {
         lock(&self.copied).push((video.video_id.clone(), started));
+    }
+
+    fn copied_link_to_pick(&self, link: &str, listing: Option<ListingKind>) {
+        lock(&self.to_pick).push((link.to_owned(), listing));
     }
 
     fn options_changed(&self, options: &AddingSettings) {
@@ -324,7 +330,7 @@ impl Test {
         wait_until(&format!("{link} is read"), || {
             matches!(
                 self.state(link),
-                Some(PendingState::Ready | PendingState::Failed)
+                Some(PendingState::Ready | PendingState::Failed | PendingState::NeedsPicking)
             )
         });
     }
@@ -1228,7 +1234,6 @@ fn a_copied_link_with_nothing_to_download_leaves_quietly() {
     let test = Test::new();
     let unsupported = "https://github.com/Fuzen777/Tsundoku";
     let article = "https://www.bbc.com/news/articles/an-article";
-    let channel = "https://www.youtube.com/@someone";
     test.reader
         .answer(unsupported, Err(PreviewError::UnsupportedSite));
     test.reader.answer(
@@ -1237,7 +1242,6 @@ fn a_copied_link_with_nothing_to_download_leaves_quietly() {
             detail: "No video formats found".to_owned(),
         }),
     );
-    test.reader.answer(channel, Err(PreviewError::Playlist));
     let short_link = "https://bit.ly/an-article";
     test.reader.answer(
         short_link,
@@ -1253,8 +1257,8 @@ fn a_copied_link_with_nothing_to_download_leaves_quietly() {
             site: "X".to_owned(),
         }),
     );
-    test.copy(&[unsupported, article, channel, short_link, account, FIRST]);
-    for link in [unsupported, article, channel, short_link, account] {
+    test.copy(&[unsupported, article, short_link, account, FIRST]);
+    for link in [unsupported, article, short_link, account] {
         test.wait_until_gone(link);
     }
     test.wait_until_read(FIRST);
@@ -1771,4 +1775,156 @@ fn a_link_downloaded_with_a_password_opens_with_it_again() {
         "without asking"
     );
     assert_eq!(test.reader.passwords_given(FIRST), [Some("pw".to_owned())]);
+}
+
+const CHANNEL: &str = "https://www.youtube.com/@someone";
+const PLAYLIST: &str = "https://www.youtube.com/playlist?list=PLsomething";
+const ACCOUNT: &str = "https://x.com/NASA";
+/// Another site's playlist, which only reading tells.
+const ALBUM: &str = "https://soundcloud.com/someone/sets/an-album";
+
+/// Each listing link answers as the reader refuses one.
+fn answer_listings(test: &Test) {
+    for link in [CHANNEL, PLAYLIST, ACCOUNT, ALBUM] {
+        test.reader.answer(link, Err(PreviewError::Playlist));
+    }
+}
+
+#[test]
+fn a_channel_playlist_or_account_waits_to_be_picked_from_whatever_its_origin() {
+    let test = Test::new();
+    answer_listings(&test);
+    test.download_right_away(true);
+    test.copy(&[CHANNEL, ALBUM]);
+    test.add(&[PLAYLIST]);
+    from_files(&test, &[ACCOUNT]);
+    for link in [CHANNEL, PLAYLIST, ACCOUNT, ALBUM] {
+        test.wait_until_read(link);
+        let pending = test.link(link).unwrap();
+        assert_eq!(pending.state, PendingState::NeedsPicking, "{link}");
+        assert_eq!(pending.error, None);
+        assert!(!pending.start_when_read);
+        assert!(!starts_with_all(&pending), "Start All leaves {link}");
+    }
+    assert_eq!(
+        test.link(CHANNEL).unwrap().listing,
+        Some(ListingKind::Channel)
+    );
+    assert_eq!(
+        test.link(PLAYLIST).unwrap().listing,
+        Some(ListingKind::Playlist)
+    );
+    assert_eq!(
+        test.link(ACCOUNT).unwrap().listing,
+        Some(ListingKind::Account)
+    );
+    assert_eq!(
+        test.link(ALBUM).unwrap().listing,
+        None,
+        "only reading said so"
+    );
+    assert!(
+        test.queue.items().is_empty(),
+        "Download Right Away starts none"
+    );
+    assert_eq!(
+        *lock(&test.listener.to_pick),
+        [
+            (CHANNEL.to_owned(), Some(ListingKind::Channel)),
+            (ALBUM.to_owned(), None)
+        ],
+        "only copied links are announced"
+    );
+    assert!(lock(&test.listener.copied).is_empty());
+
+    let ids: Vec<i64> = test.links.list().iter().map(|link| link.id).collect();
+    assert_eq!(test.links.start_all("best-video").unwrap(), 0);
+    test.links.start(&ids, "best-video").unwrap();
+    assert_eq!(test.links.list().len(), 4, "Start leaves them waiting too");
+    assert!(test.queue.items().is_empty());
+
+    let reopened = test.reopen();
+    assert_eq!(reopened.list(), test.links.list(), "kept through a restart");
+    assert_eq!(test.reader.reads().len(), 4, "without being read again");
+}
+
+#[test]
+fn a_listing_started_before_it_was_read_waits_to_be_picked_from() {
+    let test = Test::new();
+    answer_listings(&test);
+    test.reader.hold(CHANNEL);
+    test.add(&[CHANNEL]);
+    let id = test.link(CHANNEL).unwrap().id;
+    test.links.start(&[id], "best-video").unwrap();
+    assert!(test.link(CHANNEL).unwrap().start_when_read);
+    test.reader.release(CHANNEL);
+    test.wait_until_read(CHANNEL);
+    let pending = test.link(CHANNEL).unwrap();
+    assert_eq!(pending.state, PendingState::NeedsPicking);
+    assert!(!pending.start_when_read);
+    assert!(test.queue.items().is_empty());
+}
+
+#[test]
+fn a_second_link_to_a_listing_here_already_leaves() {
+    let test = Test::new();
+    answer_listings(&test);
+    let shorts = "https://www.youtube.com/@someone/shorts";
+    let media = "https://twitter.com/NASA/media";
+    test.reader.answer(shorts, Err(PreviewError::Playlist));
+    test.reader.answer(media, Err(PreviewError::Playlist));
+    test.copy(&[CHANNEL, ACCOUNT]);
+    test.wait_until_read(CHANNEL);
+    test.wait_until_read(ACCOUNT);
+    test.copy(&[shorts]);
+    test.add(&[media]);
+    test.wait_until_gone(shorts);
+    test.wait_until_gone(media);
+    let links: Vec<String> = test
+        .links
+        .list()
+        .into_iter()
+        .map(|link| link.link)
+        .collect();
+    assert_eq!(links, [CHANNEL, ACCOUNT]);
+}
+
+#[test]
+fn picking_from_a_listing_takes_it_out_of_pending() {
+    let test = Test::new();
+    answer_listings(&test);
+    test.add(&[CHANNEL, FIRST, SECOND]);
+    for link in [CHANNEL, FIRST, SECOND] {
+        test.wait_until_read(link);
+    }
+    let channel = test.link(CHANNEL).unwrap().id;
+    let first = test.link(FIRST).unwrap().id;
+    let second = test.link(SECOND).unwrap().id;
+    test.links.remove(&[second]).unwrap();
+
+    test.links.picked(first).unwrap();
+    assert!(
+        test.link(FIRST).is_some(),
+        "a link that doesn't need picking stays"
+    );
+    test.links.picked(channel).unwrap();
+    assert!(test.link(CHANNEL).is_none());
+    assert!(
+        test.reopen().list().iter().all(|link| link.id != channel),
+        "for good"
+    );
+    test.links.picked(channel).unwrap();
+
+    assert_eq!(
+        test.links.restore_removed().unwrap(),
+        1,
+        "Undo still puts back what was removed, not the listing"
+    );
+    let links: Vec<String> = test
+        .links
+        .list()
+        .into_iter()
+        .map(|link| link.link)
+        .collect();
+    assert_eq!(links, [FIRST, SECOND]);
 }

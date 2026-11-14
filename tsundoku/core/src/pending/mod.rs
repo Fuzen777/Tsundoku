@@ -6,6 +6,10 @@
 //! A copied link is held to a stricter standard than one added by hand, since nobody chose it for Tsundoku: yt-dlp
 //! reads only sites it knows, and a link nothing can download, or that's downloaded or in the queue already, leaves
 //! without a word. With Download Right Away on, the rest start once read.
+//!
+//! A channel, playlist or account, from wherever it came, is never started from here, since it may hold thousands of
+//! items: it waits as `NeedsPicking` until the person picks what to download from it in the preview card's picker,
+//! then leaves (`PendingLinks::picked`).
 
 pub mod files;
 mod store;
@@ -26,6 +30,7 @@ use crate::cancel::CancelToken;
 use crate::database::Database;
 use crate::downloads::{DownloadError, DownloadQueue};
 use crate::history::History;
+use crate::listing::{self, ListingKind};
 use crate::metadata::{self, Fetched, PreviewError, VideoInfo};
 use crate::passwords::Password;
 use crate::presets::{Preset, PresetError, PresetManager};
@@ -55,6 +60,10 @@ pub enum PendingState {
     /// Its link needs a password, which the person enters on its row (`PendingLinks::unlock`); `error` says whether one
     /// was tried. It isn't failed: it never leaves by itself, and it starts once a password opens it if it was started.
     NeedsPassword,
+    /// A channel, playlist or account: it lists several items, maybe thousands, so nothing starts it (Start, Start All,
+    /// Download Right Away, a start before it was read). The person picks what to download from it in the preview
+    /// card's picker, after which it leaves (`PendingLinks::picked`); until then it stays, whatever its origin.
+    NeedsPicking,
 }
 
 /// A link waiting to be started, as the Pending view shows it.
@@ -92,6 +101,9 @@ pub struct PendingLink {
     pub from_page: bool,
     /// While it waits to be read, the wait of its site, which answered "too many requests".
     pub hold: Option<SiteWait>,
+    /// For a link that needs picking: what its address says it is, or `None` when only reading it said it lists
+    /// several items (another site's playlist, or a short link to a listing).
+    pub listing: Option<ListingKind>,
 }
 
 /// What adding links did.
@@ -162,6 +174,11 @@ pub trait PendingListener: Send + Sync {
     /// A link copied in another app was read and stays: waiting in the pending links, or `started` into the queue.
     /// The app notifies the user while its window is hidden.
     fn copied_link_read(&self, _video: &VideoInfo, _started: bool) {}
+
+    /// A link copied in another app turned out to list several items (`PendingState::NeedsPicking`): it waits in the
+    /// pending links for the person to pick from, `listing` saying what it is when its address tells. The app
+    /// notifies the user while its window is hidden.
+    fn copied_link_to_pick(&self, _link: &str, _listing: Option<ListingKind>) {}
 
     /// How links get added changed, from Settings or the tray's Watch Clipboard.
     fn options_changed(&self, _options: &AddingSettings) {}
@@ -538,6 +555,26 @@ impl PendingLinks {
         Ok(())
     }
 
+    /// A link that needs picking was dealt with in the preview card's picker: what was picked from it joined the queue,
+    /// or it's watched now. It leaves, not kept for Undo, since the picker has done what it was waiting for. A link
+    /// that's gone or in another state is left alone.
+    pub fn picked(&self, id: i64) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let Some(index) = state
+                .entries
+                .iter()
+                .position(|entry| entry.id == id && entry.state == PendingState::NeedsPicking)
+            else {
+                return Ok(());
+            };
+            self.store.delete(id)?;
+            state.entries.remove(index);
+        }
+        self.notify();
+        Ok(())
+    }
+
     /// Picks which files of a read post the link downloads, by their number (`PostFile::picked`). Any number the post
     /// doesn't have is ignored.
     pub fn set_post_files(&self, id: i64, picked: &[u32]) -> Result<(), DownloadError> {
@@ -682,7 +719,9 @@ impl PendingLinks {
                             first_error.get_or_insert(error);
                         }
                     }
-                    PendingState::Failed | PendingState::NeedsPassword => {}
+                    PendingState::Failed
+                    | PendingState::NeedsPassword
+                    | PendingState::NeedsPicking => {}
                 }
             }
             for id in &started {
@@ -839,8 +878,9 @@ impl PendingLinks {
     /// Reads a link and keeps what was found. A link on a paced site makes the next one wait. A link to a video
     /// that another link here already found is dropped, and one started before it was read goes to the queue. A
     /// copied link also leaves when there's nothing to download or the history or the queue has it, and starts once
-    /// read with Download Right Away on. A site that answers "too many requests" waits (`DownloadQueue::slow_down`),
-    /// and its links are read again once the wait ends.
+    /// read with Download Right Away on. A channel, playlist or account needs picking, whatever its origin, and
+    /// never starts; a second link to one here already is dropped. A site that answers "too many requests" waits
+    /// (`DownloadQueue::slow_down`), and its links are read again once the wait ends.
     fn read(&self, turn: &Turn) {
         let outcome = self
             .reader
@@ -860,6 +900,7 @@ impl PendingLinks {
         }
         let settings = self.settings.get();
         let mut announce = None;
+        let mut announce_to_pick = None;
         {
             let mut state = lock(&self.state);
             state.reading = None;
@@ -888,6 +929,9 @@ impl PendingLinks {
                                 .is_some_and(|known| same_video(&known.video, &fetched.video))
                     });
                     duplicate || self.leaves_once_read(turn.origin, &outcome, &turn.link)
+                }
+                Err(PreviewError::Playlist) => {
+                    listing_here_already(&state.entries, turn.id, &turn.link)
                 }
                 Err(_) => self.leaves_once_read(turn.origin, &outcome, &turn.link),
             };
@@ -942,6 +986,14 @@ impl PendingLinks {
                         entry.state = PendingState::NeedsPassword;
                         entry.error = Some(error);
                         entry.password = None;
+                    } else if matches!(error, PreviewError::Playlist) {
+                        // It waits to be picked from, even if it was started: nothing starts a whole listing.
+                        entry.state = PendingState::NeedsPicking;
+                        entry.error = None;
+                        entry.start_when_read = StartWhenRead::No;
+                        if turn.origin == LinkOrigin::Copied {
+                            announce_to_pick = Some(entry.link.clone());
+                        }
                     } else {
                         entry.state = PendingState::Failed;
                         entry.error = Some(error);
@@ -954,6 +1006,10 @@ impl PendingLinks {
         self.notify();
         if let Some((video, started)) = announce {
             self.listener.copied_link_read(&video, started);
+        }
+        if let Some(link) = announce_to_pick {
+            self.listener
+                .copied_link_to_pick(&link, listing_kind_of(&link));
         }
     }
 
@@ -1005,6 +1061,9 @@ impl PendingLinks {
             missing_js_runtime: fetched.missing_js_runtime,
             video: fetched.video,
         });
+        let listing = (entry.state == PendingState::NeedsPicking)
+            .then(|| listing_kind_of(&entry.link))
+            .flatten();
         PendingLink {
             id: entry.id,
             link: entry.link,
@@ -1020,6 +1079,7 @@ impl PendingLinks {
             from_file: entry.origin == LinkOrigin::File,
             from_page: entry.origin == LinkOrigin::Page,
             hold,
+            listing,
         }
     }
 
@@ -1060,7 +1120,8 @@ impl PendingLinks {
     /// always stays, to say what it is or why it couldn't be read. A copied link leaves when there's nothing to
     /// download (`nothing_to_download`) or the queue or the history has its video, since nobody picked it. A link from
     /// a file, or one a page sent, leaves when there's nothing to download, and otherwise stays as one added by hand
-    /// does: marked when it was downloaded before. (A second link to a video already here leaves whatever its origin.)
+    /// does: marked when it was downloaded before. (A second link to a video already here leaves whatever its origin,
+    /// and so does a second link to a channel, playlist or account here already: `listing_here_already`.)
     fn leaves_once_read(
         &self,
         origin: LinkOrigin,
@@ -1117,14 +1178,15 @@ fn read_links(links: &Weak<PendingLinks>) {
     }
 }
 
-/// Whether Start All takes a link: not one that couldn't be read, is in the queue, was downloaded before or starts
-/// once read already, nor a copied link still being checked. The Pending view's own Start All matches it.
+/// Whether Start All takes a link: not one that couldn't be read, needs a password or picking, is in the queue, was
+/// downloaded before or starts once read already, nor a copied link still being checked. The Pending view's own Start
+/// All matches it.
 pub fn starts_with_all(link: &PendingLink) -> bool {
     let checking = (link.caught || link.from_file || link.from_page)
         && matches!(link.state, PendingState::Waiting | PendingState::Reading);
     !matches!(
         link.state,
-        PendingState::Failed | PendingState::NeedsPassword
+        PendingState::Failed | PendingState::NeedsPassword | PendingState::NeedsPicking
     ) && !checking
         && !link.start_when_read
         && link
@@ -1146,7 +1208,8 @@ struct Turn {
 }
 
 /// Whether a copied link's error means there's nothing there to download, rather than something to fix such as
-/// signing in: then it leaves without a word.
+/// signing in: then it leaves without a word. A channel, playlist or account (`Playlist`) has plenty, and needs
+/// picking; a page of several items that can't be listed (`NotListable`) has nothing Tsundoku can offer.
 fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
     match error {
         PreviewError::InvalidLink
@@ -1154,7 +1217,6 @@ fn nothing_to_download(error: &PreviewError, link: &str) -> bool {
         // A short link to such a site, as the site's own link would be.
         | PreviewError::ShortLinkToUnsupportedSite { .. }
         | PreviewError::NoVideo { .. }
-        | PreviewError::Playlist
         | PreviewError::NotListable { .. } => true,
         // Without gallery-dl, a page with no video may be images; on a site that isn't about images, it's more
         // likely just a page.
@@ -1179,6 +1241,24 @@ fn readable(state: &Contents, now: Instant, site_waits: impl Fn(&str) -> bool) -
         .iter()
         .position(|entry| ready(entry) && entry.password.is_some())
         .or_else(|| state.entries.iter().position(ready))
+}
+
+/// What a link's address says it lists: a channel, a playlist or an account.
+fn listing_kind_of(link: &str) -> Option<ListingKind> {
+    listing::listing_link(link).map(|listing| listing.kind)
+}
+
+/// Whether another link here needs picking from the same channel, playlist or account as `link`, told by the page
+/// their addresses list (`youtube.com/@name` and `youtube.com/@name/shorts` both list its Videos tab).
+fn listing_here_already(entries: &[Entry], id: i64, link: &str) -> bool {
+    let Some(page) = listing::listing_link(link).map(|listing| listing.link) else {
+        return false;
+    };
+    entries.iter().any(|other| {
+        other.id != id
+            && other.state == PendingState::NeedsPicking
+            && listing::listing_link(&other.link).is_some_and(|listing| listing.link == page)
+    })
 }
 
 fn same_video(first: &VideoInfo, second: &VideoInfo) -> bool {

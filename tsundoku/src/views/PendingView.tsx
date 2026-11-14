@@ -13,7 +13,17 @@ import {
   setPendingRule,
   startPendingLinks,
 } from "../api"
-import { AFTER_GROUPS, arrangeNested, firstItems, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
+import {
+  AFTER_GROUPS,
+  arrange,
+  arrangeNested,
+  firstItems,
+  folderGroup,
+  NO_GROUP,
+  type GroupPlace,
+  type ItemGroup,
+  type SortFacts,
+} from "../arrange"
 import type { Destination } from "../bindings/Destination"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { PendingLink } from "../bindings/PendingLink"
@@ -42,6 +52,7 @@ import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDeta
 import { listsPostFiles, pickedOf, pickSummary, postLeftOutMessage } from "../postFiles"
 import { sameFiles, sharedLeftOutMessage, sharedPickedOf } from "../sharedFiles"
 import { describeSiteWait, useTimeLeft } from "../holds"
+import { useAppActions } from "../navigation"
 import { checkingCounts, shownPendingLinks } from "../pendingLinks"
 import {
   useDownloadDestination,
@@ -73,7 +84,8 @@ const DEFAULT_PRESET = ""
  * the background to show what it is. Copied links still being read are only counted, since they may turn out to be
  * nothing to download. Start All sends every link not downloaded before to the queue (those still being read go once
  * they're read); with links selected, Start Selected and Remove Selected act on those instead. The list is grouped and
- * sorted as its toolbar says.
+ * sorted as its toolbar says, under Needs Attention's channels, playlists and accounts, which nothing starts: each is
+ * picked from in the preview card.
  */
 export function PendingView() {
   const { data: allLinks = [] } = usePendingLinks()
@@ -116,13 +128,31 @@ export function PendingView() {
     ),
   )
   const destinationOf = new Map(readLinks.map(({ link }, index) => [link.id, destinations[index]]))
-  const groups = arrangeNested(
-    links,
+  // Links that list several items sit in Needs Attention, above the rest however they're grouped.
+  const toPick = links.filter((link) => link.state === "needsPicking")
+  const others = links.filter((link) => link.state !== "needsPicking")
+  const grouped = group !== "none" || byStatus
+  const arranged = arrangeNested(
+    others,
     arrangement,
     pendingFacts,
     byStatus ? pendingStatusGroup : null,
     group === "none" ? null : (link) => pendingGroup(link, group, destinationOf.get(link.id), ruleGroupOf, byStatus),
   )
+  const attentionGroups: ItemGroup<PendingLink>[] =
+    toPick.length > 0
+      ? [
+          {
+            ...STATUS_PLACES.needsAttention,
+            items: arrange(toPick, arrangement, pendingFacts, null).flatMap(({ items }) => items),
+          },
+        ]
+      : []
+  // Ungrouped, the rest gets a heading of its own under Needs Attention, so it doesn't seem to belong there.
+  const groups =
+    grouped || toPick.length === 0
+      ? arranged
+      : arranged.map((only) => ({ ...only, key: "otherLinks", label: strings.pending.otherLinks }))
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -292,31 +322,37 @@ export function PendingView() {
           </div>
           {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           {error && <StatusMessage tone="danger" {...error} />}
-          <GroupedList
-            view="pending"
-            groups={firstItems(groups, shownCount)}
-            grouped={group !== "none" || byStatus}
-            keyOf={(link) => link.id}
-            selection={{ isSelected: (link) => selection.has(link.id), onSelect: selectAllOf }}
-            renderItem={(link) => (
-              <PendingRow
-                link={link}
-                presets={presets}
-                allPresetId={followedPreset(link)}
-                batchPresetId={presetId}
-                rulePreset={rulePresetOf.get(link.id) ?? null}
-                folderInHeading={group === "destination"}
-                selected={selection.has(link.id)}
-                onSelect={(on) => toggle(link.id, on)}
-                onStart={() => void start([link])}
-                busy={busy}
-              />
-            )}
-          />
-          {links.length > shownCount && (
+          {[attentionGroups, firstItems(groups, shownCount).filter(({ items }) => items.length > 0)].map(
+            (shownGroups, index) =>
+              shownGroups.length > 0 && (
+                <GroupedList
+                  key={index}
+                  view="pending"
+                  groups={shownGroups}
+                  grouped={index === 0 || grouped || toPick.length > 0}
+                  keyOf={(link) => link.id}
+                  selection={{ isSelected: (link) => selection.has(link.id), onSelect: selectAllOf }}
+                  renderItem={(link) => (
+                    <PendingRow
+                      link={link}
+                      presets={presets}
+                      allPresetId={followedPreset(link)}
+                      batchPresetId={presetId}
+                      rulePreset={rulePresetOf.get(link.id) ?? null}
+                      folderInHeading={group === "destination"}
+                      selected={selection.has(link.id)}
+                      onSelect={(on) => toggle(link.id, on)}
+                      onStart={() => void start([link])}
+                      busy={busy}
+                    />
+                  )}
+                />
+              ),
+          )}
+          {others.length > shownCount && (
             <div>
               <Button size="sm" onClick={() => setShownCount((count) => count + PENDING_PAGE)}>
-                {strings.pending.showMore(Math.min(PENDING_PAGE, links.length - shownCount))}
+                {strings.pending.showMore(Math.min(PENDING_PAGE, others.length - shownCount))}
               </Button>
             </div>
           )}
@@ -357,6 +393,7 @@ function PendingRow({
 }: PendingRowProps) {
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const removeLinks = useRemoveLinks()
+  const { pickFromPending } = useAppActions()
   const preview = link.preview
   const video = preview?.video ?? null
   const presetId = link.presetId ?? allPresetId
@@ -449,6 +486,12 @@ function PendingRow({
         {link.state === "needsPassword" && (
           <PendingPassword link={link} onUnlock={(password) => act(() => unlockPendingLink(link.id, password))} />
         )}
+        {link.state === "needsPicking" && (
+          <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
+            <ListChecks size={12} className="shrink-0" />
+            {strings.pending.toPick[link.listing ?? "other"]}
+          </p>
+        )}
         {link.state === "failed" && link.error && (
           <StatusMessage tone="danger" {...describePreviewError(link.error)}>
             {fixFor(link.error) && (
@@ -499,7 +542,14 @@ function PendingRow({
             onClick={() => setShowsFiles((shown) => !shown)}
           />
         )}
-        {link.state === "failed" ? (
+        {link.state === "needsPicking" ? (
+          <IconButton
+            label={strings.pending.pick}
+            icon={ListChecks}
+            variant="secondary"
+            onClick={() => pickFromPending(link.id, link.link)}
+          />
+        ) : link.state === "failed" ? (
           <IconButton
             label={strings.pending.tryAgain}
             icon={RefreshCw}
@@ -700,7 +750,7 @@ function PendingPassword({ link, onUnlock }: { link: PendingLink; onUnlock: (pas
 
 /** For a link not read yet: whether it waits its turn or is being read, and whether it starts once read. */
 function ReadingStatus({ link }: { link: PendingLink }) {
-  if (link.state === "failed" || link.state === "needsPassword") return null
+  if (link.state === "failed" || link.state === "needsPassword" || link.state === "needsPicking") return null
   return (
     <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
       {link.state === "reading" && <Loader2 size={12} className="shrink-0 animate-spin" />}
@@ -714,8 +764,10 @@ function ReadingStatus({ link }: { link: PendingLink }) {
 
 type PendingStatus = keyof typeof strings.pending.groups
 
-/** Where links stand, in the order their groups come: those Start All takes first. */
+/** Where links stand, in the order their groups come: Needs Attention, which shows above the rest whatever the
+ * grouping, then those Start All takes. */
 const PENDING_STATUSES: readonly PendingStatus[] = [
+  "needsAttention",
   "ready",
   "downloadedBefore",
   "notRead",
@@ -725,6 +777,7 @@ const PENDING_STATUSES: readonly PendingStatus[] = [
 ]
 
 function pendingStatus(link: PendingLink): PendingStatus {
+  if (link.state === "needsPicking") return "needsAttention"
   if (link.state === "failed") return "failed"
   if (link.state === "needsPassword") return "needsPassword"
   if (!link.preview) return "notRead"
@@ -744,10 +797,14 @@ function pendingFacts(link: PendingLink): SortFacts {
   }
 }
 
+/** Each status's group. */
+const STATUS_PLACES = Object.fromEntries(
+  PENDING_STATUSES.map((status, rank) => [status, { key: status, label: strings.pending.groups[status], rank }]),
+) as Record<PendingStatus, GroupPlace>
+
 /** The group of where a link stands. */
 function pendingStatusGroup(link: PendingLink): GroupPlace {
-  const status = pendingStatus(link)
-  return { key: status, label: strings.pending.groups[status], rank: PENDING_STATUSES.indexOf(status) }
+  return STATUS_PLACES[pendingStatus(link)]
 }
 
 /**
@@ -772,12 +829,13 @@ function pendingGroup(
   return { ...status, rank: AFTER_GROUPS + status.rank }
 }
 
-/** Whether Start All takes the link: not one that couldn't be read, needs a password, is in the queue, or was
- * downloaded before. */
+/** Whether Start All takes the link: not one that couldn't be read, needs a password or picking, is in the queue, or
+ * was downloaded before. */
 function startsWithAll(link: PendingLink): boolean {
   return (
     link.state !== "failed" &&
     link.state !== "needsPassword" &&
+    link.state !== "needsPicking" &&
     !link.preview?.inQueue &&
     !link.preview?.lastDownload &&
     !link.startWhenRead

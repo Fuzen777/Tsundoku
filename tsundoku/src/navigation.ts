@@ -71,6 +71,9 @@ export interface AppActions {
   navigate: (view: ViewId, place?: SettingsPlace) => void
   /** Puts a link in the add bar and fetches its preview, as a dropped link is. */
   showLink: (link: string) => void
+  /** Shows a pending link that lists several items in the preview card, to pick from: once what's picked joins the
+   * queue, or it's watched, the pending link leaves Pending. */
+  pickFromPending: (id: number, link: string) => void
   /** Adds text as if pasted in the add bar and submitted: one link's preview, or several links to Pending. */
   addText: (text: string) => void
   /** Adds links read from files to Pending, as a dropped file's are (asking first for many), or says why there were
@@ -81,6 +84,7 @@ export interface AppActions {
 export const AppActionsContext = createContext<AppActions>({
   navigate: () => {},
   showLink: () => {},
+  pickFromPending: () => {},
   addText: () => {},
   addFileLinks: () => {},
 })

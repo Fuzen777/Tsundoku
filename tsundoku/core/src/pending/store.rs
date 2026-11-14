@@ -79,6 +79,7 @@ impl PendingStore {
                 Some(PendingState::Ready) if fetched.is_some() => PendingState::Ready,
                 Some(PendingState::Failed) if error.is_some() => PendingState::Failed,
                 Some(PendingState::NeedsPassword) if error.is_some() => PendingState::NeedsPassword,
+                Some(PendingState::NeedsPicking) => PendingState::NeedsPicking,
                 _ => PendingState::Waiting,
             };
             entries.push(Entry {
@@ -186,6 +187,8 @@ fn state_name(state: PendingState) -> &'static str {
         PendingState::Failed => "failed",
         // An older version reads it as waiting, and finds the link needs a password it can't enter.
         PendingState::NeedsPassword => "password",
+        // An older version reads it as waiting, then refuses it as a playlist, as it did before.
+        PendingState::NeedsPicking => "pick",
     }
 }
 
@@ -241,6 +244,7 @@ fn state_from_name(name: &str) -> Option<PendingState> {
         "ready" => PendingState::Ready,
         "failed" => PendingState::Failed,
         "password" => PendingState::NeedsPassword,
+        "pick" => PendingState::NeedsPicking,
         _ => return None,
     })
 }

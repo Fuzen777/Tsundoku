@@ -35,8 +35,10 @@ interface PreviewCardProps {
   state: Exclude<PreviewState, { stage: "idle" }>
   /** Cancel, Dismiss or Close. */
   onClose: () => void
-  /** The video joined the queue. */
+  /** The video, or the items picked from a listing, joined the queue. */
   onAdded: () => void
+  /** The listing is watched now. */
+  onWatched: () => void
   /** Fetch the link again, after a fix such as setting up gallery-dl, with the password that opened it. */
   onRetry: (link: string, password: string | null) => void
   /** Read a link that needs a password again with the one typed. */
@@ -45,7 +47,7 @@ interface PreviewCardProps {
 
 /** Under the add bar: what a link is, whether it was downloaded before, and Download; or, for a channel, playlist or
  * account, its items to pick from (`ListingPicker`); or, for a link that needs a password, a field for it. */
-export function PreviewCard({ state, onClose, onAdded, onRetry, onUnlock }: PreviewCardProps) {
+export function PreviewCard({ state, onClose, onAdded, onWatched, onRetry, onUnlock }: PreviewCardProps) {
   return (
     <Card className="flex flex-col gap-3 p-4">
       {state.stage === "loading" && (
@@ -87,7 +89,7 @@ export function PreviewCard({ state, onClose, onAdded, onRetry, onUnlock }: Prev
         ))}
       {state.stage === "ready" &&
         (state.preview.kind === "listing" ? (
-          <ListingPicker listing={state.preview.listing} onClose={onClose} onAdded={onAdded} />
+          <ListingPicker listing={state.preview.listing} onClose={onClose} onAdded={onAdded} onWatched={onWatched} />
         ) : (
           <VideoDetails
             preview={state.preview}

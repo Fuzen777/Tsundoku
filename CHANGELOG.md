@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.139 · 2026-11-14
+
+### Added
+
+- **Channels, playlists and accounts wait in Pending**: a YouTube channel or playlist, an Instagram account or an X account copied while Watch Clipboard is on now waits in Pending instead of leaving without a word, and so does one pasted with other links, sent from your browser or found in a dropped file. They sit under Needs Attention, at the top of Pending whatever its grouping, and nothing starts them: not Start All, Start Selected, Download Right Away or the tray's Start All Pending, so copying one never starts a huge download. Each row says what it is, and Pick What to Download opens its list in the preview card; once Download Selected queues what you ticked, or you Watch it, it leaves Pending. A copied one shows a notification while the window isn't in front, and a second link to the same channel or account is kept once.
+
 ## 0.1.138 · 2026-11-14
 
 ### Added
