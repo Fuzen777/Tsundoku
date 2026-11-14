@@ -51,10 +51,14 @@ const MISSING_VALUE_CHOICES: readonly { value: MissingValues; label: string }[] 
   { value: "leaveOut", label: text.missingValueChoices.leaveOut },
 ]
 
-/** What a rule can say of matching downloads' archives, after Leave as Is: left packed, or unpacked to a place. */
-const UNPACKING_CHOICES: readonly { value: RuleUnpacking; label: string }[] = [
-  { value: "off", label: text.dontUnpack },
-  ...UNPACK_PLACES.map((place) => ({ value: place, label: strings.settings.unpackPlaces[place] })),
+/** A rule's Unpack Archives: default follows the rules above it, then Settings → Archives. */
+type UnpackingChoice = RuleUnpacking | "default"
+
+/** Default, Skip (left packed), then the places Settings → Archives offers. What each does is in How Rules Work. */
+const UNPACKING_CHOICES: readonly { value: UnpackingChoice; label: string }[] = [
+  { value: "default", label: text.unpackChoices.default },
+  { value: "off", label: text.unpackChoices.off },
+  ...UNPACK_PLACES.map((place) => ({ value: place, label: strings.settings.unpackPlaceChoices[place] })),
 ]
 
 /** The site field's suggestions: every supported site. */
@@ -263,24 +267,13 @@ function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
           onChange={(choice) => onChange({ downloadRightAway: choice === "unset" ? null : choice === "on" })}
         />
       </Field>
-      <Field
-        label={text.unpackArchives}
-        hint={draft.unpack && draft.unpack !== "off" ? strings.settings.unpackPlaceHints[draft.unpack] : undefined}
-        htmlFor="rule-unpack"
-      >
-        <SelectInput
-          id="rule-unpack"
-          className="self-start"
-          value={draft.unpack ?? ""}
-          onChange={(event) => onChange({ unpack: (event.target.value || null) as RuleUnpacking | null })}
-        >
-          <option value="">{text.leaveAsIs}</option>
-          {UNPACKING_CHOICES.map((choice) => (
-            <option key={choice.value} value={choice.value}>
-              {choice.label}
-            </option>
-          ))}
-        </SelectInput>
+      <Field label={text.unpackArchives}>
+        <SegmentedControl
+          label={text.unpackArchives}
+          options={UNPACKING_CHOICES}
+          value={draft.unpack ?? "default"}
+          onChange={(choice) => onChange({ unpack: choice === "default" ? null : choice })}
+        />
       </Field>
     </>
   )

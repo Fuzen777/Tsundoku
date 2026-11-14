@@ -782,8 +782,9 @@ export const strings = {
       downloadRightAway:
         "Whether matching links you copy, or that the clipboard shortcut or your browser send, start downloading once they're read. Leave as Is follows Settings.",
       unpackArchives: [
-        "Whether the zip, 7z and rar archives that matching downloads bring are unpacked, and where. Leave as Is follows Settings → Archives, and Don't Unpack leaves them as they're downloaded even while Settings unpacks.",
-        "Smart puts an archive's one file or folder beside it as it is, and several in a folder named after it. In a Folder Named After the Archive always makes that folder; In Place never does. The passwords, and what becomes of the archive once unpacked, are Settings'.",
+        "Whether the zip, 7z and rar archives that matching downloads bring are unpacked, and where. Default follows Settings → Archives. Skip leaves them as they're downloaded, even while Settings unpacks.",
+        "Smart puts an archive's one file or folder beside it as it is, and several in a folder named after the archive. In Place puts everything beside the archive as it is, with no folder made for it. Folder puts everything in a folder named after the archive, even a single file.",
+        "The passwords, and what becomes of the archive once unpacked, are Settings'.",
       ],
     },
     addRule: "Add Rule",
@@ -876,7 +877,8 @@ export const strings = {
     downloadRightAway: "Download Right Away",
     on: "On",
     unpackArchives: "Unpack Archives",
-    dontUnpack: "Don't Unpack",
+    /** A rule's own two choices, before the places Settings → Archives offers too (`unpackPlaceChoices`). */
+    unpackChoices: { default: "Default", off: "Skip" },
     /** What a rule does besides picking a folder, under its folder in the list. */
     actions: {
       namesFiles: (name: string) => `Names files “${name}”`,
@@ -1236,27 +1238,34 @@ export const strings = {
     unpackArchivesHint:
       "Zip, 7z and rar archives, in one file or split into parts, are unpacked beside them. An archive split over several links is unpacked once its last part is downloaded. A rule can say otherwise for the downloads it matches.",
     unpackPlace: "Where to Unpack",
+    /** The places as the toggles name them, in Settings → Archives and a rule's editor. */
+    unpackPlaceChoices: { smart: "Smart", inPlace: "In Place", archiveFolder: "Folder" },
+    /** The places in full, where a sentence names one: a rule's line, Test a Link. */
     unpackPlaces: {
       smart: "Smart",
       archiveFolder: "In a Folder Named After the Archive",
       inPlace: "In Place",
     },
-    unpackPlaceHints: {
-      smart: "One file or folder goes beside the archive as it is; several go in a folder named after the archive.",
-      archiveFolder: "Everything goes in a folder named after the archive, even a single file.",
-      inPlace: "Everything goes beside the archive as it is, with no folder made for it.",
-    },
     afterUnpacking: "After Unpacking",
-    afterUnpackingHint: "What happens to the archive, all its parts, once what it holds is beside it.",
-    afterUnpackingChoices: {
-      recycleBin: "Move the Archive to the Recycle Bin",
-      delete: "Delete the Archive",
-      keep: "Keep the Archive",
+    afterUnpackingChoices: { recycleBin: "Recycle Bin", delete: "Delete", keep: "Keep" },
+    /** The (?) beside Archives: what Where to Unpack's and After Unpacking's choices do. */
+    archivesHelp: {
+      label: "How Unpacking Works",
+      unpackPlace: [
+        "Smart puts an archive's one file or folder beside it as it is, and several in a folder named after the archive, so there's never a folder in a folder or a pile of loose files.",
+        "In Place puts everything beside the archive as it is, with no folder made for it. Folder puts everything in a folder named after the archive, even a single file.",
+        "A name already taken gets “(2)”, so nothing is replaced. A rule can pick another way, or none, for the downloads it matches.",
+      ],
+      afterUnpacking: [
+        "What happens to the archive, all its parts, once what it holds is beside it. Recycle Bin moves them there, where they can be put back from; Delete deletes them for good; Keep leaves them where they are.",
+        "An archive that couldn't be unpacked is always kept, so Retry unpacks it without downloading again.",
+      ],
     },
     archivePasswords: "Passwords",
     archivePasswordsHint:
-      "One per line, tried in order on an archive that has a password until one opens it. They're kept in Tsundoku's settings as they are, not hidden.",
-    archivePasswordsPlaceholder: "One password per line",
+      "Tried in order on an archive that has a password until one opens it. Type one and press Enter to add it. They're kept in Tsundoku's settings as they are, not hidden.",
+    archivePasswordsPlaceholder: "Add a Password",
+    removePassword: (password: string) => `Remove ${password}`,
     archivePasswordsSaved: (count: number) =>
       count === 0 ? "Saved: no passwords." : count === 1 ? "Saved: 1 password." : `Saved: ${count} passwords.`,
     pacing: "Pacing",

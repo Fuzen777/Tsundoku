@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.137 · 2026-11-14
+
+### Changed
+
+- **Unpacking choices as toggles**: a rule's Unpack Archives is now a row of buttons, Default, Skip, Smart, In Place and Folder, and Settings → Archives' Where to Unpack (Smart, In Place, Folder) and After Unpacking (Recycle Bin, Delete, Keep) are too. What each choice does is in How Rules Work and in the new (?) beside Archives, How Unpacking Works.
+- **Archive passwords as tags**: Settings → Archives' Passwords shows each password as a tag with × to remove it. Type one and press Enter to add it; pasting several lines adds a tag for each. Each change is saved at once.
+
 ## 0.1.136 · 2026-11-14
 
 ### Added
