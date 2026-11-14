@@ -328,8 +328,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 **32. Filters and acting on several** · 0.1.54
 - [ ] Filter by kind (Videos, Audio, Posts, Shared Files), by date (Today, 7 days, 30 days, the year, or between two dates) and Only Missing Files (rename a downloaded file to see one).
-- [ ] Tick rows, or every row the search and filters show with the box above the list. Forget Selected asks once and keeps the files; Show Selected in Folder opens each folder once with its files selected, asking first above 5 folders. Changing a filter clears the ticks.
+- [ ] Tick rows, or every row the search and filters show with the box above the list. Forget Selected asks once and keeps the files; Show Selected in Folder opens each folder once with the first of its files selected (since 0.1.143), asking first above 5 folders. Changing a filter clears the ticks.
 - [ ] Both Forget dialogs read well, and neither mentions yt-dlp's archive any more.
+
+**74. Show in Folder comes to the front** · 0.1.143
+- [ ] Click Show in Folder (on a Queue row, in a picture's right-click menu, in History, on a post's file) or one of Settings' Open Folder buttons → a File Explorer window opens on the folder in front of Tsundoku, with the file selected for Show in Folder, and no "Application not found" message.
+- Tried in a test copy driven over DevTools: each opened File Explorer on the right folder with the file selected, with no message, and Tsundoku answered within 10 ms while Windows opened it (0.1.142 froze until the message was closed). A game had the focus the whole time, so whether the window comes in front when you click in Tsundoku yourself couldn't be seen.
 
 **44. Only Existing Files** · 0.1.66
 - [ ] History: the checkbox is now a Files list. Rename a downloaded file → Only Missing Files shows it, Only Existing Files hides it and shows the rest; All Files shows both. The count follows, and Select All ticks only what the list shows.

@@ -4,7 +4,6 @@
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
-use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::{
     DownloadError, DownloadLog, DownloadProgress, DownloadProgressEvent, DownloadQueue, QueueItem,
     QueueListener, QueuePick, QueueSource,
@@ -19,6 +18,7 @@ use tsundoku_core::rules::{
 use tsundoku_core::settings::{DownloadSettings, ListArrangements, PickerLayouts, SettingsStore};
 
 use crate::queue_status::QueueStatus;
+use crate::shell;
 
 /// Sent with every item when the queue changes.
 const QUEUE_CHANGED_EVENT: &str = "queue-changed";
@@ -406,22 +406,25 @@ pub fn save_picker_layouts(
     Ok(layouts)
 }
 
-/// Opens the download's log in the default text editor.
 /// The end of a download's log, for the Queue's log viewer.
 #[tauri::command]
 pub fn download_log(queue: Queue<'_>, id: i64) -> Result<DownloadLog, DownloadError> {
     queue.log(id)
 }
 
+/// Opens the download's log in the default text editor, off the window's thread (`shell`).
 #[tauri::command]
-pub fn open_download_log(app: AppHandle, queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
+pub async fn open_download_log(queue: Queue<'_>, id: i64) -> Result<(), DownloadError> {
     let path = queue.log_path(id);
-    if !path.is_file() {
-        return Err(DownloadError::NotFound);
-    }
-    app.opener()
-        .open_path(path.display().to_string(), None::<&str>)
-        .map_err(|error| DownloadError::Unexpected {
-            detail: error.to_string(),
-        })
+    let unexpected = |detail: String| DownloadError::Unexpected { detail };
+    shell::in_background(
+        move || {
+            if !path.is_file() {
+                return Err(DownloadError::NotFound);
+            }
+            shell::open_file(&path).map_err(|error| unexpected(error.to_string()))
+        },
+        unexpected,
+    )
+    .await
 }

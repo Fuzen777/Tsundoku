@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.143 · 2026-11-14
+
+### Fixed
+
+- **Show in Folder froze Tsundoku**: on a PC where Windows' setting for opening folders still points to an app that's gone (a file manager uninstalled since), Show in Folder showed "Application not found" and Tsundoku stopped responding until it was closed. Show in Folder and every Open Folder button now open File Explorer itself, with the file selected, and Tsundoku keeps responding while Windows opens anything, files included.
+
+### Changed
+
+- **Show Selected in Folder** in History selects the first of the ticked files in each folder it opens, rather than all of them.
+
 ## 0.1.142 · 2026-11-14
 
 ### Added

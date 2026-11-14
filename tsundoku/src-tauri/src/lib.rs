@@ -10,6 +10,7 @@ mod history;
 mod pending;
 mod queue_status;
 mod report;
+mod shell;
 mod tools;
 mod watched;
 mod whats_new;
@@ -23,7 +24,6 @@ use std::time::Duration;
 
 use tauri::utils::config::AppDirectoriesOverride;
 use tauri::{App, AppHandle, Manager, State, WebviewWindow};
-use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::StateFlags;
 use tsundoku_core::app_info::AppInfo;
 use tsundoku_core::data_folder::{self, BuildKind, DataPaths};
@@ -70,26 +70,31 @@ fn app_info(
     }
 }
 
-/// Opens the data folder in File Explorer. Fails only if Windows can't open it, with its reason.
+/// Opens the data folder in File Explorer, off the window's thread (`shell`). Fails only if Windows can't open it, with
+/// its reason.
 #[tauri::command]
-fn open_data_folder(app: AppHandle, data_folder: State<'_, DataFolder>) -> Result<(), String> {
-    app.opener()
-        .open_path(data_folder.path.display().to_string(), None::<&str>)
-        .map_err(|error| error.to_string())
+async fn open_data_folder(data_folder: State<'_, DataFolder>) -> Result<(), String> {
+    let folder = data_folder.path.clone();
+    shell::in_background(
+        move || shell::open_folder(&folder).map_err(|error| error.to_string()),
+        |error| error,
+    )
+    .await
 }
 
 /// Opens the download folder (Settings → Downloads, the end of Rules) in File Explorer, making it first if no download
 /// has yet. The core resolves it, so the UI never names a path to open. Fails with Windows' reason.
 #[tauri::command]
-fn open_download_folder(
-    app: AppHandle,
-    queue: State<'_, Arc<DownloadQueue>>,
-) -> Result<(), String> {
+async fn open_download_folder(queue: State<'_, Arc<DownloadQueue>>) -> Result<(), String> {
     let folder = queue.options().resolved_folder();
-    fs::create_dir_all(&folder).map_err(|error| error.to_string())?;
-    app.opener()
-        .open_path(folder.display().to_string(), None::<&str>)
-        .map_err(|error| error.to_string())
+    shell::in_background(
+        move || {
+            fs::create_dir_all(&folder).map_err(|error| error.to_string())?;
+            shell::open_folder(&folder).map_err(|error| error.to_string())
+        },
+        |error| error,
+    )
+    .await
 }
 
 /// Brings the main window to the front: for a second launch of the app, the tray icon, or a click on a notification.

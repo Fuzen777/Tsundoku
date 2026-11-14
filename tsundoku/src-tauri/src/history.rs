@@ -7,8 +7,7 @@ use std::sync::Arc;
 
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
-use tauri_plugin_opener::OpenerExt;
+use tauri::{Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
     History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, PastDownload,
@@ -21,6 +20,8 @@ use tsundoku_core::preview::{LinkPreview, PreviewService};
 use tsundoku_core::relocate::MovedFiles;
 use tsundoku_core::thumbnails;
 use tsundoku_core::tools::ToolManager;
+
+use crate::shell;
 
 /// What a link is, for the preview card: a video or post, or a channel's, playlist's or account's items.
 #[tauri::command]
@@ -122,28 +123,32 @@ pub fn listing_kind(link: String) -> Option<ListingKind> {
 }
 
 /// Opens a downloaded file in its default app. The UI names the download, never a path, so it can't open anything
-/// else.
+/// else. Off the window's thread, like every command that opens something (`shell`).
 #[tauri::command]
-pub fn open_download(
-    app: AppHandle,
+pub async fn open_download(
     history: State<'_, Arc<History>>,
     download_id: i64,
 ) -> Result<(), HistoryError> {
-    let path = history.download_path(download_id)?;
-    app.opener()
-        .open_path(path.display().to_string(), None::<&str>)
-        .map_err(open_failed)
+    let history = Arc::clone(&history);
+    blocking(move || {
+        let path = history.download_path(download_id)?;
+        shell::open_file(&path).map_err(open_failed)
+    })
+    .await
 }
 
 /// Opens the download's folder in File Explorer, with the file selected.
 #[tauri::command]
-pub fn show_download_in_folder(
-    app: AppHandle,
+pub async fn show_download_in_folder(
     history: State<'_, Arc<History>>,
     download_id: i64,
 ) -> Result<(), HistoryError> {
-    let path = history.download_path(download_id)?;
-    app.opener().reveal_item_in_dir(path).map_err(open_failed)
+    let history = Arc::clone(&history);
+    blocking(move || {
+        let path = history.download_path(download_id)?;
+        shell::show_in_folders(&[path]).map_err(open_failed)
+    })
+    .await
 }
 
 /// Every file of a download, for a post's list of files. Off the async runtime's threads, since it checks each
@@ -165,28 +170,32 @@ pub async fn download_files(
 
 /// Opens one file of a download, by its place in `download_files`, in its default app.
 #[tauri::command]
-pub fn open_download_file(
-    app: AppHandle,
+pub async fn open_download_file(
     history: State<'_, Arc<History>>,
     download_id: i64,
     position: u32,
 ) -> Result<(), HistoryError> {
-    let path = history.file_path(download_id, position)?;
-    app.opener()
-        .open_path(path.display().to_string(), None::<&str>)
-        .map_err(open_failed)
+    let history = Arc::clone(&history);
+    blocking(move || {
+        let path = history.file_path(download_id, position)?;
+        shell::open_file(&path).map_err(open_failed)
+    })
+    .await
 }
 
 /// Opens one file's folder in File Explorer, with the file selected.
 #[tauri::command]
-pub fn show_download_file_in_folder(
-    app: AppHandle,
+pub async fn show_download_file_in_folder(
     history: State<'_, Arc<History>>,
     download_id: i64,
     position: u32,
 ) -> Result<(), HistoryError> {
-    let path = history.file_path(download_id, position)?;
-    app.opener().reveal_item_in_dir(path).map_err(open_failed)
+    let history = Arc::clone(&history);
+    blocking(move || {
+        let path = history.file_path(download_id, position)?;
+        shell::show_in_folders(&[path]).map_err(open_failed)
+    })
+    .await
 }
 
 /// One page of the history matching the view's search, filters and sort, from the `offset`th video on, with how many
@@ -274,16 +283,18 @@ pub async fn history_folder_count(
     .await
 }
 
-/// Opens each folder holding the videos' files in File Explorer once, with those files selected.
+/// Opens each folder holding the videos' files in File Explorer once, with the first of those files selected.
 #[tauri::command]
 pub async fn show_videos_in_folders(
-    app: AppHandle,
     history: State<'_, Arc<History>>,
     video_ids: Vec<i64>,
 ) -> Result<(), HistoryError> {
     let history = Arc::clone(&history);
-    let files = blocking(move || history.latest_files(&video_ids)).await?;
-    app.opener().reveal_items_in_dir(files).map_err(open_failed)
+    blocking(move || {
+        let files = history.latest_files(&video_ids)?;
+        shell::show_in_folders(&files).map_err(open_failed)
+    })
+    .await
 }
 
 /// Where the history's thumbnails are kept, for the `thumbnail` protocol.
@@ -321,7 +332,7 @@ pub fn serve_thumbnail<R: Runtime>(
     });
 }
 
-/// Runs `work` off the async runtime's threads, which must never wait on the disk.
+/// Runs `work` off the async runtime's threads, which must never wait on the disk or Windows' shell.
 async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, HistoryError> + Send + 'static,
 ) -> Result<T, HistoryError> {
@@ -334,7 +345,7 @@ async fn blocking<T: Send + 'static>(
         })
 }
 
-fn open_failed(error: tauri_plugin_opener::Error) -> HistoryError {
+fn open_failed(error: std::io::Error) -> HistoryError {
     HistoryError::OpenFailed {
         detail: error.to_string(),
     }
