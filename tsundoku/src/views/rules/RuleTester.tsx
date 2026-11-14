@@ -11,7 +11,14 @@ import { StatusMessage } from "../../components/StatusMessage"
 import { describePreviewError, type ErrorDescription } from "../../errors"
 import { joinDetails } from "../../format"
 import { useAppActions } from "../../navigation"
-import { useDownloadDestination, usePresets, useRuleLabel, useRulePreset, useRuleRightAway } from "../../queries"
+import {
+  useDownloadDestination,
+  usePresets,
+  useRuleLabel,
+  useRulePreset,
+  useRuleRightAway,
+  useRuleUnpacking,
+} from "../../queries"
 import { strings } from "../../strings"
 import { scrollWithin } from "../../scrollWithin"
 
@@ -25,8 +32,8 @@ type Trial =
 
 /**
  * Test a Link, at the top of Rules: reads a link as the preview card does, then shows where its download would go,
- * the preset it would start as, and whether copied and sent links of it start once read, each with the rule that
- * decides it. Nothing is downloaded, and the answers follow the rules as they're edited.
+ * the preset it would start as, whether copied and sent links of it start once read, and how its archives would be
+ * unpacked, each with the rule that decides it. Nothing is downloaded, and the answers follow the rules as they're edited.
  */
 export function RuleTester() {
   const [link, setLink] = useState("")
@@ -78,7 +85,8 @@ export function RuleTester() {
   )
 }
 
-/** What the rules decide for a read video: its folder, its preset and Download Right Away, each with its rule. */
+/** What the rules decide for a read video: its folder, its preset, Download Right Away and unpacking, each with its
+ * rule. */
 function TrialOutcome({ video }: { video: VideoInfo }) {
   const { navigate } = useAppActions()
   const { data: presets } = usePresets()
@@ -88,6 +96,7 @@ function TrialOutcome({ video }: { video: VideoInfo }) {
   const ready = !hasPreset || (presetId !== null && !pickingPreset)
   const { data: destination } = useDownloadDestination(video, presetId, ready)
   const { data: rightAway } = useRuleRightAway(video, presetId, ready)
+  const { data: unpacking } = useRuleUnpacking(video, presetId, ready)
   const ruleLabel = useRuleLabel()
   const presetName = presets?.presets.find((preset) => preset.id === presetId)?.name
   const ruleLink = (rule: number) => (
@@ -143,6 +152,18 @@ function TrialOutcome({ video }: { video: VideoInfo }) {
             </span>
           ) : (
             <span className="text-fg-secondary">{text.asSettingsSay}</span>
+          )}
+        </Row>
+        <Row label={text.archives}>
+          {unpacking ? (
+            <span className="flex items-center gap-1.5 text-fg-secondary">
+              {unpacking.unpacking === "off"
+                ? text.leftPacked
+                : text.unpackedTo(strings.settings.unpackPlaces[unpacking.unpacking])}
+              {ruleLink(unpacking.rule)}
+            </span>
+          ) : (
+            <span className="text-fg-secondary">{text.asArchiveSettingsSay}</span>
           )}
         </Row>
       </dl>

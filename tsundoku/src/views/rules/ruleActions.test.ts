@@ -25,6 +25,14 @@ describe("describeActions", () => {
     expect(describeActions({ ...rule, folder: "", presetId: "audio-mp3" }, [audioMp3])).toEqual(["Starts as Audio MP3"])
   })
 
+  it("says whether and where archives are unpacked", () => {
+    expect(describeActions({ ...newRule(), unpack: "inPlace" }, [audioMp3])).toEqual(["Unpacks archives: In Place"])
+    expect(describeActions({ ...newRule(), unpack: "archiveFolder" }, [audioMp3])).toEqual([
+      "Unpacks archives: In a Folder Named After the Archive",
+    ])
+    expect(describeActions({ ...newRule(), unpack: "off" }, [audioMp3])).toEqual(["Leaves archives packed"])
+  })
+
   it("says nothing for a rule that only picks a folder", () => {
     expect(describeActions({ ...newRule(), folder: "D:\\Music" }, [audioMp3])).toEqual([])
   })

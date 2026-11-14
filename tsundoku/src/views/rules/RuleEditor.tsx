@@ -1,6 +1,7 @@
 import { useRef } from "react"
 import { CaseSensitive, Plus, X } from "lucide-react"
 import { pickFolder } from "../../api"
+import { UNPACK_PLACES } from "../../archives"
 import type { ConditionJoin } from "../../bindings/ConditionJoin"
 import type { FolderRule } from "../../bindings/FolderRule"
 import type { MissingValues } from "../../bindings/MissingValues"
@@ -8,6 +9,7 @@ import type { Preset } from "../../bindings/Preset"
 import type { RuleCondition } from "../../bindings/RuleCondition"
 import type { RuleField } from "../../bindings/RuleField"
 import type { RuleOperator } from "../../bindings/RuleOperator"
+import type { RuleUnpacking } from "../../bindings/RuleUnpacking"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
@@ -49,6 +51,12 @@ const MISSING_VALUE_CHOICES: readonly { value: MissingValues; label: string }[] 
   { value: "leaveOut", label: text.missingValueChoices.leaveOut },
 ]
 
+/** What a rule can say of matching downloads' archives, after Leave as Is: left packed, or unpacked to a place. */
+const UNPACKING_CHOICES: readonly { value: RuleUnpacking; label: string }[] = [
+  { value: "off", label: text.dontUnpack },
+  ...UNPACK_PLACES.map((place) => ({ value: place, label: strings.settings.unpackPlaces[place] })),
+]
+
 /** The site field's suggestions: every supported site. */
 const SITES_LIST_ID = "rule-sites"
 
@@ -65,8 +73,8 @@ interface RuleEditorProps {
   onDiscard: () => void
 }
 
-/** One rule's conditions and what it does (its folder, the preset videos start with, Download Right Away), kept as a
- * draft until Save. The catch-all has no conditions, only a folder. */
+/** One rule's conditions and what it does (its folder, the preset videos start with, Download Right Away, unpacking),
+ * kept as a draft until Save. The catch-all has no conditions, only a folder. */
 export function RuleEditor({
   draft,
   number,
@@ -216,8 +224,9 @@ interface RuleActionsProps {
   onChange: (changes: Partial<FolderRule>) => void
 }
 
-/** What a rule does besides picking a folder: the preset matching videos start with, and Download Right Away. A rule
- * that checks the kind or the preset can't pick the preset, so Start As is off for it, or says why it can't stay. */
+/** What a rule does besides picking a folder: the preset matching videos start with, Download Right Away, and whether
+ * and where archives are unpacked. A rule that checks the kind or the preset can't pick the preset, so Start As is off
+ * for it, or says why it can't stay. */
 function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
   const presetAllowed = canPickPreset(draft.conditions)
   const presetMissing = draft.presetId !== null && !presets.some((preset) => preset.id === draft.presetId)
@@ -253,6 +262,25 @@ function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
           value={rightAway}
           onChange={(choice) => onChange({ downloadRightAway: choice === "unset" ? null : choice === "on" })}
         />
+      </Field>
+      <Field
+        label={text.unpackArchives}
+        hint={draft.unpack && draft.unpack !== "off" ? strings.settings.unpackPlaceHints[draft.unpack] : undefined}
+        htmlFor="rule-unpack"
+      >
+        <SelectInput
+          id="rule-unpack"
+          className="self-start"
+          value={draft.unpack ?? ""}
+          onChange={(event) => onChange({ unpack: (event.target.value || null) as RuleUnpacking | null })}
+        >
+          <option value="">{text.leaveAsIs}</option>
+          {UNPACKING_CHOICES.map((choice) => (
+            <option key={choice.value} value={choice.value}>
+              {choice.label}
+            </option>
+          ))}
+        </SelectInput>
       </Field>
     </>
   )

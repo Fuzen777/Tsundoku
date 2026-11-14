@@ -269,6 +269,7 @@ function helpTopics(downloadFolder: string): HelpTopic[] {
     { title: text.missingValues, paragraphs: help.missingValues },
     { title: text.startAs, paragraphs: help.startAs },
     { title: text.downloadRightAway, paragraphs: [help.downloadRightAway] },
+    { title: text.unpackArchives, paragraphs: help.unpackArchives },
   ]
 }
 

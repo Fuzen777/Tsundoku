@@ -37,6 +37,7 @@ import {
   getRulePreset,
   getWatchedSources,
   getRuleRightAway,
+  getRuleUnpacking,
   getToolDownloads,
   getToolsNeedSetup,
   getToolsOverview,
@@ -232,6 +233,15 @@ export function useRuleRightAway(video: VideoInfo | null, presetId: string | nul
   return useQuery({
     queryKey: [...queryKeys.ruleRightAway, video?.site, video?.videoId, presetId],
     queryFn: () => (video ? getRuleRightAway(video, presetId) : null),
+    enabled: enabled && video !== null,
+  })
+}
+
+/** Whether a rule unpacks a video's archives, and where, and which rule: null when Settings → Archives decides. */
+export function useRuleUnpacking(video: VideoInfo | null, presetId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.ruleUnpacking, video?.site, video?.videoId, presetId],
+    queryFn: () => (video ? getRuleUnpacking(video, presetId) : null),
     enabled: enabled && video !== null,
   })
 }

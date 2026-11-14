@@ -1,7 +1,7 @@
 //! Unpacking the archives a download brings: zip, 7z and rar, in one file or split into parts (which may come from
 //! several downloads), with a password from the list in Settings → Archives when one is needed. What an archive holds
-//! goes beside it: its one file or folder as it is, several in a folder named after it. See
-//! `DOCUMENTATION/Docs/Download Pipeline.md`.
+//! goes beside it as Settings → Archives or a rule says (`UnpackPlace`): its one file or folder as it is and several in
+//! a folder named after it, always in such a folder, or always as it is. See `DOCUMENTATION/Docs/Download Pipeline.md`.
 
 mod files;
 mod joined;
@@ -25,7 +25,7 @@ use ts_rs::TS;
 pub use self::sets::{ArchiveSet, Completeness, Format, sets_among};
 use crate::cancel::CancelToken;
 use crate::room::{self, DiskSpace};
-use crate::settings::AfterUnpacking;
+use crate::settings::{AfterUnpacking, UnpackPlace};
 use crate::sync::lock;
 
 /// Why an archive couldn't be unpacked, as Failed shows it.
@@ -112,6 +112,8 @@ pub struct Request<'a> {
     pub set: &'a ArchiveSet,
     /// Tried in order when it has a password.
     pub passwords: &'a [String],
+    /// Where what it holds goes beside it.
+    pub place: UnpackPlace,
     /// Where it's unpacked before being put beside the archive: a folder made and removed here, on the archive's
     /// drive, so putting it beside the archive is a move.
     pub work_folder: &'a Path,
@@ -122,7 +124,8 @@ pub struct Request<'a> {
 /// An archive unpacked.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unpacked {
-    /// What it was unpacked to: its one file or folder, or the folder made for what it holds.
+    /// What it was unpacked to: its one file or folder, the folder made for what it holds, or the archive's folder
+    /// when it held several things put there as they are.
     pub placed: PathBuf,
     /// Every file unpacked, in a stable order.
     pub files: Vec<PathBuf>,
@@ -235,7 +238,8 @@ fn attempt(
         Format::Rar => rar::unpack(first, password, &mut output),
     };
     let left_out = std::mem::take(&mut output.left_out);
-    let placed = unpacked.and_then(|()| files::put_beside(work, set.folder(), &set.stem));
+    let placed =
+        unpacked.and_then(|()| files::put_beside(work, set.folder(), &set.stem, request.place));
     let _ = fs::remove_dir_all(work);
     let (placed, files) = placed?;
     Ok(Unpacked {

@@ -9,15 +9,16 @@ use super::runner::{open_log, seconds_since_epoch, write_log};
 use super::{DownloadError, DownloadProgress, DownloadStage, JobOutcome, JobSpec};
 use crate::cancel::CancelToken;
 use crate::room::DiskSpace;
-use crate::settings::AfterUnpacking;
+use crate::settings::{AfterUnpacking, UnpackPlace};
 use crate::unpack::{self, ArchiveSet, Completeness, Request, UnpackError};
 
 /// How often progress is told while unpacking: every this much of an archive.
 const PROGRESS_STEPS: u64 = 200;
 
-/// What unpacking takes from Settings → Archives.
+/// What unpacking takes from Settings → Archives, and from the rule that says where to unpack.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnpackJob {
+    pub place: UnpackPlace,
     pub after: AfterUnpacking,
     pub passwords: Vec<String>,
 }
@@ -195,6 +196,7 @@ fn unpack_one(
         &Request {
             set,
             passwords: &settings.passwords,
+            place: settings.place,
             work_folder,
             disks,
             cancel,
@@ -308,6 +310,7 @@ mod tests {
 
     fn settings(after: AfterUnpacking) -> UnpackJob {
         UnpackJob {
+            place: UnpackPlace::Smart,
             after,
             passwords: Vec::new(),
         }
@@ -516,6 +519,60 @@ mod tests {
         assert_eq!(
             taken, shared,
             "the files the download took, not what they held"
+        );
+    }
+
+    #[test]
+    fn puts_what_an_archive_holds_where_the_job_says() {
+        let unpacked_with = |place: UnpackPlace, entries: &[(&str, &[u8])]| {
+            let folder = TempDir::new().unwrap();
+            let archive = folder.path().join("Pack.zip");
+            zip(&archive, entries);
+            let job = UnpackJob {
+                place,
+                ..settings(AfterUnpacking::Delete)
+            };
+            let JobOutcome::Finished { files, .. } =
+                run_on(folder.path(), downloaded(&[&archive]), &job)
+            else {
+                panic!();
+            };
+            files
+                .iter()
+                .map(|file| {
+                    file.strip_prefix(folder.path())
+                        .unwrap()
+                        .display()
+                        .to_string()
+                        .replace('\\', "/")
+                })
+                .collect::<Vec<String>>()
+        };
+        let one: &[(&str, &[u8])] = &[("only.txt", b"only")];
+        let several: &[(&str, &[u8])] = &[
+            ("Art/cover.jpg", b"cover"),
+            ("b.txt", b"b"),
+            ("a.txt", b"a"),
+        ];
+
+        assert_eq!(unpacked_with(UnpackPlace::Smart, one), ["only.txt"]);
+        assert_eq!(
+            unpacked_with(UnpackPlace::Smart, several),
+            ["Pack/Art/cover.jpg", "Pack/a.txt", "Pack/b.txt"]
+        );
+        assert_eq!(
+            unpacked_with(UnpackPlace::ArchiveFolder, one),
+            ["Pack/only.txt"]
+        );
+        assert_eq!(
+            unpacked_with(UnpackPlace::ArchiveFolder, several),
+            ["Pack/Art/cover.jpg", "Pack/a.txt", "Pack/b.txt"]
+        );
+        assert_eq!(unpacked_with(UnpackPlace::InPlace, one), ["only.txt"]);
+        assert_eq!(
+            unpacked_with(UnpackPlace::InPlace, several),
+            ["Art/cover.jpg", "a.txt", "b.txt"],
+            "folders first, then files, each by name"
         );
     }
 }

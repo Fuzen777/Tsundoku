@@ -144,6 +144,7 @@ fn run_with(
         &Request {
             set,
             passwords: &passwords,
+            place: UnpackPlace::Smart,
             work_folder: &work_folder,
             disks,
             cancel,
@@ -311,6 +312,106 @@ fn several_files_go_in_a_folder_named_after_the_archive() {
     // Unpacked again, the folder's name is taken.
     let again = run(&the_set(&[zip]), &[], folder.path()).unwrap();
     assert_eq!(again.placed, folder.path().join("Album (2)"));
+}
+
+/// Unpacks `set` beside it as `place` says, with no password.
+fn run_placed(set: &ArchiveSet, folder: &Path, place: UnpackPlace) -> Unpacked {
+    unpack(
+        &Request {
+            set,
+            passwords: &[],
+            place,
+            work_folder: &folder.join(".tsundoku-1").join("unpacking"),
+            disks: &ROOMY,
+            cancel: &CancelToken::new(),
+        },
+        &mut |_, _| {},
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_folder_named_after_the_archive_holds_even_its_one_file() {
+    let folder = TempDir::new().unwrap();
+    let zip = folder.path().join("Movie.zip");
+    make_zip(&zip, &[("Movie.mkv", b"video")], None);
+    let unpacked = run_placed(
+        &the_set(std::slice::from_ref(&zip)),
+        folder.path(),
+        UnpackPlace::ArchiveFolder,
+    );
+    assert_eq!(unpacked.placed, folder.path().join("Movie"));
+    assert_eq!(
+        unpacked.files,
+        [folder.path().join("Movie").join("Movie.mkv")]
+    );
+
+    let again = run_placed(&the_set(&[zip]), folder.path(), UnpackPlace::ArchiveFolder);
+    assert_eq!(
+        again.placed,
+        folder.path().join("Movie (2)"),
+        "its name taken"
+    );
+}
+
+#[test]
+fn in_place_puts_everything_beside_the_archive_as_it_is() {
+    let folder = TempDir::new().unwrap();
+    let zip = folder.path().join("Album.zip");
+    make_zip(
+        &zip,
+        &[
+            ("Art/", b""),
+            ("Art/cover.jpg", b"cover"),
+            ("02.flac", b"two"),
+            ("01.flac", b"one"),
+        ],
+        None,
+    );
+    fs::write(folder.path().join("01.flac"), b"taken").unwrap();
+    let unpacked = run_placed(
+        &the_set(std::slice::from_ref(&zip)),
+        folder.path(),
+        UnpackPlace::InPlace,
+    );
+    assert_eq!(
+        unpacked.placed,
+        folder.path(),
+        "several things: the archive's folder"
+    );
+    assert_eq!(
+        unpacked.files,
+        [
+            folder.path().join("Art").join("cover.jpg"),
+            folder.path().join("01 (2).flac"),
+            folder.path().join("02.flac"),
+        ],
+        "folders first, then files, a name taken numbered"
+    );
+    assert_eq!(
+        fs::read(folder.path().join("01.flac")).unwrap(),
+        b"taken",
+        "never replaced"
+    );
+    assert!(
+        !folder.path().join(".tsundoku-1").join("unpacking").exists(),
+        "the work folder is gone"
+    );
+
+    let again = run_placed(&the_set(&[zip]), folder.path(), UnpackPlace::InPlace);
+    assert_eq!(
+        again.files[0],
+        folder.path().join("Art (2)").join("cover.jpg")
+    );
+
+    let single = folder.path().join("Single.zip");
+    make_zip(&single, &[("Inner/", b""), ("Inner/a.txt", b"a")], None);
+    let unpacked = run_placed(&the_set(&[single]), folder.path(), UnpackPlace::InPlace);
+    assert_eq!(
+        unpacked.placed,
+        folder.path().join("Inner"),
+        "its one thing"
+    );
 }
 
 #[test]
@@ -624,6 +725,7 @@ fn progress_counts_up_to_the_whole_size() {
         &Request {
             set: &set,
             passwords: &[],
+            place: UnpackPlace::Smart,
             work_folder: &folder.path().join("work"),
             disks: &ROOMY,
             cancel: &CancelToken::new(),
@@ -689,6 +791,7 @@ fn unpack_live() {
             &Request {
                 set: &set,
                 passwords: &passwords,
+                place: UnpackPlace::Smart,
                 work_folder: &work,
                 disks: &crate::room::SystemDisks,
                 cancel: &CancelToken::new(),

@@ -288,6 +288,8 @@ pub struct DownloadSettings {
 #[ts(export)]
 pub struct UnpackSettings {
     pub enabled: bool,
+    /// Where what an archive holds goes. Missing in settings saved before 0.1.136, which unpacked as `Smart` does.
+    pub place: UnpackPlace,
     /// What happens to an archive once unpacked.
     pub after: AfterUnpacking,
     /// Tried in order on an archive with a password: no blank one, none twice.
@@ -298,6 +300,7 @@ impl Default for UnpackSettings {
     fn default() -> Self {
         Self {
             enabled: true,
+            place: UnpackPlace::Smart,
             after: AfterUnpacking::RecycleBin,
             passwords: Vec::new(),
         }
@@ -317,6 +320,22 @@ impl UnpackSettings {
         }
         kept
     }
+}
+
+/// Where what an archive holds goes, in the archive's folder (`unpack::files::put_beside`). A name already taken
+/// gets " (2)", " (3)"…
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum UnpackPlace {
+    /// Its one file or folder as it is, several in a folder named after the archive: never a folder in a folder, never
+    /// a pile of loose files.
+    #[default]
+    Smart,
+    /// Always in a folder named after the archive, even its one file.
+    ArchiveFolder,
+    /// Always as it is, beside the archive: several files stay loose.
+    InPlace,
 }
 
 /// What happens to an archive's parts once what it holds is beside them.

@@ -869,6 +869,7 @@ fn checks_and_saves_the_options() {
             hourly_file_limit: Some(0),
             unpack: crate::settings::UnpackSettings {
                 enabled: false,
+                place: crate::settings::UnpackPlace::InPlace,
                 after: crate::settings::AfterUnpacking::Delete,
                 passwords: ["", "  ", "one", " two ", "one", "three\r\n"]
                     .map(str::to_owned)
@@ -884,6 +885,7 @@ fn checks_and_saves_the_options() {
         "blank ones and repeats dropped, spaces kept"
     );
     assert!(!saved.unpack.enabled);
+    assert_eq!(saved.unpack.place, crate::settings::UnpackPlace::InPlace);
     assert_eq!(saved.post_file_name, "{site} {post} {number}", "trimmed");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
     assert_eq!(saved.folder, None, "blank is the default folder");
@@ -1851,6 +1853,7 @@ fn a_rule_picks_the_folder() {
                 missing_values: crate::rules::MissingValues::StandIn,
                 preset_id: None,
                 download_right_away: None,
+                unpack: None,
                 join: crate::rules::ConditionJoin::All,
             });
         })
@@ -1974,6 +1977,96 @@ fn a_rule_names_a_posts_files_and_the_item_keeps_it() {
     let video = test.queue.add(video("a"), "best-video", false).unwrap();
     assert_eq!(video.file_name, None, "a video keeps its preset's name");
     test.queue.cancel(video.id).unwrap();
+}
+
+#[test]
+fn a_rule_says_whether_and_where_archives_are_unpacked() {
+    use crate::rules::{FolderRule, RuleCondition, RuleField, RuleOperator, RuleUnpacking};
+    use crate::settings::UnpackPlace;
+
+    let test = Test::new();
+    let unpacking_of = |item: &QueueItem| {
+        test.queue
+            .job_for(item)
+            .unpack
+            .map(|job| (job.place, job.after))
+    };
+    test.settings
+        .update(|settings| {
+            settings.downloads.unpack.place = UnpackPlace::ArchiveFolder;
+            settings.downloads.unpack.after = crate::settings::AfterUnpacking::Keep;
+        })
+        .unwrap();
+    let item = test
+        .queue
+        .add_post(shared_folder("pack", &[0, 1, 2]))
+        .unwrap();
+    assert_eq!(
+        unpacking_of(&item),
+        Some((
+            UnpackPlace::ArchiveFolder,
+            crate::settings::AfterUnpacking::Keep
+        )),
+        "Settings"
+    );
+
+    let on_mega = |unpack: RuleUnpacking| FolderRule {
+        id: format!("rule-{unpack:?}"),
+        folder: String::new(),
+        conditions: vec![RuleCondition {
+            field: RuleField::Site,
+            operator: RuleOperator::Is,
+            value: "MEGA".to_owned(),
+            case_sensitive: false,
+            join: crate::rules::ConditionJoin::All,
+        }],
+        unpack: Some(unpack),
+        ..crate::rules::catch_all_rule()
+    };
+    test.settings
+        .update(|settings| settings.rules.list.push(on_mega(RuleUnpacking::InPlace)))
+        .unwrap();
+    assert_eq!(
+        unpacking_of(&item),
+        Some((UnpackPlace::InPlace, crate::settings::AfterUnpacking::Keep)),
+        "the rule, read when the download runs, with Settings' after"
+    );
+
+    test.settings
+        .update(|settings| {
+            settings.downloads.unpack.enabled = false;
+        })
+        .unwrap();
+    assert_eq!(
+        unpacking_of(&item).map(|(place, _)| place),
+        Some(UnpackPlace::InPlace),
+        "a rule unpacks even while Settings doesn't"
+    );
+
+    test.settings
+        .update(|settings| {
+            settings.downloads.unpack.enabled = true;
+            settings.rules.list.push(on_mega(RuleUnpacking::Off));
+        })
+        .unwrap();
+    assert_eq!(unpacking_of(&item), None, "a rule leaves them packed");
+    test.queue.cancel(item.id).unwrap();
+
+    let picked = test
+        .queue
+        .add_post_in(
+            shared_folder("picked", &[0]),
+            None,
+            Some("rule-InPlace".to_owned()),
+            None,
+        )
+        .unwrap();
+    assert_eq!(
+        unpacking_of(&picked).map(|(place, _)| place),
+        Some(UnpackPlace::InPlace),
+        "the rule picked for it says first"
+    );
+    test.queue.cancel(picked.id).unwrap();
 }
 
 #[test]

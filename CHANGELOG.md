@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.136 · 2026-11-14
+
+### Added
+
+- **Where archives are unpacked**: Settings → Archives → Where to Unpack offers Smart (as before: one file or folder comes out as it is, several go in a folder named after the archive), In a Folder Named After the Archive (always, even for a single file) and In Place (everything beside the archive as it is, never a new folder). A name already taken gets "(2)", so nothing is replaced.
+- **Unpacking in rules**: a rule's Unpack Archives sets it for the downloads it matches, whatever Settings → Archives says: Don't Unpack, Smart, In a Folder Named After the Archive or In Place. Leave as Is follows Settings. The rule's line says what it does, and Test a Link shows how a link's archives would be unpacked and which rule decides.
+
 ## 0.1.135 · 2026-11-14
 
 ### Changed

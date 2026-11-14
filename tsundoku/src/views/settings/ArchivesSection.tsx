@@ -1,11 +1,13 @@
 import { useState } from "react"
 import type { AfterUnpacking } from "../../bindings/AfterUnpacking"
+import type { UnpackPlace } from "../../bindings/UnpackPlace"
 import type { UnpackSettings } from "../../bindings/UnpackSettings"
 import { Card } from "../../components/Card"
 import { Checkbox, Field, SelectInput } from "../../components/Field"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { classes, INPUT_CLASSES } from "../../components/styles"
+import { UNPACK_PLACES } from "../../archives"
 import { useSaveDownloadOptions } from "../../queries"
 import { strings } from "../../strings"
 
@@ -15,10 +17,10 @@ const text = strings.settings
 const AFTER_CHOICES: readonly AfterUnpacking[] = ["recycleBin", "delete", "keep"]
 
 /** As the core has it before Settings is read (`UnpackSettings::default`). */
-const DEFAULT_UNPACK: UnpackSettings = { enabled: true, after: "recycleBin", passwords: [] }
+const DEFAULT_UNPACK: UnpackSettings = { enabled: true, place: "smart", after: "recycleBin", passwords: [] }
 
-/** Settings → Archives: unpacking the archives downloads bring, what becomes of them after, and the passwords tried on
- * one that has a password. */
+/** Settings → Archives: unpacking the archives downloads bring, where what they hold goes, what becomes of them after,
+ * and the passwords tried on one that has a password. */
 export function ArchivesSection() {
   const { options, save, error } = useSaveDownloadOptions()
   const unpack = options?.unpack ?? DEFAULT_UNPACK
@@ -47,6 +49,21 @@ export function ArchivesSection() {
           />
           <p className="pl-6 text-xs text-fg-muted">{text.unpackArchivesHint}</p>
         </div>
+        <Field label={text.unpackPlace} hint={text.unpackPlaceHints[unpack.place]} htmlFor="settings-unpack-place">
+          <SelectInput
+            id="settings-unpack-place"
+            className="self-start"
+            value={unpack.place}
+            disabled={!options || !unpack.enabled}
+            onChange={(event) => void save({ unpack: { ...unpack, place: event.target.value as UnpackPlace } })}
+          >
+            {UNPACK_PLACES.map((place) => (
+              <option key={place} value={place}>
+                {text.unpackPlaces[place]}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
         <Field label={text.afterUnpacking} hint={text.afterUnpackingHint} htmlFor="settings-after-unpacking">
           <SelectInput
             id="settings-after-unpacking"

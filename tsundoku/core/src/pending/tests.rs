@@ -757,6 +757,7 @@ fn no_actions() -> rules::FolderRule {
         missing_values: rules::MissingValues::StandIn,
         preset_id: None,
         download_right_away: None,
+        unpack: None,
         join: rules::ConditionJoin::All,
     }
 }

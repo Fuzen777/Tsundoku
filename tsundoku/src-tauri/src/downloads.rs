@@ -14,6 +14,7 @@ use tsundoku_core::passwords::Password;
 use tsundoku_core::presets::{Preset, PresetError, PresetManager, PresetsOverview};
 use tsundoku_core::rules::{
     self, Destination, FolderRule, RightAwayRule, RuleError, RuleManager, RulePreset, RuleSubject,
+    UnpackingRule,
 };
 use tsundoku_core::settings::{DownloadSettings, ListArrangements, SettingsStore};
 
@@ -166,6 +167,23 @@ pub fn rule_download_right_away(
         preset: preset.as_ref(),
     };
     rules::right_away_rule(&manager.list(), &subject)
+}
+
+/// Whether a rule unpacks a video's archives, and where, and which rule, for Rules' Test a Link: `None` when
+/// Settings → Archives decides.
+#[tauri::command]
+pub fn rule_unpacking(
+    manager: Rules<'_>,
+    presets: Presets<'_>,
+    video: VideoInfo,
+    preset_id: Option<String>,
+) -> Option<UnpackingRule> {
+    let preset = preset_id.and_then(|id| presets.get(&id));
+    let subject = RuleSubject {
+        video: &video,
+        preset: preset.as_ref(),
+    };
+    rules::unpacking_rule(&manager.list(), &subject, None)
 }
 
 #[tauri::command]

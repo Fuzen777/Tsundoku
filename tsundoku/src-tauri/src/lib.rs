@@ -368,6 +368,7 @@ pub fn run() {
             downloads::download_destination,
             downloads::rule_preset,
             downloads::rule_download_right_away,
+            downloads::rule_unpacking,
             downloads::queue_items,
             downloads::add_to_queue,
             downloads::add_post_to_queue,

@@ -1182,10 +1182,7 @@ impl DownloadQueue {
                 .flatten(),
             caught_links: item.caught_links.clone(),
             window_offer: None,
-            unpack: options.unpack.enabled.then(|| UnpackJob {
-                after: options.unpack.after,
-                passwords: options.unpack.passwords.clone(),
-            }),
+            unpack: self.unpack_job(item, &options.unpack),
             // Downloaded before: unpacked again while the archives are all still there, else downloaded again.
             unpack_only: item
                 .unpack_files
@@ -1193,6 +1190,29 @@ impl DownloadQueue {
                 .filter(|files| files.archives.iter().all(|archive| archive.exists())),
             password: item.password.clone(),
         }
+    }
+
+    /// Whether a run of `item` unpacks its archives, and where: as the rules say when it runs (the one picked for it
+    /// first, `rules::unpacking_rule`), else as Settings → Archives (`settings`) says. The passwords and what becomes of
+    /// an archive are always Settings'.
+    fn unpack_job(&self, item: &QueueItem, settings: &UnpackSettings) -> Option<UnpackJob> {
+        let decided = rules::unpacking_rule(
+            &self.settings.get().rules.list,
+            &RuleSubject {
+                video: &item.video,
+                preset: item.preset.as_ref(),
+            },
+            item.rule_id.as_deref(),
+        );
+        let place = match decided {
+            Some(decided) => decided.unpacking.place(),
+            None => settings.enabled.then_some(settings.place),
+        }?;
+        Some(UnpackJob {
+            place,
+            after: settings.after,
+            passwords: settings.passwords.clone(),
+        })
     }
 
     fn start(&self, job: JobSpec, cancel: CancelToken) {

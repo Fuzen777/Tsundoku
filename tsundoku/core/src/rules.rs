@@ -1,10 +1,11 @@
 //! Rules: how a download goes, picked from what it is ("when the site is Instagram and the uploader is natgeo, save in
-//! D:\Hydrus\natgeo"; "when the site is SoundCloud, start as Audio MP3"). A rule does up to three things: picks the
-//! folder, the preset a video starts with, and whether a copied or sent link downloads right away. For each, the last
-//! rule that's on, does it and matches decides (the bottom-most in the Rules view), so one rule can pick the preset and
-//! an earlier one the folder. With no rule picking the folder, the preset's own folder, then the catch-all (the first
-//! rule, which takes everything else), then the download folder; with none picking the preset, the one picked by hand or the default; with none picking
-//! Download Right Away, Settings. A rule picked by hand for one link (Pending) decides everything it sets for it, before
+//! D:\Hydrus\natgeo"; "when the site is SoundCloud, start as Audio MP3"). A rule does up to four things: picks the
+//! folder, the preset a video starts with, whether a copied or sent link downloads right away, and whether the archives
+//! a download brings are unpacked, and where. For each, the last rule that's on, does it and matches decides (the
+//! bottom-most in the Rules view), so one rule can pick the preset and an earlier one the folder. With no rule picking
+//! the folder, the preset's own folder, then the catch-all (the first rule, which takes everything else), then the
+//! download folder; with none picking the preset, the one picked by hand or the default; with none picking Download
+//! Right Away or unpacking, Settings. A rule picked by hand for one link (Pending) decides everything it sets for it, before
 //! any other rule (`picked_rule`). Kept in `settings.json`, edited in the Rules view.
 
 use std::path::{Path, PathBuf};
@@ -19,7 +20,7 @@ use crate::metadata::VideoInfo;
 use crate::name_parts::{NamePart, join_leaving_out};
 use crate::post_names::{self, PostNameError};
 use crate::presets::Preset;
-use crate::settings::{SettingsError, SettingsStore};
+use crate::settings::{SettingsError, SettingsStore, UnpackPlace};
 use crate::sites;
 
 /// The ID of the catch-all, the rule every install starts with: every download the other rules don't take goes in a
@@ -36,8 +37,9 @@ const SITE_PLACEHOLDER: &str = "site";
 /// The most characters a placeholder fills in, so a long title doesn't make a path longer than Windows takes.
 const LONGEST_PLACEHOLDER: usize = 80;
 
-/// When every condition matches a download, it goes in `folder`, starts with `preset_id` and downloads right away or
-/// not, each when set. A rule sets at least one; the catch-all only its folder.
+/// When every condition matches a download, it goes in `folder`, starts with `preset_id`, downloads right away or not
+/// and has its archives unpacked as `unpack` says, each when set. A rule sets at least one; the catch-all only its
+/// folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -81,6 +83,35 @@ pub struct FolderRule {
     /// browser) start once read, or `None` to leave it to the rules before it, then Settings.
     #[serde(default)]
     pub download_right_away: Option<bool>,
+    /// Whether the archives matching downloads bring are unpacked, and where, or `None` to leave it to the rules before
+    /// it, then Settings → Archives. Missing in rules saved before 0.1.136.
+    #[serde(default)]
+    pub unpack: Option<RuleUnpacking>,
+}
+
+/// What a rule says of the archives a matching download brings, over Settings → Archives: left as they are, or
+/// unpacked to a place (`UnpackPlace`). The passwords and what becomes of an archive after are Settings' alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum RuleUnpacking {
+    /// Left as they were downloaded, even while Settings unpacks archives.
+    Off,
+    Smart,
+    ArchiveFolder,
+    InPlace,
+}
+
+impl RuleUnpacking {
+    /// Where the archives go, or `None` when they're left as they are.
+    pub fn place(self) -> Option<UnpackPlace> {
+        match self {
+            Self::Off => None,
+            Self::Smart => Some(UnpackPlace::Smart),
+            Self::ArchiveFolder => Some(UnpackPlace::ArchiveFolder),
+            Self::InPlace => Some(UnpackPlace::InPlace),
+        }
+    }
 }
 
 /// How a condition joins the one before it.
@@ -215,6 +246,16 @@ pub struct RightAwayRule {
     pub rule: u32,
 }
 
+/// How a download's archives are unpacked by the rules, and the rule that says so, for Rules' Test a Link.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct UnpackingRule {
+    pub unpacking: RuleUnpacking,
+    /// The rule, numbered from 1 as the Rules view lists them.
+    pub rule: u32,
+}
+
 /// Where a download goes, and what decided it, for the preview card.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -245,7 +286,7 @@ pub enum RuleError {
     /// The catch-all without a folder. Rules are numbered from 1.
     #[error("rule {rule} has no folder")]
     EmptyFolder { rule: u32 },
-    /// A rule that picks neither a folder, a preset nor whether to download right away.
+    /// A rule that picks neither a folder, a file name, a preset, whether to download right away nor how to unpack.
     #[error("rule {rule} does nothing")]
     NoAction { rule: u32 },
     /// A rule that picks the preset but checks the kind or the preset, which both depend on it.
@@ -309,6 +350,7 @@ pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
             file_name: String::new(),
             preset_id: None,
             download_right_away: None,
+            unpack: None,
             join: ConditionJoin::All,
             ..rule
         },
@@ -334,6 +376,7 @@ pub fn catch_all_rule() -> FolderRule {
         missing_values: MissingValues::StandIn,
         preset_id: None,
         download_right_away: None,
+        unpack: None,
         join: ConditionJoin::All,
     }
 }
@@ -359,6 +402,7 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
         missing_values: MissingValues::StandIn,
         preset_id: None,
         download_right_away: None,
+        unpack: None,
         join: ConditionJoin::All,
     }
 }
@@ -509,6 +553,7 @@ impl FolderRule {
             && self.file_name.trim().is_empty()
             && self.preset_id.is_none()
             && self.download_right_away.is_none()
+            && self.unpack.is_none()
         {
             return Err(RuleError::NoAction { rule: number });
         }
@@ -760,6 +805,30 @@ pub fn right_away_rule(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Optio
             rule: rule_number(index),
         })
     })
+}
+
+/// How a download's archives are unpacked by the rules: as the rule picked for it (`picked`, by ID) says when it says,
+/// else as the last rule that's on, says and matches, with that rule. `None` leaves it to Settings → Archives.
+pub fn unpacking_rule(
+    rules: &[FolderRule],
+    subject: &RuleSubject<'_>,
+    picked: Option<&str>,
+) -> Option<UnpackingRule> {
+    let decided = |index: usize, rule: &FolderRule| {
+        rule.unpack.map(|unpacking| UnpackingRule {
+            unpacking,
+            rule: rule_number(index),
+        })
+    };
+    picked_rule(rules, picked)
+        .and_then(|(index, rule)| decided(index, rule))
+        .or_else(|| {
+            rules.iter().enumerate().rev().find_map(|(index, rule)| {
+                (rule.enabled && rule.matches(subject))
+                    .then(|| decided(index, rule))
+                    .flatten()
+            })
+        })
 }
 
 /// A rule's number, from 1, as the Rules view lists them.
@@ -1230,6 +1299,7 @@ mod tests {
             missing_values: MissingValues::StandIn,
             preset_id: None,
             download_right_away: None,
+            unpack: None,
             join: ConditionJoin::All,
         }
     }
@@ -2349,6 +2419,66 @@ mod tests {
     }
 
     #[test]
+    fn the_last_rule_that_says_decides_unpacking() {
+        let file = mega_file();
+        let subject = RuleSubject {
+            video: &file,
+            preset: None,
+        };
+        let unpacking = |unpack: RuleUnpacking, conditions: Vec<RuleCondition>| FolderRule {
+            id: format!("{unpack:?}"),
+            unpack: Some(unpack),
+            ..rule(conditions, "")
+        };
+        let mut off = unpacking(RuleUnpacking::Smart, Vec::new());
+        off.enabled = false;
+        let rules = vec![
+            unpacking(RuleUnpacking::InPlace, Vec::new()),
+            unpacking(
+                RuleUnpacking::Off,
+                vec![condition(RuleField::Site, RuleOperator::Is, "MEGA")],
+            ),
+            unpacking(
+                RuleUnpacking::ArchiveFolder,
+                vec![condition(RuleField::Site, RuleOperator::Is, "Dropbox")],
+            ),
+            rule(Vec::new(), r"D:\All"),
+            off,
+        ];
+        assert_eq!(
+            unpacking_rule(&rules, &subject, None),
+            Some(UnpackingRule {
+                unpacking: RuleUnpacking::Off,
+                rule: 2
+            }),
+            "the last that says and matches, numbered as listed"
+        );
+        assert_eq!(
+            unpacking_rule(&rules[2..], &subject, None),
+            None,
+            "Settings"
+        );
+        assert_eq!(
+            unpacking_rule(&rules, &subject, Some("ArchiveFolder"))
+                .map(|decided| decided.unpacking),
+            Some(RuleUnpacking::ArchiveFolder),
+            "a rule picked by hand says first, whatever its conditions"
+        );
+        assert_eq!(
+            unpacking_rule(&rules, &subject, Some("Smart")).map(|decided| decided.unpacking),
+            Some(RuleUnpacking::Smart),
+            "even while it's off"
+        );
+        assert_eq!(
+            unpacking_rule(&rules[1..], &subject, Some("rule-9")).map(|decided| decided.rule),
+            Some(1),
+            "a picked rule that's gone leaves it to the others"
+        );
+        assert_eq!(RuleUnpacking::Off.place(), None);
+        assert_eq!(RuleUnpacking::InPlace.place(), Some(UnpackPlace::InPlace));
+    }
+
+    #[test]
     fn rules_from_before_actions_read_as_folder_rules() {
         let saved = r#"{ "id": "rule-1", "enabled": true, "folder": "D:\\Music",
             "conditions": [{ "field": "site", "operator": "is", "value": "SoundCloud" }] }"#;
@@ -2456,6 +2586,7 @@ mod tests {
         let with_actions = FolderRule {
             preset_id: Some("audio-mp3".to_owned()),
             download_right_away: Some(true),
+            unpack: Some(RuleUnpacking::Off),
             ..catch_all_rule()
         };
         assert_eq!(
@@ -2577,11 +2708,16 @@ mod tests {
                     download_right_away: Some(false),
                     ..rule(soundcloud(), " ")
                 },
+                FolderRule {
+                    unpack: Some(RuleUnpacking::InPlace),
+                    ..rule(soundcloud(), "")
+                },
             ])
             .unwrap();
         assert_eq!(saved[1].preset_id.as_deref(), Some("audio-mp3"));
         assert_eq!(saved[2].folder, "");
         assert_eq!(saved[2].download_right_away, Some(false));
+        assert_eq!(saved[3].unpack, Some(RuleUnpacking::InPlace));
         assert_eq!(manager_in(&folder).list(), saved, "kept in settings.json");
         assert_eq!(
             manager

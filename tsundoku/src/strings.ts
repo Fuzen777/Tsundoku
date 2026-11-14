@@ -753,7 +753,7 @@ export const strings = {
   },
   rules: {
     intro:
-      "Rules pick where downloads go, the preset videos start with, and whether copied links download right away. For each, the last rule that matches and picks it decides, so a rule overrides those above it. A preset with a folder of its own comes before the first rule, which takes everything else.",
+      "Rules pick where downloads go, the preset videos start with, whether copied links download right away, and how archives are unpacked. For each, the last rule that matches and picks it decides, so a rule overrides those above it. A preset with a folder of its own comes before the first rule, which takes everything else.",
     /** The (?) at the top of the view: what each of the editor's fields means, under the field's own label. */
     help: {
       label: "How Rules Work",
@@ -781,11 +781,15 @@ export const strings = {
       ],
       downloadRightAway:
         "Whether matching links you copy, or that the clipboard shortcut or your browser send, start downloading once they're read. Leave as Is follows Settings.",
+      unpackArchives: [
+        "Whether the zip, 7z and rar archives that matching downloads bring are unpacked, and where. Leave as Is follows Settings → Archives, and Don't Unpack leaves them as they're downloaded even while Settings unpacks.",
+        "Smart puts an archive's one file or folder beside it as it is, and several in a folder named after it. In a Folder Named After the Archive always makes that folder; In Place never does. The passwords, and what becomes of the archive once unpacked, are Settings'.",
+      ],
     },
     addRule: "Add Rule",
     emptyTitle: "No Rules",
     emptyBody:
-      "Add a rule to pick the folder, the preset or Download Right Away for downloads by site, uploader, title, link, kind or preset.",
+      "Add a rule to pick the folder, the preset, Download Right Away or unpacking for downloads by site, uploader, title, link, kind or preset.",
     otherwise: (folder: string) => `The download folder is ${folder}.`,
     changeDownloadFolder: "Change Download Folder",
     tester: {
@@ -802,6 +806,10 @@ export const strings = {
       rightAway: "Download right away",
       waitInPending: "Wait in Pending",
       asSettingsSay: "As Settings → Adding Links says",
+      archives: "Archives",
+      leftPacked: "Left as they are",
+      unpackedTo: (place: string) => `Unpacked: ${place}`,
+      asArchiveSettingsSay: "As Settings → Archives says",
       listing: "This is a channel, playlist or account. Each item picked from it is matched on its own, so test one of its links instead.",
       nothingDownloaded: "Nothing is downloaded.",
     },
@@ -867,6 +875,8 @@ export const strings = {
     deletedPreset: "Deleted Preset",
     downloadRightAway: "Download Right Away",
     on: "On",
+    unpackArchives: "Unpack Archives",
+    dontUnpack: "Don't Unpack",
     /** What a rule does besides picking a folder, under its folder in the list. */
     actions: {
       namesFiles: (name: string) => `Names files “${name}”`,
@@ -875,6 +885,8 @@ export const strings = {
       presetDeleted: "Starts with the default preset, since the one it picked was deleted",
       rightAway: "Downloads right away",
       notRightAway: "Waits to be started",
+      leavesArchivesPacked: "Leaves archives packed",
+      unpacksArchives: (place: string) => `Unpacks archives: ${place}`,
     },
     fields: {
       site: "Site",
@@ -939,7 +951,7 @@ export const strings = {
     errors: {
       emptyFolder: (rule: number) => `Rule ${rule} needs a folder.`,
       noAction: (rule: number) =>
-        `Rule ${rule} doesn't do anything yet. Pick a folder, a file name, a preset to start with or Download Right Away.`,
+        `Rule ${rule} doesn't do anything yet. Pick a folder, a file name, a preset to start with, Download Right Away or how to unpack archives.`,
       circularPreset: (rule: number) =>
         `Rule ${rule} checks the kind or the preset, so it can't pick the preset too. Remove that condition, or set Start As to Leave as Is.`,
       emptyValue: (rule: number) => `A condition of rule ${rule} is empty. Fill it in or remove it.`,
@@ -1222,7 +1234,18 @@ export const strings = {
     archives: "Archives",
     unpackArchives: "Unpack Archives After Downloading",
     unpackArchivesHint:
-      "Zip, 7z and rar archives, in one file or split into parts, are unpacked beside them: one file or folder as it is, several in a folder named after the archive. An archive split over several links is unpacked once its last part is downloaded.",
+      "Zip, 7z and rar archives, in one file or split into parts, are unpacked beside them. An archive split over several links is unpacked once its last part is downloaded. A rule can say otherwise for the downloads it matches.",
+    unpackPlace: "Where to Unpack",
+    unpackPlaces: {
+      smart: "Smart",
+      archiveFolder: "In a Folder Named After the Archive",
+      inPlace: "In Place",
+    },
+    unpackPlaceHints: {
+      smart: "One file or folder goes beside the archive as it is; several go in a folder named after the archive.",
+      archiveFolder: "Everything goes in a folder named after the archive, even a single file.",
+      inPlace: "Everything goes beside the archive as it is, with no folder made for it.",
+    },
     afterUnpacking: "After Unpacking",
     afterUnpackingHint: "What happens to the archive, all its parts, once what it holds is beside it.",
     afterUnpackingChoices: {

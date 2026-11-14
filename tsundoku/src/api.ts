@@ -49,6 +49,7 @@ import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolUpdateCheck } from "./bindings/ToolUpdateCheck"
 import type { ToolUpdateOutcome } from "./bindings/ToolUpdateOutcome"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
+import type { UnpackingRule } from "./bindings/UnpackingRule"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
 import { standIns } from "./standIns"
@@ -73,6 +74,7 @@ export const queryKeys = {
   downloadLog: ["download-log"],
   rulePreset: ["rule-preset"],
   ruleRightAway: ["rule-right-away"],
+  ruleUnpacking: ["rule-unpacking"],
   queue: ["queue"],
   pending: ["pending"],
   watched: ["watched"],
@@ -466,6 +468,13 @@ export function getRulePreset(video: VideoInfo, ruleId: string | null = null): P
 export function getRuleRightAway(video: VideoInfo, presetId: string | null): Promise<RightAwayRule | null> {
   if (!isTauri()) return Promise.resolve(standIns.ruleRightAway(video))
   return invoke<RightAwayRule | null>("rule_download_right_away", { video, presetId })
+}
+
+/** Whether a rule unpacks a video's archives, and where, and which rule: null when Settings → Archives decides.
+ * `presetId` is the preset it would start with, none for a post or a file host's files. */
+export function getRuleUnpacking(video: VideoInfo, presetId: string | null): Promise<UnpackingRule | null> {
+  if (!isTauri()) return Promise.resolve(standIns.ruleUnpacking(video))
+  return invoke<UnpackingRule | null>("rule_unpacking", { video, presetId })
 }
 
 /** Where downloads go when no folder is chosen: a Tsundoku folder in Downloads. */

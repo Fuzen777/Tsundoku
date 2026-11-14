@@ -10,6 +10,7 @@ use std::time::SystemTime;
 use super::Failure;
 use crate::cancel::CancelToken;
 use crate::rules::without_refused_characters;
+use crate::settings::UnpackPlace;
 
 /// How much is read at a time.
 const BUFFER_SIZE: usize = 256 * 1024;
@@ -196,42 +197,64 @@ fn safe_part(part: &str) -> String {
     }
 }
 
-/// Puts what an archive was unpacked to (`unpacked`, a folder of its own) beside it in `folder`: the one file or
-/// folder it held as it is, several in a folder named `stem`. A name that's taken gets a number ("Album (2)"). Answers
-/// where it went and every file now there, in a stable order.
+/// Puts what an archive was unpacked to (`unpacked`, a folder of its own) beside it in `folder`, as `place` says: in
+/// a folder named `stem` (always, or for `Smart` only when it held several things), else each thing it held as it is.
+/// A name that's taken gets a number ("Album (2)"). Answers where it went (that folder, its one thing, or `folder` for
+/// several things put there as they are) and every file now there, in a stable order.
 pub(super) fn put_beside(
     unpacked: &Path,
     folder: &Path,
     stem: &str,
+    place: UnpackPlace,
 ) -> Result<(PathBuf, Vec<PathBuf>), Failure> {
     let mut top: Vec<PathBuf> = fs::read_dir(unpacked)
         .map_err(|error| Failure::write(unpacked, &error))?
         .flatten()
         .map(|entry| entry.path())
         .collect();
-    let placed = match top.as_mut_slice() {
-        [] => {
-            let _ = fs::remove_dir(unpacked);
-            return Ok((folder.to_path_buf(), Vec::new()));
-        }
-        [only] => {
-            let name = only.file_name().map(Path::new).unwrap_or(Path::new(stem));
-            let target = if only.is_dir() {
-                free_folder_name(&folder.join(name))
-            } else {
-                crate::downloads::free_name(&folder.join(name))
-            };
-            fs::rename(&*only, &target).map_err(|error| Failure::write(&target, &error))?;
-            let _ = fs::remove_dir(unpacked);
-            target
-        }
-        _ => {
-            let target = free_folder_name(&folder.join(safe_part(stem)));
-            fs::rename(unpacked, &target).map_err(|error| Failure::write(&target, &error))?;
-            target
-        }
+    if top.is_empty() {
+        let _ = fs::remove_dir(unpacked);
+        return Ok((folder.to_path_buf(), Vec::new()));
+    }
+    let in_a_folder = match place {
+        UnpackPlace::Smart => top.len() > 1,
+        UnpackPlace::ArchiveFolder => true,
+        UnpackPlace::InPlace => false,
     };
-    Ok((placed.clone(), files_under(&placed)))
+    if in_a_folder {
+        let target = free_folder_name(&folder.join(safe_part(stem)));
+        fs::rename(unpacked, &target).map_err(|error| Failure::write(&target, &error))?;
+        return Ok((target.clone(), files_under(&target)));
+    }
+    // Folders first, then files, each by name, as `files_under` lists them.
+    top.sort_by_cached_key(|path| (!path.is_dir(), path.clone()));
+    let mut moved: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(top.len());
+    for path in top {
+        let name = path.file_name().map(Path::new).unwrap_or(Path::new(stem));
+        let target = if path.is_dir() {
+            free_folder_name(&folder.join(name))
+        } else {
+            crate::downloads::free_name(&folder.join(name))
+        };
+        if let Err(error) = fs::rename(&path, &target) {
+            // Back where they were, so a failed unpacking leaves nothing beside the archive.
+            for (from, to) in moved.iter().rev() {
+                let _ = fs::rename(to, from);
+            }
+            return Err(Failure::write(&target, &error));
+        }
+        moved.push((path, target));
+    }
+    let _ = fs::remove_dir(unpacked);
+    let files = moved
+        .iter()
+        .flat_map(|(_, target)| files_under(target))
+        .collect();
+    let placed = match moved.as_slice() {
+        [(_, only)] => only.clone(),
+        _ => folder.to_path_buf(),
+    };
+    Ok((placed, files))
 }
 
 /// `path`, or the first of "Name (2)", "Name (3)"… that isn't taken: a folder's name has no extension to keep.

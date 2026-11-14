@@ -32,6 +32,7 @@ import type { SharedFile } from "./bindings/SharedFile"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolDownload } from "./bindings/ToolDownload"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
+import type { UnpackingRule } from "./bindings/UnpackingRule"
 import type { VideoInfo } from "./bindings/VideoInfo"
 import type { WatchedItem } from "./bindings/WatchedItem"
 import type { WatchedSource } from "./bindings/WatchedSource"
@@ -503,7 +504,7 @@ export const standIns = {
     postPause: { min: 5, max: 10 },
     sitePauses: { x: { min: 2, max: 5 }, pixiv: null, tumblr: null },
     hourlyFileLimit: null,
-    unpack: { enabled: true, after: "recycleBin", passwords: [] },
+    unpack: { enabled: true, place: "smart", after: "recycleBin", passwords: [] },
   } satisfies DownloadSettings,
   addingOptions: {
     watchClipboard: true,
@@ -529,6 +530,7 @@ export const standIns = {
       missingValues: "standIn",
       presetId: null,
       downloadRightAway: null,
+      unpack: null,
     },
     {
       id: "rule-1",
@@ -543,6 +545,7 @@ export const standIns = {
       missingValues: "leaveOut",
       presetId: null,
       downloadRightAway: null,
+      unpack: null,
     },
     {
       id: "rule-2",
@@ -557,6 +560,7 @@ export const standIns = {
       missingValues: "standIn",
       presetId: null,
       downloadRightAway: null,
+      unpack: null,
     },
     {
       id: "rule-3",
@@ -568,6 +572,19 @@ export const standIns = {
       missingValues: "standIn",
       presetId: "best-audio",
       downloadRightAway: true,
+      unpack: null,
+    },
+    {
+      id: "rule-4",
+      name: "MEGA Packs",
+      enabled: true,
+      conditions: [{ field: "site", operator: "is", value: "MEGA", caseSensitive: false, join: "all" }],
+      folder: "",
+      fileName: "",
+      missingValues: "standIn",
+      presetId: null,
+      downloadRightAway: null,
+      unpack: "inPlace",
     },
   ] satisfies FolderRule[],
   /** The first rule's folder for the video's site, as a new install has it, or the folder of the rule picked for it. */
@@ -587,6 +604,10 @@ export const standIns = {
   ruleRightAway(video: VideoInfo): RightAwayRule | null {
     // As the stand-in rules have it: rule 3 downloads videos with "zoo" in their title right away.
     return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 4 } : null
+  },
+  ruleUnpacking(video: VideoInfo): UnpackingRule | null {
+    // As the stand-in rules have it: rule 5 unpacks MEGA's archives in place.
+    return video.site === "mega" ? { unpacking: "inPlace", rule: 5 } : null
   },
   rulePreset(video: VideoInfo, ruleId: string | null = null): RulePreset | null {
     if (video.post || video.files) return null

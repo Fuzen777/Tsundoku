@@ -98,6 +98,7 @@ export function newRule(): FolderRule {
     missingValues: "standIn",
     presetId: null,
     downloadRightAway: null,
+    unpack: null,
   }
 }
 
@@ -130,8 +131,8 @@ export function canPickPreset(conditions: readonly RuleCondition[]): boolean {
 }
 
 /** What a rule does besides picking a folder, as short phrases: how it names files, whether it leaves out placeholders
- * without a value (when it has a folder or a file name for them), the preset it starts videos with, and whether
- * matching links download right away. */
+ * without a value (when it has a folder or a file name for them), the preset it starts videos with, whether matching
+ * links download right away, and whether and where their archives are unpacked. */
 export function describeActions(rule: FolderRule, presets: readonly Preset[]): string[] {
   const actions = text.actions
   const phrases: string[] = []
@@ -144,6 +145,13 @@ export function describeActions(rule: FolderRule, presets: readonly Preset[]): s
     phrases.push(preset ? actions.startsAs(preset.name) : actions.presetDeleted)
   }
   if (rule.downloadRightAway !== null) phrases.push(rule.downloadRightAway ? actions.rightAway : actions.notRightAway)
+  if (rule.unpack !== null) {
+    phrases.push(
+      rule.unpack === "off"
+        ? actions.leavesArchivesPacked
+        : actions.unpacksArchives(strings.settings.unpackPlaces[rule.unpack]),
+    )
+  }
   return phrases
 }
 
