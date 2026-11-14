@@ -46,11 +46,12 @@ import { Thumbnail } from "../components/Thumbnail"
 import { describeHistoryError, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { DATE_RANGES, dateBounds, type DateBounds, type DateRange } from "../historyDates"
-import { useAppActions } from "../navigation"
-import { useDownloadFiles, useHistory, useHistoryFilters, useVideoDownloads } from "../queries"
+import { type HistoryTarget, useAppActions } from "../navigation"
+import { useDownloadFiles, useHistory, useHistoryFilters, useVideoDownloads, useWatchedSources } from "../queries"
 import { strings } from "../strings"
 import { useDebouncedValue } from "../useDebouncedValue"
 import { useVirtualRows } from "../virtualRows"
+import { sourceLabels } from "../watchedSources"
 
 const text = strings.history
 
@@ -70,10 +71,14 @@ const LOAD_AHEAD = 30
 /**
  * Every video downloaded, newest first, with search, filters and sorting. The history is read a page at a time as the
  * list scrolls, and only the rows on screen are drawn, so a history of thousands stays quick. Which rows are expanded is
- * kept here, so a row scrolled away and back keeps its lists open.
+ * kept here, so a row scrolled away and back keeps its lists open. Opened from a watched source (`target`), it shows
+ * only that source's items.
  */
-export function HistoryView() {
+export function HistoryView({ target = null }: { target?: HistoryTarget | null }) {
   const queryClient = useQueryClient()
+  const { data: watchedSources = [] } = useWatchedSources()
+  const watchedLabels = sourceLabels(watchedSources)
+  const [watchedSource, setWatchedSource] = useState<number | null>(target?.watchedSource ?? null)
   const [search, setSearch] = useState("")
   const [site, setSite] = useState<string | null>(null)
   const [preset, setPreset] = useState<string | null>(null)
@@ -97,13 +102,20 @@ export function HistoryView() {
     files,
     downloadedFrom: dates.bounds.from,
     downloadedUntil: dates.bounds.until,
+    watchedSource,
     sort,
     descending,
   }
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useHistory(query)
   const { data: filters } = useHistoryFilters()
   const isFiltered =
-    query.search !== null || site !== null || preset !== null || kind !== null || files !== null || dates.range !== "any"
+    query.search !== null ||
+    site !== null ||
+    preset !== null ||
+    kind !== null ||
+    files !== null ||
+    dates.range !== "any" ||
+    watchedSource !== null
 
   // The dates are worked out when they're picked, so the query doesn't change while the view is open.
   const changeDates = (range: DateRange, from = dates.from, to = dates.to) =>
@@ -378,6 +390,21 @@ export function HistoryView() {
                 </option>
               ))}
             </SelectInput>
+            {(watchedSources.length > 0 || watchedSource !== null) && (
+              <SelectInput
+                aria-label={text.allSources}
+                className="max-w-56"
+                value={watchedSource ?? ""}
+                onChange={(event) => setWatchedSource(event.target.value ? Number(event.target.value) : null)}
+              >
+                <option value="">{text.allSources}</option>
+                {watchedSources.map((source) => (
+                  <option key={source.id} value={source.id}>
+                    {watchedLabels.get(source.id)}
+                  </option>
+                ))}
+              </SelectInput>
+            )}
           </div>
 
           {total !== undefined && total > 0 && (

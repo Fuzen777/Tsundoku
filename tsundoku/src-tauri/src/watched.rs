@@ -60,6 +60,12 @@ pub fn check_watched_source(watched: Watched<'_>, id: i64) -> Result<(), Watched
     watched.check(id)
 }
 
+/// Check All: each of these sources is checked in the background, one after the other in this order.
+#[tauri::command]
+pub fn check_watched_sources(watched: Watched<'_>, ids: Vec<i64>) -> Result<(), WatchedError> {
+    watched.check_many(&ids)
+}
+
 /// Download Selected (with `skip_rest`, the new items not picked are skipped), or Download on a skipped item. How many
 /// were queued.
 #[tauri::command]
@@ -76,4 +82,21 @@ pub fn download_watched_items(
 #[tauri::command]
 pub fn skip_watched_items(watched: Watched<'_>, id: i64) -> Result<(), WatchedError> {
     watched.skip_new(id)
+}
+
+/// All New Items' Download Selected: the picked new items of every source, each with its source's folder and preset
+/// (with `skip_rest`, every other new item is skipped). How many were queued.
+#[tauri::command]
+pub fn download_new_watched_items(
+    watched: Watched<'_>,
+    items: Vec<ItemKey>,
+    skip_rest: bool,
+) -> Result<usize, WatchedError> {
+    watched.download_new(&items, skip_rest)
+}
+
+/// All New Items' Skip All: every new item of every source is skipped.
+#[tauri::command]
+pub fn skip_every_new_watched_item(watched: Watched<'_>) -> Result<(), WatchedError> {
+    watched.skip_every_new()
 }

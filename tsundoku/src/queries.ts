@@ -53,6 +53,7 @@ import {
 } from "./api"
 import { ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
 import { DEFAULT_PICKER_LAYOUTS, sizeStep } from "./pickerLayout"
+import { DEFAULT_WATCHED_ARRANGEMENT } from "./watchedSources"
 import { ruleLabel } from "./views/rules/ruleLabels"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
@@ -72,6 +73,7 @@ import type { ToolStatus } from "./bindings/ToolStatus"
 import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
+import type { WatchedArrangement } from "./bindings/WatchedArrangement"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { applyAppearance } from "./theme"
 
@@ -308,7 +310,33 @@ export function usePendingLinks() {
 
 /** How the Pending or Queue view groups and sorts its list (the stored order until it's read), and a change to it,
  * which takes effect at once and is saved, or undone with the error if saving failed. */
-export function useListArrangement(list: keyof ListArrangements) {
+export function useListArrangement(list: "pending" | "queue") {
+  const { arrangements, change, error } = useListArrangements()
+  return {
+    arrangement: arrangements?.[list] ?? STORED_ORDER,
+    ready: arrangements !== undefined,
+    change: (changes: Partial<ListArrangement>) =>
+      change((current) => ({ ...current, [list]: { ...current[list], ...changes } })),
+    error,
+  }
+}
+
+/** How the Watched view shows its sources (its defaults until it's read), and a change to it, saved as the lists'
+ * arrangements are. */
+export function useWatchedArrangement() {
+  const { arrangements, change, error } = useListArrangements()
+  return {
+    arrangement: arrangements?.watched ?? DEFAULT_WATCHED_ARRANGEMENT,
+    ready: arrangements !== undefined,
+    change: (changes: Partial<WatchedArrangement>) =>
+      change((current) => ({ ...current, watched: { ...current.watched, ...changes } })),
+    error,
+  }
+}
+
+/** Every list's arrangement, and a change to them, which takes effect at once and is saved, or undone with the error
+ * if saving failed. */
+function useListArrangements() {
   const queryClient = useQueryClient()
   const { data: arrangements } = useQuery({
     queryKey: queryKeys.listArrangements,
@@ -316,9 +344,9 @@ export function useListArrangement(list: keyof ListArrangements) {
     staleTime: Infinity,
   })
   const [error, setError] = useState<ErrorDescription | null>(null)
-  const change = async (changes: Partial<ListArrangement>) => {
+  const change = async (update: (current: ListArrangements) => ListArrangements) => {
     if (!arrangements) return
-    const changed = { ...arrangements, [list]: { ...arrangements[list], ...changes } }
+    const changed = update(arrangements)
     setError(null)
     queryClient.setQueryData(queryKeys.listArrangements, changed)
     try {
@@ -328,7 +356,7 @@ export function useListArrangement(list: keyof ListArrangements) {
       setError(describeDownloadError(caught))
     }
   }
-  return { arrangement: arrangements?.[list] ?? STORED_ORDER, ready: arrangements !== undefined, change, error }
+  return { arrangements, change, error }
 }
 
 /** The pickers' layouts being saved, one after another, so quick clicks on the size buttons are saved in order. */

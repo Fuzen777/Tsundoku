@@ -4,7 +4,7 @@
 //! what it knows (`listing::before_known_ground`); a playlist is compared whole. New items wait on the source's card
 //! until they're downloaded, with the source's own folder and preset, or skipped.
 //!
-//! Checks run one at a time on a thread of their own, by hand for now (Check Now). They keep to a site's
+//! Checks run one at a time on a thread of their own, by hand for now (Check Now, Check All). They keep to a site's
 //! "too many requests" wait as previews do.
 
 mod store;
@@ -99,6 +99,10 @@ pub struct WatchedSource {
     pub last_error: Option<PreviewError>,
     /// A check of it is running or waiting to.
     pub checking: bool,
+    /// How many of its items the history has: what the history lists for it (`HistoryQuery::watched_source`).
+    pub downloaded_count: u32,
+    /// The day its newest item was posted (YYYY-MM-DD, roughly for YouTube), when any of them says.
+    pub latest_post: Option<String>,
     /// What checks found that's neither downloaded nor skipped, newest first.
     pub new_items: Vec<WatchedItem>,
     /// What was left out of a download, newest first: never new again, and still downloadable.
@@ -214,12 +218,14 @@ impl WatchedSources {
     pub fn list(&self) -> Result<Vec<WatchedSource>, WatchedError> {
         let checking = lock(&self.checking).clone();
         let sources = self.store.sources()?;
+        let downloaded = self.store.downloaded_counts()?;
         sources
             .into_iter()
             .map(|source| {
                 let items = self.store.items(source.id)?;
                 let is_checking = checking.contains(&source.id);
-                Ok(self.present(source, items, is_checking))
+                let count = downloaded.get(&source.id).copied().unwrap_or(0);
+                Ok(self.present(source, items, is_checking, count))
             })
             .collect()
     }
@@ -300,12 +306,38 @@ impl WatchedSources {
     /// Check Now: reads the source again, on the checks' thread, after the checks before it.
     pub fn check(&self, id: i64) -> Result<(), WatchedError> {
         self.store.source(id)?.ok_or(WatchedError::NotFound)?;
+        if self.ask_check(id) {
+            self.notify();
+        }
+        Ok(())
+    }
+
+    /// Check All: reads each of these sources again, one after the other in the order given, after the checks before
+    /// them. A source removed meanwhile, or already waiting for its check, is left out.
+    pub fn check_many(&self, ids: &[i64]) -> Result<(), WatchedError> {
+        let watched: HashSet<i64> = self
+            .store
+            .sources()?
+            .iter()
+            .map(|source| source.id)
+            .collect();
+        let mut asked = false;
+        for id in ids.iter().filter(|id| watched.contains(id)) {
+            asked |= self.ask_check(*id);
+        }
+        if asked {
+            self.notify();
+        }
+        Ok(())
+    }
+
+    /// Puts a source's check on the checks' thread, unless it waits there already. Whether it was put there.
+    fn ask_check(&self, id: i64) -> bool {
         if !lock(&self.checking).insert(id) {
-            return Ok(());
+            return false;
         }
         let _ = lock(&self.to_check).send(id);
-        self.notify();
-        Ok(())
+        true
     }
 
     /// Download Selected: queues these items with the source's folder and preset. With `skip_rest`, the new items not
@@ -345,17 +377,70 @@ impl WatchedSources {
         Ok(added)
     }
 
+    /// All New Items' Download Selected: queues the picked items of every source's new ones, each with its own
+    /// source's folder and preset. An item two sources found is queued once, from the first source added, and leaves
+    /// both. With `skip_rest`, every other new item becomes skipped. How many were queued.
+    pub fn download_new(&self, picked: &[ItemKey], skip_rest: bool) -> Result<usize, WatchedError> {
+        let picked: HashSet<&ItemKey> = picked.iter().collect();
+        let settings = self.settings.get();
+        let download_folder = settings.downloads.resolved_folder();
+        let mut queued_here = HashSet::new();
+        let mut added = 0;
+        for source in self.store.sources()? {
+            let items = self.store.items(source.id)?;
+            let mut picks = Vec::new();
+            let mut taken = Vec::new();
+            let mut rest = Vec::new();
+            for item in items.iter().filter(|item| item.state == ItemState::New) {
+                let key = ItemKey::of(&item.video);
+                if !picked.contains(&key) {
+                    rest.push(key);
+                    continue;
+                }
+                if queued_here.insert(key.clone()) {
+                    picks.push(self.pick_for(&source, &item.video, &download_folder));
+                }
+                taken.push(key);
+            }
+            if !picks.is_empty() {
+                added += self
+                    .queue
+                    .add_many(picks)
+                    .map_err(|error| WatchedError::Queue { error })?;
+            }
+            self.store.set_state(source.id, &taken, ItemState::Queued)?;
+            if skip_rest {
+                self.store.set_state(source.id, &rest, ItemState::Skipped)?;
+            }
+        }
+        self.notify();
+        Ok(added)
+    }
+
     /// Skip All: every new item of the source becomes skipped.
     pub fn skip_new(&self, id: i64) -> Result<(), WatchedError> {
+        self.skip_new_of(id)?;
+        self.notify();
+        Ok(())
+    }
+
+    /// All New Items' Skip All: every new item of every source becomes skipped.
+    pub fn skip_every_new(&self) -> Result<(), WatchedError> {
+        for source in self.store.sources()? {
+            self.skip_new_of(source.id)?;
+        }
+        self.notify();
+        Ok(())
+    }
+
+    fn skip_new_of(&self, id: i64) -> Result<(), WatchedError> {
         let items = self.store.items(id)?;
         let new: Vec<ItemKey> = items
             .iter()
             .filter(|item| item.state == ItemState::New)
             .map(|item| ItemKey::of(&item.video))
             .collect();
-        self.store.set_state(id, &new, ItemState::Skipped)?;
-        self.notify();
-        Ok(())
+        self.store.set_state(id, &new, ItemState::Skipped)
     }
 
     /// How many new items wait across every source, for the sidebar's count.
@@ -497,7 +582,18 @@ impl WatchedSources {
         source: StoredSource,
         items: Vec<StoredItem>,
         checking: bool,
+        downloaded_count: u32,
     ) -> WatchedSource {
+        let latest_post = items
+            .iter()
+            .filter_map(|item| {
+                item.video
+                    .upload_date
+                    .as_ref()
+                    .or(item.approximate_date.as_ref())
+            })
+            .max()
+            .cloned();
         let mut new_items = Vec::new();
         let mut skipped_items = Vec::new();
         for item in items {
@@ -531,6 +627,8 @@ impl WatchedSources {
             last_checked_at: source.last_checked_at,
             last_error: source.last_error,
             checking,
+            downloaded_count,
+            latest_post,
             new_items,
             skipped_items,
         }

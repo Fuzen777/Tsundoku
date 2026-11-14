@@ -79,6 +79,14 @@ export interface AppActions {
   /** Adds links read from files to Pending, as a dropped file's are (asking first for many), or says why there were
    * none. */
   addFileLinks: (read: LinkFilesRead) => void
+  /** Opens the history at a watched source's downloads: its Source filter set, the others cleared. */
+  showWatchedDownloads: (sourceId: number) => void
+}
+
+/** What the history opens showing, when another view sends the user there: a new object each time, so the history
+ * starts again from it. */
+export interface HistoryTarget {
+  watchedSource: number
 }
 
 export const AppActionsContext = createContext<AppActions>({
@@ -87,6 +95,7 @@ export const AppActionsContext = createContext<AppActions>({
   pickFromPending: () => {},
   addText: () => {},
   addFileLinks: () => {},
+  showWatchedDownloads: () => {},
 })
 
 export function useAppActions(): AppActions {

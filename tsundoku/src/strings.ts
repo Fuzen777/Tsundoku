@@ -296,6 +296,8 @@ export const strings = {
     searchPlaceholder: "Search Titles and Uploaders",
     allSites: "All Sites",
     allPresets: "All Presets",
+    /** The filter of a watched source's items, which Show Downloads in History on its card picks. */
+    allSources: "All Watched Sources",
     sortBy: "Sort By",
     sorts: {
       downloaded: "Date Downloaded",
@@ -559,6 +561,45 @@ export const strings = {
     emptyTitle: "Nothing Watched",
     emptyBody:
       "Paste a channel, playlist or account link, then Watch on its list. Watched sources stay here, and Check Now lists what's new on them.",
+    checkAll: "Check All",
+    checkAllHint: "Checks every source, one after the other",
+    checkGroup: (group: string) => `Check All Under ${group}`,
+    show: "Show",
+    shows: {
+      sources: "Sources",
+      allNew: (count: number) => (count === 0 ? "All New Items" : `All New Items (${count})`),
+    },
+    groupBy: "Group By",
+    groups: {
+      none: "None",
+      site: "Site",
+    },
+    sortBy: "Sort By",
+    sorts: {
+      mostNew: "Most New",
+      name: "Name",
+      lastChecked: "Last Checked",
+      latestPost: "Latest Post",
+      added: "Date Watched",
+    },
+    ascending: "Ascending",
+    descending: "Descending",
+    expandAll: "Expand All",
+    collapseAll: "Collapse All",
+    expand: (name: string) => `Expand ${name}`,
+    collapse: (name: string) => `Collapse ${name}`,
+    /** The group of the sources whose last check failed, above the rest. */
+    needsAttention: "Needs Attention",
+    /** The heading over the other sources, while some need attention and the list isn't grouped. */
+    otherSources: "Other Sources",
+    groupNew: (count: number) => `${count} new`,
+    downloadedCount: (count: number) => `${count} downloaded`,
+    skippedCount: (count: number) => `${count} skipped`,
+    latestPost: (ago: string) => `Last post ${ago}`,
+    showInHistory: "Show Downloads in History",
+    allNewNone: "Nothing new on any source. Check All looks for more.",
+    /** A source in All New Items when another watched source has its name: "NASA on x.com". */
+    sourceOnSite: (name: string, site: string) => `${name} on ${site}`,
     checkNow: "Check Now",
     checking: "Checking…",
     edit: "Edit",

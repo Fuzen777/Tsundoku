@@ -23,6 +23,7 @@ import {
   AppActionsContext,
   type SettingsPlace,
   type SettingsSectionId,
+  type HistoryTarget,
   type SettingsTarget,
   type ViewId,
 } from "./navigation"
@@ -41,7 +42,13 @@ import { SetupView } from "./views/SetupView"
 import { WatchedView } from "./views/WatchedView"
 
 export function App() {
-  const [view, setView] = useState<ViewId>("queue")
+  const [view, setShownView] = useState<ViewId>("queue")
+  // What the history shows when a watched source's Show Downloads in History opens it, until another view is opened.
+  const [historyTarget, setHistoryTarget] = useState<HistoryTarget | null>(null)
+  const setView = useCallback((to: ViewId) => {
+    setHistoryTarget(null)
+    setShownView(to)
+  }, [])
   const [link, setLink] = useState("")
   const [addError, setAddError] = useState<ErrorDescription | null>(null)
   /** Why dropped files gave no links: a type Tsundoku doesn't read, or none in it. */
@@ -104,7 +111,7 @@ export function App() {
         await addPendingLinks(links)
         setLink("")
         closePreview()
-        setView("pending")
+        setShownView("pending")
       } catch (error) {
         setAddError(describeDownloadError(error))
       }
@@ -137,7 +144,7 @@ export function App() {
         await addPendingLinksFromFiles(read.links)
         setLink("")
         closePreview()
-        setView("pending")
+        setShownView("pending")
       } catch (error) {
         setAddError(describeDownloadError(error))
       }
@@ -176,9 +183,16 @@ export function App() {
   const [settingsPlace, setSettingsPlace] = useState<SettingsTarget | null>(null)
   // The section at the top of Settings, which the sidebar marks among those it lists under Settings.
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId | null>(null)
-  const navigate = useCallback((to: ViewId, place?: SettingsPlace) => {
-    setView(to)
-    setSettingsPlace(place ? { place } : null)
+  const navigate = useCallback(
+    (to: ViewId, place?: SettingsPlace) => {
+      setView(to)
+      setSettingsPlace(place ? { place } : null)
+    },
+    [setView],
+  )
+  const showWatchedDownloads = useCallback((sourceId: number) => {
+    setShownView("history")
+    setHistoryTarget({ watchedSource: sourceId })
   }, [])
   const actions = useMemo(
     () => ({
@@ -187,8 +201,9 @@ export function App() {
       pickFromPending,
       addText: takeText,
       addFileLinks: (read: LinkFilesRead) => void addFileLinks(read),
+      showWatchedDownloads,
     }),
-    [navigate, showLink, pickFromPending, takeText, addFileLinks],
+    [navigate, showLink, pickFromPending, takeText, addFileLinks, showWatchedDownloads],
   )
 
   if (needsSetup) return <SetupView />
@@ -259,7 +274,12 @@ export function App() {
         <main className="relative col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
           {/* Outside the views, so an offer to undo stays when another view is opened. */}
           <UndoToastProvider>
-            <CurrentView view={view} settingsPlace={settingsPlace} onSettingsSectionShown={setSettingsSection} />
+            <CurrentView
+              view={view}
+              settingsPlace={settingsPlace}
+              historyTarget={historyTarget}
+              onSettingsSectionShown={setSettingsSection}
+            />
           </UndoToastProvider>
         </main>
       </div>
@@ -270,10 +290,11 @@ export function App() {
 interface CurrentViewProps {
   view: ViewId
   settingsPlace: SettingsTarget | null
+  historyTarget: HistoryTarget | null
   onSettingsSectionShown: (section: SettingsSectionId) => void
 }
 
-function CurrentView({ view, settingsPlace, onSettingsSectionShown }: CurrentViewProps) {
+function CurrentView({ view, settingsPlace, historyTarget, onSettingsSectionShown }: CurrentViewProps) {
   switch (view) {
     case "queue":
       return <QueueView />
@@ -282,7 +303,7 @@ function CurrentView({ view, settingsPlace, onSettingsSectionShown }: CurrentVie
     case "watched":
       return <WatchedView />
     case "history":
-      return <HistoryView />
+      return <HistoryView target={historyTarget} />
     case "presets":
       return <PresetsView />
     case "rules":

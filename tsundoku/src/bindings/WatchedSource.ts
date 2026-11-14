@@ -36,6 +36,14 @@ lastError: PreviewError | null,
  */
 checking: boolean, 
 /**
+ * How many of its items the history has: what the history lists for it (`HistoryQuery::watched_source`).
+ */
+downloadedCount: number, 
+/**
+ * The day its newest item was posted (YYYY-MM-DD, roughly for YouTube), when any of them says.
+ */
+latestPost: string | null, 
+/**
  * What checks found that's neither downloaded nor skipped, newest first.
  */
 newItems: Array<WatchedItem>, 

@@ -654,13 +654,14 @@ where
     Ok(T::deserialize(value).unwrap_or_default())
 }
 
-/// How the Pending and Queue views group and sort their lists, each chosen in its own toolbar.
+/// How the Pending, Queue and Watched views group and sort their lists, each chosen in its own toolbar.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
 pub struct ListArrangements {
     pub pending: ListArrangement,
     pub queue: ListArrangement,
+    pub watched: WatchedArrangement,
 }
 
 /// How one list is grouped and sorted. By default, ungrouped and oldest first, as the list is stored.
@@ -733,6 +734,68 @@ impl From<StoredListArrangement> for ListArrangement {
             descending: stored.descending,
         }
     }
+}
+
+/// How the Watched view shows its sources. By default, a card each, grouped by site, the ones with the most new items
+/// first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct WatchedArrangement {
+    pub show: WatchedShow,
+    pub group: WatchedGroup,
+    pub sort: WatchedSort,
+    /// The most, the latest or Z first.
+    pub descending: bool,
+}
+
+impl Default for WatchedArrangement {
+    fn default() -> Self {
+        Self {
+            show: WatchedShow::Sources,
+            group: WatchedGroup::Site,
+            sort: WatchedSort::MostNew,
+            descending: true,
+        }
+    }
+}
+
+/// What the Watched view lists.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum WatchedShow {
+    /// A card per source, with its new items.
+    #[default]
+    Sources,
+    /// What's new on every source, in one picker.
+    AllNew,
+}
+
+/// What the watched sources are grouped by, under the failed checks' group, which always comes first.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum WatchedGroup {
+    None,
+    #[default]
+    Site,
+}
+
+/// What the watched sources are sorted by, within their groups.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum WatchedSort {
+    /// How many new items it has.
+    #[default]
+    MostNew,
+    Name,
+    LastChecked,
+    /// When its newest item was posted.
+    LatestPost,
+    /// When it was watched.
+    Added,
 }
 
 /// How the pickers show what they offer, each chosen with the picker's own toggle and size buttons.
@@ -979,6 +1042,42 @@ mod tests {
                 by_status: true,
                 ..ListArrangement::default()
             }
+        );
+        assert_eq!(
+            lists.watched,
+            WatchedArrangement::default(),
+            "a file from before Watched had its arrangement"
+        );
+    }
+
+    #[test]
+    fn reads_the_watched_arrangement() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "lists": { "watched": { "show": "allNew", "group": "none", "sort": "latestPost" } } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            store_in(&folder).get().lists.watched,
+            WatchedArrangement {
+                show: WatchedShow::AllNew,
+                group: WatchedGroup::None,
+                sort: WatchedSort::LatestPost,
+                descending: true,
+            }
+        );
+
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "lists": { "queue": { "group": "rule" }, "watched": { "sort": "fromANewerVersion" } } }"#,
+        )
+        .unwrap();
+        let lists = store_in(&folder).get().lists;
+        assert_eq!(
+            lists,
+            ListArrangements::default(),
+            "a sort from a newer version resets the arrangements"
         );
     }
 

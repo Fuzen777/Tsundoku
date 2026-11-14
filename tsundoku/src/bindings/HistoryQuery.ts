@@ -34,4 +34,8 @@ downloadedFrom: number | null,
 /**
  * Only videos last downloaded before this time, in seconds since 1970.
  */
-downloadedUntil: number | null, sort: HistorySort, descending: boolean, };
+downloadedUntil: number | null, 
+/**
+ * Only the items of this watched source (`watched`), by its ID: what its checks or its adding met.
+ */
+watchedSource: number | null, sort: HistorySort, descending: boolean, };

@@ -2,6 +2,21 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.141 · 2026-11-14
+
+### Changed
+
+- **Watched, grouped by site**: the Watched tab now puts its sources under a heading per site (instagram.com, x.com, youtube.com), each saying how many new items wait in it, with a button that checks every source under it. A heading folds its group away, and Group By None lists them all together. A source whose last check failed moves to the top under Needs Attention until a check works.
+- **Cards that fold**: each source folds to its picture, name and one line on where it stands: when it was checked, how many items are new, downloaded and skipped, and when it last posted. A card opens by itself while it has new items; the chevron, picture or name opens or folds it, Expand All opens every card and folded site, and Collapse All folds every card.
+- **Sorted your way**: by Most New (to start with), Name, Last Checked, Latest Post or Date Watched, either way round. The grouping and the sort are remembered.
+- **Skipped Before** opens the same picker as the new items (List, Masonry or Gallery), so several skipped items can be ticked and downloaded at once.
+
+### Added
+
+- **Check All**: at the top of Watched, checks every source one after the other.
+- **All New Items**: beside Sources, shows what's new on every source in one list, the latest posted first, each with its source's name under it (with its site when another source has the same name: "NASA on x.com"). Download Selected queues the ticked ones, each with its own source's folder and preset, and skips the rest; Skip All skips them all.
+- **From Watched to History**: a source's Show Downloads in History button opens the history at what was downloaded from it, and the history has a filter of watched sources for the same, which names them the same way.
+
 ## 0.1.140 · 2026-11-14
 
 ### Added

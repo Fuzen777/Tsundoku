@@ -1,9 +1,10 @@
-import { Fragment, useState, type ReactNode } from "react"
+import { Fragment, type ReactNode } from "react"
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, Folder } from "lucide-react"
 import type { ItemGroup } from "../arrange"
 import type { ListArrangement } from "../bindings/ListArrangement"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { ListSort } from "../bindings/ListSort"
+import { useFoldedGroups, type FoldedGroups, type GroupedView } from "../foldedGroups"
 import { strings } from "../strings"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
@@ -72,7 +73,7 @@ export function ArrangeControls({ arrangement, onChange, disabled = false }: Arr
 
 interface GroupedListProps<Item> {
   /** Which view's list it is: each remembers the groups folded away in it. */
-  view: "pending" | "queue"
+  view: GroupedView
   groups: readonly ItemGroup<Item>[]
   /** Whether to show the groups' headings: off when the list isn't grouped. */
   grouped: boolean
@@ -80,6 +81,10 @@ interface GroupedListProps<Item> {
   renderItem: (item: Item) => ReactNode
   /** With it, each heading has a box that ticks or unticks every item in its group (Pending). */
   selection?: GroupSelection<Item>
+  /** What a heading shows after its count, such as a group's new items and its actions (Watched). */
+  headingExtra?: (group: ItemGroup<Item>) => ReactNode
+  /** The view's folded groups, when the view changes them too (Watched's Expand All); else the list keeps its own. */
+  folds?: FoldedGroups
 }
 
 /** A list's ticked items, for the boxes on its groups' headings. */
@@ -89,27 +94,24 @@ export interface GroupSelection<Item> {
   onSelect: (items: readonly Item[], selected: boolean) => void
 }
 
-/** The groups folded away in each view, by heading, kept while the app runs so leaving a view doesn't unfold them. */
-const collapsedByView: Record<GroupedListProps<unknown>["view"], ReadonlySet<string>> = {
-  pending: new Set(),
-  queue: new Set(),
-}
-
 /**
  * A list of cards, under a heading per group when it's grouped: the group's name (a folder's path with its icon) and
  * how many it holds. A status's group holds the other grouping's groups under smaller headings. Clicking a heading
  * folds its group away; each view remembers which while the app runs. With `selection`, a box before each heading
  * ticks its whole group.
  */
-export function GroupedList<Item>({ view, groups, grouped, keyOf, renderItem, selection }: GroupedListProps<Item>) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(collapsedByView[view])
-  const toggle = (key: string) =>
-    setCollapsed((current) => {
-      const next = new Set(current)
-      if (!next.delete(key)) next.add(key)
-      collapsedByView[view] = next
-      return next
-    })
+export function GroupedList<Item>({
+  view,
+  groups,
+  grouped,
+  keyOf,
+  renderItem,
+  selection,
+  headingExtra,
+  folds,
+}: GroupedListProps<Item>) {
+  const ownFolds = useFoldedGroups(view)
+  const { collapsed, toggle } = folds ?? ownFolds
   const rows = (items: readonly Item[]) =>
     items.map((item) => <Fragment key={keyOf(item)}>{renderItem(item)}</Fragment>)
   if (!grouped) return <div className="flex flex-col gap-2">{rows(groups.flatMap((group) => group.items))}</div>
@@ -140,6 +142,7 @@ export function GroupedList<Item>({ view, groups, grouped, keyOf, renderItem, se
           </span>
           <span className="shrink-0 font-normal text-fg-muted tabular-nums">{group.items.length}</span>
           </button>
+          {headingExtra?.(group)}
         </div>
         {!isCollapsed &&
           (group.subgroups ? (

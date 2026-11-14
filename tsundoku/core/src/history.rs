@@ -191,6 +191,9 @@ pub struct HistoryQuery {
     /// Only videos last downloaded before this time, in seconds since 1970.
     #[ts(type = "number | null")]
     pub downloaded_until: Option<i64>,
+    /// Only the items of this watched source (`watched`), by its ID: what its checks or its adding met.
+    #[ts(type = "number | null")]
+    pub watched_source: Option<i64>,
     pub sort: HistorySort,
     pub descending: bool,
 }
@@ -1079,6 +1082,13 @@ fn filter_of(query: &HistoryQuery) -> (String, Vec<Value>) {
     if let Some(until) = query.downloaded_until {
         values.push(Value::Integer(until));
         conditions.push(format!("d.downloaded_at < ?{}", values.len()));
+    }
+    if let Some(source) = query.watched_source {
+        values.push(Value::Integer(source));
+        conditions.push(format!(
+            "EXISTS (SELECT 1 FROM watched_items w WHERE w.source = ?{} AND w.site = v.site AND w.item_id = v.video_id)",
+            values.len()
+        ));
     }
     let filter = if conditions.is_empty() {
         String::new()
@@ -2375,6 +2385,41 @@ mod tests {
         assert_eq!(between(Some(201), None), ["a", "c"]);
         assert_eq!(between(None, Some(300)), ["b"], "the end is left out");
         assert_eq!(between(Some(250), Some(350)), ["c"]);
+    }
+
+    #[test]
+    fn filters_by_the_watched_source_that_met_it() {
+        let test = TestHistory::new();
+        for id in ["a", "b", "c"] {
+            record_kind(&test, id, DownloadKind::Video, 1, false);
+        }
+        {
+            let connection = test.history.database.lock();
+            connection
+                .execute_batch(
+                    "INSERT INTO watched_sources (id, url, kind, name, site_name, added_at)
+                        VALUES (1, 'one', 'channel', 'One', 'youtube.com', 0), (2, 'two', 'channel', 'Two', 'youtube.com', 0);
+                    INSERT INTO watched_items (source, site, item_id, video, state, first_seen_at, position) VALUES
+                        (1, 'youtube', 'a', '{}', 'queued', 0, 0),
+                        (1, 'youtube', 'c', '{}', 'seen', 0, 1),
+                        (1, 'youtube', 'never-downloaded', '{}', 'new', 0, 2),
+                        (1, 'vimeo', 'b', '{}', 'seen', 0, 3),
+                        (2, 'youtube', 'b', '{}', 'seen', 0, 0);",
+                )
+                .unwrap();
+        }
+        let of_source = |source| {
+            sorted_titles(
+                &test,
+                HistoryQuery {
+                    watched_source: Some(source),
+                    ..HistoryQuery::default()
+                },
+            )
+        };
+        assert_eq!(of_source(1), ["a", "c"], "by site and ID, downloaded only");
+        assert_eq!(of_source(2), ["b"]);
+        assert!(of_source(3).is_empty());
     }
 
     #[test]

@@ -1,16 +1,24 @@
-import { useState } from "react"
-import { Download, Eye, Pencil, RefreshCw } from "lucide-react"
+import { useState, type ReactNode } from "react"
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, Eye, History, Pencil, RefreshCw } from "lucide-react"
 import {
   checkWatchedSource,
+  checkWatchedSources,
   confirmWithUser,
+  downloadNewWatchedItems,
   downloadWatchedItems,
   editWatchedSource,
   pickFolder,
   removeWatchedSource,
+  skipEveryNewWatchedItem,
   skipWatchedItems,
 } from "../api"
+import type { ItemKey } from "../bindings/ItemKey"
+import type { WatchedGroup } from "../bindings/WatchedGroup"
 import type { WatchedItem } from "../bindings/WatchedItem"
+import type { WatchedShow } from "../bindings/WatchedShow"
+import type { WatchedSort } from "../bindings/WatchedSort"
 import type { WatchedSource } from "../bindings/WatchedSource"
+import { GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
@@ -19,52 +27,211 @@ import { Field, SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { ExpandToggle } from "../components/LinkButton"
 import { ListedItems, ListingPicture } from "../components/ListingPicker"
-import { PickerViewControls } from "../components/PickerViewControls"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
+import { PickerViewControls } from "../components/PickerViewControls"
+import { SegmentedControl } from "../components/SegmentedControl"
 import { StatusMessage } from "../components/StatusMessage"
-import { Thumbnail } from "../components/Thumbnail"
 import { describePreviewError, describeWatchedError, fixFor, type ErrorDescription } from "../errors"
-import {
-  formatCalendarDate,
-  formatContents,
-  formatDuration,
-  formatRoughAge,
-  formatTimeAgo,
-  joinDetails,
-} from "../format"
+import { useFoldedGroups } from "../foldedGroups"
+import { formatRoughAge, formatTimeAgo, joinDetails } from "../format"
 import { isQueued, itemKey } from "../listingPicker"
-import { usePickerLayout, usePresets, useWatchedSources } from "../queries"
+import { useAppActions } from "../navigation"
+import { usePickerLayout, usePresets, useWatchedArrangement, useWatchedSources } from "../queries"
 import { strings } from "../strings"
+import {
+  allNewItems,
+  arrangeSources,
+  isExpanded,
+  newCount,
+  WATCHED_SORTS,
+  type SourcedItem,
+} from "../watchedSources"
 
 const text = strings.watched
 
+const SHOWS: readonly WatchedShow[] = ["sources", "allNew"]
+const GROUP_OPTIONS = (["none", "site"] as const satisfies readonly WatchedGroup[]).map((group) => ({
+  value: group,
+  label: text.groups[group],
+}))
+
+/** The sources opened or closed by hand, kept while the app runs so leaving the view doesn't change them. */
+const remembered: { expansion: ReadonlyMap<number, boolean> } = { expansion: new Map() }
+
 /**
- * The watched channels, playlists and accounts, in the order added: one card each with what checks found that's new,
- * Download Selected (which skips the rest), and what was skipped before, still downloadable.
+ * The watched channels, playlists and accounts: a card each, grouped by site and sorted as the toolbar says, the ones
+ * whose last check failed first under Needs Attention. A card folds to its summary, and starts open while it has new
+ * items. All New Items shows every source's new items in one picker instead.
  */
 export function WatchedView() {
   const { data: sources = [] } = useWatchedSources()
+  const { arrangement, ready, change, error: arrangeError } = useWatchedArrangement()
+  const [expansion, setExpansion] = useState(remembered.expansion)
+  const folds = useFoldedGroups("watched")
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const { groups, headings } = arrangeSources(sources, arrangement)
+  const shown = groups.flatMap((group) => group.items)
+  // An item two sources found counts once, as All New Items shows it.
+  const waiting = allNewItems(sources).length
+  const showingAll = arrangement.show === "allNew"
+
+  const choose = (update: (current: ReadonlyMap<number, boolean>) => ReadonlyMap<number, boolean>) =>
+    setExpansion((current) => {
+      const next = update(current)
+      remembered.expansion = next
+      return next
+    })
+  const toggle = (source: WatchedSource) =>
+    choose((current) => new Map(current).set(source.id, !isExpanded(source, current)))
+  // Expand All also unfolds the folded headings, so every card it opens shows; Collapse All folds the cards only.
+  const anyFolded =
+    shown.some((source) => !isExpanded(source, expansion)) ||
+    (headings && groups.some((group) => folds.isFolded(group.key)))
+  const setAll = (open: boolean) => {
+    choose(() => new Map(shown.map((source) => [source.id, open])))
+    if (open) folds.unfoldAll()
+  }
+
+  const check = (ids: number[]) => {
+    setError(null)
+    checkWatchedSources(ids).catch((caught: unknown) => setError(describeWatchedError(caught)))
+  }
+  const allChecking = sources.every((source) => source.checking)
+
+  const actions = sources.length > 0 && (
+    <Button size="sm" variant="secondary" disabled={allChecking} title={text.checkAllHint} onClick={() => check(shown.map((source) => source.id))}>
+      {text.checkAll}
+    </Button>
+  )
+
   return (
-    <Page title={strings.nav.watched}>
+    <Page title={strings.nav.watched} actions={actions}>
       {sources.length === 0 ? (
         <EmptyState icon={Eye} title={text.emptyTitle} body={text.emptyBody} />
       ) : (
         <div className="flex max-w-4xl flex-col gap-3">
-          {sources.map((source) => (
-            <SourceCard key={source.id} source={source} />
-          ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <SegmentedControl
+              label={text.show}
+              options={SHOWS.map((show) => ({
+                value: show,
+                label: show === "allNew" ? text.shows.allNew(waiting) : text.shows.sources,
+              }))}
+              value={arrangement.show}
+              disabled={!ready}
+              onChange={(show) => void change({ show })}
+            />
+            {!showingAll && (
+              <>
+                <span className="ml-2 text-xs text-fg-secondary">{text.groupBy}</span>
+                <SegmentedControl
+                  label={text.groupBy}
+                  options={GROUP_OPTIONS}
+                  value={arrangement.group}
+                  disabled={!ready}
+                  onChange={(group) => void change({ group })}
+                />
+                <SelectInput
+                  aria-label={text.sortBy}
+                  title={text.sortBy}
+                  value={arrangement.sort}
+                  disabled={!ready}
+                  onChange={(event) => void change({ sort: event.target.value as WatchedSort })}
+                >
+                  {WATCHED_SORTS.map((sort) => (
+                    <option key={sort} value={sort}>
+                      {text.sorts[sort]}
+                    </option>
+                  ))}
+                </SelectInput>
+                <IconButton
+                  label={arrangement.descending ? text.descending : text.ascending}
+                  icon={arrangement.descending ? ArrowDownWideNarrow : ArrowUpNarrowWide}
+                  variant="secondary"
+                  disabled={!ready}
+                  onClick={() => void change({ descending: !arrangement.descending })}
+                />
+                <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setAll(anyFolded)}>
+                  {anyFolded ? text.expandAll : text.collapseAll}
+                </Button>
+              </>
+            )}
+          </div>
+          {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
+          {error && <StatusMessage tone="danger" {...error} />}
+          {showingAll ? (
+            <AllNewItems sources={sources} />
+          ) : (
+            <GroupedList
+              view="watched"
+              groups={groups}
+              grouped={headings}
+              folds={folds}
+              keyOf={(source) => source.id}
+              headingExtra={(group) => (
+                <GroupHeadingExtra
+                  label={group.label}
+                  sources={group.items}
+                  onCheck={() => check(group.items.map((source) => source.id))}
+                />
+              )}
+              renderItem={(source) => (
+                <SourceCard source={source} expanded={isExpanded(source, expansion)} onToggle={() => toggle(source)} />
+              )}
+            />
+          )}
         </div>
       )}
     </Page>
   )
 }
 
-function SourceCard({ source }: { source: WatchedSource }) {
+/** After a group's name and count: how many new items wait in it, and Check All Under it. */
+function GroupHeadingExtra({
+  label,
+  sources,
+  onCheck,
+}: {
+  label: string
+  sources: readonly WatchedSource[]
+  onCheck: () => void
+}) {
+  const waiting = newCount(sources)
+  return (
+    <>
+      {waiting > 0 && <span className="shrink-0 text-xs font-medium text-accent tabular-nums">{text.groupNew(waiting)}</span>}
+      <span className="ml-auto">
+        <IconButton
+          label={text.checkGroup(label)}
+          icon={RefreshCw}
+          disabled={sources.every((source) => source.checking)}
+          onClick={onCheck}
+        />
+      </span>
+    </>
+  )
+}
+
+interface SourceCardProps {
+  source: WatchedSource
+  expanded: boolean
+  onToggle: () => void
+}
+
+/**
+ * A source: its chevron, picture, name, kind and site, and what checks found, with its actions on the right. Open, it
+ * shows where it saves, its new items and what was skipped before. A failed check's message and the editor show either
+ * way.
+ */
+function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
   const { data: presets } = usePresets()
+  const { showWatchedDownloads } = useAppActions()
   const [editing, setEditing] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const presetName = presets?.presets.find((preset) => preset.id === source.presetId)?.name
+  const Chevron = expanded ? ChevronDown : ChevronRight
+  const hasItems = source.newItems.length > 0 || source.skippedItems.length > 0
 
   const act = (action: () => Promise<unknown>) => {
     setError(null)
@@ -84,30 +251,34 @@ function SourceCard({ source }: { source: WatchedSource }) {
   const check = () => act(() => checkWatchedSource(source.id))
   return (
     <Card className="flex flex-col gap-3 p-4">
-      <div className="flex items-start gap-4">
-        <ListingPicture listing={source} small />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <p className="truncate font-semibold" title={source.name}>
-            {source.name}
-          </p>
-          <p className="truncate text-xs text-fg-secondary">
-            {joinDetails([strings.picker.kinds[source.kind], source.siteName])}
-          </p>
-          <p className="text-xs text-fg-secondary tabular-nums">
-            {source.checking
-              ? text.checking
-              : joinDetails([
-                  source.lastCheckedAt === null ? text.neverChecked : text.checked(formatTimeAgo(source.lastCheckedAt)),
-                  text.newCount(source.newItems.length),
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? text.collapse(source.name) : text.expand(source.name)}
+          onClick={onToggle}
+          className="flex min-w-0 flex-1 items-start gap-3 rounded text-left focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          <Chevron size={16} className="mt-5 shrink-0 text-fg-secondary" aria-hidden />
+          <ListingPicture listing={source} small />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate font-semibold" title={source.name}>
+              {source.name}
+            </span>
+            <span className="truncate text-xs text-fg-secondary">
+              {joinDetails([strings.picker.kinds[source.kind], source.siteName])}
+            </span>
+            <SourceSummary source={source} />
+            {expanded && (
+              <span className="truncate text-xs text-fg-muted" title={source.folder ?? undefined}>
+                {joinDetails([
+                  source.folder ? text.savesIn(source.folder) : text.savesByRules,
+                  presetName && text.startsAs(presetName),
                 ])}
-          </p>
-          <p className="truncate text-xs text-fg-muted" title={source.folder ?? undefined}>
-            {joinDetails([
-              source.folder ? text.savesIn(source.folder) : text.savesByRules,
-              presetName && text.startsAs(presetName),
-            ])}
-          </p>
-        </div>
+              </span>
+            )}
+          </span>
+        </button>
         <div className="flex shrink-0 items-center gap-1">
           <IconButton
             label={source.checking ? text.checking : text.checkNow}
@@ -115,6 +286,12 @@ function SourceCard({ source }: { source: WatchedSource }) {
             variant="secondary"
             disabled={source.checking}
             onClick={check}
+          />
+          <IconButton
+            label={text.showInHistory}
+            icon={History}
+            disabled={source.downloadedCount === 0}
+            onClick={() => showWatchedDownloads(source.id)}
           />
           <IconButton label={text.edit} icon={Pencil} onClick={() => setEditing((shown) => !shown)} />
           <Menu label={text.moreActions} items={[{ label: text.remove, danger: true, onSelect: () => act(remove) }]} />
@@ -127,9 +304,37 @@ function SourceCard({ source }: { source: WatchedSource }) {
       )}
       {error && <StatusMessage tone="danger" {...error} />}
       {editing && <SourceEditor source={source} onDone={() => setEditing(false)} />}
-      {source.newItems.length > 0 && <NewItems source={source} />}
-      {source.skippedItems.length > 0 && <SkippedItems source={source} />}
+      {expanded && hasItems && (
+        <div className="flex flex-col gap-3 border-t border-line pt-3">
+          {source.newItems.length > 0 && <NewItems source={source} />}
+          {source.skippedItems.length > 0 && <SkippedItems source={source} />}
+        </div>
+      )}
     </Card>
+  )
+}
+
+/** "Checked 2 hours ago · 3 new · 12 downloaded · 2 skipped · Last post 3 weeks ago", the new items in the accent. */
+function SourceSummary({ source }: { source: WatchedSource }) {
+  const waiting = source.newItems.length
+  const counts = joinDetails([
+    source.downloadedCount > 0 && text.downloadedCount(source.downloadedCount),
+    source.skippedItems.length > 0 && text.skippedCount(source.skippedItems.length),
+    source.latestPost && text.latestPost(formatRoughAge(source.latestPost)),
+  ])
+  return (
+    <span className="text-xs text-fg-secondary tabular-nums">
+      {source.checking ? (
+        text.checking
+      ) : (
+        <>
+          {source.lastCheckedAt === null ? text.neverChecked : text.checked(formatTimeAgo(source.lastCheckedAt))}
+          {" · "}
+          <span className={waiting > 0 ? "font-medium text-accent" : undefined}>{text.newCount(waiting)}</span>
+        </>
+      )}
+      {counts && ` · ${counts}`}
+    </span>
   )
 }
 
@@ -206,47 +411,135 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
 }
 
 /**
- * What checks found: each item ticked unless the history or the queue has it, kept as the items left unticked, so a
- * newer find comes in ticked. Download Selected queues the ticked ones and skips the rest.
+ * What checks found: each item ticked unless the history or the queue has it. Download Selected queues the ticked ones
+ * and skips the rest.
  */
 function NewItems({ source }: { source: WatchedSource }) {
-  const items = source.newItems
-  const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set())
+  return (
+    <ItemPicker
+      items={source.newItems}
+      startsTicked={(item) => !item.lastDownload}
+      showUploader={source.kind === "playlist"}
+      actions={(picked, run, busy) => (
+        <>
+          <Button variant="ghost" disabled={busy} onClick={() => run(() => skipWatchedItems(source.id))}>
+            {text.skipAll}
+          </Button>
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={picked.length === 0}
+            title={text.downloadSelectedHint}
+            onClick={() => run(() => downloadWatchedItems(source.id, keysOf(picked), true))}
+          >
+            {text.downloadSelected(picked.length)}
+          </Button>
+        </>
+      )}
+    />
+  )
+}
+
+/** Skipped Before, folded to start with: the picker again, nothing ticked, and Download Selected for what's ticked. */
+function SkippedItems({ source }: { source: WatchedSource }) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div className="flex flex-col gap-2">
+      <ExpandToggle
+        expanded={shown}
+        onToggle={() => setShown((open) => !open)}
+        label={text.skipped(source.skippedItems.length)}
+      />
+      {shown && (
+        <ItemPicker
+          items={source.skippedItems}
+          startsTicked={() => false}
+          showUploader={source.kind === "playlist"}
+          actions={(picked, run, busy) => (
+            <Button
+              variant="secondary"
+              loading={busy}
+              disabled={picked.length === 0}
+              onClick={() => run(() => downloadWatchedItems(source.id, keysOf(picked), false))}
+            >
+              {text.downloadSelected(picked.length)}
+            </Button>
+          )}
+        />
+      )}
+    </div>
+  )
+}
+
+/** All New Items: every source's new items in one picker, each named with its source. Download Selected queues the
+ * ticked ones, each with its source's folder and preset, and skips the rest. */
+function AllNewItems({ sources }: { sources: readonly WatchedSource[] }) {
+  const items = allNewItems(sources)
+  if (items.length === 0) return <p className="text-fg-secondary">{text.allNewNone}</p>
+  return (
+    <Card className="p-4">
+      <ItemPicker
+        items={items}
+        startsTicked={(item) => !item.lastDownload}
+        showUploader={false}
+        sourceOf={(item: SourcedItem) => item.sourceName}
+        actions={(picked, run, busy) => (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => run(skipEveryNewWatchedItem)}>
+              {text.skipAll}
+            </Button>
+            <Button
+              variant="primary"
+              loading={busy}
+              disabled={picked.length === 0}
+              title={text.downloadSelectedHint}
+              onClick={() => run(() => downloadNewWatchedItems(keysOf(picked), true))}
+            >
+              {text.downloadSelected(picked.length)}
+            </Button>
+          </>
+        )}
+      />
+    </Card>
+  )
+}
+
+interface ItemPickerProps<Item extends WatchedItem> {
+  items: readonly Item[]
+  /** Whether an item is ticked until it's ticked or unticked by hand. One in the queue never is. */
+  startsTicked: (item: Item) => boolean
+  showUploader: boolean
+  sourceOf?: (item: Item) => string
+  /** The buttons under the items, given the ticked ones, a way to run an action (which shows its error, and starts the
+   * ticks again once it's done) and whether one runs. */
+  actions: (picked: Item[], run: (action: () => Promise<unknown>) => void, busy: boolean) => ReactNode
+}
+
+/** A list of a source's items in the picker's view (shared with the preview card's), with a box that ticks them all,
+ * how many are ticked, and the actions under them. */
+function ItemPicker<Item extends WatchedItem>({ items, startsTicked, showUploader, sourceOf, actions }: ItemPickerProps<Item>) {
+  const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const { layout, change: changeLayout } = usePickerLayout("items")
-  const isTicked = (item: WatchedItem) => !isQueued(item) && !item.lastDownload && !unticked.has(itemKey(item))
+  const isTicked = (item: Item) => !isQueued(item) && (chosen.get(itemKey(item)) ?? startsTicked(item))
   const picked = items.filter(isTicked)
   const selectable = items.filter((item) => !isQueued(item))
   const allTicked = selectable.length > 0 && picked.length === selectable.length
 
-  const tick = (item: WatchedItem, on: boolean) =>
-    setUnticked((current) => {
-      const next = new Set(current)
-      if (on) next.delete(itemKey(item))
-      else next.add(itemKey(item))
-      return next
-    })
+  const tick = (item: Item, on: boolean) => setChosen((current) => new Map(current).set(itemKey(item), on))
 
-  async function run(action: () => Promise<unknown>) {
+  const run = (action: () => Promise<unknown>) => {
     setBusy(true)
     setError(null)
-    try {
-      await action()
-      setUnticked(new Set())
-    } catch (caught) {
-      setError(describeWatchedError(caught))
-    } finally {
-      setBusy(false)
-    }
+    action()
+      .then(() => setChosen(new Map()))
+      .catch((caught: unknown) => setError(describeWatchedError(caught)))
+      .finally(() => setBusy(false))
   }
 
-  const keys = picked.map(({ video }) => ({
-    site: video.site,
-    videoId: video.videoId,
-  }))
   return (
-    <div className="flex flex-col gap-2 border-t border-line pt-3">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <label className="flex items-center gap-2 text-fg-secondary">
           <input
@@ -259,9 +552,7 @@ function NewItems({ source }: { source: WatchedSource }) {
               if (box) box.indeterminate = picked.length > 0 && !allTicked
             }}
             disabled={busy || selectable.length === 0}
-            onChange={(event) =>
-              setUnticked(event.target.checked ? new Set() : new Set(items.map((item) => itemKey(item))))
-            }
+            onChange={(event) => setChosen(new Map(selectable.map((item) => [itemKey(item), event.target.checked])))}
           />
           <span className="whitespace-nowrap tabular-nums">{text.selected(picked.length, items.length)}</span>
         </label>
@@ -270,82 +561,18 @@ function NewItems({ source }: { source: WatchedSource }) {
       <ListedItems
         items={items}
         layout={layout}
-        showUploader={source.kind === "playlist"}
+        showUploader={showUploader}
+        sourceOf={sourceOf}
         isSelected={isTicked}
         disabled={busy}
         onSelect={tick}
       />
       {error && <StatusMessage tone="danger" {...error} />}
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" disabled={busy} onClick={() => void run(() => skipWatchedItems(source.id))}>
-          {text.skipAll}
-        </Button>
-        <Button
-          variant="primary"
-          loading={busy}
-          disabled={picked.length === 0}
-          title={text.downloadSelectedHint}
-          onClick={() => void run(() => downloadWatchedItems(source.id, keys, true))}
-        >
-          {text.downloadSelected(picked.length)}
-        </Button>
-      </div>
+      <div className="flex justify-end gap-2">{actions(picked, run, busy)}</div>
     </div>
   )
 }
 
-/** Skipped Before, folded to start with: each item greyed, with Download. */
-function SkippedItems({ source }: { source: WatchedSource }) {
-  const [shown, setShown] = useState(false)
-  const [error, setError] = useState<ErrorDescription | null>(null)
-
-  function download(item: WatchedItem) {
-    setError(null)
-    downloadWatchedItems(source.id, [{ site: item.video.site, videoId: item.video.videoId }], false).catch(
-      (caught: unknown) => setError(describeWatchedError(caught)),
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      <ExpandToggle
-        expanded={shown}
-        onToggle={() => setShown((open) => !open)}
-        label={text.skipped(source.skippedItems.length)}
-      />
-      {error && <StatusMessage tone="danger" {...error} />}
-      {shown && (
-        <ul className="flex max-h-[min(20rem,40vh)] flex-col gap-1 overflow-y-auto">
-          {source.skippedItems.map((item) => (
-            <SkippedRow key={itemKey(item)} item={item} onDownload={() => download(item)} />
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-function SkippedRow({ item, onDownload }: { item: WatchedItem; onDownload: () => void }) {
-  const { video } = item
-  const date = video.uploadDate
-    ? formatCalendarDate(video.uploadDate)
-    : item.approximateDate && formatRoughAge(item.approximateDate)
-  return (
-    <li className="flex items-center gap-3 py-1">
-      <Thumbnail key={video.thumbnailUrl} url={video.thumbnailUrl} className="w-20 opacity-50" />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <p className="truncate text-fg-muted" title={video.title}>
-          {video.title}
-        </p>
-        <p className="truncate text-xs text-fg-secondary tabular-nums">
-          {joinDetails([
-            date,
-            video.durationSeconds !== null && formatDuration(video.durationSeconds),
-            formatContents(video),
-          ])}
-        </p>
-      </div>
-      <IconButton label={text.download} icon={Download} disabled={isQueued(item)} onClick={onDownload} />
-    </li>
-  )
+function keysOf(items: readonly WatchedItem[]): ItemKey[] {
+  return items.map(({ video }) => ({ site: video.site, videoId: video.videoId }))
 }

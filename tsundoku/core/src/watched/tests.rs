@@ -152,9 +152,14 @@ impl Test {
 
     /// Adds the channel as the picker listed it, with these items newest first.
     fn add(&self, ids: &[&str], first: FirstItems) -> i64 {
+        self.add_at(CHANNEL, ids, first)
+    }
+
+    /// Adds the listing at `url` as the picker listed it, with these items newest first.
+    fn add_at(&self, url: &str, ids: &[&str], first: FirstItems) -> i64 {
         self.sources
             .add(NewWatchedSource {
-                url: CHANNEL.to_owned(),
+                url: url.to_owned(),
                 kind: ListingKind::Channel,
                 name: "Someone".to_owned(),
                 site_name: "youtube.com".to_owned(),
@@ -384,4 +389,148 @@ fn removing_forgets_the_source() {
         test.sources.remove(id),
         Err(WatchedError::NotFound)
     ));
+}
+
+#[test]
+fn a_source_says_how_many_of_its_items_were_downloaded_and_when_it_last_posted() {
+    let test = Test::new();
+    test.downloaded("b");
+    let dated = |id: &str, exact: Option<&str>, rough: Option<&str>| ListedVideo {
+        video: VideoInfo {
+            upload_date: exact.map(str::to_owned),
+            ..video(id)
+        },
+        approximate_date: rough.map(str::to_owned),
+    };
+    let id = test
+        .sources
+        .add(NewWatchedSource {
+            url: CHANNEL.to_owned(),
+            kind: ListingKind::Channel,
+            name: "Someone".to_owned(),
+            site_name: "youtube.com".to_owned(),
+            thumbnail_url: None,
+            items: vec![
+                dated("a", None, Some("2026-11-02")),
+                dated("b", Some("2026-11-05"), None),
+                dated("c", None, None),
+            ],
+            first: FirstItems::FromNow,
+            folder: None,
+            preset_id: None,
+        })
+        .unwrap();
+    let source = test.source(id);
+    assert_eq!(source.downloaded_count, 1);
+    assert_eq!(source.latest_post.as_deref(), Some("2026-11-05"));
+
+    test.downloaded("c");
+    test.downloaded("not-its-own");
+    assert_eq!(test.source(id).downloaded_count, 2);
+
+    let empty = test.add_at(
+        "https://www.youtube.com/@empty/videos",
+        &[],
+        FirstItems::All,
+    );
+    let source = test.source(empty);
+    assert_eq!(source.downloaded_count, 0);
+    assert_eq!(source.latest_post, None);
+}
+
+#[test]
+fn check_all_checks_each_source_once_in_the_order_given() {
+    let test = Test::new();
+    let first = test.add(&["a"], FirstItems::FromNow);
+    let second = test.add_at(
+        "https://www.youtube.com/@other/videos",
+        &["a"],
+        FirstItems::FromNow,
+    );
+    test.reader.lists(&["n", "a"]);
+    test.sources
+        .check_many(&[second, 999, first, second])
+        .unwrap();
+    wait_until("both checks end", || {
+        test.reader.reads.load(Ordering::SeqCst) == 2
+            && test
+                .sources
+                .list()
+                .unwrap()
+                .iter()
+                .all(|source| !source.checking)
+    });
+    assert_eq!(test.new_ids(first), ["n"]);
+    assert_eq!(test.new_ids(second), ["n"]);
+    assert_eq!(
+        test.reader.reads.load(Ordering::SeqCst),
+        2,
+        "a source asked twice is read once, and one not watched isn't read"
+    );
+}
+
+#[test]
+fn downloading_from_every_source_queues_each_with_its_own_choices() {
+    let test = Test::new();
+    let first = test.add(&["a", "shared", "b"], FirstItems::All);
+    let second = test.add_at(
+        "https://www.youtube.com/@other/videos",
+        &["shared", "c", "d"],
+        FirstItems::All,
+    );
+    test.sources
+        .edit(second, Some("Other".to_owned()), None)
+        .unwrap();
+    let added = test
+        .sources
+        .download_new(&[key("a"), key("shared"), key("c")], true)
+        .unwrap();
+    assert_eq!(added, 3, "the item both found is queued once");
+    let queued: Vec<(String, bool)> = test
+        .queue
+        .items()
+        .into_iter()
+        .map(|item| (item.video.video_id, item.folder_chosen))
+        .collect();
+    assert_eq!(queued.len(), 3);
+    assert!(
+        queued.contains(&("c".to_owned(), true)),
+        "with its source's folder"
+    );
+    assert!(queued.contains(&("a".to_owned(), false)));
+    assert!(
+        queued.contains(&("shared".to_owned(), false)),
+        "from the source added first"
+    );
+
+    let first = test.source(first);
+    assert!(first.new_items.is_empty());
+    assert_eq!(ids(&first.skipped_items), ["b"]);
+    let second = test.source(second);
+    assert!(second.new_items.is_empty(), "the shared item left both");
+    assert_eq!(ids(&second.skipped_items), ["d"]);
+}
+
+#[test]
+fn downloading_from_every_source_can_leave_the_rest_new() {
+    let test = Test::new();
+    let id = test.add(&["a", "b"], FirstItems::All);
+    test.sources.download_new(&[key("b")], false).unwrap();
+    assert_eq!(test.new_ids(id), ["a"]);
+    assert!(test.source(id).skipped_items.is_empty());
+}
+
+#[test]
+fn skip_all_of_every_source_skips_every_new_item() {
+    let test = Test::new();
+    let first = test.add(&["a", "b"], FirstItems::All);
+    let second = test.add_at(
+        "https://www.youtube.com/@other/videos",
+        &["c"],
+        FirstItems::All,
+    );
+    test.sources.skip_every_new().unwrap();
+    assert_eq!(ids(&test.source(first).skipped_items), ["a", "b"]);
+    assert_eq!(ids(&test.source(second).skipped_items), ["c"]);
+    assert!(test.source(second).new_items.is_empty());
 }

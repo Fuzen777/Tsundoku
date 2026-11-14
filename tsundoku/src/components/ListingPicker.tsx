@@ -399,6 +399,8 @@ interface ListedRowProps {
   item: ListedItem
   /** A playlist's items may come from several uploaders; a channel's or an account's all come from it. */
   showUploader: boolean
+  /** The watched source that found it, in All New Items, first in its details. */
+  source?: string | null
   selected: boolean
   disabled: boolean
   onSelect: (ticked: boolean) => void
@@ -409,7 +411,7 @@ interface ListedRowProps {
  * or the queue has it, with Downloaded or In Queue. Rows off screen aren't laid out (`content-visibility`), so a
  * playlist of hundreds scrolls smoothly.
  */
-export function ListedRow({ item, showUploader, selected, disabled, onSelect }: ListedRowProps) {
+export function ListedRow({ item, showUploader, source = null, selected, disabled, onSelect }: ListedRowProps) {
   const { video, lastDownload } = item
   const known = isKnown(item)
   const queued = isQueued(item)
@@ -434,7 +436,7 @@ export function ListedRow({ item, showUploader, selected, disabled, onSelect }: 
           <p className={classes("truncate", known && "text-fg-muted")} title={video.title}>
             {video.title}
           </p>
-          <p className="truncate text-xs text-fg-secondary tabular-nums">{listedDetails(item, showUploader)}</p>
+          <p className="truncate text-xs text-fg-secondary tabular-nums">{listedDetails(item, showUploader, source)}</p>
         </div>
         {queued ? (
           <span
@@ -458,12 +460,14 @@ export function ListedRow({ item, showUploader, selected, disabled, onSelect }: 
   )
 }
 
-/** "uploader · date · length" or what a post holds, under an item's title in List and in its hover text elsewhere. */
-function listedDetails({ video, approximateDate }: ListedItem, showUploader: boolean): string {
+/** "source · uploader · date · length" or what a post holds, under an item's title in List and in its hover text
+ * elsewhere. */
+function listedDetails({ video, approximateDate }: ListedItem, showUploader: boolean, source: string | null): string {
   const date = video.uploadDate
     ? formatCalendarDate(video.uploadDate)
     : approximateDate && formatRoughAge(approximateDate)
   return joinDetails([
+    source,
     showUploader && video.uploader,
     date,
     video.durationSeconds !== null && formatDuration(video.durationSeconds),
@@ -476,6 +480,8 @@ interface ListedItemsProps<Item extends ListedItem> {
   layout: PickerLayout
   /** A playlist's items may come from several uploaders; a channel's or an account's all come from it. */
   showUploader: boolean
+  /** In All New Items, the watched source that found each item: named under its picture and first in its details. */
+  sourceOf?: (item: Item) => string
   isSelected: (item: Item) => boolean
   disabled: boolean
   onSelect: (item: Item, ticked: boolean) => void
@@ -489,6 +495,7 @@ export function ListedItems<Item extends ListedItem>({
   items,
   layout,
   showUploader,
+  sourceOf,
   isSelected,
   disabled,
   onSelect,
@@ -501,6 +508,7 @@ export function ListedItems<Item extends ListedItem>({
             key={itemKey(item)}
             item={item}
             showUploader={showUploader}
+            source={sourceOf?.(item) ?? null}
             selected={isSelected(item)}
             disabled={disabled}
             onSelect={(ticked) => onSelect(item, ticked)}
@@ -512,7 +520,9 @@ export function ListedItems<Item extends ListedItem>({
   const posts = items.some((item) => item.video.post !== null)
   return (
     <MediaTiles
-      tiles={items.map((item) => listedTile(item, showUploader, isSelected(item), (ticked) => onSelect(item, ticked)))}
+      tiles={items.map((item) =>
+        listedTile(item, showUploader, sourceOf?.(item) ?? null, isSelected(item), (ticked) => onSelect(item, ticked)),
+      )}
       view={layout.view}
       size={layout.size}
       galleryRatio={posts ? 1 : 16 / 9}
@@ -523,8 +533,14 @@ export function ListedItems<Item extends ListedItem>({
 }
 
 /** An item as a picture: its title and details as its hover text, its length or what a post holds in its corner, and
- * Downloaded or In Queue under it. */
-function listedTile(item: ListedItem, showUploader: boolean, selected: boolean, onToggle: (ticked: boolean) => void): MediaTile {
+ * Downloaded or In Queue under it, after the source that found it in All New Items. */
+function listedTile(
+  item: ListedItem,
+  showUploader: boolean,
+  source: string | null,
+  selected: boolean,
+  onToggle: (ticked: boolean) => void,
+): MediaTile {
   const { video, lastDownload } = item
   const queued = isQueued(item)
   const post = video.post
@@ -538,7 +554,7 @@ function listedTile(item: ListedItem, showUploader: boolean, selected: boolean, 
     thumbnailUrl: video.thumbnailUrl,
     fallbackIcon: post && !onlyVideo ? Images : Film,
     label: video.title,
-    hint: [video.title, listedDetails(item, showUploader), known].filter(Boolean).join("\n"),
+    hint: [video.title, listedDetails(item, showUploader, source), known].filter(Boolean).join("\n"),
     picked: selected,
     locked: queued,
     ratio: post ? 4 / 5 : 16 / 9,
@@ -558,10 +574,12 @@ function listedTile(item: ListedItem, showUploader: boolean, selected: boolean, 
         </span>
       ) : null,
     mark: queued
-      ? { text: strings.picker.inQueue, tone: "plain" }
+      ? { text: joinDetails([strings.picker.inQueue, source]), tone: "plain" }
       : lastDownload
-        ? { text: strings.picker.downloaded, tone: "done" }
-        : null,
+        ? { text: joinDetails([strings.picker.downloaded, source]), tone: "done" }
+        : source
+          ? { text: source, tone: "plain" }
+          : null,
     onToggle,
   }
 }

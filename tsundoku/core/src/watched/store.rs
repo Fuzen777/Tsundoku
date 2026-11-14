@@ -1,5 +1,6 @@
 //! The watched sources and their items in `tsundoku.db` (`watched_sources`, `watched_items`).
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -158,6 +159,24 @@ impl WatchedStore {
             });
         }
         Ok(items)
+    }
+
+    /// How many items of each source the history has, by source ID; a source with none is left out. The history's
+    /// tables are in the same database, and a video counts as the history view counts it: with a download.
+    pub fn downloaded_counts(&self) -> Result<HashMap<i64, u32>, WatchedError> {
+        let connection = self.database.lock();
+        let mut statement = connection
+            .prepare(
+                "SELECT w.source, COUNT(*) FROM watched_items w
+                WHERE EXISTS (SELECT 1 FROM videos v JOIN downloads d ON d.video = v.id
+                    WHERE v.site = w.site AND v.video_id = w.item_id)
+                GROUP BY w.source",
+            )
+            .map_err(storage_error)?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, u32>(1)?)))
+            .map_err(storage_error)?;
+        rows.collect::<Result<_, _>>().map_err(storage_error)
     }
 
     /// Saves a new source with its first items, in one transaction. Its ID.
