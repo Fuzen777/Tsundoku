@@ -338,6 +338,17 @@ fn downloading_queues_the_picked_and_skips_the_rest() {
     assert_eq!(queued.len(), 1);
     assert_eq!(queued[0].video.video_id, "a");
     assert_eq!(
+        queued[0].source,
+        Some(QueueSource {
+            url: CHANNEL.to_owned(),
+            kind: ListingKind::Channel,
+            name: "Someone".to_owned(),
+            site_name: "youtube.com".to_owned(),
+            thumbnail_url: None,
+        }),
+        "the Queue shows it under the source"
+    );
+    assert_eq!(
         Path::new(&queued[0].folder),
         test.folder
             .path()
@@ -501,6 +512,24 @@ fn downloading_from_every_source_queues_each_with_its_own_choices() {
     assert!(
         queued.contains(&("shared".to_owned(), false)),
         "from the source added first"
+    );
+    let source_of = |id: &str| {
+        test.queue
+            .items()
+            .into_iter()
+            .find(|item| item.video.video_id == id)
+            .and_then(|item| item.source)
+            .map(|source| source.url)
+    };
+    assert_eq!(
+        source_of("a").as_deref(),
+        Some(CHANNEL),
+        "the Queue shows each under its own source"
+    );
+    assert_eq!(source_of("shared").as_deref(), Some(CHANNEL));
+    assert_eq!(
+        source_of("c").as_deref(),
+        Some("https://www.youtube.com/@other/videos")
     );
 
     let first = test.source(first);

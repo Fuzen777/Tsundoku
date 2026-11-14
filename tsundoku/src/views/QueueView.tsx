@@ -1,53 +1,28 @@
 import { useState } from "react"
-import { CircleStop, FileText, FolderOpen, ListVideo, Play, RefreshCw, X } from "lucide-react"
+import { ListVideo } from "lucide-react"
 import {
-  cancelDownload,
   clearFinishedDownloads,
-  confirmWithUser,
-  downloadNext,
-  enterDownloadPassword,
-  openCheckWindow,
-  openDownload,
-  pickFolder,
-  removeFinishedDownload,
   restoreClearedDownloads,
   resumeAllDownloads,
-  resumeDownload,
-  retryDownload,
   retryFailedDownloads,
-  setQueueFolder,
-  showDownloadInFolder,
   stopAllDownloads,
-  stopDownload,
-  tryDownloadNow,
 } from "../api"
 import { arrangeNested, chosenFolderGroup, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
 import type { Destination } from "../bindings/Destination"
-import type { DownloadProgress } from "../bindings/DownloadProgress"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { QueueItem } from "../bindings/QueueItem"
 import type { QueueState } from "../bindings/QueueState"
-import { ArrangeControls, GroupedList } from "../components/ArrangedList"
+import { ArrangeControls, GroupedList, type Bundling } from "../components/ArrangedList"
 import { Button } from "../components/Button"
-import { Card } from "../components/Card"
-import { CopyDetailsButton } from "../components/CopyDetailsButton"
 import { EmptyState } from "../components/EmptyState"
-import { FailureFixes } from "../components/FailureFixes"
-import { IconButton } from "../components/IconButton"
-import { LogPanel } from "../components/LogPanel"
-import { PasswordForm } from "../components/PasswordForm"
-import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
-import { ProgressBar } from "../components/ProgressBar"
+import { QueueRow } from "../components/QueueRow"
+import { QueueSourceGroup } from "../components/QueueSourceGroup"
 import { StatusMessage } from "../components/StatusMessage"
-import { Thumbnail } from "../components/Thumbnail"
 import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
-import { describeDownloadError, describeHistoryError, fixFor, type ErrorDescription } from "../errors"
-import { formatBytes, formatContents, formatDuration, formatSpeed, joinDetails } from "../format"
-import { pickSummary } from "../postFiles"
-import { describeHold, holdEnd, useTimeLeft } from "../holds"
+import { describeDownloadError, type ErrorDescription } from "../errors"
 import { useDownloadDestinations, useListArrangement, useQueue, useRuleGroupOf } from "../queries"
-import { useDownloadProgress } from "../queueEvents"
+import { sourceKey } from "../queueSources"
 import { strings } from "../strings"
 import { useOfferUndo, type UndoOffer } from "../undo"
 
@@ -76,10 +51,20 @@ async function clearFinishedWithUndo(offerUndo: (offer: UndoOffer) => void): Pro
   }
 }
 
+/** The downloads picked together from a channel, playlist or account stay together under its heading. */
+const BY_SOURCE: Bundling<QueueItem> = {
+  keyOf: sourceKey,
+  render: ({ items, folded, onFold, rows }) =>
+    items[0].source && (
+      <QueueSourceGroup source={items[0].source} items={items} folded={folded} onFold={onFold} rows={rows} />
+    ),
+}
+
 /** The ways to add links an empty queue offers: by hand first. */
 const QUEUE_WAYS: readonly WayToAdd[] = ["paste", "drop", "watch", "shortcut", "bookmark", "sendButtons"]
 
-/** Every download added and not cleared yet, grouped and sorted as its toolbar says. */
+/** Every download added and not cleared yet, grouped and sorted as its toolbar says, those picked together from one
+ * source under its heading. */
 export function QueueView() {
   const { data: items = [] } = useQueue()
   const [queueError, setQueueError] = useState<ErrorDescription | null>(null)
@@ -146,6 +131,7 @@ export function QueueView() {
             grouped={group !== "none" || byStatus}
             keyOf={(item) => item.id}
             renderItem={(item) => <QueueRow item={item} />}
+            bundles={BY_SOURCE}
           />
         </div>
       )}
@@ -182,222 +168,4 @@ function queueGroup(
       if (item.folderChosen) return chosenFolderGroup(item.folder)
       return destination && ruleGroupOf ? ruleGroupOf(destination) : NO_GROUP
   }
-}
-
-function QueueRow({ item }: { item: QueueItem }) {
-  const progress = useDownloadProgress(item)
-  const [actionError, setActionError] = useState<ErrorDescription | null>(null)
-  const [showsLog, setShowsLog] = useState(false)
-  const hold = item.state === "waiting" ? item.hold : null
-  // The check window saving the file shows as a download, with its progress.
-  const savingInWindow = hold?.kind === "windowDownload"
-  const stage = savingInWindow ? strings.queue.stages.downloading : stageLabel(item, progress)
-  const holdTimeLeft = useTimeLeft(hold ? holdEnd(hold) : null)
-  const offerUndo = useOfferUndo()
-  // Enter Password shows the field; it's sent once, then the download runs with it.
-  const [entersPassword, setEntersPassword] = useState(false)
-  const [sendingPassword, setSendingPassword] = useState(false)
-
-  const act = (action: (id: number) => Promise<void>, describe = describeDownloadError) => {
-    setActionError(null)
-    action(item.id).catch((error: unknown) => setActionError(describe(error)))
-  }
-  /** Remove from Queue, then an offer for a few seconds to put it back where it was. */
-  const removeWithUndo = async (id: number) => {
-    await removeFinishedDownload(id)
-    offerUndo({
-      message: strings.queue.removed(item.video.title),
-      undo: restoreClearedDownloads,
-      describeError: describeDownloadError,
-    })
-  }
-  const actOnFile = (action: (downloadId: number) => Promise<void>) => {
-    if (!item.result) return
-    setActionError(null)
-    action(item.result.downloadId).catch((error: unknown) => setActionError(describeHistoryError(error)))
-  }
-
-  return (
-    <Card className="flex items-start gap-3 p-3">
-      <Thumbnail key={item.video.thumbnailUrl} url={item.video.thumbnailUrl} className="w-24" />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="truncate font-medium" title={item.video.title}>
-          {item.video.title}
-        </p>
-        <p className="truncate text-xs text-fg-secondary tabular-nums">
-          {joinDetails([
-            item.preset?.name ?? pickSummary(item.video) ?? formatContents(item.video),
-            stage,
-            ...sizeDetails(item, progress),
-          ])}
-        </p>
-        {(item.state === "running" || savingInWindow) && (
-          <ProgressBar value={progress?.fraction ?? undefined} label={stage} />
-        )}
-        {hold && (
-          <StatusMessage tone="neutral" message={describeHold(hold)} detail={holdTimeLeft ?? undefined}>
-            {hold.kind === "browserCheck" && (
-              <Button size="sm" onClick={() => act(openCheckWindow)}>
-                {strings.queue.openCheck}
-              </Button>
-            )}
-            {hold.kind === "needsPassword" &&
-              (entersPassword ? (
-                <PasswordForm
-                  size="sm"
-                  busy={sendingPassword}
-                  onUnlock={(password) => {
-                    setSendingPassword(true)
-                    act((id) =>
-                      enterDownloadPassword(id, password).finally(() => {
-                        setSendingPassword(false)
-                        setEntersPassword(false)
-                      }),
-                    )
-                  }}
-                />
-              ) : (
-                <Button size="sm" onClick={() => setEntersPassword(true)}>
-                  {strings.queue.enterPassword}
-                </Button>
-              ))}
-          </StatusMessage>
-        )}
-        {item.state === "failed" && item.error && (
-          <StatusMessage tone="danger" {...describeDownloadError(item.error)}>
-            {fixFor(item.error) && (
-              <FailureFixes
-                error={item.error}
-                // An archive's password, once added, retries at once: it only unpacks.
-                onRetry={item.error.kind === "unpack" ? () => act(retryDownload) : undefined}
-              />
-            )}
-          </StatusMessage>
-        )}
-        {actionError && <StatusMessage tone="danger" {...actionError} />}
-        {showsLog && item.state !== "waiting" && <LogPanel downloadId={item.id} live={item.state === "running"} />}
-      </div>
-      <div className="flex shrink-0 flex-wrap items-start justify-end gap-1">
-        {(item.state === "running" || item.state === "waiting") && (
-          <IconButton
-            label={strings.queue.stop}
-            icon={CircleStop}
-            variant="secondary"
-            onClick={() => act(stopDownload)}
-          />
-        )}
-        {hold &&
-          hold.kind !== "hourlyLimit" &&
-          hold.kind !== "browserCheck" &&
-          hold.kind !== "windowDownload" &&
-          hold.kind !== "needsPassword" && (
-          <IconButton label={strings.queue.tryNow} icon={RefreshCw} onClick={() => act(tryDownloadNow)} />
-        )}
-        {item.state === "stopped" && (
-          <IconButton
-            label={strings.queue.resume}
-            icon={Play}
-            variant="secondary"
-            onClick={() => act(resumeDownload)}
-          />
-        )}
-        {item.state === "failed" && (
-          <IconButton
-            label={strings.queue.retry}
-            icon={RefreshCw}
-            variant="secondary"
-            onClick={() => act(retryDownload)}
-          />
-        )}
-        {item.state === "done" && (
-          <>
-            <IconButton
-              label={strings.queue.openFile}
-              icon={Play}
-              variant="secondary"
-              onClick={() => actOnFile(openDownload)}
-            />
-            <IconButton
-              label={strings.queue.showInFolder}
-              icon={FolderOpen}
-              onClick={() => actOnFile(showDownloadInFolder)}
-            />
-          </>
-        )}
-        {item.state !== "waiting" && (
-          <IconButton
-            label={showsLog ? strings.queue.hideLog : strings.queue.showLog}
-            icon={FileText}
-            aria-expanded={showsLog}
-            onClick={() => setShowsLog((shown) => !shown)}
-          />
-        )}
-        {item.state === "failed" && item.error && (
-          <CopyDetailsButton id={item.id} error={describeDownloadError(item.error)} onError={setActionError} />
-        )}
-        {item.state === "done" ? (
-          <IconButton label={strings.queue.removeFinished} icon={X} onClick={() => act(removeWithUndo)} />
-        ) : (
-          <IconButton label={strings.queue.cancel} icon={X} onClick={() => act(cancelDownload)} />
-        )}
-        {(item.state === "waiting" || item.state === "stopped" || item.state === "failed") && (
-          <Menu
-            label={strings.queue.moreActions}
-            items={[
-              ...(item.state === "waiting" ? [{ label: strings.queue.downloadNext, onSelect: () => act(downloadNext) }] : []),
-              { label: strings.queue.changeFolder, onSelect: () => act((id) => changeFolder(id, item)) },
-              ...(item.folderChosen
-                ? [{ label: strings.queue.usualFolder, onSelect: () => act((id) => moveToFolder(id, item, null)) }]
-                : []),
-            ]}
-          />
-        )}
-      </div>
-    </Card>
-  )
-}
-
-/** Change Folder…: asks for a folder, then saves the download there. */
-async function changeFolder(id: number, item: QueueItem): Promise<void> {
-  const folder = await pickFolder(strings.queue.changeFolderTitle)
-  if (folder) await moveToFolder(id, item, folder)
-}
-
-/** Saves the download in `folder`, or the usual one, asking first when a stopped one would lose what it downloaded. */
-async function moveToFolder(id: number, item: QueueItem, folder: string | null): Promise<void> {
-  const startsOver = item.state === "stopped"
-  if (
-    startsOver &&
-    !(await confirmWithUser({
-      title: strings.queue.changeFolderStoppedTitle,
-      message: strings.queue.changeFolderStoppedMessage,
-      confirmLabel: strings.queue.changeFolderConfirm,
-      cancelLabel: strings.dialogs.cancel,
-    }))
-  ) {
-    return
-  }
-  await setQueueFolder(id, folder)
-}
-
-/** What the item is doing: its state, or while it runs, the stage yt-dlp is at. */
-function stageLabel(item: QueueItem, progress: DownloadProgress | null): string {
-  const stages = strings.queue.stages
-  return item.state === "running" ? stages[progress?.stage ?? "starting"] : stages[item.state]
-}
-
-/** Size, speed and time left while downloading; the file's size once done. */
-function sizeDetails(item: QueueItem, progress: DownloadProgress | null): (string | null)[] {
-  if (item.state === "done") {
-    return [item.result?.fileSize ? formatBytes(item.result.fileSize) : null]
-  }
-  if (progress?.stage === "countdown") {
-    return [progress.eta === null ? null : strings.queue.timeLeft(formatDuration(progress.eta))]
-  }
-  if (!progress || progress.totalBytes === null) return []
-  return [
-    strings.queue.progress(formatBytes(progress.downloadedBytes ?? 0), formatBytes(progress.totalBytes)),
-    progress.speed ? formatSpeed(progress.speed) : null,
-    progress.eta !== null && progress.fraction !== 1 ? strings.queue.timeLeft(formatDuration(progress.eta)) : null,
-  ]
 }

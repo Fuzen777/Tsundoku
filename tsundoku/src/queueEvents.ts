@@ -12,6 +12,7 @@ import {
 import type { DownloadProgress } from "./bindings/DownloadProgress"
 import type { QueueItem } from "./bindings/QueueItem"
 import { createLiveStore } from "./liveStore"
+import { combinedFraction } from "./queueSources"
 import { strings } from "./strings"
 
 /*
@@ -76,4 +77,11 @@ export function useDownloadProgress(item: QueueItem): DownloadProgress | null {
   const live = progress.useValue(item.id)
   const saving = item.state === "waiting" && item.hold?.kind === "windowDownload"
   return item.state === "running" || saving ? (live ?? item.progress) : null
+}
+
+/** How far these downloads have come together (`combinedFraction`), following the running ones' progress. */
+export function useCombinedProgress(items: readonly QueueItem[]): number {
+  return progress.useComputed((latest) =>
+    combinedFraction(items, (item) => (item.state === "running" ? (latest.get(item.id) ?? item.progress) : null)),
+  )
 }

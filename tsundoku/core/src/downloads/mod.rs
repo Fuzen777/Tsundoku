@@ -36,6 +36,7 @@ use crate::browsers;
 use crate::cancel::CancelToken;
 use crate::database::Database;
 use crate::history::{History, NewDownload, SavedFile};
+use crate::listing::ListingKind;
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::passwords::Password;
 use crate::post_names::{self, PostNameError};
@@ -87,6 +88,10 @@ pub struct QueueItem {
     /// `None` when none was.
     #[serde(default)]
     pub rule_id: Option<String>,
+    /// The channel, playlist or account it was picked from (the picker's Download Selected, or a watched source's),
+    /// which the Queue shows its downloads together under. `None` for a link added on its own.
+    #[serde(default)]
+    pub source: Option<QueueSource>,
     /// How a post's files, or a file host's one file, are named by a rule when it was added (`rules::file_name`), or
     /// `None` for Settings' name or the file's own, and for a video. The UI doesn't need it.
     #[serde(skip)]
@@ -210,6 +215,24 @@ pub struct QueuePick {
     pub folder: Option<String>,
 }
 
+/// What a download was picked from: a channel, playlist or account, as its listing was read. Saved with the download,
+/// so the Queue keeps showing the downloads picked from one source together, under its name and picture.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct QueueSource {
+    /// The listing's own page, which tells sources apart: every pick from one channel shares it, whether from its
+    /// picker or as a watched source.
+    pub url: String,
+    pub kind: ListingKind,
+    /// The channel's, playlist's or account's name.
+    pub name: String,
+    /// The site as people know it ("youtube.com").
+    pub site_name: String,
+    /// The channel's or account's picture, or a playlist's first thumbnail.
+    pub thumbnail_url: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -296,6 +319,19 @@ pub enum DownloadError {
     },
     #[error("unexpected error: {detail}")]
     Unexpected { detail: String },
+}
+
+/// What a new download is added with besides its video and preset: each `None` for a link added as the rules say.
+#[derive(Default)]
+struct AddChoices {
+    /// A folder picked for it instead of the one the rules give.
+    folder: Option<String>,
+    /// The rule picked for it in Pending, by its ID, deciding what it sets before any other.
+    rule_id: Option<String>,
+    /// The password that opened its link.
+    password: Option<Password>,
+    /// What it was picked from.
+    source: Option<QueueSource>,
 }
 
 /// Told about every change, to pass it on to the UI.
@@ -477,7 +513,17 @@ impl DownloadQueue {
         rule_id: Option<String>,
         password: Option<Password>,
     ) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_video(video, preset_id, overwrite, folder, rule_id, password)?;
+        let item = self.insert_video(
+            video,
+            preset_id,
+            overwrite,
+            AddChoices {
+                folder,
+                rule_id,
+                password,
+                source: None,
+            },
+        )?;
         self.schedule();
         Ok(item)
     }
@@ -488,10 +534,14 @@ impl DownloadQueue {
         video: VideoInfo,
         preset_id: &str,
         overwrite: bool,
-        chosen: Option<String>,
-        rule_id: Option<String>,
-        password: Option<Password>,
+        choices: AddChoices,
     ) -> Result<QueueItem, DownloadError> {
+        let AddChoices {
+            folder: chosen,
+            rule_id,
+            password,
+            source,
+        } = choices;
         let preset = self.presets.get(preset_id).ok_or(DownloadError::Preset {
             error: PresetError::NotFound,
         })?;
@@ -514,6 +564,7 @@ impl DownloadQueue {
             folder,
             folder_chosen,
             rule_id,
+            source,
             file_name,
             password,
             video,
@@ -550,15 +601,28 @@ impl DownloadQueue {
         rule_id: Option<String>,
         password: Option<Password>,
     ) -> Result<QueueItem, DownloadError> {
-        let item = self.insert_post(video, folder, rule_id, password)?;
+        let item = self.insert_post(
+            video,
+            AddChoices {
+                folder,
+                rule_id,
+                password,
+                source: None,
+            },
+        )?;
         self.schedule();
         Ok(item)
     }
 
-    /// Adds several downloads at once, such as those picked from a channel, each as `add` (with a preset) or `add_post`
-    /// (without) would, then starts what can start: the UI hears of the change once rather than once each. One already
-    /// in the queue is skipped. How many were added; the first error is returned once every other one is in.
-    pub fn add_many(&self, picks: Vec<QueuePick>) -> Result<usize, DownloadError> {
+    /// Adds several downloads at once, such as those picked from a channel (its `source`), each as `add` (with a
+    /// preset) or `add_post` (without) would, then starts what can start: the UI hears of the change once rather than
+    /// once each. One already in the queue is skipped, keeping the source it was added from. How many were added; the
+    /// first error is returned once every other one is in.
+    pub fn add_many(
+        &self,
+        picks: Vec<QueuePick>,
+        source: Option<QueueSource>,
+    ) -> Result<usize, DownloadError> {
         let mut added = 0;
         let mut first_error = None;
         for QueuePick {
@@ -568,11 +632,14 @@ impl DownloadQueue {
             folder,
         } in picks
         {
+            let choices = AddChoices {
+                folder,
+                source: source.clone(),
+                ..AddChoices::default()
+            };
             let inserted = match preset_id {
-                Some(preset_id) => {
-                    self.insert_video(video, &preset_id, overwrite, folder, None, None)
-                }
-                None => self.insert_post(video, folder, None, None),
+                Some(preset_id) => self.insert_video(video, &preset_id, overwrite, choices),
+                None => self.insert_post(video, choices),
             };
             match inserted {
                 Ok(_) => added += 1,
@@ -592,10 +659,14 @@ impl DownloadQueue {
     fn insert_post(
         &self,
         video: VideoInfo,
-        chosen: Option<String>,
-        rule_id: Option<String>,
-        password: Option<Password>,
+        choices: AddChoices,
     ) -> Result<QueueItem, DownloadError> {
+        let AddChoices {
+            folder: chosen,
+            rule_id,
+            password,
+            source,
+        } = choices;
         if video.post.is_none() && video.files.is_none() {
             return Err(DownloadError::WrongState);
         }
@@ -625,6 +696,7 @@ impl DownloadQueue {
             folder,
             folder_chosen,
             rule_id,
+            source,
             file_name,
             password,
             video,
@@ -672,6 +744,16 @@ impl DownloadQueue {
     /// Pause All: Stop for every download running or waiting. The running ones end keeping their partial files, the
     /// waiting ones are held. One being cancelled is left to finish cancelling.
     pub fn stop_all(&self) -> Result<(), DownloadError> {
+        self.stop_where(|_| true)
+    }
+
+    /// Pause All for some downloads only, such as those picked from one channel (a source's heading in the Queue).
+    pub fn stop_these(&self, ids: &[i64]) -> Result<(), DownloadError> {
+        self.stop_where(|id| ids.contains(&id))
+    }
+
+    /// Stop for every download `pick` takes by its ID that is running or waiting.
+    fn stop_where(&self, pick: impl Fn(i64) -> bool) -> Result<(), DownloadError> {
         let mut state = lock(&self.state);
         let contents = &mut *state;
         let mut saved = Ok(());
@@ -680,16 +762,16 @@ impl DownloadQueue {
         for item in contents
             .items
             .iter_mut()
-            .filter(|item| item.state == QueueState::Waiting)
+            .filter(|item| item.state == QueueState::Waiting && pick(item.id))
         {
             item.state = QueueState::Stopped;
             offers.extend(item.recovery.offer.take());
             saved = saved.and(self.store.update(item));
         }
-        for running in contents
+        for (_, running) in contents
             .running
-            .values_mut()
-            .filter(|running| running.end_request.is_none())
+            .iter_mut()
+            .filter(|(id, running)| running.end_request.is_none() && pick(**id))
         {
             running.end_request = Some(EndRequest::Stop);
             running.cancel.cancel();
@@ -709,7 +791,12 @@ impl DownloadQueue {
 
     /// Resume All: Resume for every stopped download, which start in their order.
     pub fn resume_all(&self) -> Result<(), DownloadError> {
-        self.requeue_all(QueueState::Stopped)
+        self.requeue_where(QueueState::Stopped, |_| true)
+    }
+
+    /// Resume All for some downloads only, such as those picked from one channel.
+    pub fn resume_these(&self, ids: &[i64]) -> Result<(), DownloadError> {
+        self.requeue_where(QueueState::Stopped, |id| ids.contains(&id))
     }
 
     /// Puts a failed download back in line. Its partial files are kept, so it continues where it failed.
@@ -719,7 +806,12 @@ impl DownloadQueue {
 
     /// Retry Failed: Retry for every failed download.
     pub fn retry_failed(&self) -> Result<(), DownloadError> {
-        self.requeue_all(QueueState::Failed)
+        self.requeue_where(QueueState::Failed, |_| true)
+    }
+
+    /// Retry Failed for some downloads only, such as those picked from one channel.
+    pub fn retry_these(&self, ids: &[i64]) -> Result<(), DownloadError> {
+        self.requeue_where(QueueState::Failed, |id| ids.contains(&id))
     }
 
     fn requeue(&self, id: i64, from: QueueState) -> Result<(), DownloadError> {
@@ -735,13 +827,21 @@ impl DownloadQueue {
         Ok(())
     }
 
-    /// Puts every download in the state `from` back in line. One that can't be saved still goes; the first error is
-    /// the answer.
-    fn requeue_all(&self, from: QueueState) -> Result<(), DownloadError> {
+    /// Puts every download in the state `from` that `pick` takes by its ID back in line. One that can't be saved still
+    /// goes; the first error is the answer.
+    fn requeue_where(
+        &self,
+        from: QueueState,
+        pick: impl Fn(i64) -> bool,
+    ) -> Result<(), DownloadError> {
         let mut saved = Ok(());
         {
             let mut state = lock(&self.state);
-            for item in state.items.iter_mut().filter(|item| item.state == from) {
+            for item in state
+                .items
+                .iter_mut()
+                .filter(|item| item.state == from && pick(item.id))
+            {
                 saved = saved.and(self.put_back_in_line(item));
             }
         }
@@ -870,10 +970,58 @@ impl DownloadQueue {
         Ok(())
     }
 
+    /// Cancel for each of these downloads that isn't done, such as those picked from one channel. The ones not running
+    /// go at once, their partial files deleted, before the running ones are ended, so none of them starts meanwhile;
+    /// each running one's thread removes it once its process is gone. One that can't be deleted from the saved queue
+    /// still goes; the first error is the answer.
+    pub fn cancel_these(&self, ids: &[i64]) -> Result<(), DownloadError> {
+        let mut state = lock(&self.state);
+        let contents = &mut *state;
+        let mut first_error = None;
+        let mut offers = Vec::new();
+        let (mut cancelled, kept): (Vec<QueueItem>, Vec<QueueItem>) =
+            std::mem::take(&mut contents.items)
+                .into_iter()
+                .partition(|item| {
+                    ids.contains(&item.id)
+                        && item.state != QueueState::Done
+                        && !contents.running.contains_key(&item.id)
+                });
+        contents.items = kept;
+        for item in &mut cancelled {
+            offers.extend(item.recovery.offer.take());
+            // The files go first, so once the item is gone, they are too.
+            remove_folder(&temp_folder(item));
+            if let Err(error) = self.store.delete(item.id) {
+                first_error.get_or_insert(error);
+            }
+        }
+        for (_, running) in contents
+            .running
+            .iter_mut()
+            .filter(|(id, _)| ids.contains(id))
+        {
+            running.end_request = Some(EndRequest::Cancel);
+            running.cancel.cancel();
+        }
+        drop(state);
+        for offered in offers {
+            offered.refuse();
+        }
+        // Their partial files are gone: a download waiting for room may fit now.
+        self.schedule();
+        first_error.map_or(Ok(()), Err)
+    }
+
     /// Removes the finished downloads from the queue. They stay in the history, and in the queue's memory until the
     /// next Clear Finished, so Undo can put them back (`restore_cleared`). How many were removed.
     pub fn clear_finished(&self) -> Result<usize, DownloadError> {
         self.clear_done(|_| true)
+    }
+
+    /// Clear Finished for some downloads only, such as those picked from one channel. How many were removed.
+    pub fn clear_these(&self, ids: &[i64]) -> Result<usize, DownloadError> {
+        self.clear_done(|item| ids.contains(&item.id))
     }
 
     /// Removes one finished download from the queue, as Clear Finished does for them all: it stays in the history,

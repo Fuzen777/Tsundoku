@@ -22,7 +22,7 @@ use ts_rs::TS;
 
 use crate::cancel::CancelToken;
 use crate::database::Database;
-use crate::downloads::{DownloadError, DownloadQueue, QueuePick};
+use crate::downloads::{DownloadError, DownloadQueue, QueuePick, QueueSource};
 use crate::history::{History, PastDownload};
 use crate::listing::{self, Listing, ListingKind};
 use crate::metadata::{PreviewError, VideoInfo};
@@ -360,7 +360,7 @@ impl WatchedSources {
             .collect();
         let added = self
             .queue
-            .add_many(picks)
+            .add_many(picks, Some(queue_source(&source)))
             .map_err(|error| WatchedError::Queue { error })?;
         let queued: Vec<ItemKey> = picked.into_iter().cloned().collect();
         self.store.set_state(id, &queued, ItemState::Queued)?;
@@ -405,7 +405,7 @@ impl WatchedSources {
             if !picks.is_empty() {
                 added += self
                     .queue
-                    .add_many(picks)
+                    .add_many(picks, Some(queue_source(&source)))
                     .map_err(|error| WatchedError::Queue { error })?;
             }
             self.store.set_state(source.id, &taken, ItemState::Queued)?;
@@ -650,6 +650,17 @@ fn run_checks(sources: &Weak<WatchedSources>, receiver: &Receiver<i64>) {
         sources.run_check(id);
         lock(&sources.checking).remove(&id);
         sources.notify();
+    }
+}
+
+/// The source a download from a watched source is queued with, so the Queue shows it with the others picked from it.
+fn queue_source(source: &StoredSource) -> QueueSource {
+    QueueSource {
+        url: source.url.clone(),
+        kind: source.kind,
+        name: source.name.clone(),
+        site_name: source.site_name.clone(),
+        thumbnail_url: source.thumbnail_url.clone(),
     }
 }
 

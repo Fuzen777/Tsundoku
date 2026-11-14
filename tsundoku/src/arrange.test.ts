@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest"
 import {
   arrange,
   arrangeNested,
+  bundled,
   firstItems,
   fixedFolder,
   folderGroup,
   NO_GROUP,
+  sharedBundles,
   STORED_ORDER,
   type GroupPlace,
   type SortFacts,
@@ -166,5 +168,32 @@ describe("firstItems", () => {
       ["x", [1]],
       ["y", [2]],
     ])
+  })
+})
+
+describe("bundled", () => {
+  const sourceOf = (id: number) => ({ 2: "nasa", 4: "nasa", 5: "esa", 6: "nasa", 7: "jaxa" })[id] ?? null
+  const shown = (ids: number[]) =>
+    bundled(ids, sourceOf).map((entry) => (entry.bundle ? entry.bundle.items : entry.item))
+
+  it("gathers a source's items where the first of them comes, the rest keeping their places", () => {
+    expect(shown([1, 2, 3, 4, 5, 6])).toEqual([1, [2, 4, 6], 3, [5]])
+    expect(shown([6, 3, 4, 2])).toEqual([[6, 4, 2], 3])
+    expect(shown([])).toEqual([])
+  })
+
+  it("names each bundle by its source", () => {
+    expect(bundled([2, 5, 4, 5], sourceOf).flatMap((entry) => (entry.bundle ? [entry.bundle.key] : []))).toEqual([
+      "nasa",
+      "esa",
+    ])
+  })
+})
+
+describe("sharedBundles", () => {
+  it("finds the sources two or more items share, leaving out one with a single item and items with none", () => {
+    const sourceOf = (id: number) => ({ 2: "nasa", 4: "nasa", 5: "esa", 7: "jaxa", 8: "jaxa" })[id] ?? null
+    expect(sharedBundles([1, 2, 3, 4, 5, 7, 8], sourceOf)).toEqual(new Set(["nasa", "jaxa"]))
+    expect(sharedBundles([1, 5, 3], sourceOf)).toEqual(new Set())
   })
 })

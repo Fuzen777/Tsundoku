@@ -12,4 +12,9 @@ items: PickerLayout,
 /**
  * A post's pictures and videos, on the preview card and in Pending.
  */
-postFiles: PickerLayout, };
+postFiles: PickerLayout, 
+/**
+ * The downloads picked from a channel, playlist or account, under its heading in the Queue (the same choice for
+ * every heading).
+ */
+queueSources: PickerLayout, };

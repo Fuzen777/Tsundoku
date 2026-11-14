@@ -35,6 +35,18 @@ export function describeHold(hold: Hold): string {
   }
 }
 
+/** Whether a waiting download's hold can be cut short with Try Now: not the hourly limit, a check, the check window's
+ * download or a password, which wait for something else. */
+export function canTryNow(hold: Hold | null): boolean {
+  return (
+    hold !== null &&
+    hold.kind !== "hourlyLimit" &&
+    hold.kind !== "browserCheck" &&
+    hold.kind !== "windowDownload" &&
+    hold.kind !== "needsPassword"
+  )
+}
+
 /** When a hold ends, for its countdown: none for a drive without room, which is only looked at again then, nor for a
  * check or a password, which wait for you. */
 export function holdEnd(hold: Hold): number | null {

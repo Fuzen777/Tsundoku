@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react"
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, Folder } from "lucide-react"
-import type { ItemGroup } from "../arrange"
+import { bundled, sharedBundles, type ItemGroup } from "../arrange"
 import type { ListArrangement } from "../bindings/ListArrangement"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { ListSort } from "../bindings/ListSort"
@@ -85,6 +85,26 @@ interface GroupedListProps<Item> {
   headingExtra?: (group: ItemGroup<Item>) => ReactNode
   /** The view's folded groups, when the view changes them too (Watched's Expand All); else the list keeps its own. */
   folds?: FoldedGroups
+  /** With it, the items from one source sit together under a heading of their own wherever they fall (the Queue's
+   * downloads picked from one channel). */
+  bundles?: Bundling<Item>
+}
+
+/** How a list keeps the items from one source together. */
+export interface Bundling<Item> {
+  /** The source an item came from, or null for an item added on its own. */
+  keyOf: (item: Item) => string | null
+  /** Draws a source's items in one part of the list: its heading, then `rows` unless it's folded. */
+  render: (bundle: ShownBundle<Item>) => ReactNode
+}
+
+/** A source's items as a list shows them, with whether they're folded away. */
+export interface ShownBundle<Item> {
+  items: readonly Item[]
+  folded: boolean
+  onFold: () => void
+  /** Its items' rows. */
+  rows: ReactNode
 }
 
 /** A list's ticked items, for the boxes on its groups' headings. */
@@ -98,7 +118,8 @@ export interface GroupSelection<Item> {
  * A list of cards, under a heading per group when it's grouped: the group's name (a folder's path with its icon) and
  * how many it holds. A status's group holds the other grouping's groups under smaller headings. Clicking a heading
  * folds its group away; each view remembers which while the app runs. With `selection`, a box before each heading
- * ticks its whole group.
+ * ticks its whole group. With `bundles`, the items of a source two or more share sit together under its own heading in
+ * each group they're in, where the first of them comes; it folds the same way.
  */
 export function GroupedList<Item>({
   view,
@@ -109,17 +130,42 @@ export function GroupedList<Item>({
   selection,
   headingExtra,
   folds,
+  bundles,
 }: GroupedListProps<Item>) {
   const ownFolds = useFoldedGroups(view)
   const { collapsed, toggle } = folds ?? ownFolds
-  const rows = (items: readonly Item[]) =>
-    items.map((item) => <Fragment key={keyOf(item)}>{renderItem(item)}</Fragment>)
-  if (!grouped) return <div className="flex flex-col gap-2">{rows(groups.flatMap((group) => group.items))}</div>
+  const row = (item: Item) => <Fragment key={keyOf(item)}>{renderItem(item)}</Fragment>
+  // A source with one item in the whole list shows it on its own; one with more shows each under its heading, even one
+  // alone in its group (grouped by status, say).
+  const shared = bundles ? sharedBundles(groups.flatMap((group) => group.items), bundles.keyOf) : null
+  // `path` names the group the items are in, so a source's items folded in one group stay unfolded in another.
+  const rows = (items: readonly Item[], path: string) => {
+    if (!bundles || !shared) return items.map(row)
+    const sharedKeyOf = (item: Item) => {
+      const key = bundles.keyOf(item)
+      return key !== null && shared.has(key) ? key : null
+    }
+    return bundled(items, sharedKeyOf).map((entry) => {
+      if (!entry.bundle) return row(entry.item)
+      const key = `${path}/bundle:${entry.bundle.key}`
+      return (
+        <Fragment key={key}>
+          {bundles.render({
+            items: entry.bundle.items,
+            folded: collapsed.has(key),
+            onFold: () => toggle(key),
+            rows: entry.bundle.items.map(row),
+          })}
+        </Fragment>
+      )
+    })
+  }
+  if (!grouped) return <div className="flex flex-col gap-2">{rows(groups.flatMap((group) => group.items), "")}</div>
 
   const section = (group: ItemGroup<Item>, path: string, nested: boolean): ReactNode => {
     const key = `${path}/${group.key}`
     // Items in no group of the second grouping sit under their status's heading without one of their own.
-    if (nested && group.key === "") return <Fragment key={key}>{rows(group.items)}</Fragment>
+    if (nested && group.key === "") return <Fragment key={key}>{rows(group.items, key)}</Fragment>
     const isCollapsed = collapsed.has(key)
     const Chevron = isCollapsed ? ChevronRight : ChevronDown
     return (
@@ -148,7 +194,7 @@ export function GroupedList<Item>({
           (group.subgroups ? (
             <div className="flex flex-col gap-3">{group.subgroups.map((subgroup) => section(subgroup, key, true))}</div>
           ) : (
-            rows(group.items)
+            rows(group.items, key)
           ))}
       </section>
     )

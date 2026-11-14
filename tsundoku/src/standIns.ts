@@ -29,6 +29,7 @@ import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { QueueSource } from "./bindings/QueueSource"
 import type { RightAwayRule } from "./bindings/RightAwayRule"
 import type { RulePreset } from "./bindings/RulePreset"
 import type { SharedFile } from "./bindings/SharedFile"
@@ -94,6 +95,35 @@ const presetStandIns: Preset[] = [
   presetStandIn("audio-mp3", "Audio MP3", { kind: "audio", format: "mp3" }),
 ]
 
+/** A channel and an account some stand-in downloads were picked from. */
+const channelSourceStandIn: QueueSource = {
+  url: "https://www.youtube.com/@jawed/videos",
+  kind: "channel",
+  name: "jawed",
+  siteName: "youtube.com",
+  thumbnailUrl: "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg",
+}
+const accountSourceStandIn: QueueSource = {
+  url: "https://www.instagram.com/someaccount/",
+  kind: "account",
+  name: "Some Account",
+  siteName: "instagram.com",
+  thumbnailUrl: null,
+}
+
+/** A stand-in download's result, its file named after it. */
+function finishedStandIn(id: number): QueueItem["result"] {
+  return { filePath: String.raw`C:\Users\You\Videos\video${id}.mkv`, fileSize: 8_000_000 + id * 1_000_000, downloadId: id }
+}
+
+/** What a stand-in post's download starts with: the post, no preset. */
+function postQueueStandIn(id: number, title: string): Partial<QueueItem> {
+  return {
+    video: { ...postStandIn.video, videoId: `post${id}`, title },
+    preset: null,
+  }
+}
+
 function queueStandIn(id: number, state: QueueItem["state"], title: string, extra: Partial<QueueItem> = {}): QueueItem {
   return {
     id,
@@ -102,6 +132,7 @@ function queueStandIn(id: number, state: QueueItem["state"], title: string, extr
     folder: id % 2 ? String.raw`C:\Users\You\Videos` : String.raw`C:\Users\You\Downloads\Tsundoku\youtube.com`,
     folderChosen: false,
     ruleId: null,
+    source: null,
     state,
     overwrite: false,
     addedAt: 1_793_876_473 + id * 60,
@@ -685,6 +716,36 @@ export const standIns = {
         downloadId: 1,
       },
     }),
+    // Picked together from a channel, and from an account, among the others: each shows under its source's heading.
+    queueStandIn(20, "done", "Video number 1", { source: channelSourceStandIn, result: finishedStandIn(20) }),
+    queueStandIn(21, "running", "Video number 2", {
+      source: channelSourceStandIn,
+      progress: {
+        stage: "downloadingVideo",
+        fraction: 0.6,
+        downloadedBytes: 60_000_000,
+        totalBytes: 100_000_000,
+        speed: 3_100_000,
+        eta: 13,
+      },
+    }),
+    queueStandIn(22, "waiting", "Video number 4", { source: channelSourceStandIn }),
+    queueStandIn(23, "waiting", "Video number 5", { source: channelSourceStandIn }),
+    queueStandIn(24, "done", "Post number 1", {
+      ...postQueueStandIn(24, "Post number 1"),
+      source: accountSourceStandIn,
+      result: finishedStandIn(24),
+    }),
+    queueStandIn(25, "failed", "Post number 2", {
+      ...postQueueStandIn(25, "Post number 2"),
+      source: accountSourceStandIn,
+      error: { kind: "ytDlp", error: { kind: "network", detail: "Connection reset by peer" } },
+    }),
+    queueStandIn(26, "done", "Post number 3", {
+      ...postQueueStandIn(26, "Post number 3"),
+      source: accountSourceStandIn,
+      result: finishedStandIn(26),
+    }),
   ] satisfies QueueItem[],
   /** The carousel downloaded before (`postAgainStandIn`) left its second and fifth files out, the Gofile folder
    * (`filePostAgainStandIn`) its second and sixth. */
@@ -768,6 +829,7 @@ export const standIns = {
   pickerLayouts: {
     items: { view: "gallery", size: 2, hideDownloaded: false },
     postFiles: { view: "gallery", size: 1, hideDownloaded: false },
+    queueSources: { view: "gallery", size: 2, hideDownloaded: false },
   } satisfies PickerLayouts,
   /** Words that start with http:// or https://, each once: the core also takes links without them. */
   linksInText(text: string): string[] {

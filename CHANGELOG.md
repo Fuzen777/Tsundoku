@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.142 · 2026-11-14
+
+### Added
+
+- **Downloads from one channel together in the queue**: the items you pick from a channel, playlist or account (Download Selected, or a watched source's new items) now sit together in the queue under the source's own heading, so it's clear they came from the same place: its picture and name, where its downloads stand ("3 of 12 done · 2 downloading · 7 waiting") and their progress together. Fold it away with the chevron, or click the picture or the name. The heading also pauses, resumes, retries or cancels all of them at once, and clears them once they're all done. Picking more from the same source later adds them to the same heading. Downloads added before this version show as before.
+- **List, Masonry or Gallery in the queue**: a source's heading has the picker's view toggle and picture size buttons, so its downloads can show as pictures. Right-click a picture for its actions, or click it to see its full row.
+
 ## 0.1.141 · 2026-11-14
 
 ### Changed

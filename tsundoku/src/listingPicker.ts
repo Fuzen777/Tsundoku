@@ -2,6 +2,7 @@ import type { ListedItem } from "./bindings/ListedItem"
 import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
 import type { QueuePick } from "./bindings/QueuePick"
+import type { QueueSource } from "./bindings/QueueSource"
 import { strings } from "./strings"
 
 /*
@@ -150,4 +151,15 @@ export function shownItems(items: readonly ListedItem[], hideDownloaded: boolean
 export function nounOf(listing: Pick<Listing, "kind" | "siteName">): keyof typeof strings.picker.nouns {
   if (listing.kind === "account") return "post"
   return listing.kind === "channel" || listing.siteName === "youtube.com" ? "video" : "item"
+}
+
+/** What Download Selected's picks come from, which the Queue shows them together under. */
+export function sourceOf(listing: Listing): QueueSource {
+  return {
+    url: listing.url,
+    kind: listing.kind,
+    name: listing.title,
+    siteName: listing.siteName,
+    thumbnailUrl: listing.thumbnailUrl,
+  }
 }

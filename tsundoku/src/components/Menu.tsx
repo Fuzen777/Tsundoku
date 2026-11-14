@@ -7,6 +7,8 @@ export interface MenuItem {
   onSelect: () => void
   /** A destructive action, in the danger color. */
   danger?: boolean
+  /** Shown before the label in a right-click menu (ContextMenu), as the button it stands for. */
+  icon?: LucideIcon
 }
 
 interface MenuProps {

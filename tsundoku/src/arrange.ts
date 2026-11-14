@@ -103,6 +103,52 @@ export function arrangeNested<Item>(
   return byStatus.map((group) => ({ ...group, subgroups: arrange(group.items, arrangement, factsOf, groupOf) }))
 }
 
+/** Items that came from one source, such as the downloads picked from one channel, kept together in a list. */
+export interface ItemBundle<Item> {
+  key: string
+  items: Item[]
+}
+
+/** One entry of a list: an item on its own, or a bundle of items from one source. */
+export type ListEntry<Item> = { item: Item; bundle?: undefined } | { bundle: ItemBundle<Item>; item?: undefined }
+
+/** The bundles two or more of the items share. An item whose bundle holds no other is better shown on its own. */
+export function sharedBundles<Item>(items: readonly Item[], bundleOf: (item: Item) => string | null): Set<string> {
+  const seen = new Set<string>()
+  const shared = new Set<string>()
+  for (const item of items) {
+    const key = bundleOf(item)
+    if (key === null) continue
+    if (seen.has(key)) shared.add(key)
+    else seen.add(key)
+  }
+  return shared
+}
+
+/**
+ * Gathers the items of each bundle (`bundleOf`, null for none) where the first of them comes, keeping their order, so a
+ * source's items stay together whatever the sort, and the rest keep their places.
+ */
+export function bundled<Item>(items: readonly Item[], bundleOf: (item: Item) => string | null): ListEntry<Item>[] {
+  const entries: ListEntry<Item>[] = []
+  const bundles = new Map<string, ItemBundle<Item>>()
+  for (const item of items) {
+    const key = bundleOf(item)
+    if (key === null) {
+      entries.push({ item })
+      continue
+    }
+    const bundle = bundles.get(key)
+    if (bundle) bundle.items.push(item)
+    else {
+      const added = { key, items: [item] }
+      bundles.set(key, added)
+      entries.push({ bundle: added })
+    }
+  }
+  return entries
+}
+
 /**
  * The part of a rule's folder that doesn't change from one download to the next: the folders before the first one
  * with a placeholder, joined to the download folder when it isn't a full path. `Downloads\{site}` gives `Downloads`.

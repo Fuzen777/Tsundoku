@@ -24,6 +24,7 @@ import {
   selectedItems,
   selectEvery,
   shownItems,
+  sourceOf,
   takesPreset,
   withItem,
   withMoreItems,
@@ -148,7 +149,7 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
     setAdding(true)
     setError(null)
     try {
-      await addManyToQueue(picks)
+      await addManyToQueue(picks, sourceOf(listing))
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))

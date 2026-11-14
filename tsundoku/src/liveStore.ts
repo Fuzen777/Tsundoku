@@ -27,5 +27,10 @@ export function createLiveStore<Key, Value>() {
     useValue(key: Key): Value | undefined {
       return useSyncExternalStore(subscribe, () => values.get(key))
     },
+    /** What `compute` makes of every value, such as several downloads' progress together, re-rendering only when it
+     * changes. It must answer with a value that compares equal for the same values: a number, a string. */
+    useComputed<Result>(compute: (values: ReadonlyMap<Key, Value>) => Result): Result {
+      return useSyncExternalStore(subscribe, () => compute(values))
+    },
   }
 }

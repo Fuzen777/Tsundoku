@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { PickerLayout } from "./bindings/PickerLayout"
 import type { PickerView } from "./bindings/PickerView"
-import { columnsFor, intoColumns, resized, sizeStep, TILE_GAP, TILE_WIDTHS, tileWidthIn } from "./pickerLayout"
+import { columnsFor, intoColumns, ownShape, resized, sizeStep, TILE_GAP, TILE_WIDTHS, tileWidthIn } from "./pickerLayout"
 
 function layout(view: PickerView, size: number): PickerLayout {
   return { view, size, hideDownloaded: false }
@@ -73,5 +73,17 @@ describe("intoColumns", () => {
 
   it("puts everything in one column when asked for none", () => {
     expect(intoColumns([1, 2], 0)).toEqual([[1, 2]])
+  })
+})
+
+describe("ownShape", () => {
+  it("is a picture's width over its height, kept from turning a long strip into a line", () => {
+    expect(ownShape({ naturalWidth: 1920, naturalHeight: 1080 })).toBeCloseTo(16 / 9)
+    expect(ownShape({ naturalWidth: 100, naturalHeight: 1000 })).toBe(0.4)
+    expect(ownShape({ naturalWidth: 4000, naturalHeight: 100 })).toBe(3)
+  })
+
+  it("is null for a picture without a size", () => {
+    expect(ownShape({ naturalWidth: 0, naturalHeight: 0 })).toBeNull()
   })
 })

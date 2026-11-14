@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use super::*;
 use crate::data_folder::DataPaths;
+use crate::listing::ListingKind;
 use crate::passwords::Password;
 use crate::presets::built_in_presets;
 use crate::rules::DownloadKind;
@@ -300,13 +301,16 @@ fn adds_many_at_once_with_one_change() {
         overwrite: false,
         folder: None,
     };
-    let added = test.queue.add_many(vec![
-        pick(video("b"), Some("best-video")),
-        pick(post("Post"), None),
-        // Already in the queue: skipped.
-        pick(video("a"), Some("best-video")),
-        pick(video("c"), Some("best-audio")),
-    ]);
+    let added = test.queue.add_many(
+        vec![
+            pick(video("b"), Some("best-video")),
+            pick(post("Post"), None),
+            // Already in the queue: skipped.
+            pick(video("a"), Some("best-video")),
+            pick(video("c"), Some("best-audio")),
+        ],
+        None,
+    );
     assert_eq!(added, Ok(3));
     assert_eq!(
         test.listener.changes.load(Ordering::SeqCst) - changes_before,
@@ -326,13 +330,205 @@ fn adds_many_at_once_with_one_change() {
     assert_eq!(items[2].preset, None);
 
     // A video without a preset, or a preset that's gone, fails without stopping the rest.
-    let added = test.queue.add_many(vec![
-        pick(video("d"), None),
-        pick(video("e"), Some("no-such-preset")),
-        pick(video("f"), Some("best-video")),
-    ]);
+    let added = test.queue.add_many(
+        vec![
+            pick(video("d"), None),
+            pick(video("e"), Some("no-such-preset")),
+            pick(video("f"), Some("best-video")),
+        ],
+        None,
+    );
     assert_eq!(added, Err(DownloadError::WrongState));
     assert!(test.queue.contains("youtube", "f"));
+}
+
+/// A channel as its picker passes it with its picks.
+fn nasa() -> QueueSource {
+    QueueSource {
+        url: "https://www.youtube.com/@NASA/videos".to_owned(),
+        kind: ListingKind::Channel,
+        name: "NASA".to_owned(),
+        site_name: "youtube.com".to_owned(),
+        thumbnail_url: Some("https://yt3.ggpht.com/nasa.jpg".to_owned()),
+    }
+}
+
+/// Picks from one channel, all with a preset, added together with the channel as their source.
+fn add_from_nasa(test: &Test, video_ids: &[&str]) -> Vec<i64> {
+    let picks = video_ids
+        .iter()
+        .map(|id| QueuePick {
+            video: video(id),
+            preset_id: Some("best-video".to_owned()),
+            overwrite: false,
+            folder: None,
+        })
+        .collect();
+    test.queue.add_many(picks, Some(nasa())).unwrap();
+    video_ids
+        .iter()
+        .map(|video_id| {
+            test.queue
+                .items()
+                .iter()
+                .find(|item| item.video.video_id == *video_id)
+                .unwrap()
+                .id
+        })
+        .collect()
+}
+
+#[test]
+fn downloads_picked_together_keep_their_source_through_a_restart() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let alone = test.add("a");
+    let picked = add_from_nasa(&test, &["b", "c"]);
+    // Already in the queue on its own: it keeps having no source.
+    test.queue
+        .add_many(
+            vec![QueuePick {
+                video: video("a"),
+                preset_id: Some("best-video".to_owned()),
+                overwrite: false,
+                folder: None,
+            }],
+            Some(nasa()),
+        )
+        .unwrap();
+    for items in [test.queue.items(), test.queue.store.load().unwrap()] {
+        let sources: Vec<(&str, Option<&str>)> = items
+            .iter()
+            .map(|item| {
+                (
+                    item.video.video_id.as_str(),
+                    item.source.as_ref().map(|source| source.name.as_str()),
+                )
+            })
+            .collect();
+        assert_eq!(
+            sources,
+            [("a", None), ("b", Some("NASA")), ("c", Some("NASA"))]
+        );
+        assert_eq!(items[1].source, Some(nasa()));
+    }
+
+    // Removed from the queue and put back, it keeps it too.
+    wait_until("the first runs", || test.runner.started() == [alone]);
+    test.runner.complete(alone, test.finished_file("a.mkv"));
+    wait_until("the next runs", || {
+        test.runner.started() == [alone, picked[0]]
+    });
+    test.runner.complete(picked[0], test.finished_file("b.mkv"));
+    wait_until("it's done", || {
+        test.state(picked[0]) == Some(QueueState::Done)
+    });
+    test.queue.remove_finished(picked[0]).unwrap();
+    test.queue.restore_cleared().unwrap();
+    let restored = test.queue.store.load().unwrap();
+    let restored = restored.iter().find(|item| item.id == picked[0]).unwrap();
+    assert_eq!(restored.source, Some(nasa()));
+    test.queue.stop_all().unwrap();
+}
+
+#[test]
+fn a_sources_downloads_pause_resume_and_retry_together_and_nothing_else() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let alone = test.add("a");
+    let picked = add_from_nasa(&test, &["b", "c", "d"]);
+    wait_until("the first runs", || test.runner.started() == [alone]);
+
+    // The waiting ones are held; the download added on its own goes on.
+    test.queue.stop_these(&picked).unwrap();
+    for id in &picked {
+        assert_eq!(test.state(*id), Some(QueueState::Stopped));
+    }
+    assert_eq!(test.state(alone), Some(QueueState::Running));
+
+    // Resumed, they wait their turn; a running one stops keeping its partial files, and none of the others starts.
+    test.queue.resume_these(&picked).unwrap();
+    test.runner.complete(alone, test.finished_file("a.mkv"));
+    wait_until("the first of them runs", || {
+        test.state(picked[0]) == Some(QueueState::Running)
+    });
+    test.queue.stop_these(&picked).unwrap();
+    wait_until("it stops", || {
+        test.state(picked[0]) == Some(QueueState::Stopped)
+    });
+    assert!(test.temp_folder(picked[0]).exists());
+    assert_eq!(test.runner.started(), [alone, picked[0]]);
+
+    // Retry takes only the failed one.
+    test.queue.resume_these(&picked[..1]).unwrap();
+    wait_until("it runs again", || test.runner.started().len() == 3);
+    test.runner
+        .complete(picked[0], JobOutcome::Failed(DownloadError::NoFile));
+    wait_until("it fails", || {
+        test.state(picked[0]) == Some(QueueState::Failed)
+    });
+    test.queue.retry_these(&picked).unwrap();
+    wait_until("it runs once more", || test.runner.started().len() == 4);
+    assert_eq!(test.runner.started()[3], picked[0]);
+    assert_eq!(test.state(picked[1]), Some(QueueState::Stopped));
+    assert_eq!(test.state(picked[2]), Some(QueueState::Stopped));
+    test.queue.stop_all().unwrap();
+}
+
+#[test]
+fn a_sources_downloads_can_be_cancelled_together_leaving_the_finished_ones() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.at_once = 1)
+        .unwrap();
+    let alone = test.add("a");
+    wait_until("it runs", || test.runner.started() == [alone]);
+    test.runner.complete(alone, test.finished_file("a.mkv"));
+    wait_until("it's done", || test.state(alone) == Some(QueueState::Done));
+    let picked = add_from_nasa(&test, &["b", "c", "d"]);
+    let [first, second, third] = picked[..] else {
+        unreachable!("three were picked")
+    };
+    wait_until("the first runs", || {
+        test.state(first) == Some(QueueState::Running)
+    });
+    test.runner.complete(first, test.finished_file("b.mkv"));
+    wait_until("the second runs", || {
+        test.state(second) == Some(QueueState::Running)
+    });
+    test.queue.stop(third).unwrap();
+
+    test.queue.cancel_these(&picked).unwrap();
+    assert_eq!(test.state(third), None, "one not running goes at once");
+    wait_until("the running one is gone", || test.state(second).is_none());
+    assert!(!test.temp_folder(second).exists());
+    assert_eq!(
+        test.state(first),
+        Some(QueueState::Done),
+        "a finished one stays"
+    );
+    assert_eq!(test.state(alone), Some(QueueState::Done));
+    assert_eq!(test.runner.started(), [alone, first, second]);
+    let saved: Vec<i64> = test
+        .queue
+        .store
+        .load()
+        .unwrap()
+        .iter()
+        .map(|item| item.id)
+        .collect();
+    assert_eq!(saved, [alone, first]);
+
+    // Clear Finished for them then takes the finished one only, and Undo puts it back.
+    assert_eq!(test.queue.clear_these(&picked), Ok(1));
+    assert_eq!(test.state(alone), Some(QueueState::Done));
+    assert_eq!(test.state(first), None);
+    assert_eq!(test.queue.restore_cleared(), Ok(1));
+    assert_eq!(test.state(first), Some(QueueState::Done));
 }
 
 #[test]
@@ -650,6 +846,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         folder: String::new(),
         folder_chosen: false,
         rule_id: None,
+        source: None,
         file_name: None,
         state,
         overwrite: false,

@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { Check, type LucideIcon } from "lucide-react"
-import { columnsFor, intoColumns, SMALL_TILE, TILE_WIDTHS, TINY_TILE, tileWidthIn } from "../pickerLayout"
+import { columnsFor, intoColumns, ownShape, SMALL_TILE, TILE_WIDTHS, TINY_TILE, tileWidthIn } from "../pickerLayout"
 import { classes } from "./styles"
 
 /** What a tile says under its picture, as the post strip's marks do. */
@@ -53,6 +53,44 @@ interface MediaTilesProps {
  * tile ticks it; Tab and Space work.
  */
 export function MediaTiles({ tiles, view, size, galleryRatio, disabled, className }: MediaTilesProps) {
+  return (
+    // The scrollbar's room is kept, so its coming and going never changes how many columns fit.
+    <div className={classes("overflow-y-auto [scrollbar-gutter:stable]", className)}>
+      {/* Padded for the focus outline. */}
+      <div className="p-1">
+        <TiledItems
+          items={tiles}
+          view={view}
+          size={size}
+          render={(spec, labels) => (
+            <Tile
+              key={spec.key}
+              spec={spec}
+              ratio={view === "gallery" ? galleryRatio : null}
+              labels={labels}
+              disabled={disabled}
+            />
+          )}
+        />
+      </div>
+    </div>
+  )
+}
+
+interface TiledItemsProps<Item> {
+  items: readonly Item[]
+  view: "masonry" | "gallery"
+  /** The step of the size buttons (`TILE_WIDTHS`). */
+  size: number
+  /** One item's tile: an `li`, with its key, its labels as they fit at the size the tiles came to. */
+  render: (item: Item, labels: TileLabels) => ReactNode
+}
+
+/**
+ * Items as tiles, in as many columns as fit the box's width at the size picked: a grid in Gallery, columns dealt left to
+ * right in Masonry, so the first ones stay at the top. The pickers' pictures and the Queue's both lay out this way.
+ */
+export function TiledItems<Item>({ items, view, size, render }: TiledItemsProps<Item>) {
   const inner = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
 
@@ -69,41 +107,29 @@ export function MediaTiles({ tiles, view, size, galleryRatio, disabled, classNam
   const columns = columnsFor(width, size)
   const tileWidth = width > 0 ? tileWidthIn(width, columns) : TILE_WIDTHS[size]
   const labels: TileLabels = tileWidth < TINY_TILE ? "hidden" : tileWidth < SMALL_TILE ? "small" : "full"
-  const tile = (spec: MediaTile) => (
-    <Tile key={spec.key} spec={spec} ratio={view === "gallery" ? galleryRatio : null} labels={labels} disabled={disabled} />
-  )
   return (
-    // The scrollbar's room is kept, so its coming and going never changes how many columns fit.
-    <div className={classes("overflow-y-auto [scrollbar-gutter:stable]", className)}>
-      {/* Padded for the focus outline; the box inside is the one measured. */}
-      <div className="p-1">
-        <div ref={inner}>
-          {view === "gallery" ? (
-            <ul className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-              {tiles.map(tile)}
+    <div ref={inner}>
+      {view === "gallery" ? (
+        <ul className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+          {items.map((item) => render(item, labels))}
+        </ul>
+      ) : (
+        <div className="flex items-start gap-2">
+          {intoColumns(items, columns).map((column, index) => (
+            <ul key={index} className="flex min-w-0 flex-1 flex-col gap-2">
+              {column.map((item) => render(item, labels))}
             </ul>
-          ) : (
-            <div className="flex items-start gap-2">
-              {intoColumns(tiles, columns).map((column, index) => (
-                <ul key={index} className="flex min-w-0 flex-1 flex-col gap-2">
-                  {column.map(tile)}
-                </ul>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
-      </div>
+      )}
     </div>
   )
 }
 
 /** How a picture's corner labels show: as they are, shrunk on a small picture, or left out on a tiny one, where they
  * would cover it. */
-type TileLabels = "full" | "small" | "hidden"
+export type TileLabels = "full" | "small" | "hidden"
 
-/** The narrowest and widest a picture's own shape is shown in Masonry, so a long strip stays a picture. */
-const NARROWEST = 0.4
-const WIDEST = 3
 
 interface TileProps {
   spec: MediaTile
@@ -142,10 +168,8 @@ function Tile({ spec, ratio, labels, disabled }: TileProps) {
             referrerPolicy="no-referrer"
             className={classes("size-full object-cover transition-opacity", !shown && "opacity-35")}
             onLoad={(event) => {
-              const { naturalWidth, naturalHeight } = event.currentTarget
-              if (naturalWidth > 0 && naturalHeight > 0) {
-                setOwnRatio(Math.min(Math.max(naturalWidth / naturalHeight, NARROWEST), WIDEST))
-              }
+              const shape = ownShape(event.currentTarget)
+              if (shape !== null) setOwnRatio(shape)
             }}
             onError={() => setFailed(true)}
           />

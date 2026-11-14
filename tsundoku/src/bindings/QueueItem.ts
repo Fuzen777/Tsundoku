@@ -4,6 +4,7 @@ import type { DownloadProgress } from "./DownloadProgress";
 import type { DownloadResult } from "./DownloadResult";
 import type { Hold } from "./Hold";
 import type { Preset } from "./Preset";
+import type { QueueSource } from "./QueueSource";
 import type { QueueState } from "./QueueState";
 import type { VideoInfo } from "./VideoInfo";
 
@@ -27,7 +28,12 @@ folderChosen: boolean,
  * (`rules::destination`): the folder it was given when added, and again when its folder goes back to the rules'.
  * `None` when none was.
  */
-ruleId: string | null, state: QueueState, 
+ruleId: string | null, 
+/**
+ * The channel, playlist or account it was picked from (the picker's Download Selected, or a watched source's),
+ * which the Queue shows its downloads together under. `None` for a link added on its own.
+ */
+source: QueueSource | null, state: QueueState, 
 /**
  * Download Again with the same preset: replace the file made before.
  */

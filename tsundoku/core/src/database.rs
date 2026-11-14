@@ -148,6 +148,9 @@ const MIGRATIONS: &[&str] = &[
     // files, which unpacking replaces with what the archives held. NULL for downloads made before, which took every
     // file, and for videos and posts.
     "ALTER TABLE downloads ADD COLUMN share_paths TEXT;",
+    // 17: the channel, playlist or account a queue item was picked from (`downloads::QueueSource`), as JSON, so the
+    // Queue keeps showing the downloads of one source together. NULL for a link added on its own.
+    "ALTER TABLE queue_items ADD COLUMN source TEXT;",
 ];
 
 pub struct Database {

@@ -23,7 +23,7 @@ impl QueueStore {
         let mut statement = connection
             .prepare(
                 "SELECT id, video, preset, folder, state, overwrite, added_at, result, error, folder_chosen, file_name,
-                    rule, password
+                    rule, password, source
                 FROM queue_items ORDER BY position, id",
             )
             .map_err(storage_error)?;
@@ -43,6 +43,7 @@ impl QueueStore {
                     row.get::<_, Option<String>>(10)?,
                     row.get::<_, Option<String>>(11)?,
                     row.get::<_, Option<String>>(12)?,
+                    row.get::<_, Option<String>>(13)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -63,6 +64,7 @@ impl QueueStore {
                 file_name,
                 rule_id,
                 password,
+                source,
             ) = row.map_err(storage_error)?;
             // An item that can't be read (from a newer version, say) is skipped rather than blocking the queue.
             let (Ok(video), Ok(preset), Some(state)) = (
@@ -79,6 +81,8 @@ impl QueueStore {
                 folder,
                 folder_chosen,
                 rule_id,
+                // A source that can't be read only leaves the download on its own.
+                source: source.and_then(|json| serde_json::from_str(&json).ok()),
                 file_name,
                 state,
                 overwrite,
@@ -113,8 +117,8 @@ impl QueueStore {
             .query_row(
                 "INSERT INTO queue_items
                     (id, video, preset, folder, state, overwrite, added_at, result, error, position, folder_chosen,
-                    file_name, rule, password)
-                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13, ?14) RETURNING id",
+                    file_name, rule, password, source)
+                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13, ?14, ?15) RETURNING id",
                 params![
                     to_json(&item.video),
                     to_json(&item.preset),
@@ -130,6 +134,7 @@ impl QueueStore {
                     item.file_name,
                     item.rule_id,
                     item.password.as_ref().map(Password::reveal),
+                    item.source.as_ref().map(to_json),
                 ],
                 |row| row.get(0),
             )

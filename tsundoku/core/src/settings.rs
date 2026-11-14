@@ -807,6 +807,9 @@ pub struct PickerLayouts {
     pub items: PickerLayout,
     /// A post's pictures and videos, on the preview card and in Pending.
     pub post_files: PickerLayout,
+    /// The downloads picked from a channel, playlist or account, under its heading in the Queue (the same choice for
+    /// every heading).
+    pub queue_sources: PickerLayout,
 }
 
 impl Default for PickerLayouts {
@@ -818,6 +821,7 @@ impl Default for PickerLayouts {
                 size: 1,
                 hide_downloaded: false,
             },
+            queue_sources: PickerLayout::default(),
         }
     }
 }
@@ -1097,6 +1101,11 @@ mod tests {
                     size: 1,
                     hide_downloaded: false,
                 },
+                queue_sources: PickerLayout {
+                    view: PickerView::Gallery,
+                    size: 2,
+                    hide_downloaded: false,
+                },
             }
         );
 
@@ -1119,6 +1128,8 @@ mod tests {
             !pickers.post_files.hide_downloaded,
             "settings from before Hide Downloaded show everything"
         );
+        // From before the Queue had views: its own starts as Gallery.
+        assert_eq!(pickers.queue_sources, PickerLayout::default());
     }
 
     #[test]
@@ -1151,6 +1162,11 @@ mod tests {
             post_files: PickerLayout {
                 view: PickerView::Masonry,
                 size: 5,
+                hide_downloaded: false,
+            },
+            queue_sources: PickerLayout {
+                view: PickerView::List,
+                size: 3,
                 hide_downloaded: false,
             },
         };

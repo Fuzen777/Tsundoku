@@ -40,6 +40,7 @@ import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
 import type { QueuePick } from "./bindings/QueuePick"
+import type { QueueSource } from "./bindings/QueueSource"
 import type { RightAwayRule } from "./bindings/RightAwayRule"
 import type { RulePreset } from "./bindings/RulePreset"
 import type { ShownError } from "./bindings/ShownError"
@@ -452,11 +453,12 @@ export function getLeftOutSharedFiles(video: VideoInfo): Promise<number[] | null
   return invoke<number[] | null>("left_out_shared_files", { video })
 }
 
-/** Adds the items picked from a channel, playlist or account, each as its own download, and answers how many were
- * added. Rejects with a DownloadError once every other one is in. */
-export function addManyToQueue(picks: QueuePick[]): Promise<number> {
+/** Adds the items picked from a channel, playlist or account (`source`, which the Queue shows them together under),
+ * each as its own download, and answers how many were added. Rejects with a DownloadError once every other one is
+ * in. */
+export function addManyToQueue(picks: QueuePick[], source: QueueSource | null): Promise<number> {
   if (!isTauri()) return outsideTauri()
-  return invoke<number>("add_many_to_queue", { picks })
+  return invoke<number>("add_many_to_queue", { picks, source })
 }
 
 /** The folder rules, in the order they're tried. */
@@ -564,6 +566,37 @@ export async function resumeAllDownloads(): Promise<void> {
 export async function retryFailedDownloads(): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("retry_failed_downloads")
+}
+
+/** Pause All for some downloads only: those under one source's heading in the Queue. */
+export async function stopTheseDownloads(ids: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("stop_these_downloads", { ids })
+}
+
+/** Resume All for the downloads under one source's heading. */
+export async function resumeTheseDownloads(ids: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("resume_these_downloads", { ids })
+}
+
+/** Retry Failed for the downloads under one source's heading. */
+export async function retryTheseDownloads(ids: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("retry_these_downloads", { ids })
+}
+
+/** Cancel for each of the downloads under one source's heading that isn't done, deleting their partial files. */
+export async function cancelTheseDownloads(ids: number[]): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("cancel_these_downloads", { ids })
+}
+
+/** Clear Finished for the downloads under one source's heading, answering how many: restoreClearedDownloads puts
+ * them back. */
+export function clearTheseDownloads(ids: number[]): Promise<number> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<number>("clear_these_downloads", { ids })
 }
 
 /** Moves a waiting download to the front of the line, so it starts before the others waiting. */
@@ -1071,7 +1104,7 @@ export function saveListArrangements(arrangements: ListArrangements): Promise<Li
   return invoke<ListArrangements>("save_list_arrangements", { arrangements })
 }
 
-/** How the pickers show a listing's items and a post's files. */
+/** How the pickers show a listing's items and a post's files, and the Queue a source's downloads. */
 export function getPickerLayouts(): Promise<PickerLayouts> {
   if (!isTauri()) return Promise.resolve(standIns.pickerLayouts)
   return invoke<PickerLayouts>("picker_layouts")

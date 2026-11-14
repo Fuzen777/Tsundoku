@@ -213,6 +213,38 @@ export const strings = {
       failed: "Failed",
       done: "Done",
     },
+    /** A source's downloads as pictures, in Masonry or Gallery (QueueTiles). */
+    tiles: {
+      hint: "Right-click for its actions, or click for its details.",
+      menu: (title: string) => `Actions for ${title}`,
+      showDetails: "Show Details",
+      hideDetails: "Hide Details",
+    },
+    /** The heading over the downloads picked together from one channel, playlist or account (QueueSourceGroup). */
+    source: {
+      done: (done: number, total: number) => `${done} of ${total} done`,
+      allDone: (count: number) => `${count} done`,
+      states: {
+        running: (count: number) => `${count} downloading`,
+        waiting: (count: number) => `${count} waiting`,
+        stopped: (count: number) => `${count} stopped`,
+        failed: (count: number) => `${count} failed`,
+      },
+      progress: (name: string) => `Downloading from ${name}`,
+      pauseAll: (name: string) => `Pause All from ${name}`,
+      resumeAll: (name: string) => `Resume All from ${name}`,
+      retryFailed: (name: string) => `Retry Failed from ${name}`,
+      cancelAll: (name: string) => `Cancel All from ${name}`,
+      clearFinished: (name: string) => `Clear Finished from ${name}`,
+      cancelTitle: (count: number, name: string) =>
+        `Cancel ${count} ${count === 1 ? "Download" : "Downloads"} from ${name}?`,
+      cancelMessage: (count: number, finished: number) =>
+        `${count === 1 ? "What it has" : "What they have"} downloaded so far is deleted.${
+          finished === 0 ? "" : ` The ${finished} finished ${finished === 1 ? "one stays" : "ones stay"} in the queue.`
+        }`,
+      cancelConfirm: (count: number) => (count === 1 ? "Cancel Download" : "Cancel Downloads"),
+      keep: (count: number) => (count === 1 ? "Keep It" : "Keep Them"),
+    },
     /** Why a waiting download, or a link waiting in Pending, doesn't start yet. */
     holds: {
       slowDown: (site: string, time: string) => `${site} asked to slow down. Continuing at ${time}.`,

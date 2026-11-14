@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Check, ClipboardCopy } from "lucide-react"
-import { copyText, getDownloadDetails } from "../api"
 import { describeDownloadError, type ErrorDescription } from "../errors"
+import { copyDownloadDetails } from "../queueItems"
 import { strings } from "../strings"
 import { IconButton } from "./IconButton"
 
@@ -36,7 +36,7 @@ export function CopyDetailsButton({ id, error, onError }: CopyDetailsButtonProps
     onError(null)
     setCopying(true)
     try {
-      await copyText(await getDownloadDetails(id, { message: error.message, detail: error.detail ?? null }))
+      await copyDownloadDetails(id, error)
       setCopied(true)
     } catch (caught) {
       onError(describeDownloadError(caught))

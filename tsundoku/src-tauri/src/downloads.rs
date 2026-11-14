@@ -7,7 +7,7 @@ use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_opener::OpenerExt;
 use tsundoku_core::downloads::{
     DownloadError, DownloadLog, DownloadProgress, DownloadProgressEvent, DownloadQueue, QueueItem,
-    QueueListener, QueuePick,
+    QueueListener, QueuePick, QueueSource,
 };
 use tsundoku_core::metadata::VideoInfo;
 use tsundoku_core::passwords::Password;
@@ -238,10 +238,15 @@ pub fn set_queue_folder(
     queue.set_folder(id, folder)
 }
 
-/// Adds the items picked from a channel, playlist or account, each as its own download. How many were added.
+/// Adds the items picked from a channel, playlist or account (`source`), each as its own download. How many were
+/// added.
 #[tauri::command]
-pub fn add_many_to_queue(queue: Queue<'_>, picks: Vec<QueuePick>) -> Result<usize, DownloadError> {
-    queue.add_many(picks)
+pub fn add_many_to_queue(
+    queue: Queue<'_>,
+    picks: Vec<QueuePick>,
+    source: Option<QueueSource>,
+) -> Result<usize, DownloadError> {
+    queue.add_many(picks, source)
 }
 
 /// Where downloads go when no folder is chosen: a Tsundoku folder in Downloads.
@@ -292,6 +297,37 @@ pub fn resume_all_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
 #[tauri::command]
 pub fn retry_failed_downloads(queue: Queue<'_>) -> Result<(), DownloadError> {
     queue.retry_failed()
+}
+
+/// Pause All for the downloads under one source's heading in the Queue.
+#[tauri::command]
+pub fn stop_these_downloads(queue: Queue<'_>, ids: Vec<i64>) -> Result<(), DownloadError> {
+    queue.stop_these(&ids)
+}
+
+/// Resume All for the downloads under one source's heading.
+#[tauri::command]
+pub fn resume_these_downloads(queue: Queue<'_>, ids: Vec<i64>) -> Result<(), DownloadError> {
+    queue.resume_these(&ids)
+}
+
+/// Retry Failed for the downloads under one source's heading.
+#[tauri::command]
+pub fn retry_these_downloads(queue: Queue<'_>, ids: Vec<i64>) -> Result<(), DownloadError> {
+    queue.retry_these(&ids)
+}
+
+/// Cancel for each of the downloads under one source's heading that isn't done.
+#[tauri::command]
+pub fn cancel_these_downloads(queue: Queue<'_>, ids: Vec<i64>) -> Result<(), DownloadError> {
+    queue.cancel_these(&ids)
+}
+
+/// Clear Finished for the downloads under one source's heading, and answers how many: Undo puts them back
+/// (`restore_cleared_downloads`).
+#[tauri::command]
+pub fn clear_these_downloads(queue: Queue<'_>, ids: Vec<i64>) -> Result<usize, DownloadError> {
+    queue.clear_these(&ids)
 }
 
 /// Moves a waiting download to the front of the line.

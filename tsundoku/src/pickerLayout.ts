@@ -22,6 +22,7 @@ export const TILE_GAP = 8
 export const DEFAULT_PICKER_LAYOUTS: PickerLayouts = {
   items: { view: "gallery", size: 2, hideDownloaded: false },
   postFiles: { view: "gallery", size: 1, hideDownloaded: false },
+  queueSources: { view: "gallery", size: 2, hideDownloaded: false },
 }
 
 /** A size kept by an older or newer version, brought within this one's steps. */
@@ -53,4 +54,14 @@ export function intoColumns<Item>(items: readonly Item[], count: number): Item[]
   const columns: Item[][] = Array.from({ length: Math.max(1, count) }, () => [])
   items.forEach((item, index) => columns[index % columns.length].push(item))
   return columns
+}
+
+/** The narrowest and widest a picture's own shape is shown in Masonry, so a long strip stays a picture. */
+const NARROWEST = 0.4
+const WIDEST = 3
+
+/** A loaded picture's own shape, as width over height, within what Masonry shows, or null when it has no size. */
+export function ownShape(picture: { naturalWidth: number; naturalHeight: number }): number | null {
+  const { naturalWidth, naturalHeight } = picture
+  return naturalWidth > 0 && naturalHeight > 0 ? Math.min(Math.max(naturalWidth / naturalHeight, NARROWEST), WIDEST) : null
 }
