@@ -355,6 +355,7 @@ pub fn run() {
             history::video_downloads,
             history::forget_video,
             history::history_ids,
+            history::history_size,
             history::forget_videos,
             history::move_history_files,
             history::history_folder_count,

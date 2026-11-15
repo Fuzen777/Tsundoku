@@ -10,8 +10,8 @@ use tauri::ipc::Channel;
 use tauri::{Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
-    History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, PastDownload,
-    folder_count,
+    History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, HistorySize,
+    PastDownload, folder_count,
 };
 use tsundoku_core::listing::{self, ListingKind, ListingMore, MoreItems, MoreRead};
 use tsundoku_core::metadata::PreviewError;
@@ -271,6 +271,17 @@ pub async fn history_ids(
 ) -> Result<Vec<i64>, HistoryError> {
     let history = Arc::clone(&history);
     blocking(move || history.ids(&query)).await
+}
+
+/// What the files of the videos the history view's query matches take on the disk: every download's files that are
+/// still there. Off the async runtime's threads, since it asks the disk about each folder.
+#[tauri::command]
+pub async fn history_size(
+    history: State<'_, Arc<History>>,
+    query: HistoryQuery,
+) -> Result<HistorySize, HistoryError> {
+    let history = Arc::clone(&history);
+    blocking(move || history.size(&query)).await
 }
 
 /// Forgets several videos at once, as `forget_video` does each, and answers how many were in the history.

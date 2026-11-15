@@ -1,9 +1,10 @@
 //! The history of every download: its tables in `tsundoku.db` (database.rs) are its source of truth, and yt-dlp's `archive.txt` is
 //! rewritten from it after every change, one `<site> <id>` line per video, so yt-dlp can use it too.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
@@ -139,6 +140,20 @@ pub struct HistoryPage {
     pub videos: Vec<HistoryVideo>,
     /// How many videos match the query, across every page.
     pub total: u32,
+}
+
+/// What the files of the videos a query matches take on the disk (`History::size`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HistorySize {
+    /// The files still where they were saved, together, in bytes.
+    #[ts(type = "number")]
+    pub bytes: u64,
+    /// How many files that is.
+    pub files: u32,
+    /// The files recorded that aren't where they were saved anymore, which count for nothing.
+    pub missing: u32,
 }
 
 /// What the history can be filtered by.
@@ -612,6 +627,31 @@ impl History {
             .query_map(params_from_iter(&values), |row| row.get(0))?
             .collect::<Result<_, _>>()?;
         Ok(ids)
+    }
+
+    /// What the videos matching the query take on the disk: every file their downloads made (each download, not only
+    /// the latest, and every file of a post or a shared folder) that's still where it was saved, each path counted
+    /// once. The disk is asked once the database is free, a folder at a time (`size_on_disk`).
+    pub fn size(&self, query: &HistoryQuery) -> Result<HistorySize, HistoryError> {
+        if query.files.is_some() {
+            self.note_missing(query)?;
+        }
+        let (filter, values) = filter_of(query);
+        let paths: Vec<String> = {
+            let connection = self.database.lock();
+            let mut statement = connection.prepare(&format!(
+                "WITH shown AS (SELECT v.id {VIDEOS_WITH_LATEST_DOWNLOAD} {filter})
+                SELECT f.file_path FROM download_files f JOIN downloads a ON a.id = f.download
+                WHERE a.video IN shown
+                UNION ALL
+                SELECT a.file_path FROM downloads a
+                WHERE a.video IN shown AND NOT EXISTS (SELECT 1 FROM download_files f WHERE f.download = a.id)"
+            ))?;
+            statement
+                .query_map(params_from_iter(&values), |row| row.get(0))?
+                .collect::<Result<_, _>>()?
+        };
+        Ok(size_on_disk(&paths))
     }
 
     /// Notes, in `missing_files`, which of the videos the query's other filters take have lost their latest
@@ -1119,6 +1159,121 @@ fn missing_files(files: &[(i64, String)]) -> Vec<i64> {
             .flat_map(|check| check.join().unwrap_or_default())
             .collect()
     })
+}
+
+/// How many of a folder's files `size_on_disk` asks the disk about one by one. A folder holding more is listed once
+/// instead, which gives every file's size in one answer, and one request rather than one a file on a network drive.
+const ASKED_ONE_BY_ONE: usize = 4;
+
+/// The size of the files that are still there, each path counted once, ignoring letter case as Windows does. The files
+/// are grouped by folder, and several folders are read at a time, since a slow or network drive answers each slowly.
+fn size_on_disk(paths: &[String]) -> HistorySize {
+    let mut unnamed = 0;
+    // Each folder by its path in lowercase: the folder, and its files by their names in lowercase.
+    let mut by_folder: HashMap<String, (PathBuf, HashMap<String, PathBuf>)> = HashMap::new();
+    for path in paths {
+        let path = PathBuf::from(path);
+        let (Some(folder), Some(name)) = (path.parent(), path.file_name()) else {
+            unnamed += 1;
+            continue;
+        };
+        let (_, files) = by_folder
+            .entry(folder.to_string_lossy().to_lowercase())
+            .or_insert_with(|| (folder.to_path_buf(), HashMap::new()));
+        files
+            .entry(name.to_string_lossy().to_lowercase())
+            .or_insert(path);
+    }
+    let folders: Vec<(PathBuf, HashMap<String, PathBuf>)> = by_folder.into_values().collect();
+    // Each reader takes the next folder left, so one big folder doesn't hold up the others' share.
+    let next = AtomicUsize::new(0);
+    let total = std::thread::scope(|scope| {
+        let readers: Vec<_> = (0..folders.len().min(8))
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut size = HistorySize::default();
+                    while let Some((folder, files)) =
+                        folders.get(next.fetch_add(1, Ordering::Relaxed))
+                    {
+                        size = size.plus(folder_size(folder, files));
+                    }
+                    size
+                })
+            })
+            .collect();
+        readers
+            .into_iter()
+            .map(|reader| reader.join().unwrap_or_default())
+            .fold(HistorySize::default(), HistorySize::plus)
+    });
+    HistorySize {
+        missing: total.missing + unnamed,
+        ..total
+    }
+}
+
+/// The size of a folder's files that are still there, `files` by their names in lowercase.
+fn folder_size(folder: &Path, files: &HashMap<String, PathBuf>) -> HistorySize {
+    let wanted = u32::try_from(files.len()).unwrap_or(u32::MAX);
+    let listed = (files.len() > ASKED_ONE_BY_ONE)
+        .then(|| std::fs::read_dir(folder).ok())
+        .flatten();
+    let Some(entries) = listed else {
+        // A few files, or a folder that can't be listed (gone, or not ours to list): each file is asked about.
+        let lengths: Vec<u64> = files
+            .values()
+            .filter_map(|path| file_length(path))
+            .collect();
+        let found = u32::try_from(lengths.len()).unwrap_or(u32::MAX);
+        return HistorySize {
+            bytes: lengths.iter().sum(),
+            files: found,
+            missing: wanted - found,
+        };
+    };
+    let mut left: HashMap<&str, &PathBuf> = files
+        .iter()
+        .map(|(name, path)| (name.as_str(), path))
+        .collect();
+    let mut size = HistorySize::default();
+    for entry in entries.flatten() {
+        let Some(path) = left.remove(entry.file_name().to_string_lossy().to_lowercase().as_str())
+        else {
+            continue;
+        };
+        // A file's listing gives its size; anything else (a link) is asked about, and a folder doesn't count.
+        let length = match entry.metadata() {
+            Ok(metadata) if metadata.is_file() => Some(metadata.len()),
+            _ => file_length(path),
+        };
+        if let Some(length) = length {
+            size.bytes += length;
+            size.files += 1;
+        }
+    }
+    HistorySize {
+        missing: wanted - size.files,
+        ..size
+    }
+}
+
+/// A file's size, if it's there and is a file.
+fn file_length(path: &Path) -> Option<u64> {
+    std::fs::metadata(path)
+        .ok()
+        .filter(|metadata| metadata.is_file())
+        .map(|metadata| metadata.len())
+}
+
+impl HistorySize {
+    /// Both sizes together.
+    fn plus(self, other: Self) -> Self {
+        Self {
+            bytes: self.bytes + other.bytes,
+            files: self.files + other.files,
+            missing: self.missing + other.missing,
+        }
+    }
 }
 
 /// How many folders the files are in, each counted once, ignoring letter case as Windows does.
@@ -2237,6 +2392,34 @@ mod tests {
                 "{name}: {found} videos; all at once {whole:.1} ms, first page {first_page:.1} ms, last page {last_page:.1} ms"
             );
         }
+        // Every file in one folder, listed once; then a folder per uploader's few files, each asked about.
+        let mut size = HistorySize::default();
+        let listed = median_milliseconds(9, || {
+            size = test
+                .history
+                .size(&query(None, HistorySort::Downloaded))
+                .unwrap();
+        });
+        println!(
+            "size on disk: {} files ({} missing), {listed:.1} ms",
+            size.files, size.missing
+        );
+        let scattered: Vec<String> = (0..size.files + size.missing)
+            .map(|index| {
+                let folder = files.path().join(format!("folder{}", index / 3));
+                fs::create_dir_all(&folder).unwrap();
+                let path = folder.join(format!("{index}.bin"));
+                fs::write(&path, b"x").unwrap();
+                path.display().to_string()
+            })
+            .collect();
+        let one_by_one = median_milliseconds(9, || {
+            size_on_disk(&scattered);
+        });
+        println!(
+            "size on disk, 3 files a folder: {} files, {one_by_one:.1} ms",
+            scattered.len()
+        );
     }
 
     #[test]
@@ -2485,6 +2668,96 @@ mod tests {
         assert_eq!(
             post_download.last_download.file_path,
             target.join("1.jpg").display().to_string()
+        );
+    }
+
+    #[test]
+    fn sizes_every_file_still_there_once_as_filtered() {
+        let test = TestHistory::new();
+        assert_eq!(
+            test.history.size(&HistoryQuery::default()).unwrap(),
+            HistorySize::default()
+        );
+        let write = |name: &str, bytes: usize| {
+            let path = test.folder.path().join(name);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, vec![b'x'; bytes]).unwrap();
+            path.display().to_string()
+        };
+        // A video downloaded twice: both downloads' files count.
+        let clip = video("youtube", "clip", "Clip", "x", 1.0);
+        for (name, bytes, at) in [("clip.mkv", 100, 1), ("clip.opus", 20, 2)] {
+            let mut saved = download("p", at, 1);
+            saved.file_path = write(name, bytes);
+            test.history.record(&clip, &saved).unwrap();
+        }
+        // Downloaded twice to one file, written in capitals the second time: it counts once.
+        let song = video("soundcloud", "song", "Song", "x", 1.0);
+        let song_path = write("song.mp3", 7);
+        for (path, at) in [(song_path.clone(), 3), (song_path.to_uppercase(), 4)] {
+            let mut saved = download("p", at, 1);
+            saved.file_path = path;
+            test.history.record(&song, &saved).unwrap();
+        }
+        // A post's six files in a folder of their own, which is listed rather than asked about file by file; the
+        // last was deleted since.
+        let paths: Vec<String> = (1..=6)
+            .map(|number| write(&format!("posts/{number}.jpg"), number))
+            .collect();
+        fs::remove_file(&paths[5]).unwrap();
+        let mut post = video("instagram", "post", "Post", "x", 0.0);
+        post.post = Some(PostContents {
+            images: 6,
+            videos: 0,
+            others: 0,
+        });
+        let mut saved = saved(&paths.iter().map(String::as_str).collect::<Vec<_>>());
+        saved.kind = DownloadKind::Post;
+        test.history.record(&post, &saved).unwrap();
+        // A video whose file is gone.
+        record_kind(&test, "gone", DownloadKind::Video, 5, true);
+
+        assert_eq!(
+            test.history.size(&HistoryQuery::default()).unwrap(),
+            HistorySize {
+                bytes: 100 + 20 + 7 + (1 + 2 + 3 + 4 + 5),
+                files: 2 + 1 + 5,
+                missing: 2,
+            }
+        );
+        let only = |query: HistoryQuery| test.history.size(&query).unwrap();
+        assert_eq!(
+            only(HistoryQuery {
+                kind: Some(DownloadKind::Post),
+                ..HistoryQuery::default()
+            }),
+            HistorySize {
+                bytes: 15,
+                files: 5,
+                missing: 1,
+            }
+        );
+        assert_eq!(
+            only(HistoryQuery {
+                files: Some(FileState::Missing),
+                ..HistoryQuery::default()
+            }),
+            HistorySize {
+                bytes: 0,
+                files: 0,
+                missing: 1,
+            }
+        );
+        assert_eq!(
+            only(HistoryQuery {
+                search: Some("clip".to_owned()),
+                ..HistoryQuery::default()
+            }),
+            HistorySize {
+                bytes: 120,
+                files: 2,
+                missing: 0,
+            }
         );
     }
 

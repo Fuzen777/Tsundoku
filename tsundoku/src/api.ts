@@ -24,6 +24,7 @@ import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryPage } from "./bindings/HistoryPage"
+import type { HistorySize } from "./bindings/HistorySize"
 import type { LinkPreview } from "./bindings/LinkPreview"
 import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PickerLayouts } from "./bindings/PickerLayouts"
@@ -1041,6 +1042,13 @@ export async function forgetVideo(videoId: number): Promise<void> {
 export function getHistoryIds(query: HistoryQuery): Promise<number[]> {
   if (!isTauri()) return Promise.resolve(standIns.historyIds(query, addressNumber("history")))
   return invoke<number[]>("history_ids", { query })
+}
+
+/** What the files of the videos a query matches take on the disk: every download's files still where they were saved.
+ * In a browser, the stand-ins' latest downloads. */
+export function getHistorySize(query: HistoryQuery): Promise<HistorySize> {
+  if (!isTauri()) return Promise.resolve(standIns.historySize(query, addressNumber("history")))
+  return invoke<HistorySize>("history_size", { query })
 }
 
 /** Forgets several videos, as forgetVideo does each, and resolves to how many were in the history. */

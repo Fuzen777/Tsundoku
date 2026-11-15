@@ -14,6 +14,7 @@ import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryPage } from "./bindings/HistoryPage"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
+import type { HistorySize } from "./bindings/HistorySize"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
 import type { LinkFileError } from "./bindings/LinkFileError"
 import type { LinkPreview } from "./bindings/LinkPreview"
@@ -540,6 +541,15 @@ export const standIns = {
   },
   historyIds: (query: HistoryQuery, count: number | null): number[] =>
     matchingHistory(query, count).map((video) => video.id),
+  /** What the matching stand-ins' latest downloads take, their missing files counted apart. */
+  historySize: (query: HistoryQuery, count: number | null): HistorySize =>
+    matchingHistory(query, count).reduce(
+      (size, { lastDownload }) =>
+        lastDownload.fileExists
+          ? { ...size, bytes: size.bytes + (lastDownload.fileSize ?? 0), files: size.files + lastDownload.fileCount }
+          : { ...size, missing: size.missing + lastDownload.fileCount },
+      { bytes: 0, files: 0, missing: 0 },
+    ),
   historyFilters: {
     sites: [{ site: "youtube", siteName: "youtube.com" }],
     presets: ["1080p MP4", "Audio MP3", "Best Audio", "Best Video"],

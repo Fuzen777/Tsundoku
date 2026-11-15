@@ -47,7 +47,14 @@ import { describeHistoryError, type ErrorDescription } from "../errors"
 import { formatBytes, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { DATE_RANGES, dateBounds, type DateBounds, type DateRange } from "../historyDates"
 import { type HistoryTarget, useAppActions } from "../navigation"
-import { useDownloadFiles, useHistory, useHistoryFilters, useVideoDownloads, useWatchedSources } from "../queries"
+import {
+  useDownloadFiles,
+  useHistory,
+  useHistoryFilters,
+  useHistorySize,
+  useVideoDownloads,
+  useWatchedSources,
+} from "../queries"
 import { strings } from "../strings"
 import { useDebouncedValue } from "../useDebouncedValue"
 import { useVirtualRows } from "../virtualRows"
@@ -108,6 +115,7 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
   }
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useHistory(query)
   const { data: filters } = useHistoryFilters()
+  const { data: size, isPlaceholderData: sizeIsOld } = useHistorySize(query)
   const isFiltered =
     query.search !== null ||
     site !== null ||
@@ -418,7 +426,20 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
                 disabled={busy}
                 onChange={(event) => void tickAll(event.target.checked)}
               />
-              {joinDetails([text.itemCount(total), selected.size > 0 && text.selectedCount(selected.size)])}
+              <span>
+                {text.itemCount(total)}
+                {size && (
+                  // The last query's size, faded, until this one's is worked out.
+                  <span
+                    className={sizeIsOld ? "opacity-50" : undefined}
+                    title={text.sizeOnDiskHint(size.files, size.missing)}
+                  >
+                    {strings.separator}
+                    {size.files === 0 ? text.noFilesOnDisk : text.sizeOnDisk(formatBytes(size.bytes))}
+                  </span>
+                )}
+                {selected.size > 0 && strings.separator + text.selectedCount(selected.size)}
+              </span>
             </label>
           )}
           {error && <StatusMessage tone="danger" {...error} />}

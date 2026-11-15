@@ -344,6 +344,14 @@ export const strings = {
     ascending: "Ascending",
     descending: "Descending",
     itemCount: (count: number) => (count === 1 ? "1 item" : `${count} items`),
+    /** What the items listed take on the disk, after their count. */
+    sizeOnDisk: (size: string) => `${size} on disk`,
+    noFilesOnDisk: "no files left on disk",
+    sizeOnDiskHint: (files: number, missing: number) =>
+      files === 0
+        ? "None of the files their downloads made is where it was saved anymore."
+        : `${files === 1 ? "1 file" : `${files} files`} from every download of these items, still where they were saved.` +
+          (missing === 0 ? "" : ` ${missing} more ${missing === 1 ? "isn't" : "aren't"} there anymore.`),
     downloadCount: (count: number) => `${count} Downloads`,
     fileCount: (count: number) => `${count} Files`,
     fileMissing: "File Missing",

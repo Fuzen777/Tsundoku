@@ -30,6 +30,7 @@ import {
   getSupportedSites,
   getHistoryFilters,
   getHistoryPage,
+  getHistorySize,
   getVideoDownloads,
   getPresetArguments,
   getPendingLinks,
@@ -410,6 +411,17 @@ export function useLatestWatchedDownloads(sourceId: number) {
     queryKey: [...queryKeys.history, "watchedSource", sourceId],
     queryFn: () => getHistoryPage(latestDownloadsQuery(sourceId), 0, LATEST_DOWNLOADS),
     select: (page) => page.videos,
+  })
+}
+
+/** What the files of the videos the history view's query matches take on the disk, the last answer kept while the next
+ * is worked out. Read again with the history (queueEvents.ts), as a download finishes or a video is forgotten or moved,
+ * and when the window is focused, since files may have been deleted meanwhile. */
+export function useHistorySize(query: HistoryQuery) {
+  return useQuery({
+    queryKey: [...queryKeys.history, "size", query],
+    queryFn: () => getHistorySize(query),
+    placeholderData: keepPreviousData,
   })
 }
 

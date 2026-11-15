@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.151 · 2026-11-15
+
+### Added
+
+- **Space on disk in the History**: the line over the list now says how much what it lists takes on disk ("5000 items · 412.3 GB on disk"), following the search and filters, so picking a site or Posts shows what those take. It counts every file of every download of those items that's still where it was saved, each once; hovering says how many files that is and how many more aren't there anymore. It's counted again when a download finishes, after Forget or Move Files…, and when you open the History again.
+
 ## 0.1.150 · 2026-11-15
 
 ### Changed
