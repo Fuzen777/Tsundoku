@@ -53,7 +53,7 @@ import {
 } from "./api"
 import { ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
 import { DEFAULT_PICKER_LAYOUTS, sizeStep } from "./pickerLayout"
-import { DEFAULT_WATCHED_ARRANGEMENT } from "./watchedSources"
+import { DEFAULT_WATCHED_ARRANGEMENT, LATEST_DOWNLOADS, latestDownloadsQuery } from "./watchedSources"
 import { ruleLabel } from "./views/rules/ruleLabels"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
@@ -400,6 +400,16 @@ export function useHistory(query: HistoryQuery) {
       return lastPage.videos.length === HISTORY_PAGE_SIZE && loaded < lastPage.total ? loaded : undefined
     },
     placeholderData: keepPreviousData,
+  })
+}
+
+/** A watched source's latest downloads, the latest first, for the strip on its folded card. Read again with the history
+ * (queueEvents.ts), as a download finishes or a video is forgotten. */
+export function useLatestWatchedDownloads(sourceId: number) {
+  return useQuery({
+    queryKey: [...queryKeys.history, "watchedSource", sourceId],
+    queryFn: () => getHistoryPage(latestDownloadsQuery(sourceId), 0, LATEST_DOWNLOADS),
+    select: (page) => page.videos,
   })
 }
 

@@ -629,6 +629,9 @@ export const strings = {
     skippedCount: (count: number) => `${count} skipped`,
     latestPost: (ago: string) => `Last post ${ago}`,
     showInHistory: "Show Downloads in History",
+    latestDownloads: "Latest Downloads",
+    openDownload: (title: string) => `Open ${title}`,
+    downloadedOn: (day: string) => `Downloaded ${day}`,
     allNewNone: "Nothing new on any source. Check All looks for more.",
     /** A source in All New Items when another watched source has its name: "NASA on x.com". */
     sourceOnSite: (name: string, site: string) => `${name} on ${site}`,

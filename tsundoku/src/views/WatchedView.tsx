@@ -7,11 +7,14 @@ import {
   downloadNewWatchedItems,
   downloadWatchedItems,
   editWatchedSource,
+  keptThumbnailUrl,
+  openDownload,
   pickFolder,
   removeWatchedSource,
   skipEveryNewWatchedItem,
   skipWatchedItems,
 } from "../api"
+import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { ItemKey } from "../bindings/ItemKey"
 import type { WatchedGroup } from "../bindings/WatchedGroup"
 import type { WatchedItem } from "../bindings/WatchedItem"
@@ -32,18 +35,33 @@ import { Page } from "../components/Page"
 import { PickerViewControls } from "../components/PickerViewControls"
 import { SegmentedControl } from "../components/SegmentedControl"
 import { StatusMessage } from "../components/StatusMessage"
-import { describePreviewError, describeWatchedError, fixFor, type ErrorDescription } from "../errors"
+import { classes } from "../components/styles"
+import { Thumbnail } from "../components/Thumbnail"
+import {
+  describeHistoryError,
+  describePreviewError,
+  describeWatchedError,
+  fixFor,
+  type ErrorDescription,
+} from "../errors"
 import { useFoldedGroups } from "../foldedGroups"
-import { formatRoughAge, formatTimeAgo, joinDetails } from "../format"
+import { formatDay, formatRoughAge, formatTimeAgo, joinDetails } from "../format"
 import { isQueued, itemKey } from "../listingPicker"
 import { useAppActions } from "../navigation"
-import { usePickerLayout, usePresets, useWatchedArrangement, useWatchedSources } from "../queries"
+import {
+  useLatestWatchedDownloads,
+  usePickerLayout,
+  usePresets,
+  useWatchedArrangement,
+  useWatchedSources,
+} from "../queries"
 import { strings } from "../strings"
 import {
   allNewItems,
   arrangeSources,
   isExpanded,
   newCount,
+  stripShape,
   WATCHED_SORTS,
   type SourcedItem,
 } from "../watchedSources"
@@ -297,6 +315,10 @@ function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
           <Menu label={text.moreActions} items={[{ label: text.remove, danger: true, onSelect: () => act(remove) }]} />
         </div>
       </div>
+      {!expanded && source.downloadedCount > 0 && (
+        // Under the name, past the chevron and the picture (a playlist's is wider).
+        <LatestDownloads sourceId={source.id} className={source.kind === "playlist" ? "pl-34" : "pl-24"} />
+      )}
       {source.lastError && !source.checking && (
         <StatusMessage tone="danger" {...describePreviewError(source.lastError)}>
           {fixFor(source.lastError) && <FailureFixes error={source.lastError} onRetry={check} />}
@@ -311,6 +333,67 @@ function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
         </div>
       )}
     </Card>
+  )
+}
+
+/**
+ * A folded card's strip of the source's latest downloads, the latest first: as many pictures as fit on one row (the
+ * row's height hides the ones that wrap), each opening its file. Its room is kept while they're read, so the card
+ * doesn't grow under the pointer.
+ */
+function LatestDownloads({ sourceId, className }: { sourceId: number; className: string }) {
+  const { data: videos = [] } = useLatestWatchedDownloads(sourceId)
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const open = (downloadId: number) => {
+    setError(null)
+    openDownload(downloadId).catch((caught: unknown) => setError(describeHistoryError(caught)))
+  }
+  return (
+    <>
+      <ul
+        aria-label={text.latestDownloads}
+        className={classes("flex h-12 flex-wrap gap-x-1.5 gap-y-4 overflow-hidden", className)}
+      >
+        {videos.map((video) => (
+          <LatestDownload key={video.id} video={video} onOpen={open} />
+        ))}
+      </ul>
+      {error && <StatusMessage tone="danger" {...error} />}
+    </>
+  )
+}
+
+/** A picture in the strip: the thumbnail kept in the data folder, else the site's; dimmed when its file is gone. */
+function LatestDownload({ video, onOpen }: { video: HistoryVideo; onOpen: (downloadId: number) => void }) {
+  const { lastDownload } = video
+  const kept = video.thumbnailFile && keptThumbnailUrl(video.thumbnailFile)
+  return (
+    // The hover text sits on the item, since a disabled button shows none.
+    <li
+      className="shrink-0"
+      title={[
+        video.title,
+        joinDetails([
+          text.downloadedOn(formatDay(lastDownload.downloadedAt)),
+          !lastDownload.fileExists && strings.history.fileMissing,
+        ]),
+      ].join("\n")}
+    >
+      <button
+        type="button"
+        aria-label={text.openDownload(video.title)}
+        disabled={!lastDownload.fileExists}
+        onClick={() => onOpen(lastDownload.id)}
+        className="block rounded-md transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40"
+      >
+        <Thumbnail
+          key={`${video.thumbnailFile}|${video.thumbnailUrl}`}
+          url={kept ?? video.thumbnailUrl}
+          fallbackUrl={kept && video.thumbnailUrl}
+          className={stripShape(video) === "square" ? "size-12" : "h-12 w-21"}
+        />
+      </button>
+    </li>
   )
 }
 

@@ -6,8 +6,10 @@ import {
   arrangeSources,
   DEFAULT_WATCHED_ARRANGEMENT,
   isExpanded,
+  latestDownloadsQuery,
   newCount,
   sortSources,
+  stripShape,
 } from "./watchedSources"
 
 function item(id: string, dates: { uploadDate?: string; approximateDate?: string; firstSeenAt?: number } = {}): WatchedItem {
@@ -178,5 +180,27 @@ describe("newCount and isExpanded", () => {
     expect(isExpanded(busy, new Map())).toBe(true)
     expect(isExpanded(busy, new Map([[2, false]]))).toBe(false)
     expect(isExpanded(quiet, new Map([[1, true]]))).toBe(true)
+  })
+})
+
+describe("the latest downloads strip", () => {
+  it("asks the history for what the source met, the latest downloaded first, with no other filter", () => {
+    expect(latestDownloadsQuery(7)).toEqual({
+      search: null,
+      site: null,
+      preset: null,
+      kind: null,
+      files: null,
+      downloadedFrom: null,
+      downloadedUntil: null,
+      watchedSource: 7,
+      sort: "downloaded",
+      descending: true,
+    })
+  })
+
+  it("shows a post's picture square and a video's wide", () => {
+    expect(stripShape({ post: { images: 3, videos: 0, others: 0 } })).toBe("square")
+    expect(stripShape({ post: null })).toBe("wide")
   })
 })

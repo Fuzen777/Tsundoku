@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.145 · 2026-11-15
+
+### Added
+
+- **Latest downloads on folded Watched cards**: a folded source shows a row of pictures of what was downloaded from it, the latest first, as many as fit. Click one to open its file; a picture whose file is gone is dimmed, and hovering one shows its title and when it was downloaded.
+
 ## 0.1.144 · 2026-11-15
 
 ### Changed

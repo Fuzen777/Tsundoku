@@ -1,4 +1,6 @@
 import type { ItemGroup } from "./arrange"
+import type { HistoryQuery } from "./bindings/HistoryQuery"
+import type { HistoryVideo } from "./bindings/HistoryVideo"
 import type { WatchedArrangement } from "./bindings/WatchedArrangement"
 import type { WatchedItem } from "./bindings/WatchedItem"
 import type { WatchedSort } from "./bindings/WatchedSort"
@@ -162,4 +164,29 @@ export function newCount(sources: readonly WatchedSource[]): number {
 /** Whether a source's card is open, unless it was opened or closed by hand: open while it has new items. */
 export function isExpanded(source: WatchedSource, chosen: ReadonlyMap<number, boolean>): boolean {
   return chosen.get(source.id) ?? source.newItems.length > 0
+}
+
+/** How many of a source's latest downloads its folded card reads: more than a row holds at the widest, so the strip
+ * always fills its row, cut to whole pictures. */
+export const LATEST_DOWNLOADS = 16
+
+/** The history query for a source's latest downloads: what it met (`watchedSource`), the latest downloaded first. */
+export function latestDownloadsQuery(sourceId: number): HistoryQuery {
+  return {
+    search: null,
+    site: null,
+    preset: null,
+    kind: null,
+    files: null,
+    downloadedFrom: null,
+    downloadedUntil: null,
+    watchedSource: sourceId,
+    sort: "downloaded",
+    descending: true,
+  }
+}
+
+/** A picture's shape in the strip: square for a post, as Instagram's are, else 16:9 as a video's. */
+export function stripShape(video: Pick<HistoryVideo, "post">): "square" | "wide" {
+  return video.post === null ? "wide" : "square"
 }

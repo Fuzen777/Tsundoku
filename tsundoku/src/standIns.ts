@@ -216,12 +216,40 @@ function manyHistoryStandIns(count: number): HistoryVideo[] {
 /** The stand-in history the query matches, by the title, whether it's a post (any other kind is a video), and its
  * file being missing. */
 function matchingHistory(query: HistoryQuery, count: number | null): HistoryVideo[] {
-  return (count === null ? historyStandIns : manyHistoryStandIns(count)).filter(
+  const videos =
+    query.watchedSource !== null
+      ? watchedHistoryStandIns(query.watchedSource)
+      : count === null
+        ? historyStandIns
+        : manyHistoryStandIns(count)
+  return videos.filter(
     (video) =>
       video.title.toLowerCase().includes((query.search ?? "").toLowerCase()) &&
       (query.kind === null || (query.kind === "post") === (video.post !== null)) &&
       (query.files === null || (query.files === "missing") !== video.lastDownload.fileExists),
   )
+}
+
+/** A watched source's downloads: as many as its card counts, from its stand-in listing's items (an account's posts,
+ * a channel's videos), the latest downloaded first, the fifth one's file gone. */
+function watchedHistoryStandIns(sourceId: number): HistoryVideo[] {
+  const source = watchedStandIns().find((watched) => watched.id === sourceId)
+  if (!source) return []
+  const listing = listingStandIn(source.kind === "account" && source.siteName === "instagram.com" ? "account" : "channel")
+  const now = Math.floor(Date.now() / 1000)
+  return listing.items.slice(10 + sourceId, 10 + sourceId + source.downloadedCount).map((item, index) => ({
+    ...item.video,
+    id: 1000 * sourceId + index,
+    firstDownloadedAt: now - (index + 1) * 86_400,
+    lastDownload: {
+      ...historyStandIns[1].lastDownload,
+      id: 1000 * sourceId + index,
+      downloadedAt: now - (index + 1) * 86_400,
+      fileExists: index !== 4,
+    },
+    downloadCount: 1,
+    thumbnailFile: null,
+  }))
 }
 
 const pastDownloadStandIns: PastDownload[] = [
