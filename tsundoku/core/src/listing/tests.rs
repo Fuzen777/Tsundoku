@@ -251,6 +251,7 @@ fn names_what_its_items_were_picked_from() {
     let account = from_gallery_dl(
         &fixture("instagram-account.json"),
         "https://www.instagram.com/instagram/posts/",
+        NEWEST_COUNT,
     )
     .unwrap();
     let post = &account.items[0].video;
@@ -454,6 +455,7 @@ fn reads_an_instagram_accounts_newest_posts() {
     let listing = from_gallery_dl(
         &fixture("instagram-account.json"),
         "https://www.instagram.com/instagram/posts/",
+        NEWEST_COUNT,
     )
     .unwrap();
     assert_eq!(listing.kind, ListingKind::Account);
@@ -512,7 +514,12 @@ fn reads_an_instagram_accounts_newest_posts() {
 
 #[test]
 fn reads_an_x_accounts_newest_posts() {
-    let listing = from_gallery_dl(&fixture("x-account.json"), "https://x.com/NASA/media").unwrap();
+    let listing = from_gallery_dl(
+        &fixture("x-account.json"),
+        "https://x.com/NASA/media",
+        NEWEST_COUNT,
+    )
+    .unwrap();
     assert_eq!(listing.kind, ListingKind::Account);
     assert_eq!(listing.title, "NASA");
     assert_eq!(listing.uploader, None);
@@ -612,7 +619,12 @@ fn puts_pinned_posts_where_their_date_goes() {
         post("newest", "2026-11-05"),
         post("older", "2026-10-01")
     );
-    let listing = from_gallery_dl(&json, "https://www.instagram.com/someone/posts/").unwrap();
+    let listing = from_gallery_dl(
+        &json,
+        "https://www.instagram.com/someone/posts/",
+        NEWEST_COUNT,
+    )
+    .unwrap();
     let ids: Vec<&str> = listing
         .items
         .iter()
@@ -627,7 +639,11 @@ fn puts_pinned_posts_where_their_date_goes() {
 fn an_account_needing_a_sign_in_says_so() {
     let json = r#"[[-1, {"error": "AbortExtraction", "message": "HTTP redirect to login page (https://www.instagram.com/accounts/login/)"}]]"#;
     assert!(matches!(
-        from_gallery_dl(json, "https://www.instagram.com/someone/posts/"),
+        from_gallery_dl(
+            json,
+            "https://www.instagram.com/someone/posts/",
+            NEWEST_COUNT
+        ),
         Err(PreviewError::SignInRequired { .. })
     ));
 }
@@ -659,11 +675,16 @@ fn an_account_read_signed_out_asks_for_a_sign_in() {
 
 #[test]
 fn an_empty_account_is_an_empty_listing() {
-    let listing = from_gallery_dl("[]", "https://www.instagram.com/someone/posts/").unwrap();
+    let listing = from_gallery_dl(
+        "[]",
+        "https://www.instagram.com/someone/posts/",
+        NEWEST_COUNT,
+    )
+    .unwrap();
     assert!(listing.items.is_empty());
     assert_eq!(listing.title, "someone");
 
-    let listing = from_gallery_dl("[]", "https://x.com/someone/media").unwrap();
+    let listing = from_gallery_dl("[]", "https://x.com/someone/media", NEWEST_COUNT).unwrap();
     assert!(listing.items.is_empty());
     assert_eq!(listing.title, "someone");
     assert_eq!(listing.site_name, "x.com");
@@ -729,6 +750,83 @@ fn a_check_stops_once_known_items_outnumber_the_pinned_ones() {
     assert_eq!(check("abDEF"), ("ab".to_owned(), false));
     assert_eq!(check(""), ("".to_owned(), false));
     assert_eq!(check("WXYZ"), ("".to_owned(), true));
+}
+
+#[test]
+fn a_read_that_answers_every_post_asked_may_have_more() {
+    let more = |asked: u32| {
+        from_gallery_dl(
+            &fixture("instagram-account.json"),
+            "https://www.instagram.com/instagram/posts/",
+            asked,
+        )
+        .unwrap()
+        .more
+        .map(|more| more.read)
+    };
+    // The answer holds 12 posts.
+    assert_eq!(more(CHECK_FIRST_COUNT), Some(12));
+    assert_eq!(more(NEWEST_COUNT), None);
+}
+
+#[test]
+fn a_check_of_an_instagram_account_reads_a_page_then_the_newest_only_when_it_must() {
+    assert_eq!(
+        CHECK_FIRST_COUNT, 11,
+        "one less than Instagram's page of 12"
+    );
+    // Each answer says how many it was asked for in `total`.
+    let answer = |count: u32, more: bool| Listing {
+        kind: ListingKind::Account,
+        title: "someone".to_owned(),
+        uploader: None,
+        site_name: "instagram.com".to_owned(),
+        url: "https://www.instagram.com/someone/".to_owned(),
+        thumbnail_url: None,
+        total: Some(count),
+        newest_only: true,
+        items: Vec::new(),
+        more: more.then(|| ListingMore {
+            link: "https://www.instagram.com/someone/posts/".to_owned(),
+            title: "someone".to_owned(),
+            read: count,
+            cursor: None,
+            channel_id: None,
+        }),
+    };
+    // What a check asked for, how often it paused, and which answer it kept, for whether the first answer reached
+    // what was seen before and whether the account had more.
+    let check = |first_reached: bool, has_more: bool, pause_works: bool| {
+        let mut asked = Vec::new();
+        let mut pauses = 0;
+        let found = read_in_steps(
+            &mut |count| {
+                asked.push(count);
+                Ok(answer(count, has_more))
+            },
+            &mut || {
+                pauses += 1;
+                if pause_works {
+                    Ok(())
+                } else {
+                    Err(PreviewError::Cancelled)
+                }
+            },
+            &|found| first_reached && found.total == Some(CHECK_FIRST_COUNT),
+        );
+        (asked, pauses, found.map(|found| found.total))
+    };
+    // Most checks: the first page reaches what was seen, and that's all.
+    assert_eq!(check(true, true, true), (vec![11], 0, Ok(Some(11))));
+    // An account with fewer posts than a page ends there too.
+    assert_eq!(check(false, false, true), (vec![11], 0, Ok(Some(11))));
+    // Many new posts: after a pause, the newest 50, as the preview card reads them.
+    assert_eq!(check(false, true, true), (vec![11, 50], 1, Ok(Some(50))));
+    // A check stopped during the pause reads no more.
+    assert_eq!(
+        check(false, true, false),
+        (vec![11], 1, Err(PreviewError::Cancelled))
+    );
 }
 
 #[test]

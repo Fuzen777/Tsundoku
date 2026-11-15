@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.150 · 2026-11-15
+
+### Changed
+
+- **Faster Instagram checks**: checking a watched Instagram account now reads only its newest page of posts, which holds what's new unless the account posted eight or more since the last check, instead of its newest 50 every time. Instagram makes Tsundoku wait 6 to 12 seconds before each page, so a check takes a few seconds rather than half a minute or more, and Check All gets through several accounts much sooner.
+
 ## 0.1.149 · 2026-11-15
 
 ### Added

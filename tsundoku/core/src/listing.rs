@@ -2,7 +2,8 @@
 //! pick from. `listing_link` tells one from its address and gives the page to read (a YouTube channel's Videos tab, an
 //! Instagram account's posts, an X account's Media tab); `read` lists what it holds without reading each item, newest
 //! first for a channel or an account, in its own order for a playlist. `read_more` lists the items after those, for the
-//! picker's Load More and Load All. `mark` says which items the history or the queue has. Another site's playlist is
+//! picker's Load More and Load All. `read_for_check` reads one for a watched source's check, an Instagram account a
+//! page first. `mark` says which items the history or the queue has. Another site's playlist is
 //! listed when yt-dlp answers one with a link and ID for each item (`from_yt_dlp`);
 //! otherwise, and for image sites' accounts other than Instagram's and X's, the link is refused as
 //! `PreviewError::NotListable`.
@@ -81,6 +82,12 @@ const X_PAGING: Paging = Paging {
     pause: Duration::ZERO,
     resumes: false,
 };
+
+/// How many of an Instagram account's posts a watched source's check reads first (`read_for_check`): one page, less
+/// one, since gallery-dl only sees that a range has ended at the post after it, and asking for that post from the next
+/// page waits its 6 to 12 seconds first. Pinned posts come first on that page, so up to 3 of these are pinned: a check
+/// reaches what it saw before within them (`before_known_ground`) unless 8 or so posts came since.
+pub const CHECK_FIRST_COUNT: u32 = INSTAGRAM_PAGING.page - 1;
 
 /// How long one read after the first may take: up to 8 of Instagram's pages, each after gallery-dl's 6 to 12 seconds,
 /// and a minute's wait or more whenever Instagram asks to slow down.
@@ -388,22 +395,7 @@ pub fn read(
     cancel: &CancelToken,
 ) -> Result<Listing, PreviewError> {
     if listing.reads_images() {
-        let range = format!("1-{NEWEST_COUNT}");
-        let mut extra = vec!["--post-range", range.as_str()];
-        let resumes = paging_of(&listing.link).resumes;
-        if resumes {
-            // Its debug lines say where it stopped, for Load More to start there (`gallery::last_cursor`).
-            extra.push("--verbose");
-        }
-        let read = gallery::run_logged(images, &listing.link, &extra, LISTING_TIMEOUT, cancel)
-            .and_then(|answer| {
-                let mut found = from_gallery_dl(&answer.json, &listing.link)?;
-                if let Some(more) = found.more.as_mut().filter(|_| resumes) {
-                    more.cursor = gallery::last_cursor(&answer.log);
-                }
-                Ok(found)
-            });
-        return read.map_err(|error| signed_out_failure(error, images.cookies.is_some()));
+        return read_account(images, listing, NEWEST_COUNT, cancel);
     }
     let newest = NEWEST_COUNT.to_string();
     let mut extra = vec![
@@ -416,6 +408,69 @@ pub fn read(
     }
     let answer = metadata::run(videos, &listing.link, &extra, LISTING_TIMEOUT, cancel)?;
     from_yt_dlp(&answer.json, Some(listing.kind), &listing.link)
+}
+
+/// An account's newest `count` posts, with gallery-dl.
+fn read_account(
+    images: &GalleryTools,
+    listing: &ListingLink,
+    count: u32,
+    cancel: &CancelToken,
+) -> Result<Listing, PreviewError> {
+    let range = format!("1-{count}");
+    let mut extra = vec!["--post-range", range.as_str()];
+    let resumes = paging_of(&listing.link).resumes;
+    if resumes {
+        // Its debug lines say where it stopped, for Load More to start there (`gallery::last_cursor`).
+        extra.push("--verbose");
+    }
+    let read = gallery::run_logged(images, &listing.link, &extra, LISTING_TIMEOUT, cancel)
+        .and_then(|answer| {
+            let mut found = from_gallery_dl(&answer.json, &listing.link, count)?;
+            if let Some(more) = found.more.as_mut().filter(|_| resumes) {
+                more.cursor = gallery::last_cursor(&answer.log);
+            }
+            Ok(found)
+        });
+    read.map_err(|error| signed_out_failure(error, images.cookies.is_some()))
+}
+
+/// Reads a listing for a watched source's check, which only needs its items up to what the source saw before. An
+/// Instagram account is read a page at a time by gallery-dl, waiting 6 to 12 seconds before each, so its first
+/// `CHECK_FIRST_COUNT` posts are read first (a single page), and its newest `NEWEST_COUNT`, as the preview card reads
+/// them, only when `reached` says those don't reach what was seen before and the account has more. Any other listing
+/// is read as `read` does: YouTube and X answer without waits.
+pub fn read_for_check(
+    videos: &FetchTools,
+    images: &GalleryTools,
+    listing: &ListingLink,
+    cancel: &CancelToken,
+    reached: &dyn Fn(&Listing) -> bool,
+) -> Result<Listing, PreviewError> {
+    if !(listing.reads_images() && on_instagram(&listing.link)) {
+        return read(videos, images, listing, cancel);
+    }
+    read_in_steps(
+        &mut |count| read_account(images, listing, count, cancel),
+        &mut || pause(INSTAGRAM_PAGING.pause, cancel),
+        reached,
+    )
+}
+
+/// `read_for_check`'s steps for an Instagram account, with how it reads (`read`, the newest so many) and waits
+/// between two reads (`pause`) given, for the tests.
+fn read_in_steps(
+    read: &mut dyn FnMut(u32) -> Result<Listing, PreviewError>,
+    pause: &mut dyn FnMut() -> Result<(), PreviewError>,
+    reached: &dyn Fn(&Listing) -> bool,
+) -> Result<Listing, PreviewError> {
+    let first = read(CHECK_FIRST_COUNT)?;
+    if first.more.is_none() || reached(&first) {
+        return Ok(first);
+    }
+    // A new run's first request doesn't wait as gallery-dl's later ones do.
+    pause()?;
+    read(NEWEST_COUNT)
 }
 
 /// Reads a link that isn't known to be a listing with yt-dlp: a video, or a listing if yt-dlp answers with one (another
@@ -1127,9 +1182,9 @@ fn entry_thumbnail(entry: &Value) -> Option<String> {
         .and_then(|thumbnail| text(thumbnail, "url"))
 }
 
-/// Reads gallery-dl's answer for an account's posts: each post becomes an item, as reading its own link would make it,
-/// newest first (pinned posts come first in the answer).
-pub(crate) fn from_gallery_dl(json: &str, link: &str) -> Result<Listing, PreviewError> {
+/// Reads gallery-dl's answer for an account's newest `asked` posts: each post becomes an item, as reading its own link
+/// would make it, newest first (pinned posts come first in the answer). An answer of all the posts asked may have more.
+fn from_gallery_dl(json: &str, link: &str, asked: u32) -> Result<Listing, PreviewError> {
     let found = gallery::parse_posts(json, link)?;
     let answered = found.answered;
     let mut items = newest_first(found.posts);
@@ -1153,7 +1208,7 @@ pub(crate) fn from_gallery_dl(json: &str, link: &str) -> Result<Listing, Preview
     let total = account
         .post_count
         .filter(|total| *total as usize >= items.len());
-    let more = (count_of(answered) >= NEWEST_COUNT)
+    let more = (count_of(answered) >= asked)
         .then(|| ListingMore {
             link: link.to_owned(),
             title: title.clone(),

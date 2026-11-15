@@ -96,6 +96,7 @@ impl PreviewService {
                 queue.options().cookies_browser,
                 &link,
                 password.as_ref(),
+                None,
                 &cancel,
             )
             .map_err(|error| error.after_password(typed)),
@@ -279,10 +280,23 @@ impl LinkReader for ToolReader {
 }
 
 impl crate::watched::ListingReader for ToolReader {
-    /// A watched source's listing, read as the preview card reads it; anything else is refused as not listable.
-    fn read(&self, url: &str, cancel: &CancelToken) -> Result<Listing, PreviewError> {
+    /// A watched source's listing, read as the preview card reads it, except that an Instagram account stops at what
+    /// was seen before (`listing::read_for_check`); anything else is refused as not listable.
+    fn read(
+        &self,
+        url: &str,
+        cancel: &CancelToken,
+        reached: &dyn Fn(&Listing) -> bool,
+    ) -> Result<Listing, PreviewError> {
         let cookies_choice = self.settings.get().downloads.cookies_browser;
-        match read_for_preview(&self.tools, cookies_choice, url, None, cancel)? {
+        match read_for_preview(
+            &self.tools,
+            cookies_choice,
+            url,
+            None,
+            Some(reached),
+            cancel,
+        )? {
             Found::Listing(listing) => Ok(listing),
             Found::One(_) => Err(listing::not_listable(url)),
         }
@@ -409,12 +423,14 @@ fn read_with_tools(
 }
 
 /// Reads `link` (from `normalize_link`) for the preview card: as `read_with_tools` does, except that a channel,
-/// playlist or account is listed (`listing::read`), and so is another site's playlist that yt-dlp answers with.
+/// playlist or account is listed (`listing::read`), and so is another site's playlist that yt-dlp answers with. For a
+/// watched source's check, `reached` says when the items read reach what it saw before (`listing::read_for_check`).
 fn read_for_preview(
     tools: &ToolManager,
     cookies_choice: Option<CookiesBrowser>,
     link: &str,
     password: Option<&Password>,
+    reached: Option<&dyn Fn(&Listing) -> bool>,
     cancel: &CancelToken,
 ) -> Result<Found, PreviewError> {
     let followed = follow(link, cancel)?;
@@ -426,12 +442,13 @@ fn read_for_preview(
         read_host(link, password, cancel)
     };
     let found = if let Some(listing_link) = listing::listing_link(link) {
-        listing::read(
-            &set.videos(true, None),
-            &set.images(),
-            &listing_link,
-            cancel,
-        )
+        let (videos, images) = (set.videos(true, None), set.images());
+        match reached {
+            Some(reached) => {
+                listing::read_for_check(&videos, &images, &listing_link, cancel, reached)
+            }
+            None => listing::read(&videos, &images, &listing_link, cancel),
+        }
         .map(Found::Listing)
     } else if let Some(read) = host_read {
         read.map(|share| {

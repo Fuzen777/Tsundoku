@@ -14,12 +14,14 @@ use crate::listing::ListedItem;
 use crate::rules::DownloadKind;
 use crate::tools::ToolManager;
 
-/// Answers each check with the listing a test set, newest first.
+/// Answers each check with the listing a test set, newest first, noting whether the check said the items reached what
+/// it had seen (`reached`).
 #[derive(Default)]
 struct FakeReader {
     listing: Mutex<Vec<String>>,
     failure: Mutex<Option<PreviewError>>,
     reads: AtomicUsize,
+    reached: Mutex<Option<bool>>,
 }
 
 impl FakeReader {
@@ -29,12 +31,17 @@ impl FakeReader {
 }
 
 impl ListingReader for FakeReader {
-    fn read(&self, url: &str, _cancel: &CancelToken) -> Result<Listing, PreviewError> {
+    fn read(
+        &self,
+        url: &str,
+        _cancel: &CancelToken,
+        reached: &dyn Fn(&Listing) -> bool,
+    ) -> Result<Listing, PreviewError> {
         self.reads.fetch_add(1, Ordering::SeqCst);
         if let Some(error) = lock(&self.failure).clone() {
             return Err(error);
         }
-        Ok(Listing {
+        let listing = Listing {
             kind: ListingKind::Channel,
             title: "Renamed Channel".to_owned(),
             uploader: None,
@@ -53,7 +60,9 @@ impl ListingReader for FakeReader {
                 })
                 .collect(),
             more: None,
-        })
+        };
+        *lock(&self.reached) = Some(reached(&listing));
+        Ok(listing)
     }
 }
 
@@ -321,6 +330,23 @@ fn a_check_keeps_only_what_it_doesnt_know() {
         ["n", "a"],
         "the latest find first, each found once"
     );
+}
+
+#[test]
+fn a_check_tells_the_reader_once_it_reaches_what_it_knows() {
+    let test = Test::new();
+    let id = test.add(&["x", "c", "d", "e", "f"], FirstItems::FromNow);
+    test.downloaded("b");
+    let reached = |listing: &[&str]| {
+        test.reader.lists(listing);
+        test.check(id);
+        lock(&test.reader.reached).take().unwrap()
+    };
+    // Past "x", pinned, more than three known in a row ("b" downloaded): an Instagram read can stop there.
+    assert!(reached(&["n", "x", "b", "c", "d"]));
+    // Three known in a row could all be pinned above what's new, so the read goes on.
+    assert!(!reached(&["n2", "x", "c", "d", "m"]));
+    assert!(!reached(&["n3", "n4"]));
 }
 
 #[test]

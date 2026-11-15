@@ -1,7 +1,9 @@
 //! Watched sources: channels, playlists and accounts pinned to check for what's new (the Watched view). Each keeps
 //! every item a check or its adding has met (`watched_items`), so what was skipped or downloaded never comes back as
 //! new. A check reads the source's listing (`ListingReader`), newest first for a channel or an account, and stops past
-//! what it knows (`listing::before_known_ground`); a playlist is compared whole. New items wait on the source's card
+//! what it knows (`listing::before_known_ground`), which the reader is told so it can stop reading there too (an
+//! Instagram account, read a page at a time with waits between: `listing::read_for_check`); a playlist is compared
+//! whole. New items wait on the source's card
 //! until they're downloaded, with the source's own folder and preset, or skipped.
 //!
 //! Checks run one at a time on a thread of their own, by hand for now (Check Now, Check All). They keep to a site's
@@ -34,7 +36,14 @@ use store::{ItemState, StoredItem, StoredSource, WatchedStore};
 
 /// Reads a watched source's listing, as the preview card reads a channel, playlist or account.
 pub trait ListingReader: Send + Sync {
-    fn read(&self, url: &str, cancel: &CancelToken) -> Result<Listing, PreviewError>;
+    /// `reached` says whether the items read so far reach what the source saw before (`listing::before_known_ground`),
+    /// so a reader that pays for each page, such as Instagram's, can stop there.
+    fn read(
+        &self,
+        url: &str,
+        cancel: &CancelToken,
+        reached: &dyn Fn(&Listing) -> bool,
+    ) -> Result<Listing, PreviewError>;
 }
 
 /// Told when the watched sources change, to pass them on to the UI.
@@ -488,50 +497,67 @@ impl WatchedSources {
         let Ok(Some(source)) = self.store.source(id) else {
             return;
         };
-        let read = match self.queue.site_wait(&source.url) {
-            Some(wait) => Err(PreviewError::TooManyRequests {
-                detail: String::new(),
-                site: Some(wait.site),
-                until: Some(wait.until),
-            }),
-            None => self.reader.read(&source.url, &CancelToken::new()),
-        };
-        let outcome = match read {
-            Ok(found) => {
-                self.queue.site_worked(&source.url);
-                self.keep_new(&source, found)
+        let outcome = self.known_items(id).and_then(|known| {
+            let is_known = |item: &listing::ListedItem| self.is_known(&known, item);
+            // Where the check can stop: past what it knows, as `keep_new` takes it. A playlist is read whole.
+            let reached = |found: &Listing| {
+                found.kind != ListingKind::Playlist
+                    && listing::before_known_ground(found.items.iter(), |item| is_known(item))
+                        .reached_known
+            };
+            let read = match self.queue.site_wait(&source.url) {
+                Some(wait) => Err(PreviewError::TooManyRequests {
+                    detail: String::new(),
+                    site: Some(wait.site),
+                    until: Some(wait.until),
+                }),
+                None => self.reader.read(&source.url, &CancelToken::new(), &reached),
+            };
+            match read {
+                Ok(found) => {
+                    self.queue.site_worked(&source.url);
+                    self.keep_new(&source, &found, |item| is_known(item))
+                }
+                Err(PreviewError::TooManyRequests { detail, .. }) => {
+                    let wait = self.queue.slow_down(&source.url);
+                    Err(PreviewError::TooManyRequests {
+                        detail,
+                        site: wait.as_ref().map(|wait| wait.site.clone()),
+                        until: wait.map(|wait| wait.until),
+                    })
+                }
+                Err(error) => Err(error),
             }
-            Err(PreviewError::TooManyRequests { detail, .. }) => {
-                let wait = self.queue.slow_down(&source.url);
-                Err(PreviewError::TooManyRequests {
-                    detail,
-                    site: wait.as_ref().map(|wait| wait.site.clone()),
-                    until: wait.map(|wait| wait.until),
-                })
-            }
-            Err(error) => Err(error),
-        };
+        });
         let _ = self
             .store
             .set_checked(id, now_seconds(), outcome.err().as_ref());
     }
 
-    /// Stores the items of `found` that the source, the history and the queue don't know, as new, and the source's
-    /// name and picture as the listing has them now.
-    fn keep_new(&self, source: &StoredSource, found: Listing) -> Result<(), PreviewError> {
-        let storage = |error: WatchedError| PreviewError::Failed {
-            detail: error.to_string(),
-        };
-        let known: HashSet<ItemKey> = self
+    /// The items a source has met, by key.
+    fn known_items(&self, id: i64) -> Result<HashSet<ItemKey>, PreviewError> {
+        Ok(self
             .store
-            .items(source.id)
-            .map_err(storage)?
+            .items(id)
+            .map_err(storage_failure)?
             .iter()
             .map(|item| ItemKey::of(&item.video))
-            .collect();
-        let is_known = |item: &listing::ListedItem| {
-            known.contains(&ItemKey::of(&item.video)) || self.downloaded_or_queued(&item.video)
-        };
+            .collect())
+    }
+
+    /// Whether a check counts an item as seen before: the source met it, or the history or the queue has it.
+    fn is_known(&self, known: &HashSet<ItemKey>, item: &listing::ListedItem) -> bool {
+        known.contains(&ItemKey::of(&item.video)) || self.downloaded_or_queued(&item.video)
+    }
+
+    /// Stores the items of `found` that aren't known (`is_known`), as new, and the source's name and picture as the
+    /// listing has them now.
+    fn keep_new(
+        &self,
+        source: &StoredSource,
+        found: &Listing,
+        is_known: impl Fn(&listing::ListedItem) -> bool,
+    ) -> Result<(), PreviewError> {
         let new = if found.kind == ListingKind::Playlist {
             // A playlist is often oldest first, so it's compared whole.
             found.items.iter().filter(|item| !is_known(item)).collect()
@@ -559,7 +585,7 @@ impl WatchedSources {
                 &found.title,
                 found.thumbnail_url.as_deref(),
             )
-            .map_err(storage)
+            .map_err(storage_failure)
     }
 
     fn downloaded_or_queued(&self, video: &VideoInfo) -> bool {
@@ -633,6 +659,13 @@ impl WatchedSources {
         if let Ok(sources) = self.list() {
             self.listener.changed(&sources);
         }
+    }
+}
+
+/// A check that couldn't read or keep the source's items, as the check's failure.
+fn storage_failure(error: WatchedError) -> PreviewError {
+    PreviewError::Failed {
+        detail: error.to_string(),
     }
 }
 
