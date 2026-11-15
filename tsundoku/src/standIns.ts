@@ -11,6 +11,7 @@ import type { DownloadSettings } from "./bindings/DownloadSettings"
 import type { FirstRunOptions } from "./bindings/FirstRunOptions"
 import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
+import type { HistoryData } from "./bindings/HistoryData"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryPage } from "./bindings/HistoryPage"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
@@ -541,6 +542,14 @@ export const standIns = {
   },
   historyIds: (query: HistoryQuery, count: number | null): number[] =>
     matchingHistory(query, count).map((video) => video.id),
+  historyData: {
+    database: 12_582_912,
+    thumbnails: 30_146_560,
+    thumbnailCount: 5000,
+    logs: 4_194_304,
+    logCount: 120,
+    archive: 51_200,
+  } satisfies HistoryData,
   /** What the matching stand-ins' latest downloads take, their missing files counted apart. */
   historySize: (query: HistoryQuery, count: number | null): HistorySize =>
     matchingHistory(query, count).reduce(

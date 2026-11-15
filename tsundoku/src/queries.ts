@@ -29,6 +29,7 @@ import {
   getPickerLayouts,
   getSupportedSites,
   getHistoryFilters,
+  getHistoryDataSize,
   getHistoryPage,
   getHistorySize,
   getVideoDownloads,
@@ -416,13 +417,18 @@ export function useLatestWatchedDownloads(sourceId: number) {
 
 /** What the files of the videos the history view's query matches take on the disk, the last answer kept while the next
  * is worked out. Read again with the history (queueEvents.ts), as a download finishes or a video is forgotten or moved,
- * and when the window is focused, since files may have been deleted meanwhile. */
+ * and each time the view opens, since files may have been deleted meanwhile. */
 export function useHistorySize(query: HistoryQuery) {
   return useQuery({
     queryKey: [...queryKeys.history, "size", query],
     queryFn: () => getHistorySize(query),
     placeholderData: keepPreviousData,
   })
+}
+
+/** What Tsundoku's data folder holds for the history, read again with the history, as useHistorySize is. */
+export function useHistoryDataSize() {
+  return useQuery({ queryKey: [...queryKeys.history, "data"], queryFn: getHistoryDataSize })
 }
 
 export function useHistoryFilters() {

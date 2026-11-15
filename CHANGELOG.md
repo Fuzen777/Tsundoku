@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.152 · 2026-11-15
+
+### Added
+
+- **Tsundoku's own data in the History**: the line over the list now also says, at its right end, how much Tsundoku keeps for the history in its own data folder ("Tsundoku's own data: 42.1 MB"): its database, the thumbnails it keeps, the downloads' logs and yt-dlp's archive. Hovering gives each part's size. The space the downloaded files take stays beside the count.
+
 ## 0.1.151 · 2026-11-15
 
 ### Added

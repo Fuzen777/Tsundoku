@@ -20,6 +20,7 @@ import type { DownloadSettings } from "./bindings/DownloadSettings"
 import type { FirstRunChoices } from "./bindings/FirstRunChoices"
 import type { FirstRunOptions } from "./bindings/FirstRunOptions"
 import type { FolderRule } from "./bindings/FolderRule"
+import type { HistoryData } from "./bindings/HistoryData"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
@@ -1049,6 +1050,12 @@ export function getHistoryIds(query: HistoryQuery): Promise<number[]> {
 export function getHistorySize(query: HistoryQuery): Promise<HistorySize> {
   if (!isTauri()) return Promise.resolve(standIns.historySize(query, addressNumber("history")))
   return invoke<HistorySize>("history_size", { query })
+}
+
+/** What Tsundoku's data folder holds for the history: its database, kept thumbnails, downloads' logs and archive. */
+export function getHistoryDataSize(): Promise<HistoryData> {
+  if (!isTauri()) return Promise.resolve(standIns.historyData)
+  return invoke<HistoryData>("history_data_size")
 }
 
 /** Forgets several videos, as forgetVideo does each, and resolves to how many were in the history. */

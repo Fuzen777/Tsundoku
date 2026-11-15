@@ -50,6 +50,7 @@ import { type HistoryTarget, useAppActions } from "../navigation"
 import {
   useDownloadFiles,
   useHistory,
+  useHistoryDataSize,
   useHistoryFilters,
   useHistorySize,
   useVideoDownloads,
@@ -116,6 +117,7 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
   const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useHistory(query)
   const { data: filters } = useHistoryFilters()
   const { data: size, isPlaceholderData: sizeIsOld } = useHistorySize(query)
+  const { data: ownData } = useHistoryDataSize()
   const isFiltered =
     query.search !== null ||
     site !== null ||
@@ -416,31 +418,49 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
           </div>
 
           {total !== undefined && total > 0 && (
-            <label className="flex w-fit items-center gap-2 text-xs text-fg-muted">
-              <input
-                type="checkbox"
-                className="size-4 accent-accent"
-                aria-label={text.selectAll}
-                title={text.selectAll}
-                checked={allSelected}
-                disabled={busy}
-                onChange={(event) => void tickAll(event.target.checked)}
-              />
-              <span>
-                {text.itemCount(total)}
-                {size && (
-                  // The last query's size, faded, until this one's is worked out.
-                  <span
-                    className={sizeIsOld ? "opacity-50" : undefined}
-                    title={text.sizeOnDiskHint(size.files, size.missing)}
-                  >
-                    {strings.separator}
-                    {size.files === 0 ? text.noFilesOnDisk : text.sizeOnDisk(formatBytes(size.bytes))}
-                  </span>
-                )}
-                {selected.size > 0 && strings.separator + text.selectedCount(selected.size)}
-              </span>
-            </label>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-fg-muted">
+              <label className="flex w-fit items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-accent"
+                  aria-label={text.selectAll}
+                  title={text.selectAll}
+                  checked={allSelected}
+                  disabled={busy}
+                  onChange={(event) => void tickAll(event.target.checked)}
+                />
+                <span>
+                  {text.itemCount(total)}
+                  {size && (
+                    // The last query's size, faded, until this one's is worked out.
+                    <span
+                      className={sizeIsOld ? "opacity-50" : undefined}
+                      title={text.sizeOnDiskHint(size.files, size.missing)}
+                    >
+                      {strings.separator}
+                      {size.files === 0 ? text.noFilesOnDisk : text.sizeOnDisk(formatBytes(size.bytes))}
+                    </span>
+                  )}
+                  {selected.size > 0 && strings.separator + text.selectedCount(selected.size)}
+                </span>
+              </label>
+              {ownData && (
+                <span
+                  title={text.ownDataHint({
+                    database: formatBytes(ownData.database),
+                    thumbnails: formatBytes(ownData.thumbnails),
+                    thumbnailCount: ownData.thumbnailCount,
+                    logs: formatBytes(ownData.logs),
+                    logCount: ownData.logCount,
+                    archive: formatBytes(ownData.archive),
+                  })}
+                >
+                  {text.ownData(
+                    formatBytes(ownData.database + ownData.thumbnails + ownData.logs + ownData.archive),
+                  )}
+                </span>
+              )}
+            </div>
           )}
           {error && <StatusMessage tone="danger" {...error} />}
           {moveNotice && <StatusMessage {...moveNotice} />}

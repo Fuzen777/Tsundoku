@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::ipc::Channel;
 use tauri::{Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
+use tsundoku_core::data_folder::{DataPaths, HistoryData};
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
     History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, HistorySize,
@@ -21,7 +22,7 @@ use tsundoku_core::relocate::MovedFiles;
 use tsundoku_core::thumbnails;
 use tsundoku_core::tools::ToolManager;
 
-use crate::shell;
+use crate::{DataFolder, shell};
 
 /// What a link is, for the preview card: a video or post, or a channel's, playlist's or account's items.
 #[tauri::command]
@@ -282,6 +283,16 @@ pub async fn history_size(
 ) -> Result<HistorySize, HistoryError> {
     let history = Arc::clone(&history);
     blocking(move || history.size(&query)).await
+}
+
+/// What the data folder holds for the history: the database, the kept thumbnails, the downloads' logs and yt-dlp's
+/// archive. Off the async runtime's threads, since it lists the thumbnails' folder.
+#[tauri::command]
+pub async fn history_data_size(
+    data_folder: State<'_, DataFolder>,
+) -> Result<HistoryData, HistoryError> {
+    let paths = DataPaths::new(data_folder.path.clone());
+    blocking(move || Ok(paths.history_data())).await
 }
 
 /// Forgets several videos at once, as `forget_video` does each, and answers how many were in the history.

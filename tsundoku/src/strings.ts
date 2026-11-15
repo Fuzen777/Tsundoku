@@ -347,6 +347,20 @@ export const strings = {
     /** What the items listed take on the disk, after their count. */
     sizeOnDisk: (size: string) => `${size} on disk`,
     noFilesOnDisk: "no files left on disk",
+    /** What Tsundoku keeps for the whole history in its data folder. */
+    ownData: (size: string) => `Tsundoku's own data: ${size}`,
+    ownDataHint: (parts: {
+      database: string
+      thumbnails: string
+      thumbnailCount: number
+      logs: string
+      logCount: number
+      archive: string
+    }) =>
+      `For the whole history: its database (${parts.database}), ` +
+      `${parts.thumbnailCount === 1 ? "1 kept thumbnail" : `${parts.thumbnailCount} kept thumbnails`} (${parts.thumbnails}), ` +
+      `${parts.logCount === 1 ? "1 download log" : `${parts.logCount} download logs`}, kept 30 days (${parts.logs}), ` +
+      `and yt-dlp's archive (${parts.archive}). The tools and settings aren't counted.`,
     sizeOnDiskHint: (files: number, missing: number) =>
       files === 0
         ? "None of the files their downloads made is where it was saved anymore."
