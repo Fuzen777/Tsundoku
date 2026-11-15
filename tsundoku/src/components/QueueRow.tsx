@@ -18,7 +18,7 @@ import { formatContents, joinDetails } from "../format"
 import { canTryNow, describeHold, holdEnd, useTimeLeft } from "../holds"
 import { pickSummary } from "../postFiles"
 import { useDownloadProgress } from "../queueEvents"
-import { changeFolder, moveToFolder, sizeDetails, stageLabel, useItemActions } from "../queueItems"
+import { changeFolder, moveToFolder, onAControl, sizeDetails, stageLabel, useItemActions } from "../queueItems"
 import { strings } from "../strings"
 import { Button } from "./Button"
 import { Card } from "./Card"
@@ -43,7 +43,8 @@ interface QueueRowProps {
   onHide?: () => void
 }
 
-/** A download in the Queue: its picture, title, what it's doing and its actions. */
+/** A download in the Queue: its picture, title, what it's doing and its actions. A double-click on a finished one opens
+ * its file, as Open File does. */
 export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
   const progress = useDownloadProgress(item)
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
@@ -57,9 +58,19 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
   const [entersPassword, setEntersPassword] = useState(opens === "password")
   const [sendingPassword, setSendingPassword] = useState(false)
   const { act, removeWithUndo, actOnFile } = useItemActions(item, setActionError)
+  const opensFile = item.state === "done" && item.result !== null
 
   return (
-    <Card className="flex items-start gap-3 p-3">
+    <Card
+      className="flex items-start gap-3 p-3"
+      onDoubleClick={(event) => {
+        if (opensFile && !onAControl(event.target)) actOnFile(openDownload)
+      }}
+      // Its double-click opens the file rather than selecting a word of its title.
+      onMouseDown={(event) => {
+        if (opensFile && event.detail > 1 && !onAControl(event.target)) event.preventDefault()
+      }}
+    >
       <Thumbnail key={item.video.thumbnailUrl} url={item.video.thumbnailUrl} className="w-24" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="truncate font-medium" title={item.video.title}>

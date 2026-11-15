@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.148 · 2026-11-15
+
+### Added
+
+- **Double-click to open in the queue**: double-click a finished download, as a row or a picture, to open its file.
+
+### Fixed
+
+- **No jump in the queue's pictures**: clicking a picture in Masonry or Gallery shows its row right under its line, instead of above all the pictures and scrolling back to the top.
+
 ## 0.1.147 · 2026-11-15
 
 ### Added

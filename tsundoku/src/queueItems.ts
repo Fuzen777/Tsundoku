@@ -92,3 +92,9 @@ export function sizeDetails(item: QueueItem, progress: DownloadProgress | null):
     progress.eta !== null && progress.fraction !== 1 ? strings.queue.timeLeft(formatDuration(progress.eta)) : null,
   ]
 }
+
+/** Whether an event happened on a button, field, link, menu or log, which keep their own clicks: a double-click there
+ * doesn't open the download's file. */
+export function onAControl(target: EventTarget): boolean {
+  return target instanceof Element && target.closest("button, a, input, textarea, select, pre, [role='menu']") !== null
+}

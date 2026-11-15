@@ -216,6 +216,7 @@ export const strings = {
     /** A source's downloads as pictures, in Masonry or Gallery (QueueTiles). */
     tiles: {
       hint: "Right-click for its actions, or click for its details.",
+      openHint: "Double-click to open it.",
       menu: (title: string) => `Actions for ${title}`,
       showDetails: "Show Details",
       hideDetails: "Hide Details",

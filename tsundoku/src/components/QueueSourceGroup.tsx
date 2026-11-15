@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, CircleStop, Play, RefreshCw, X } from "lucide-react"
 import {
   cancelTheseDownloads,
@@ -39,8 +39,8 @@ interface QueueSourceGroupProps {
   rows: ReactNode
 }
 
-/** A download's row shown above the pictures, opened as asked; `opened` counts each ask, so asking again opens it
- * afresh (on its log, say, when it's already shown). */
+/** A download's row shown under its line of pictures, opened as asked; `opened` counts each ask, so asking again opens
+ * it afresh (on its log, say, when it's already shown). */
 interface ShownRow {
   id: number
   opens: RowOpening
@@ -60,6 +60,9 @@ export function QueueSourceGroup({ source, items, folded, onFold, rows }: QueueS
   const [shownRow, setShownRow] = useState<ShownRow | null>(null)
   const shownItem = shownRow && items.find((item) => item.id === shownRow.id)
   const shownBox = useRef<HTMLDivElement>(null)
+  const section = useRef<HTMLElement>(null)
+  // Where the picture asked about was, so it stays there as the row moves from under another line to under its own.
+  const held = useRef<{ id: number; top: number } | null>(null)
   const offerUndo = useOfferUndo()
   const fraction = useCombinedProgress(items)
   const counts = stateCounts(items)
@@ -95,15 +98,28 @@ export function QueueSourceGroup({ source, items, folded, onFold, rows }: QueueS
     }
   }
 
-  const showRow = (id: number, opens: RowOpening) =>
+  const pictureOf = (id: number) => section.current?.querySelector(`[data-download="${id}"]`)
+  const showRow = (id: number, opens: RowOpening) => {
+    const top = pictureOf(id)?.getBoundingClientRect().top
+    held.current = top === undefined ? null : { id, top }
     setShownRow((shown) => ({ id, opens, opened: (shown?.opened ?? 0) + 1 }))
-  // The row shown comes into sight, above the pictures, each time one is asked for.
-  useEffect(() => {
+  }
+  // Before it's painted: the picture asked about back where it was (a row shown higher up has closed), then the row
+  // shown under it brought into sight, scrolling no more than that takes.
+  useLayoutEffect(() => {
+    const before = held.current
+    held.current = null
+    const picture = before && pictureOf(before.id)
+    if (before && picture) {
+      const moved = picture.getBoundingClientRect().top - before.top
+      const scroller = scrollerOf(picture)
+      if (moved !== 0 && scroller) scroller.scrollTop += moved
+    }
     if (shownRow) shownBox.current?.scrollIntoView({ block: "nearest" })
   }, [shownRow])
 
   return (
-    <section className="flex flex-col gap-2" aria-label={source.name}>
+    <section ref={section} className="flex flex-col gap-2" aria-label={source.name}>
       <Card className="flex flex-col gap-2 p-3">
         {/* The controls move under the name when both don't fit on one line, so the name stays readable. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -171,32 +187,41 @@ export function QueueSourceGroup({ source, items, folded, onFold, rows }: QueueS
           {layout.view === "list" ? (
             rows
           ) : (
-            <>
-              {shownItem && (
-                <div ref={shownBox} className="scroll-my-2">
-                  <QueueRow
-                    key={`${shownItem.id}-${shownRow.opened}`}
-                    item={shownItem}
-                    opens={shownRow.opens}
-                    onHide={() => setShownRow(null)}
-                  />
-                </div>
-              )}
-              <QueueTiles
-                items={items}
-                view={layout.view}
-                size={layout.size}
-                // An account's posts are cut square, a channel's or a playlist's videos to 16:9, as in the picker.
-                galleryRatio={source.kind === "account" ? 1 : 16 / 9}
-                shownId={shownItem ? shownItem.id : null}
-                onShow={showRow}
-                onHide={() => setShownRow(null)}
-                onError={setError}
-              />
-            </>
+            <QueueTiles
+              items={items}
+              view={layout.view}
+              size={layout.size}
+              // An account's posts are cut square, a channel's or a playlist's videos to 16:9, as in the picker.
+              galleryRatio={source.kind === "account" ? 1 : 16 / 9}
+              shownId={shownItem ? shownItem.id : null}
+              details={
+                shownItem && (
+                  <div ref={shownBox} className="scroll-my-2">
+                    <QueueRow
+                      key={`${shownItem.id}-${shownRow.opened}`}
+                      item={shownItem}
+                      opens={shownRow.opens}
+                      onHide={() => setShownRow(null)}
+                    />
+                  </div>
+                )
+              }
+              onShow={showRow}
+              onHide={() => setShownRow(null)}
+              onError={setError}
+            />
           )}
         </div>
       )}
     </section>
   )
+}
+
+/** The box an element scrolls in: the nearest one above it that scrolls, or the page. */
+function scrollerOf(element: Element): Element | null {
+  for (let box = element.parentElement; box; box = box.parentElement) {
+    const { overflowY } = getComputedStyle(box)
+    if ((overflowY === "auto" || overflowY === "scroll") && box.scrollHeight > box.clientHeight) return box
+  }
+  return document.scrollingElement
 }

@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest"
 import type { PickerLayout } from "./bindings/PickerLayout"
 import type { PickerView } from "./bindings/PickerView"
-import { columnsFor, intoColumns, ownShape, resized, sizeStep, TILE_GAP, TILE_WIDTHS, tileWidthIn } from "./pickerLayout"
+import {
+  columnsFor,
+  intoColumns,
+  lineEnd,
+  ownShape,
+  resized,
+  sizeStep,
+  TILE_GAP,
+  TILE_WIDTHS,
+  tileWidthIn,
+} from "./pickerLayout"
 
 function layout(view: PickerView, size: number): PickerLayout {
   return { view, size, hideDownloaded: false }
@@ -85,5 +95,19 @@ describe("ownShape", () => {
 
   it("is null for a picture without a size", () => {
     expect(ownShape({ naturalWidth: 0, naturalHeight: 0 })).toBeNull()
+  })
+})
+
+describe("lineEnd", () => {
+  it("is the index after the last tile on the line holding a tile", () => {
+    expect(lineEnd(0, 4)).toBe(4)
+    expect(lineEnd(3, 4)).toBe(4)
+    expect(lineEnd(4, 4)).toBe(8)
+    expect(lineEnd(9, 4)).toBe(12)
+  })
+
+  it("puts every tile on a line of its own in one column", () => {
+    expect(lineEnd(2, 1)).toBe(3)
+    expect(lineEnd(2, 0)).toBe(3)
   })
 })

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import {
   Check,
   ChevronUp,
@@ -61,6 +61,8 @@ interface QueueTilesProps {
   galleryRatio: number
   /** The download whose row is shown, if any. */
   shownId: number | null
+  /** Its row, shown across the width under its line of pictures. */
+  details: ReactNode
   /** Shows a download's row, opened on its log or its password field, or on neither. */
   onShow: (id: number, opens: RowOpening) => void
   onHide: () => void
@@ -71,16 +73,19 @@ interface QueueTilesProps {
 /**
  * A source's downloads as pictures, in Masonry or Gallery: each with where it stands in its corner, a bar while it
  * downloads, and its title and progress under it. A right-click (or the menu key) opens its actions, which its row shows
- * as buttons in List; a click shows its row above the pictures, with everything a row has (its error, log, password
- * field), and a second click hides it.
+ * as buttons in List; a click shows its row under its line of pictures, with everything a row has (its error, log,
+ * password field), and a second click hides it. A double-click on a finished one opens its file.
  */
-export function QueueTiles({ items, view, size, galleryRatio, shownId, onShow, onHide, onError }: QueueTilesProps) {
+export function QueueTiles(props: QueueTilesProps) {
+  const { items, view, size, galleryRatio, shownId, details, onShow, onHide, onError } = props
+  const shownIndex = items.findIndex((item) => item.id === shownId)
   return (
     <div className="p-1">
       <TiledItems
         items={items}
         view={view}
         size={size}
+        after={shownIndex >= 0 ? { index: shownIndex, content: details } : undefined}
         render={(item, labels) => (
           <QueueTile
             key={item.id}
@@ -118,12 +123,19 @@ const STATE_ICONS: Record<QueueState, { icon: LucideIcon; className: string }> =
   done: { icon: Check, className: "text-success" },
 }
 
+/** Pictures' own shapes once loaded, by address: a picture drawn anew in another column (Masonry starts the pictures
+ * under an open row again) has its size from its first frame, so nothing above or beside it moves. */
+const knownShapes = new Map<string, number>()
+
 function QueueTile({ item, ratio, labels, shown, onShow, onHide, onError }: QueueTileProps) {
   const progress = useDownloadProgress(item)
   const tile = useRef<HTMLDivElement>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const [failed, setFailed] = useState(false)
-  const [ownRatio, setOwnRatio] = useState<number | null>(null)
+  const thumbnail = item.video.thumbnailUrl
+  const [ownRatio, setOwnRatio] = useState<number | null>(() =>
+    thumbnail === null ? null : (knownShapes.get(thumbnail) ?? null),
+  )
   const { act, removeWithUndo, actOnFile } = useItemActions(item, onError)
 
   const { video, state } = item
@@ -139,7 +151,10 @@ function QueueTile({ item, ratio, labels, shown, onShow, onHide, onError }: Queu
   const isPost = video.post !== null
   const FallbackIcon = isPost ? Images : Film
   const { icon: StateIcon, className: stateColor } = STATE_ICONS[downloading ? "running" : state]
-  const hint = [video.title, status, hold && describeHold(hold), error?.message, text.hint].filter(Boolean).join("\n")
+  const opensFile = state === "done" && item.result !== null
+  const hint = [video.title, status, hold && describeHold(hold), error?.message, opensFile && text.openHint, text.hint]
+    .filter(Boolean)
+    .join("\n")
 
   const toggle = () => (shown ? onHide() : onShow(item.id, null))
   const closeMenu = (why: MenuClose) => {
@@ -195,13 +210,20 @@ function QueueTile({ item, ratio, labels, shown, onShow, onHide, onError }: Queu
     <li className="min-w-0">
       <div
         ref={tile}
+        data-download={item.id}
         role="button"
         tabIndex={0}
         aria-label={joinDetails([video.title, status])}
         aria-haspopup="menu"
         aria-pressed={shown}
         title={hint}
-        onClick={toggle}
+        // The second click of a double-click leaves the row shown by the first.
+        onClick={(event) => {
+          if (event.detail < 2) toggle()
+        }}
+        onDoubleClick={() => {
+          if (opensFile) actOnFile(openDownload)
+        }}
         onContextMenu={(event) => {
           event.preventDefault()
           setMenuAt({ x: event.clientX, y: event.clientY })
@@ -234,7 +256,11 @@ function QueueTile({ item, ratio, labels, shown, onShow, onHide, onError }: Queu
               "size-full object-cover transition-opacity",
               (state === "waiting" || state === "stopped") && !savingInWindow && "opacity-50",
             )}
-            onLoad={(event) => setOwnRatio(ownShape(event.currentTarget))}
+            onLoad={(event) => {
+              const shape = ownShape(event.currentTarget)
+              setOwnRatio(shape)
+              if (shape !== null && thumbnail !== null) knownShapes.set(thumbnail, shape)
+            }}
             onError={() => setFailed(true)}
           />
         ) : (

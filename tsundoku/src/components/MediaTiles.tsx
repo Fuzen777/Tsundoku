@@ -1,6 +1,15 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { Check, type LucideIcon } from "lucide-react"
-import { columnsFor, intoColumns, ownShape, SMALL_TILE, TILE_WIDTHS, TINY_TILE, tileWidthIn } from "../pickerLayout"
+import {
+  columnsFor,
+  intoColumns,
+  lineEnd,
+  ownShape,
+  SMALL_TILE,
+  TILE_WIDTHS,
+  TINY_TILE,
+  tileWidthIn,
+} from "../pickerLayout"
 import { classes } from "./styles"
 
 /** What a tile says under its picture, as the post strip's marks do. */
@@ -84,13 +93,16 @@ interface TiledItemsProps<Item> {
   size: number
   /** One item's tile: an `li`, with its key, its labels as they fit at the size the tiles came to. */
   render: (item: Item, labels: TileLabels) => ReactNode
+  /** Shown across the whole width under the line of tiles holding the item at `index`, so it opens beside what was
+   * clicked and no tile above it moves. */
+  after?: { index: number; content: ReactNode }
 }
 
 /**
  * Items as tiles, in as many columns as fit the box's width at the size picked: a grid in Gallery, columns dealt left to
  * right in Masonry, so the first ones stay at the top. The pickers' pictures and the Queue's both lay out this way.
  */
-export function TiledItems<Item>({ items, view, size, render }: TiledItemsProps<Item>) {
+export function TiledItems<Item>({ items, view, size, render, after }: TiledItemsProps<Item>) {
   const inner = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
 
@@ -107,19 +119,40 @@ export function TiledItems<Item>({ items, view, size, render }: TiledItemsProps<
   const columns = columnsFor(width, size)
   const tileWidth = width > 0 ? tileWidthIn(width, columns) : TILE_WIDTHS[size]
   const labels: TileLabels = tileWidth < TINY_TILE ? "hidden" : tileWidth < SMALL_TILE ? "small" : "full"
+  // The tiles up to the end of the line `after` opens under, and the rest.
+  const split = after ? Math.min(lineEnd(after.index, columns), items.length) : items.length
+  const above = items.slice(0, split)
+  const below = items.slice(split)
+  // A line's tiles go one to each column, so the ones above keep their places in Masonry when the rest start again
+  // under what opened.
+  const masonry = (part: readonly Item[]) =>
+    intoColumns(part, columns).map((column, index) => (
+      <ul key={index} className="flex min-w-0 flex-1 flex-col gap-2">
+        {column.map((item) => render(item, labels))}
+      </ul>
+    ))
   return (
     <div ref={inner}>
       {view === "gallery" ? (
         <ul className="grid gap-2" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-          {items.map((item) => render(item, labels))}
+          {/* One list, so a tile keeps its place in it (and what it holds) as the line it opens under moves. */}
+          {[
+            ...above.map((item) => render(item, labels)),
+            ...(after
+              ? [
+                  <li key="after" className="col-span-full">
+                    {after.content}
+                  </li>,
+                ]
+              : []),
+            ...below.map((item) => render(item, labels)),
+          ]}
         </ul>
       ) : (
-        <div className="flex items-start gap-2">
-          {intoColumns(items, columns).map((column, index) => (
-            <ul key={index} className="flex min-w-0 flex-1 flex-col gap-2">
-              {column.map((item) => render(item, labels))}
-            </ul>
-          ))}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start gap-2">{masonry(above)}</div>
+          {after?.content}
+          {below.length > 0 && <div className="flex items-start gap-2">{masonry(below)}</div>}
         </div>
       )}
     </div>
