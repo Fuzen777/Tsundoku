@@ -1358,7 +1358,6 @@ export const strings = {
         `{${name}} isn't a placeholder. The buttons under the field insert the ones there are.`,
       forbiddenCharacter: (character: string) => `A file name can't contain ${character}.`,
     },
-    instagram: "Instagram",
     chooseFolder: "Choose Folder…",
     useDefaultFolder: "Use Default",
     defaultFolder: (path: string) => `The default: ${path}`,
@@ -1398,22 +1397,36 @@ export const strings = {
     archivePasswordsSaved: (count: number) =>
       count === 0 ? "Saved: no passwords." : count === 1 ? "Saved: 1 password." : `Saved: ${count} passwords.`,
     pacing: "Pacing",
-    pacingIntro: (longest: number) =>
-      `Some sites block accounts that read too fast. For these, Tsundoku waits a random time in a range before each file of a post, and between the site's links in Pending, up to ${longest} seconds, and downloads one of the site's posts at a time.`,
-    postPause: "Pause Between Files",
-    postPauseHint: "Instagram always gets a pause, 5 to 10 seconds to start with.",
-    otherSitesPause: "Other sites get no pause until you give them one. Leave both fields empty for none.",
-    noPause: "None",
-    pauseFrom: "From",
-    pauseTo: "to",
-    seconds: "seconds",
+    pacingIntro: "Some sites block accounts that read too fast, so Tsundoku goes easy on these.",
+    pacedSites: { instagram: "Instagram", x: "X", pixiv: "Pixiv", tumblr: "Tumblr" },
+    /** One line per site, around its fields: "X from [0] to [2] seconds, [1] at once". */
+    pacingLine: { from: "from", to: "to", seconds: "seconds,", atOnce: "at once" },
+    pauseFrom: (site: string) => `${site}: Shortest Pause`,
+    pauseTo: (site: string) => `${site}: Longest Pause`,
+    siteAtOnce: (site: string) => `${site}: Downloads at Once`,
+    /** Around the hourly limit's field: "At most [No Limit] Instagram files an hour". */
+    hourlyLimitLine: { before: "At most", after: "Instagram files an hour" },
     hourlyLimit: "Hourly Limit",
-    hourlyLimitHint:
-      "Leave empty for no limit. Once the past hour holds this many Instagram files, the next Instagram download waits, then continues by itself.",
     hourlyLimitPlaceholder: "No Limit",
-    files: "files",
+    pacingHelp: {
+      label: "How Pacing Works",
+      pause: "Pause",
+      pauseParagraphs: (longest: number) => [
+        "Before each file of a post, and between the site's links read in Pending, Tsundoku waits a random time in the site's range, up to " +
+          `${longest} seconds. 0 to 0 is no pause.`,
+        "Instagram starts with 3 to 5 seconds, the others with 0 to 2.",
+      ],
+      atOnce: "At Once",
+      atOnceParagraphs: [
+        "How many of the site's downloads run at the same time, one to start with. The site's other downloads wait their turn while downloads from other sites go ahead.",
+        "Each download running pauses on its own, so two at once read about twice as fast as one. Downloads at Once, in Downloads, still limits every download together.",
+      ],
+      hourlyLimitParagraphs: [
+        "Leave it empty for no limit. Once the past hour holds this many Instagram files, the next Instagram download waits, then continues by itself.",
+      ],
+    },
     cookies: "Cookies",
-    cookiesBrowser: "Read Cookies From",
+    cookiesBrowser: "Read Cookies from",
     cookiesNone: "None",
     cookiesHint:
       "For links that need you signed in or old enough: Tsundoku reads your browser's cookies, as if you were browsing there. Automatic picks the browser profile signed in to each site.",

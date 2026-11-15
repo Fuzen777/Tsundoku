@@ -1188,8 +1188,7 @@ impl DownloadQueue {
             cookies_browser: options.cookies_browser,
             post_file_name: post_names::check(&options.post_file_name)
                 .map_err(|error| DownloadError::PostFileName { error })?,
-            post_pause: options.post_pause.normalized(),
-            site_pauses: options.site_pauses.normalized(),
+            pacing: options.pacing.normalized(MAX_AT_ONCE),
             hourly_file_limit: DownloadSettings::normalized_hourly_limit(options.hourly_file_limit),
             unpack: UnpackSettings {
                 passwords: UnpackSettings::normalized_passwords(options.unpack.passwords),
@@ -1218,10 +1217,11 @@ impl DownloadQueue {
     }
 
     /// Starts waiting items while there's room, in the queue's order: the order they were added, apart from those
-    /// Download Next moved to the front. A post on a site that limits how fast it's read (Instagram, and X, Pixiv or
-    /// Tumblr with a pause set) waits while another of that site's posts runs, since each pauses between its files on its own and two at once would read twice as
-    /// fast; downloads from other sites go ahead of it meanwhile. One that's held (`Hold`: its site asked to slow down,
-    /// or the hourly limit is reached) waits too, until a thread schedules again once its hold ends (`watch_holds`).
+    /// Download Next moved to the front. A download from a site that limits how fast it's read (Instagram, X, Pixiv,
+    /// Tumblr) waits while as many of that site's downloads run as Settings → Pacing lets it have at once (one to
+    /// start with), since each of them pauses between its files on its own; downloads from other sites go ahead of it
+    /// meanwhile. One that's held (`Hold`: its site asked to slow down, or the hourly limit is reached) waits too,
+    /// until a thread schedules again once its hold ends (`watch_holds`).
     fn schedule(&self) {
         let options = self.settings.get().downloads;
         let at_once = options.at_once.max(1) as usize;
@@ -1234,16 +1234,22 @@ impl DownloadQueue {
             // What the downloads already running need on their drives, and those started below once each starts.
             let mut reserved = Reserved::of_running(&contents.items);
             while contents.running.len() < at_once {
-                let pacing: Vec<PacedSite> = contents
-                    .items
-                    .iter()
-                    .filter(|item| item.state == QueueState::Running)
-                    .filter_map(|item| paced_site(item, &options))
-                    .collect();
+                let mut running_on: HashMap<PacedSite, usize> = HashMap::new();
+                for item in &contents.items {
+                    if item.state == QueueState::Running
+                        && let Some(site) = sites::paced_site(&item.video.url)
+                    {
+                        *running_on.entry(site).or_default() += 1;
+                    }
+                }
+                let site_has_room = |item: &QueueItem| {
+                    sites::paced_site(&item.video.url).is_none_or(|site| {
+                        running_on.get(&site).copied().unwrap_or(0)
+                            < options.pacing.of(site).at_once as usize
+                    })
+                };
                 let may_start = |item: &QueueItem| {
-                    item.state == QueueState::Waiting
-                        && item.hold.is_none()
-                        && paced_site(item, &options).is_none_or(|site| !pacing.contains(&site))
+                    item.state == QueueState::Waiting && item.hold.is_none() && site_has_room(item)
                 };
                 // A download the person just started in the check window goes first: the window holds it meanwhile.
                 let Some(index) = contents
@@ -1610,14 +1616,6 @@ fn normalize_rate_limit(text: Option<&str>) -> Result<Option<String>, DownloadEr
             value: text.to_owned(),
         }),
     }
-}
-
-/// The site of a post whose files are downloaded with a pause between them (`DownloadSettings::pause_for`): one such
-/// post runs at a time on each site.
-fn paced_site(item: &QueueItem, options: &DownloadSettings) -> Option<PacedSite> {
-    item.video.post.as_ref()?;
-    options.pause_for(&item.video.url)?;
-    sites::paced_site(&item.video.url)
 }
 
 fn find(items: &mut [QueueItem], id: i64) -> Result<&mut QueueItem, DownloadError> {

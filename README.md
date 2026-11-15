@@ -16,7 +16,7 @@ Tsundoku (積ん読: buying things and letting them pile up unread) is a Windows
 ### Downloading
 
 - **Presets** for videos and audio: Best Video, 1080p MP4, Best Audio and Audio MP3 to start with, each with its own quality, format, file name, folder, what to embed and SponsorBlock, and all editable.
-- **Posts of images**: every file of a post is saved as the site gives it, in a folder per site. Files already there are skipped, so downloading a post again only fetches what's missing. Instagram posts download one at a time, with a pause before each file so your account isn't blocked.
+- **Posts of images**: every file of a post is saved as the site gives it, in a folder per site. Files already there are skipped, so downloading a post again only fetches what's missing. Instagram, X, Pixiv and Tumblr download one at a time (up to five if you choose), with a pause before each file so your account isn't blocked.
 - **MEGA, MediaFire, Google Drive, Dropbox, OneDrive, pCloud, WeTransfer, the Internet Archive, Yandex Disk, Box, Icedrive, 1fichier, SwissTransfer, Files.fm, upload.ee, TransferNow, Filemail, Workupload and Buzzheavier**: files and shared folders download with their own folder layout, nothing to set up. Each file is checked once it arrives when the host gives a checksum, and a damaged one is downloaded again on Retry.
 - **A queue** with progress, Stop and Resume, Cancel and Retry, two downloads at a time (up to five), and an optional speed limit, grouped and sorted as Pending is. It comes back after a restart, and closing while downloading asks first.
 

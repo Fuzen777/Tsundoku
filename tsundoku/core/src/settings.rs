@@ -43,9 +43,15 @@ impl Settings {
     /// Reads `settings.json`. A file from before folder rules (0.1.10 and older) gets a rule for posts in the posts
     /// folder it chose, if it chose one, below the catch-all. Rules from before 0.1.86, where the first matching rule
     /// decided and the catch-all was last, are reversed, so the last one decides what the first did. The catch-all is
-    /// put first, and the posts rule before 0.1.30 becomes it. A backup's settings are read the same way.
+    /// put first, and the posts rule before 0.1.30 becomes it. Pacing from before 0.1.147 is carried over
+    /// (`SitePacing::carried_over`). A backup's settings are read the same way.
     pub(crate) fn from_json(contents: &[u8]) -> Option<Self> {
         let mut settings: Self = serde_json::from_slice(contents).ok()?;
+        if let Ok(before) = serde_json::from_slice::<BeforePacing>(contents)
+            && before.downloads.pacing.is_none()
+        {
+            settings.downloads.pacing = SitePacing::carried_over(&before.downloads);
+        }
         let earlier: BeforeRules = serde_json::from_slice(contents).unwrap_or_default();
         if earlier.rules.is_none()
             && let Some(posts_folder) = earlier
@@ -79,6 +85,31 @@ struct BeforeRules {
 #[serde(rename_all = "camelCase", default)]
 struct DownloadsBeforeRules {
     posts_folder: Option<String>,
+}
+
+/// What `settings.json` held before per-site pacing (0.1.147), to carry the pauses over.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct BeforePacing {
+    downloads: DownloadsBeforePacing,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct DownloadsBeforePacing {
+    pacing: Option<serde::de::IgnoredAny>,
+    /// Instagram's pause.
+    post_pause: Option<PauseRange>,
+    site_pauses: SitePausesBeforePacing,
+}
+
+/// The other paced sites' pauses, each `None` for none.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct SitePausesBeforePacing {
+    x: Option<PauseRange>,
+    pixiv: Option<PauseRange>,
+    tumblr: Option<PauseRange>,
 }
 
 /// How links get added besides pasting them. Settings → Adding Links edits it; the watcher and the shortcut start
@@ -273,11 +304,10 @@ pub struct DownloadSettings {
     /// How the files of a post are named, with placeholders such as `{account}` and `{number}` (`post_names`).
     /// The extension is added to it.
     pub post_file_name: String,
-    /// How long to wait before each file of an Instagram post, and between Instagram links read in Pending, so the
-    /// account isn't blocked (`pause_for`).
-    pub post_pause: PauseRange,
-    /// The same for the other sites that limit how fast they're read, each `None` for no pause (Settings → Pacing).
-    pub site_pauses: SitePauses,
+    /// For each site that limits how fast it's read (`PacedSite`), how many of its downloads run at once and the pause
+    /// before each file of its posts, so the account isn't blocked (Settings → Pacing). Missing in settings saved
+    /// before 0.1.147, which `Settings::from_json` carries `postPause` and `sitePauses` over from.
+    pub pacing: SitePacing,
     /// The most files from that site (Instagram) downloaded in an hour, or `None` for no limit: once the past hour
     /// holds this many, its next download waits (`site_limits::hourly_limit_end`).
     pub hourly_file_limit: Option<u32>,
@@ -360,8 +390,7 @@ impl Default for DownloadSettings {
             rate_limit: None,
             cookies_browser: Some(CookiesBrowser::Automatic),
             post_file_name: post_names::DEFAULT_POST_FILE_NAME.to_owned(),
-            post_pause: PauseRange::default(),
-            site_pauses: SitePauses::default(),
+            pacing: SitePacing::default(),
             hourly_file_limit: None,
             unpack: UnpackSettings::default(),
         }
@@ -379,15 +408,11 @@ impl DownloadSettings {
             .map(|limit| limit.min(Self::HIGHEST_HOURLY_LIMIT))
     }
 
-    /// The pause before each file of a post at `link`, and between its site's links in Pending: Instagram's always,
-    /// X's, Pixiv's and Tumblr's when set, none elsewhere.
+    /// The pause before each file of a post at `link`, and between its site's links in Pending: its site's
+    /// (`pacing`), none elsewhere or when the site's is 0 seconds.
     pub fn pause_for(&self, link: &str) -> Option<PauseRange> {
-        match sites::paced_site(link)? {
-            PacedSite::Instagram => Some(self.post_pause),
-            PacedSite::X => self.site_pauses.x,
-            PacedSite::Pixiv => self.site_pauses.pixiv,
-            PacedSite::Tumblr => self.site_pauses.tumblr,
-        }
+        let site = sites::paced_site(link)?;
+        Some(self.pacing.of(site).pause).filter(|pause| pause.max > 0)
     }
 
     /// The download folder: the chosen one, or a Tsundoku folder in Downloads. A portable copy's folder that isn't a
@@ -420,23 +445,97 @@ pub fn default_download_folder() -> PathBuf {
         .join("Tsundoku")
 }
 
-/// The pauses for the sites besides Instagram that limit how fast they're read: none to start with.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// How fast each site that limits how fast it's read (`PacedSite`) is read: one download at a time each to start
+/// with, Instagram's files 3 to 5 seconds apart, the others' 0 to 2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
-pub struct SitePauses {
-    pub x: Option<PauseRange>,
-    pub pixiv: Option<PauseRange>,
-    pub tumblr: Option<PauseRange>,
+pub struct SitePacing {
+    pub instagram: SitePace,
+    pub x: SitePace,
+    pub pixiv: SitePace,
+    pub tumblr: SitePace,
 }
 
-impl SitePauses {
-    /// Each pause within `PauseRange`'s bounds.
-    pub fn normalized(self) -> Self {
+impl Default for SitePacing {
+    fn default() -> Self {
         Self {
-            x: self.x.map(PauseRange::normalized),
-            pixiv: self.pixiv.map(PauseRange::normalized),
-            tumblr: self.tumblr.map(PauseRange::normalized),
+            instagram: SitePace {
+                at_once: 1,
+                pause: PauseRange::INSTAGRAM,
+            },
+            x: SitePace::default(),
+            pixiv: SitePace::default(),
+            tumblr: SitePace::default(),
+        }
+    }
+}
+
+impl SitePacing {
+    /// The site's pace.
+    pub fn of(&self, site: PacedSite) -> SitePace {
+        match site {
+            PacedSite::Instagram => self.instagram,
+            PacedSite::X => self.x,
+            PacedSite::Pixiv => self.pixiv,
+            PacedSite::Tumblr => self.tumblr,
+        }
+    }
+
+    /// Each site's downloads at once within 1 to `most_at_once`, and its pause within `PauseRange`'s bounds.
+    pub fn normalized(self, most_at_once: u32) -> Self {
+        let normalized = |pace: SitePace| SitePace {
+            at_once: pace.at_once.clamp(1, most_at_once),
+            pause: pace.pause.normalized(),
+        };
+        Self {
+            instagram: normalized(self.instagram),
+            x: normalized(self.x),
+            pixiv: normalized(self.pixiv),
+            tumblr: normalized(self.tumblr),
+        }
+    }
+
+    /// The pacing in settings saved before 0.1.147: Instagram's pause (`postPause`), unless it was still the 5 to 10
+    /// seconds it started with, then takes the new one to start with, as does a site that had no pause
+    /// (`sitePauses`). Each site starts with one download at a time.
+    fn carried_over(earlier: &DownloadsBeforePacing) -> Self {
+        let defaults = Self::default();
+        let with_pause = |pause: Option<PauseRange>, pace: SitePace| SitePace {
+            pause: pause.unwrap_or(pace.pause),
+            ..pace
+        };
+        Self {
+            instagram: with_pause(
+                earlier
+                    .post_pause
+                    .filter(|pause| *pause != PauseRange::INSTAGRAM_BEFORE),
+                defaults.instagram,
+            ),
+            x: with_pause(earlier.site_pauses.x, defaults.x),
+            pixiv: with_pause(earlier.site_pauses.pixiv, defaults.pixiv),
+            tumblr: with_pause(earlier.site_pauses.tumblr, defaults.tumblr),
+        }
+    }
+}
+
+/// How fast one site is read: how many of its downloads run at once, each of them pausing before each of its files
+/// on its own, so two at once read twice as fast.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct SitePace {
+    /// 1 to `downloads::MAX_AT_ONCE`; Downloads at Once (`DownloadSettings::at_once`) still bounds every download.
+    pub at_once: u32,
+    /// Before each file of each of its posts, and between its links read in Pending; 0 to 0 for none.
+    pub pause: PauseRange,
+}
+
+impl Default for SitePace {
+    fn default() -> Self {
+        Self {
+            at_once: 1,
+            pause: PauseRange::SHORT,
         }
     }
 }
@@ -453,6 +552,15 @@ pub struct PauseRange {
 impl PauseRange {
     /// The longest pause that can be set, in seconds.
     pub const LONGEST: u32 = 600;
+
+    /// Instagram's to start with: one file every 3 to 5 seconds.
+    pub const INSTAGRAM: Self = Self { min: 3, max: 5 };
+
+    /// The other paced sites' to start with.
+    pub const SHORT: Self = Self { min: 0, max: 2 };
+
+    /// Instagram's to start with before 0.1.147.
+    const INSTAGRAM_BEFORE: Self = Self { min: 5, max: 10 };
 
     /// Within 0 to `LONGEST`, with `min` no more than `max`.
     pub fn normalized(self) -> Self {
@@ -474,9 +582,8 @@ impl PauseRange {
 }
 
 impl Default for PauseRange {
-    /// One file every 5 to 10 seconds: slow enough for Instagram's limits.
     fn default() -> Self {
-        Self { min: 5, max: 10 }
+        Self::SHORT
     }
 }
 
@@ -1238,6 +1345,84 @@ mod tests {
             "Click'n'Load stays off in settings saved before it"
         );
         assert_eq!(settings.background, BackgroundSettings::default());
+    }
+
+    #[test]
+    fn carries_pauses_from_before_per_site_pacing_over() {
+        let read = |json: &str| Settings::from_json(json.as_bytes()).unwrap().downloads;
+        let untouched = read(
+            r#"{ "downloads": { "postPause": { "min": 5, "max": 10 },
+                "sitePauses": { "x": null, "pixiv": null, "tumblr": null } } }"#,
+        );
+        assert_eq!(
+            untouched.pacing,
+            SitePacing::default(),
+            "the pause Instagram started with, and no pause, take the new ones to start with"
+        );
+        assert_eq!(untouched.pacing.instagram.pause, PauseRange::INSTAGRAM);
+        assert_eq!(untouched.pacing.x.pause, PauseRange::SHORT);
+
+        let chosen = read(
+            r#"{ "downloads": { "postPause": { "min": 10, "max": 20 },
+                "sitePauses": { "pixiv": { "min": 4, "max": 8 } } } }"#,
+        );
+        assert_eq!(
+            chosen.pacing.instagram,
+            SitePace {
+                at_once: 1,
+                pause: PauseRange { min: 10, max: 20 },
+            }
+        );
+        assert_eq!(chosen.pacing.pixiv.pause, PauseRange { min: 4, max: 8 });
+        assert_eq!(chosen.pacing.tumblr, SitePace::default());
+
+        let saved = serde_json::to_vec(&Settings {
+            downloads: DownloadSettings {
+                pacing: SitePacing {
+                    instagram: SitePace {
+                        at_once: 2,
+                        pause: PauseRange::INSTAGRAM_BEFORE,
+                    },
+                    ..SitePacing::default()
+                },
+                ..DownloadSettings::default()
+            },
+            ..Settings::default()
+        })
+        .unwrap();
+        let again = Settings::from_json(&saved).unwrap().downloads.pacing;
+        assert_eq!(
+            again.instagram.pause,
+            PauseRange::INSTAGRAM_BEFORE,
+            "5 to 10 seconds chosen since is kept"
+        );
+        assert_eq!(again.instagram.at_once, 2);
+
+        let fresh = read("{}");
+        assert_eq!(fresh.pacing, SitePacing::default());
+    }
+
+    #[test]
+    fn paces_each_site_with_its_own_pause() {
+        let mut downloads = DownloadSettings::default();
+        assert_eq!(
+            downloads.pause_for("https://www.instagram.com/p/DfPQchkG1tg/"),
+            Some(PauseRange::INSTAGRAM)
+        );
+        assert_eq!(
+            downloads.pause_for("https://twitter.com/NASA/status/1"),
+            Some(PauseRange::SHORT)
+        );
+        assert_eq!(
+            downloads.pause_for("https://www.youtube.com/watch?v=1"),
+            None
+        );
+        downloads.pacing.x.pause = PauseRange { min: 0, max: 0 };
+        assert_eq!(
+            downloads.pause_for("https://x.com/NASA/status/1"),
+            None,
+            "0 seconds is no pause"
+        );
     }
 
     #[test]

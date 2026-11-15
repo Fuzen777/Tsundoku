@@ -13,7 +13,7 @@ use crate::history::NewDownload;
 use crate::metadata::{FileContents, PostContents, SignInCookies};
 use crate::passwords::Password;
 use crate::rules::DownloadKind;
-use crate::settings::ClipboardShortcut;
+use crate::settings::{ClipboardShortcut, SitePace, SitePacing};
 use crate::tools::ToolManager;
 
 /// Answers what each link is: a YouTube video, an Instagram post or a MEGA folder named after the link's end, unless
@@ -200,7 +200,13 @@ impl Test {
                 // No cookies, so the tests never look at this PC's browsers.
                 settings.downloads.cookies_browser = None;
                 settings.downloads.folder = Some(downloads.clone());
-                settings.downloads.post_pause = pause;
+                let pace = SitePace { at_once: 1, pause };
+                settings.downloads.pacing = SitePacing {
+                    instagram: pace,
+                    x: pace,
+                    pixiv: pace,
+                    tumblr: pace,
+                };
             })
             .unwrap();
         let presets = Arc::new(PresetManager::new(Arc::clone(&settings)));

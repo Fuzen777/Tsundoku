@@ -2,6 +2,18 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.147 · 2026-11-15
+
+### Added
+
+- **Downloads at once for each paced site**: Settings → Pacing sets how many downloads from Instagram, X, Pixiv and Tumblr run at the same time, one each to start with (up to five). Each of them pauses before each of its files on its own, so two at once read about twice as fast as one. Downloads from other sites go ahead meanwhile.
+
+### Changed
+
+- **Pacing on one line per site**: "Instagram from [3] to [5] seconds, [1] at once", then "At most [ ] Instagram files an hour", with How Pacing Works (?) on the section's title. Instagram sits with the other three, and every site has a pause: 3 to 5 seconds on Instagram and 0 to 2 on X, Pixiv and Tumblr to start with, 0 to 0 for none. Pauses you set before are kept, apart from Instagram's old 5 to 10 seconds and no pause, which take the new ones.
+- Typing a shortest pause above the longest raises the longest to match, and the other way round, instead of undoing what you typed.
+- **Read Cookies from** sits on one line with its list.
+
 ## 0.1.146 · 2026-11-15
 
 ### Added

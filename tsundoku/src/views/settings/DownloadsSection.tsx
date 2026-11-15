@@ -2,11 +2,12 @@ import { useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { pickFolder, queryKeys, setDefaultPreset } from "../../api"
 import type { CookiesBrowser } from "../../bindings/CookiesBrowser"
-import type { PauseRange } from "../../bindings/PauseRange"
-import type { SitePauses } from "../../bindings/SitePauses"
+import type { SitePace } from "../../bindings/SitePace"
+import type { SitePacing } from "../../bindings/SitePacing"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
+import { HelpMenu } from "../../components/HelpMenu"
 import { DEFAULT_POST_FILE_NAME, PostNameInput } from "../../components/PostNameInput"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
@@ -228,18 +229,23 @@ export function PostsSection() {
   )
 }
 
-/** The sites besides Instagram that Settings → Pacing can give a pause, in the order shown. */
-const OTHER_PACED_SITES: readonly { key: keyof SitePauses; name: string }[] = [
-  { key: "x", name: "X" },
-  { key: "pixiv", name: "Pixiv" },
-  { key: "tumblr", name: "Tumblr" },
-]
+/** The sites Settings → Pacing paces, in the order shown. */
+const PACED_SITES: readonly (keyof SitePacing)[] = ["instagram", "x", "pixiv", "tumblr"]
 
-/** Settings → Pacing: Instagram's pause before each file and between its links in Pending, and its hourly limit; then
- * the same pause for X, Pixiv and Tumblr, none until one is set. */
+/** As the core has it before Settings is read (`SitePacing::default`). */
+const DEFAULT_PACING: SitePacing = {
+  instagram: { atOnce: 1, pause: { min: 3, max: 5 } },
+  x: { atOnce: 1, pause: { min: 0, max: 2 } },
+  pixiv: { atOnce: 1, pause: { min: 0, max: 2 } },
+  tumblr: { atOnce: 1, pause: { min: 0, max: 2 } },
+}
+
+/** Settings → Pacing: a line for each site that blocks accounts reading too fast, "X from [0] to [2] seconds, [1] at
+ * once", then Instagram's hourly limit. What each does is in its (?), How Pacing Works. */
 export function PacingSection() {
   const { options, save, error } = useSaveDownloadOptions()
-  const sitePauses = options?.sitePauses ?? { x: null, pixiv: null, tumblr: null }
+  const pacing = options?.pacing ?? DEFAULT_PACING
+  const help = text.pacingHelp
 
   // The hourly limit is saved when the field is left or Enter is pressed, not at every key; empty for none.
   const [hourlyLimit, setHourlyLimit] = useState<string | null>(null)
@@ -254,48 +260,49 @@ export function PacingSection() {
   }
 
   return (
-    <Section title={text.pacing}>
+    <Section
+      title={text.pacing}
+      actions={
+        <HelpMenu
+          label={help.label}
+          topics={[
+            { title: help.pause, paragraphs: help.pauseParagraphs(LONGEST_PAUSE) },
+            { title: help.atOnce, paragraphs: help.atOnceParagraphs },
+            { title: text.hourlyLimit, paragraphs: help.hourlyLimitParagraphs },
+          ]}
+        />
+      }
+    >
       <Card className="flex flex-col gap-3 p-4">
-        <p className="text-fg-secondary">{text.pacingIntro(LONGEST_PAUSE)}</p>
-        <p className="text-xs font-semibold text-fg-secondary">{text.instagram}</p>
-        <Field label={text.postPause} hint={text.postPauseHint} htmlFor="settings-pause-instagram-min">
-          <PauseFields
-            id="settings-pause-instagram"
-            saved={options?.postPause ?? { min: 5, max: 10 }}
-            disabled={!options}
-            onSave={(range) => (range ? save({ postPause: range }) : Promise.resolve(false))}
-          />
-        </Field>
-        <Field label={text.hourlyLimit} hint={text.hourlyLimitHint} htmlFor="settings-hourly-limit">
-          <div className="flex items-center gap-2 text-fg-secondary">
-            <TextInput
-              id="settings-hourly-limit"
-              inputMode="numeric"
-              className="w-24 text-right tabular-nums"
-              placeholder={text.hourlyLimitPlaceholder}
-              value={shownLimit}
+        <p className="text-fg-secondary">{text.pacingIntro}</p>
+        <div className="grid w-fit grid-cols-[repeat(8,auto)] items-center gap-x-2 gap-y-2 text-fg-secondary">
+          {PACED_SITES.map((site) => (
+            <PaceLine
+              key={site}
+              id={`settings-pace-${site}`}
+              site={text.pacedSites[site]}
+              saved={pacing[site]}
               disabled={!options}
-              onChange={(event) => setHourlyLimit(event.target.value)}
-              onBlur={() => void saveHourlyLimit()}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void saveHourlyLimit()
-              }}
+              onSave={(pace) => save({ pacing: { ...pacing, [site]: pace } })}
             />
-            <span>{text.files}</span>
-          </div>
-        </Field>
-        <div className="flex flex-col gap-3 border-t border-line pt-3">
-          <p className="text-xs text-fg-secondary">{text.otherSitesPause}</p>
-          {OTHER_PACED_SITES.map(({ key, name }) => (
-            <Field key={key} label={name} htmlFor={`settings-pause-${key}-min`}>
-              <PauseFields
-                id={`settings-pause-${key}`}
-                saved={sitePauses[key]}
-                disabled={!options}
-                onSave={(range) => save({ sitePauses: { ...sitePauses, [key]: range } })}
-              />
-            </Field>
           ))}
+        </div>
+        <div className="flex items-center gap-2 border-t border-line pt-3 text-fg-secondary">
+          <label htmlFor="settings-hourly-limit">{text.hourlyLimitLine.before}</label>
+          <TextInput
+            id="settings-hourly-limit"
+            inputMode="numeric"
+            className="w-24 text-right tabular-nums"
+            placeholder={text.hourlyLimitPlaceholder}
+            value={shownLimit}
+            disabled={!options}
+            onChange={(event) => setHourlyLimit(event.target.value)}
+            onBlur={() => void saveHourlyLimit()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void saveHourlyLimit()
+            }}
+          />
+          <span>{text.hourlyLimitLine.after}</span>
         </div>
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
@@ -304,22 +311,27 @@ export function PacingSection() {
 }
 
 /**
- * "From [5] to [10] seconds", saved when a field is left or Enter is pressed. `saved` null shows both fields empty
- * (No Pause), and emptying both saves null; one end left empty takes the other's value.
+ * One site's line, as the cells of `PacingSection`'s grid: "X from [0] to [2] seconds, [1] at once". The pause is
+ * saved when a field is left or Enter is pressed, one end left empty taking the other's value (both empty: no pause),
+ * and the other end following the one typed in when they cross; how many at once as soon as it's picked.
  */
-function PauseFields({
+function PaceLine({
   id,
+  site,
   saved,
   disabled,
   onSave,
 }: {
   id: string
-  saved: PauseRange | null
+  site: string
+  saved: SitePace
   disabled: boolean
-  onSave: (range: PauseRange | null) => Promise<boolean>
+  onSave: (pace: SitePace) => Promise<boolean>
 }) {
-  const [draft, setDraft] = useState<{ min: string; max: string } | null>(null)
-  const shown = draft ?? { min: saved ? String(saved.min) : "", max: saved ? String(saved.max) : "" }
+  // `edited` is the end typed in last, which the other follows when they cross: "from 5" with "to 2" makes 5 to 5.
+  const [draft, setDraft] = useState<{ min: string; max: string; edited: "min" | "max" } | null>(null)
+  const shown = draft ?? { min: String(saved.pause.min), max: String(saved.pause.max) }
+  const line = text.pacingLine
 
   async function commit() {
     if (draft === null) return
@@ -327,10 +339,10 @@ function PauseFields({
       const number = Number.parseInt(value, 10)
       return Number.isNaN(number) ? null : Math.max(0, number)
     }
-    const min = read(draft.min)
-    const max = read(draft.max)
-    const range = min === null && max === null ? null : { min: min ?? max ?? 0, max: max ?? min ?? 0 }
-    if (await onSave(range)) setDraft(null)
+    const min = read(draft.min) ?? read(draft.max) ?? 0
+    const max = read(draft.max) ?? min
+    const pause = min <= max ? { min, max } : draft.edited === "min" ? { min, max: min } : { min: max, max }
+    if (await onSave({ ...saved, pause })) setDraft(null)
   }
 
   const input = (end: "min" | "max", label: string) => (
@@ -338,11 +350,11 @@ function PauseFields({
       id={`${id}-${end}`}
       aria-label={label}
       inputMode="numeric"
-      className="w-20 text-right tabular-nums"
-      placeholder={text.noPause}
+      className="w-16 text-right tabular-nums"
+      placeholder="0"
       value={shown[end]}
       disabled={disabled}
-      onChange={(event) => setDraft({ ...shown, [end]: event.target.value })}
+      onChange={(event) => setDraft({ ...shown, [end]: event.target.value, edited: end })}
       onBlur={() => void commit()}
       onKeyDown={(event) => {
         if (event.key === "Enter") void commit()
@@ -351,13 +363,31 @@ function PauseFields({
   )
 
   return (
-    <div className="flex items-center gap-2 text-fg-secondary">
-      <span>{text.pauseFrom}</span>
-      {input("min", text.pauseFrom)}
-      <span>{text.pauseTo}</span>
-      {input("max", text.pauseTo)}
-      <span>{text.seconds}</span>
-    </div>
+    <>
+      <label htmlFor={`${id}-min`} className="pr-1 font-medium text-fg">
+        {site}
+      </label>
+      <span>{line.from}</span>
+      {input("min", text.pauseFrom(site))}
+      <span>{line.to}</span>
+      {input("max", text.pauseTo(site))}
+      <span>{line.seconds}</span>
+      <SelectInput
+        id={`${id}-at-once`}
+        aria-label={text.siteAtOnce(site)}
+        className="w-20"
+        value={saved.atOnce}
+        disabled={disabled}
+        onChange={(event) => void onSave({ ...saved, atOnce: Number(event.target.value) })}
+      >
+        {AT_ONCE_CHOICES.map((count) => (
+          <option key={count} value={count}>
+            {count}
+          </option>
+        ))}
+      </SelectInput>
+      <span>{line.atOnce}</span>
+    </>
   )
 }
 
@@ -368,22 +398,28 @@ export function CookiesSection() {
   return (
     <Section title={text.cookies}>
       <Card className="flex flex-col gap-3 p-4">
-        <Field label={text.cookiesBrowser} hint={text.cookiesHint} htmlFor="settings-cookies">
-          <SelectInput
-            id="settings-cookies"
-            className="w-48"
-            value={browser ?? ""}
-            disabled={!options}
-            onChange={(event) => void save({ cookiesBrowser: (event.target.value || null) as CookiesBrowser | null })}
-          >
-            <option value="">{text.cookiesNone}</option>
-            {BROWSERS.map((option) => (
-              <option key={option} value={option}>
-                {text.browsers[option]}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <label htmlFor="settings-cookies-browser" className="font-medium">
+              {text.cookiesBrowser}
+            </label>
+            <SelectInput
+              id="settings-cookies-browser"
+              className="w-48"
+              value={browser ?? ""}
+              disabled={!options}
+              onChange={(event) => void save({ cookiesBrowser: (event.target.value || null) as CookiesBrowser | null })}
+            >
+              <option value="">{text.cookiesNone}</option>
+              {BROWSERS.map((option) => (
+                <option key={option} value={option}>
+                  {text.browsers[option]}
+                </option>
+              ))}
+            </SelectInput>
+          </div>
+          <p className="text-xs text-fg-muted">{text.cookiesHint}</p>
+        </div>
         {browser !== null && !FIREFOX_FAMILY.includes(browser) && <StatusMessage tone="warning" message={text.chromiumWarning} />}
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
