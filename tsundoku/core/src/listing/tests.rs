@@ -765,16 +765,25 @@ fn a_read_that_answers_every_post_asked_may_have_more() {
         .map(|more| more.read)
     };
     // The answer holds 12 posts.
-    assert_eq!(more(CHECK_FIRST_COUNT), Some(12));
+    assert_eq!(more(INSTAGRAM_PAGING.check_first), Some(12));
     assert_eq!(more(NEWEST_COUNT), None);
 }
 
 #[test]
-fn a_check_of_an_instagram_account_reads_a_page_then_the_newest_only_when_it_must() {
+fn a_check_of_an_account_reads_its_first_answer_then_the_newest_only_when_it_must() {
     assert_eq!(
-        CHECK_FIRST_COUNT, 11,
+        INSTAGRAM_PAGING.check_first, 11,
         "one less than Instagram's page of 12"
     );
+    assert_eq!(
+        paging_of("https://www.instagram.com/someone/posts/"),
+        INSTAGRAM_PAGING
+    );
+    assert_eq!(
+        X_PAGING.check_first, 19,
+        "less than the smallest first answer X gave (21)"
+    );
+    assert_eq!(paging_of("https://x.com/someone/media"), X_PAGING);
     // Each answer says how many it was asked for in `total`.
     let answer = |count: u32, more: bool| Listing {
         kind: ListingKind::Account,
@@ -800,6 +809,7 @@ fn a_check_of_an_instagram_account_reads_a_page_then_the_newest_only_when_it_mus
         let mut asked = Vec::new();
         let mut pauses = 0;
         let found = read_in_steps(
+            11,
             &mut |count| {
                 asked.push(count);
                 Ok(answer(count, has_more))
@@ -812,7 +822,7 @@ fn a_check_of_an_instagram_account_reads_a_page_then_the_newest_only_when_it_mus
                     Err(PreviewError::Cancelled)
                 }
             },
-            &|found| first_reached && found.total == Some(CHECK_FIRST_COUNT),
+            &|found| first_reached && found.total == Some(11),
         );
         (asked, pauses, found.map(|found| found.total))
     };

@@ -280,7 +280,7 @@ impl LinkReader for ToolReader {
 }
 
 impl crate::watched::ListingReader for ToolReader {
-    /// A watched source's listing, read as the preview card reads it, except that an Instagram account stops at what
+    /// A watched source's listing, read as the preview card reads it, except that an account stops at what
     /// was seen before (`listing::read_for_check`); anything else is refused as not listable.
     fn read(
         &self,

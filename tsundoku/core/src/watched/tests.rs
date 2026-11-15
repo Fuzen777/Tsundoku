@@ -1,6 +1,7 @@
 //! The watched sources, checked by a fake reader the tests answer for, queueing into a queue whose downloads fail at
 //! once, so what was added stays in it to look at.
 
+use std::sync::Condvar;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
@@ -15,18 +16,37 @@ use crate::rules::DownloadKind;
 use crate::tools::ToolManager;
 
 /// Answers each check with the listing a test set, newest first, noting whether the check said the items reached what
-/// it had seen (`reached`).
+/// it had seen (`reached`), which links it started reading (`started`), and holding a read of a link a test holds until
+/// it's released.
 #[derive(Default)]
 struct FakeReader {
     listing: Mutex<Vec<String>>,
     failure: Mutex<Option<PreviewError>>,
     reads: AtomicUsize,
     reached: Mutex<Option<bool>>,
+    started: Mutex<Vec<String>>,
+    held: Mutex<HashSet<String>>,
+    released: Condvar,
 }
 
 impl FakeReader {
     fn lists(&self, ids: &[&str]) {
         *lock(&self.listing) = ids.iter().map(|id| (*id).to_owned()).collect();
+    }
+
+    /// The links whose reads started, in that order.
+    fn started(&self) -> Vec<String> {
+        lock(&self.started).clone()
+    }
+
+    /// Reads of `url` wait until it's released.
+    fn hold(&self, url: &str) {
+        lock(&self.held).insert(url.to_owned());
+    }
+
+    fn release(&self, url: &str) {
+        lock(&self.held).remove(url);
+        self.released.notify_all();
     }
 }
 
@@ -37,6 +57,15 @@ impl ListingReader for FakeReader {
         _cancel: &CancelToken,
         reached: &dyn Fn(&Listing) -> bool,
     ) -> Result<Listing, PreviewError> {
+        lock(&self.started).push(url.to_owned());
+        // A test that never releases fails on its own wait rather than hanging here.
+        drop(
+            self.released
+                .wait_timeout_while(lock(&self.held), Duration::from_secs(10), |held| {
+                    held.contains(url)
+                })
+                .unwrap(),
+        );
         self.reads.fetch_add(1, Ordering::SeqCst);
         if let Some(error) = lock(&self.failure).clone() {
             return Err(error);
@@ -509,6 +538,62 @@ fn check_all_checks_each_source_once_in_the_order_given() {
         2,
         "a source asked twice is read once, and one not watched isn't read"
     );
+    assert_eq!(
+        test.reader.started(),
+        ["https://www.youtube.com/@other/videos", CHANNEL],
+        "both are on YouTube, so they're read in the order given"
+    );
+}
+
+#[test]
+fn a_check_on_one_site_doesnt_wait_for_one_on_another() {
+    const INSTAGRAM: &str = "https://www.instagram.com/someone/posts/";
+    let test = Test::new();
+    let instagram = test.add_at(INSTAGRAM, &["a"], FirstItems::FromNow);
+    let x = test.add_at("https://x.com/someone/media", &["a"], FirstItems::FromNow);
+    test.reader.lists(&["n", "a"]);
+    test.reader.hold(INSTAGRAM);
+    test.sources.check_many(&[instagram, x]).unwrap();
+    wait_until("the X account's check ends", || !test.source(x).checking);
+    assert_eq!(test.new_ids(x), ["n"]);
+    assert!(
+        test.source(instagram).checking,
+        "the Instagram account's check still runs"
+    );
+    test.reader.release(INSTAGRAM);
+    wait_until("the Instagram account's check ends", || {
+        !test.source(instagram).checking
+    });
+    assert_eq!(test.new_ids(instagram), ["n"]);
+}
+
+#[test]
+fn checks_on_one_site_run_one_after_the_other() {
+    const FIRST: &str = "https://x.com/first/media";
+    // twitter.com is X too, so it waits its turn behind x.com.
+    const SECOND: &str = "https://twitter.com/second/media";
+    let test = Test::new();
+    let first = test.add_at(FIRST, &["a"], FirstItems::FromNow);
+    let second = test.add_at(SECOND, &["a"], FirstItems::FromNow);
+    test.reader.lists(&["n", "a"]);
+    test.reader.hold(FIRST);
+    test.sources.check_many(&[first, second]).unwrap();
+    wait_until("the first check starts", || {
+        test.reader.started() == [FIRST]
+    });
+    thread::sleep(Duration::from_millis(100));
+    assert_eq!(
+        test.reader.started(),
+        [FIRST],
+        "the second waits for the first"
+    );
+    assert!(test.source(second).checking);
+    test.reader.release(FIRST);
+    wait_until("both checks end", || {
+        !test.source(first).checking && !test.source(second).checking
+    });
+    assert_eq!(test.reader.started(), [FIRST, SECOND]);
+    assert_eq!(test.new_ids(second), ["n"]);
 }
 
 #[test]

@@ -2,18 +2,19 @@
 //! every item a check or its adding has met (`watched_items`), so what was skipped or downloaded never comes back as
 //! new. A check reads the source's listing (`ListingReader`), newest first for a channel or an account, and stops past
 //! what it knows (`listing::before_known_ground`), which the reader is told so it can stop reading there too (an
-//! Instagram account, read a page at a time with waits between: `listing::read_for_check`); a playlist is compared
+//! account, read its site's first answer first: `listing::read_for_check`); a playlist is compared
 //! whole. New items wait on the source's card
 //! until they're downloaded, with the source's own folder and preset, or skipped.
 //!
-//! Checks run one at a time on a thread of their own, by hand for now (Check Now, Check All). They keep to a site's
-//! "too many requests" wait as previews do.
+//! Checks run by hand for now (Check Now, Check All), on a thread per site (`sites::site_of`, the key the queue's
+//! waits use): one at a time on each site, in the order asked, and side by side across sites, so an X account doesn't
+//! wait for the Instagram accounts asked before it. They keep to a site's "too many requests" wait as previews do.
 
 mod store;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, Weak};
@@ -31,6 +32,7 @@ use crate::metadata::{PreviewError, VideoInfo};
 use crate::presets::PresetManager;
 use crate::rules::{self, RuleSubject};
 use crate::settings::SettingsStore;
+use crate::sites;
 use crate::sync::lock;
 use store::{ItemState, StoredItem, StoredSource, WatchedStore};
 
@@ -201,13 +203,15 @@ pub struct WatchedSources {
     listener: Arc<dyn WatchedListener>,
     /// Sources whose check is running or waiting.
     checking: Mutex<HashSet<i64>>,
-    to_check: Mutex<Sender<i64>>,
+    /// Each site's checks' thread, by the site's key (`check_site`), started with its first check.
+    to_check: Mutex<HashMap<String, Sender<i64>>>,
+    /// Itself, for the checks' threads, which end once it's gone.
+    this: Weak<WatchedSources>,
 }
 
 impl WatchedSources {
     pub fn open(services: WatchedServices) -> Arc<Self> {
-        let (sender, receiver) = mpsc::channel();
-        let sources = Arc::new(Self {
+        Arc::new_cyclic(|this| Self {
             store: WatchedStore::new(services.database),
             history: services.history,
             queue: services.queue,
@@ -216,11 +220,9 @@ impl WatchedSources {
             reader: services.reader,
             listener: services.listener,
             checking: Mutex::default(),
-            to_check: Mutex::new(sender),
-        });
-        let checking = Arc::downgrade(&sources);
-        thread::spawn(move || run_checks(&checking, &receiver));
-        sources
+            to_check: Mutex::default(),
+            this: this.clone(),
+        })
     }
 
     /// Every source, in the order added, with its new and skipped items.
@@ -312,27 +314,28 @@ impl WatchedSources {
         Ok(())
     }
 
-    /// Check Now: reads the source again, on the checks' thread, after the checks before it.
+    /// Check Now: reads the source again, on its site's checks' thread, after the checks on that site before it.
     pub fn check(&self, id: i64) -> Result<(), WatchedError> {
-        self.store.source(id)?.ok_or(WatchedError::NotFound)?;
-        if self.ask_check(id) {
+        let source = self.store.source(id)?.ok_or(WatchedError::NotFound)?;
+        if self.ask_check(&source) {
             self.notify();
         }
         Ok(())
     }
 
-    /// Check All: reads each of these sources again, one after the other in the order given, after the checks before
-    /// them. A source removed meanwhile, or already waiting for its check, is left out.
+    /// Check All: reads each of these sources again, those on one site one after the other in the order given, after
+    /// the checks on that site before them, and those on different sites side by side. A source removed meanwhile, or
+    /// already waiting for its check, is left out.
     pub fn check_many(&self, ids: &[i64]) -> Result<(), WatchedError> {
-        let watched: HashSet<i64> = self
+        let watched: HashMap<i64, StoredSource> = self
             .store
             .sources()?
-            .iter()
-            .map(|source| source.id)
+            .into_iter()
+            .map(|source| (source.id, source))
             .collect();
         let mut asked = false;
-        for id in ids.iter().filter(|id| watched.contains(id)) {
-            asked |= self.ask_check(*id);
+        for source in ids.iter().filter_map(|id| watched.get(id)) {
+            asked |= self.ask_check(source);
         }
         if asked {
             self.notify();
@@ -340,12 +343,20 @@ impl WatchedSources {
         Ok(())
     }
 
-    /// Puts a source's check on the checks' thread, unless it waits there already. Whether it was put there.
-    fn ask_check(&self, id: i64) -> bool {
-        if !lock(&self.checking).insert(id) {
+    /// Puts a source's check on its site's checks' thread, starting that thread for the site's first check, unless the
+    /// check waits there already. Whether it was put there.
+    fn ask_check(&self, source: &StoredSource) -> bool {
+        if !lock(&self.checking).insert(source.id) {
             return false;
         }
-        let _ = lock(&self.to_check).send(id);
+        let mut threads = lock(&self.to_check);
+        let sender = threads.entry(check_site(&source.url)).or_insert_with(|| {
+            let (sender, receiver) = mpsc::channel();
+            let sources = self.this.clone();
+            thread::spawn(move || run_checks(&sources, &receiver));
+            sender
+        });
+        let _ = sender.send(source.id);
         true
     }
 
@@ -492,7 +503,7 @@ impl WatchedSources {
         }
     }
 
-    /// Reads a source and keeps what's new. Runs on the checks' thread.
+    /// Reads a source and keeps what's new. Runs on its site's checks' thread.
     fn run_check(&self, id: i64) {
         let Ok(Some(source)) = self.store.source(id) else {
             return;
@@ -669,7 +680,7 @@ fn storage_failure(error: WatchedError) -> PreviewError {
     }
 }
 
-/// The checks' thread: one source at a time, in the order asked, while the sources exist.
+/// A site's checks' thread: one of its sources at a time, in the order asked, while the sources exist.
 fn run_checks(sources: &Weak<WatchedSources>, receiver: &Receiver<i64>) {
     while let Ok(id) = receiver.recv() {
         let Some(sources) = sources.upgrade() else {
@@ -679,6 +690,13 @@ fn run_checks(sources: &Weak<WatchedSources>, receiver: &Receiver<i64>) {
         lock(&sources.checking).remove(&id);
         sources.notify();
     }
+}
+
+/// The site whose checks' thread checks the source at `url`: the key the queue's waits use (`sites::site_of`), so a
+/// site's pacing and "too many requests" wait hold across its sources (x.com and twitter.com are one site). A link
+/// without a site goes on the thread of those without one.
+fn check_site(url: &str) -> String {
+    sites::site_of(url).map(|site| site.key).unwrap_or_default()
 }
 
 /// The source a download from a watched source is queued with, so the Queue shows it with the others picked from it.

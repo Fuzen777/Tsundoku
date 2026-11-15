@@ -2,8 +2,8 @@
 //! pick from. `listing_link` tells one from its address and gives the page to read (a YouTube channel's Videos tab, an
 //! Instagram account's posts, an X account's Media tab); `read` lists what it holds without reading each item, newest
 //! first for a channel or an account, in its own order for a playlist. `read_more` lists the items after those, for the
-//! picker's Load More and Load All. `read_for_check` reads one for a watched source's check, an Instagram account a
-//! page first. `mark` says which items the history or the queue has. Another site's playlist is
+//! picker's Load More and Load All. `read_for_check` reads one for a watched source's check, an account a page
+//! first. `mark` says which items the history or the queue has. Another site's playlist is
 //! listed when yt-dlp answers one with a link and ID for each item (`from_yt_dlp`);
 //! otherwise, and for image sites' accounts other than Instagram's and X's, the link is refused as
 //! `PreviewError::NotListable`.
@@ -58,6 +58,10 @@ struct Paging {
     /// the newer pages aren't read again. The cursor only moves on after a whole page, so each read asks for whole pages
     /// and the next one starts on the page after. Without it, Load All reads the rest in one run.
     resumes: bool,
+    /// How many of the newest posts a watched source's check reads first (`read_for_check`): what the site's first
+    /// answer holds, less one, since gallery-dl only sees that a range has ended at the post after it, and asking for
+    /// that post from the next page costs another request (and on Instagram its 6 to 12 seconds first).
+    check_first: u32,
 }
 
 /// Instagram answers 12 posts per request and asks to slow down when read quickly. gallery-dl already waits 6 to 12
@@ -68,6 +72,9 @@ const INSTAGRAM_PAGING: Paging = Paging {
     step: 96,
     pause: Duration::from_secs(10),
     resumes: true,
+    // One page, pinned posts first, so up to 3 of these are pinned: a check reaches what it saw before within them
+    // (`before_known_ground`) unless 8 or so posts came since.
+    check_first: 12 - 1,
 };
 
 /// X is asked for 50 posts per request (gallery-dl's `limit`) and answers up to that many, fewer at times (21 on a
@@ -81,13 +88,14 @@ const X_PAGING: Paging = Paging {
     step: 200,
     pause: Duration::ZERO,
     resumes: false,
+    check_first: X_CHECK_FIRST,
 };
 
-/// How many of an Instagram account's posts a watched source's check reads first (`read_for_check`): one page, less
-/// one, since gallery-dl only sees that a range has ended at the post after it, and asking for that post from the next
-/// page waits its 6 to 12 seconds first. Pinned posts come first on that page, so up to 3 of these are pinned: a check
-/// reaches what it saw before within them (`before_known_ground`) unless 8 or so posts came since.
-pub const CHECK_FIRST_COUNT: u32 = INSTAGRAM_PAGING.page - 1;
+/// How many of an X account's newest posts a watched source's check reads first: X's first answer for a Media tab
+/// holds 20 to 40 posts (21, 26 and 39 seen), though 50 are asked for, so the newest 50 take a second page or more,
+/// half a second to a second each, after the request for the account itself.
+/// Pinned posts aren't on the Media tab, so a check reaches what it saw before within these unless 16 or so came since.
+const X_CHECK_FIRST: u32 = 19;
 
 /// How long one read after the first may take: up to 8 of Instagram's pages, each after gallery-dl's 6 to 12 seconds,
 /// and a minute's wait or more whenever Instagram asks to slow down.
@@ -436,10 +444,10 @@ fn read_account(
 }
 
 /// Reads a listing for a watched source's check, which only needs its items up to what the source saw before. An
-/// Instagram account is read a page at a time by gallery-dl, waiting 6 to 12 seconds before each, so its first
-/// `CHECK_FIRST_COUNT` posts are read first (a single page), and its newest `NEWEST_COUNT`, as the preview card reads
-/// them, only when `reached` says those don't reach what was seen before and the account has more. Any other listing
-/// is read as `read` does: YouTube and X answer without waits.
+/// account is read a page at a time by gallery-dl (on Instagram waiting 6 to 12 seconds before each; on X each takes a
+/// second or so), so the posts its site's first answer holds are read first (`Paging::check_first`), and its newest
+/// `NEWEST_COUNT`, as the preview card reads them, only when `reached` says those don't reach what was seen before and
+/// the account has more. A channel or a playlist is read as `read` does: YouTube answers 50 at once.
 pub fn read_for_check(
     videos: &FetchTools,
     images: &GalleryTools,
@@ -447,28 +455,31 @@ pub fn read_for_check(
     cancel: &CancelToken,
     reached: &dyn Fn(&Listing) -> bool,
 ) -> Result<Listing, PreviewError> {
-    if !(listing.reads_images() && on_instagram(&listing.link)) {
+    if !listing.reads_images() {
         return read(videos, images, listing, cancel);
     }
+    let paging = paging_of(&listing.link);
     read_in_steps(
+        paging.check_first,
         &mut |count| read_account(images, listing, count, cancel),
-        &mut || pause(INSTAGRAM_PAGING.pause, cancel),
+        &mut || pause(paging.pause, cancel),
         reached,
     )
 }
 
-/// `read_for_check`'s steps for an Instagram account, with how it reads (`read`, the newest so many) and waits
-/// between two reads (`pause`) given, for the tests.
+/// `read_for_check`'s steps for an account: its newest `first_count` posts, then its newest `NEWEST_COUNT` if it must,
+/// with how it reads (`read`, the newest so many) and waits between two reads (`pause`) given, for the tests.
 fn read_in_steps(
+    first_count: u32,
     read: &mut dyn FnMut(u32) -> Result<Listing, PreviewError>,
     pause: &mut dyn FnMut() -> Result<(), PreviewError>,
     reached: &dyn Fn(&Listing) -> bool,
 ) -> Result<Listing, PreviewError> {
-    let first = read(CHECK_FIRST_COUNT)?;
+    let first = read(first_count)?;
     if first.more.is_none() || reached(&first) {
         return Ok(first);
     }
-    // A new run's first request doesn't wait as gallery-dl's later ones do.
+    // A new run's first request doesn't wait as gallery-dl's later ones do (Instagram's).
     pause()?;
     read(NEWEST_COUNT)
 }

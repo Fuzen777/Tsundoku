@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.153 · 2026-11-15
+
+### Changed
+
+- **Faster X checks**: checking a watched X account now reads only the posts X sends first (20 or more), which hold what's new unless the account posted 16 or more since the last check, instead of its newest 50 every time, which X sends in two pages or more. A check of an X account with nothing new went from about 3 seconds to about 2.5 (2.6 to 3.8 seconds before, 2.3 to 2.9 after), as quick as an Instagram account's.
+- **Check All checks each site side by side**: Instagram, X and YouTube sources are now checked at the same time, one source per site at a time, so an X account no longer waits for the Instagram accounts before it. With an Instagram account, two X accounts and a YouTube channel, Check All took 11 seconds and now takes about 6, and the first X account is done after about 3 seconds instead of 5.
+
 ## 0.1.152 · 2026-11-15
 
 ### Added
