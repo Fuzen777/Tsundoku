@@ -182,7 +182,7 @@ function Tile({ spec, ratio, labels, disabled }: TileProps) {
   const shown = picked && !locked
   const inactive = disabled || locked
   return (
-    <li className="min-w-0">
+    <li data-item={spec.key} className="min-w-0">
       <label
         title={spec.hint}
         style={{ aspectRatio: ratio ?? (pictured ? (ownRatio ?? spec.ratio) : 1) }}

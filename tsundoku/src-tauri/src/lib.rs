@@ -344,6 +344,7 @@ pub fn run() {
             history::cancel_preview,
             history::load_more_of_listing,
             history::cancel_loading_more,
+            history::count_listing,
             history::left_out_files,
             history::left_out_shared_files,
             history::listing_kind,

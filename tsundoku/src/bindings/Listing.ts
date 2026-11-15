@@ -36,7 +36,7 @@ total: number | null,
  */
 newestOnly: boolean, items: Array<ListedItem>, 
 /**
- * Where the items after these start, for Load More and Load All, or `None` when the listing is whole: a playlist,
- * or a channel or an account with fewer than `NEWEST_COUNT`.
+ * Where the items after these start, for Load More, Load New and Load All, or `None` when the listing is whole: a
+ * playlist, or a channel or an account with fewer than `NEWEST_COUNT`.
  */
 more: ListingMore | null, };

@@ -13,7 +13,7 @@ use tsundoku_core::history::{
     History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, PastDownload,
     folder_count,
 };
-use tsundoku_core::listing::{self, ListingKind, ListingMore, MoreItems};
+use tsundoku_core::listing::{self, ListingKind, ListingMore, MoreItems, MoreRead};
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::passwords::Password;
 use tsundoku_core::preview::{LinkPreview, PreviewService};
@@ -76,8 +76,9 @@ pub fn cancel_preview(previews: State<'_, Arc<PreviewService>>) {
     previews.cancel();
 }
 
-/// The items after those a listing on the preview card has: the next ones (Load More), or all the rest (Load All,
-/// `all`), sent over `on_items` a batch at a time as they're read. Ends once they're all read, or with why it stopped.
+/// The items after those a listing on the preview card has: the next ones (Load More), on until enough new ones (Load
+/// New) or all the rest (Load All), as `read` says, sent over `on_items` a batch at a time as they're read. Ends once
+/// they're read, or with why it stopped.
 #[tauri::command]
 pub async fn load_more_of_listing(
     tools: State<'_, Arc<ToolManager>>,
@@ -85,7 +86,7 @@ pub async fn load_more_of_listing(
     previews: State<'_, Arc<PreviewService>>,
     queue: State<'_, Arc<DownloadQueue>>,
     more: ListingMore,
-    all: bool,
+    read: MoreRead,
     on_items: Channel<MoreItems>,
 ) -> Result<(), PreviewError> {
     let (tools, history, previews, queue) = (
@@ -96,7 +97,7 @@ pub async fn load_more_of_listing(
     );
     // Reading takes seconds to hours: off the async runtime's threads, which must never block.
     tauri::async_runtime::spawn_blocking(move || {
-        previews.fetch_more(&tools, &history, &queue, &more, all, &mut |batch| {
+        previews.fetch_more(&tools, &history, &queue, &more, read, &mut |batch| {
             // Only fails once the window is gone, which ends the app.
             let _ = on_items.send(batch);
         })
@@ -109,7 +110,31 @@ pub async fn load_more_of_listing(
     })
 }
 
-/// Stops Load More or Load All, keeping what was read.
+/// How many items a listing on the preview card holds in all, when its first read didn't say and another read can (a
+/// YouTube channel's videos), for Load All to say how many it would list; `None` when no read can.
+#[tauri::command]
+pub async fn count_listing(
+    tools: State<'_, Arc<ToolManager>>,
+    previews: State<'_, Arc<PreviewService>>,
+    queue: State<'_, Arc<DownloadQueue>>,
+    more: ListingMore,
+) -> Result<Option<u32>, PreviewError> {
+    let (tools, previews, queue) = (
+        Arc::clone(&tools),
+        Arc::clone(&previews),
+        Arc::clone(&queue),
+    );
+    // yt-dlp takes seconds: off the async runtime's threads, which must never block.
+    tauri::async_runtime::spawn_blocking(move || previews.count_more(&tools, &queue, &more))
+        .await
+        .unwrap_or_else(|error| {
+            Err(PreviewError::Failed {
+                detail: error.to_string(),
+            })
+        })
+}
+
+/// Stops Load More, Load New or Load All, keeping what was read.
 #[tauri::command]
 pub fn cancel_loading_more(previews: State<'_, Arc<PreviewService>>) {
     previews.cancel_more();

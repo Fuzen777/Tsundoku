@@ -24,6 +24,7 @@ import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
 import type { ListingMore } from "./bindings/ListingMore"
 import type { MoreItems } from "./bindings/MoreItems"
+import type { MoreRead } from "./bindings/MoreRead"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { Preset } from "./bindings/Preset"
@@ -918,31 +919,35 @@ export const standIns = {
   },
   /**
    * The items after a stand-in listing's first ones, a batch every 600 ms: 50 for Load More (48 on the account), and
-   * for Load All batches of 100 (96 on the account) up to 1,000 videos on the channel or the account's 8,634 posts.
-   * A link containing "fail" fails after the first batch; `cancelLoadingMore` stops it.
+   * for Load New and Load All batches of 100 (96 on the account) up to 1,000 videos on the channel or the account's
+   * 8,634 posts, Load New until it has as many new ones as asked. A link containing "fail" fails after the first batch;
+   * `cancelLoadingMore` stops it.
    */
-  loadMoreOfListing(more: ListingMore, all: boolean, onItems: (batch: MoreItems) => void): Promise<void> {
+  loadMoreOfListing(more: ListingMore, read: MoreRead, onItems: (batch: MoreItems) => void): Promise<void> {
     const account = more.link.includes("instagram.com")
     const total = account ? 8634 : 1000
+    const all = read.kind !== "next"
     const step = account ? (all ? 96 : 48) : all ? 100 : 50
     loadingMore.stopped = false
     return new Promise((resolve, reject) => {
-      let read = more.read
+      let index = more.read
+      let found = 0
       const next = () => {
         if (loadingMore.stopped) {
           reject({ kind: "cancelled" })
           return
         }
-        if (more.link.includes("fail") && read > more.read) {
+        if (more.link.includes("fail") && index > more.read) {
           reject({ kind: "tooManyRequests", detail: "429", site: "Instagram", until: Date.now() + 5 * 60_000 })
           return
         }
-        const count = Math.min(step, total - read)
-        const items = Array.from({ length: count }, (_, index) => listedStandIn(account ? "account" : "channel", read + index))
-        read += count
-        const ended = read >= total
-        onItems({ items, more: ended ? null : { ...more, read }, total: account || ended ? total : null })
-        if (ended || !all) resolve()
+        const count = Math.min(step, total - index)
+        const items = Array.from({ length: count }, (_, at) => listedStandIn(account ? "account" : "channel", index + at))
+        index += count
+        found += items.filter((item) => item.lastDownload === null && !item.inQueue).length
+        const ended = index >= total
+        onItems({ items, more: ended ? null : { ...more, read: index }, total: account || ended ? total : null })
+        if (ended || read.kind === "next" || (read.kind === "new" && found >= read.count)) resolve()
         else loadingMore.timer = setTimeout(next, 600)
       }
       loadingMore.timer = setTimeout(next, 600)
@@ -951,6 +956,19 @@ export const standIns = {
   cancelLoadingMore(): Promise<void> {
     loadingMore.stopped = true
     return Promise.resolve()
+  },
+  /** A channel's 1,000 videos, after a moment; `?count=fail` fails it. */
+  countListing(more: ListingMore): Promise<number | null> {
+    if (!more.channelId) return Promise.resolve(null)
+    return new Promise((resolve, reject) =>
+      setTimeout(() => {
+        if (window.location.search.includes("count=fail")) {
+          reject({ kind: "failed", detail: "yt-dlp stopped" })
+        } else {
+          resolve(1000)
+        }
+      }, 1500),
+    )
   },
   /** As the core tells them: a YouTube channel (`/@name`) or playlist (`/playlist?list=`), an Instagram account. */
   listingKind(link: string): ListingKind | null {
@@ -1085,12 +1103,16 @@ function listingStandIn(kind: ListingKind): Listing {
     total: posts ? 8634 : null,
     newestOnly: kind !== "playlist",
     items: Array.from({ length: count }, (_, index) => listedStandIn(kind, index)),
-    more: kind === "playlist" ? null : { link, title, read: count, cursor: null },
+    more:
+      kind === "playlist"
+        ? null
+        : { link, title, read: count, cursor: null, channelId: posts ? null : "UC4QobU6STFB0P71PMvOGN5A" },
   }
 }
 
-/** A stand-in listing's item at `index` in its order (a downloaded one every 7th from the third, the fifth queued),
- * newest first. */
+/** A stand-in listing's item at `index` in its order, newest first: the fifth queued; on the account, all but the 3
+ * newest of its first 150 posts downloaded, as if the newest were downloaded once before, else every 7th from the
+ * third. */
 function listedStandIn(kind: ListingKind, index: number): ListedItem {
   const posts = kind === "account"
   const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10)
@@ -1107,7 +1129,7 @@ function listedStandIn(kind: ListingKind, index: number): ListedItem {
       uploadDate: posts ? daysAgo(index * 3) : null,
     },
     approximateDate: posts ? null : daysAgo(index * 5),
-    lastDownload: index % 7 === 2 ? previewStandIn.lastDownload : null,
+    lastDownload: (posts ? index >= 3 && index < 150 : index % 7 === 2) ? previewStandIn.lastDownload : null,
     inQueue: index === 4,
   }
 }

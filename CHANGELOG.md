@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.149 · 2026-11-15
+
+### Added
+
+- **Load 50 New**: beside Load More and Load All, Load 50 New lists on past everything you've downloaded or queued until 50 items you haven't are listed (or the list ends), then scrolls to the first of them. So after downloading an account's newest 200 posts, Load 50 New skips past those 200 in one click and stops once 50 new ones are listed, instead of Load More four or five times. While it runs, the card counts what's listed and how many are new ("Listing… 250 of 8,634 posts · 50 new"), as Load All now does too; Stop keeps what's listed.
+- **How many Load All would list on YouTube**: a channel's Videos tab doesn't say how many videos it holds, so the card now asks YouTube for the channel's own list of its videos, which does, and shows the count a moment after the card opens ("Load All (5,561)", "Newest 50 of 5,561 videos"). Instagram already said how many posts an account has. X doesn't say how many posts with pictures or videos an account has (the number it gives counts something else), so Load All stays without a number there, and its hint says so.
+
 ## 0.1.148 · 2026-11-15
 
 ### Added

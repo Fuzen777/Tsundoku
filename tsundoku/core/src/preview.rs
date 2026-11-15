@@ -14,7 +14,7 @@ use crate::downloads::DownloadQueue;
 use crate::gallery::{self, GalleryTools};
 use crate::history::{History, PastDownload};
 use crate::hosts::{self, Host};
-use crate::listing::{self, Found, Listing, ListingMore, MoreItems};
+use crate::listing::{self, Found, Listing, ListingMore, MoreItems, MoreRead};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
 use crate::passwords::Password;
@@ -58,6 +58,8 @@ pub struct PreviewService {
     current: Mutex<Option<CancelToken>>,
     /// The listing's next items being read, if any.
     more: Mutex<Option<CancelToken>>,
+    /// How many items the listing holds being read, if any (`count_more`).
+    counting: Mutex<Option<CancelToken>>,
 }
 
 impl PreviewService {
@@ -86,6 +88,7 @@ impl PreviewService {
             previous.cancel();
         }
         self.cancel_more();
+        self.cancel_counting();
         let fetched = match queue.site_wait(&link) {
             Some(_) => Err(PreviewError::too_many_requests(String::new())),
             None => read_for_preview(
@@ -108,8 +111,9 @@ impl PreviewService {
         preview_of(fetched, history, queue)
     }
 
-    /// Reads the items after those a listing on the preview card has (`more`): the next ones for Load More, or all the
-    /// rest for Load All (`all`), handing each batch to `on_batch` with its items marked as `fetch` marks a listing's.
+    /// Reads the items after those a listing on the preview card has (`more`): the next ones for Load More, on until
+    /// enough new ones for Load New, or all the rest for Load All (`read`), handing each batch to `on_batch` with its
+    /// items marked as `fetch` marks a listing's.
     /// Starting it stops the read before; a site that asked to slow down isn't read until its wait ends, and Load All
     /// stops once a download from the site starts such a wait (`listing::read_more`).
     pub fn fetch_more(
@@ -118,7 +122,7 @@ impl PreviewService {
         history: &History,
         queue: &DownloadQueue,
         more: &ListingMore,
-        all: bool,
+        read: MoreRead,
         on_batch: &mut dyn FnMut(MoreItems),
     ) -> Result<(), PreviewError> {
         let link = more.link.as_str();
@@ -127,7 +131,7 @@ impl PreviewService {
             previous.cancel();
         }
         let cookies_choice = queue.options().cookies_browser;
-        let read = match queue.site_wait(link) {
+        let answer = match queue.site_wait(link) {
             Some(_) => Err(PreviewError::too_many_requests(String::new())),
             None => {
                 let set = LinkTools::new(tools, cookies_choice, link);
@@ -135,7 +139,7 @@ impl PreviewService {
                     &set.videos(true, None),
                     &set.images(),
                     more,
-                    all,
+                    read,
                     &cancel,
                     &mut |mut batch| {
                         listing::mark_items(
@@ -147,12 +151,17 @@ impl PreviewService {
                             detail: error.to_string(),
                         })?;
                         let more_to_come = batch.more.is_some();
+                        let new = batch
+                            .items
+                            .iter()
+                            .filter(|item| item.last_download.is_none() && !item.in_queue)
+                            .count();
                         on_batch(batch);
                         match queue.site_wait(link) {
                             Some(_) if more_to_come => {
                                 Err(PreviewError::too_many_requests(String::new()))
                             }
-                            _ => Ok(()),
+                            _ => Ok(u32::try_from(new).unwrap_or(u32::MAX)),
                         }
                     },
                 )
@@ -165,23 +174,64 @@ impl PreviewService {
                 *current = None;
             }
         }
-        read.map_err(|error| with_site_wait(error, queue, link))?;
+        answer.map_err(|error| with_site_wait(error, queue, link))?;
         queue.site_worked(link);
         Ok(())
     }
 
-    /// Stops the preview being fetched, if any, and the listing's next items being read.
+    /// How many items a listing on the preview card holds in all, when its first read didn't say and another read can
+    /// (`listing::count_more`), for Load All to say how many it would list. A site that asked to slow down isn't read
+    /// until its wait ends. Starting it stops the count before; a new preview stops it too.
+    pub fn count_more(
+        &self,
+        tools: &ToolManager,
+        queue: &DownloadQueue,
+        more: &ListingMore,
+    ) -> Result<Option<u32>, PreviewError> {
+        let link = more.link.as_str();
+        let cancel = CancelToken::new();
+        if let Some(previous) = lock(&self.counting).replace(cancel.clone()) {
+            previous.cancel();
+        }
+        let answer = match queue.site_wait(link) {
+            Some(_) => Err(PreviewError::too_many_requests(String::new())),
+            None => {
+                let cookies_choice = queue.options().cookies_browser;
+                let set = LinkTools::new(tools, cookies_choice, link);
+                listing::count_more(&set.videos(true, None), more, &cancel)
+            }
+        };
+        {
+            let mut current = lock(&self.counting);
+            if current.as_ref().is_some_and(|token| token.is_same(&cancel)) {
+                *current = None;
+            }
+        }
+        let answer = answer.map_err(|error| with_site_wait(error, queue, link))?;
+        queue.site_worked(link);
+        Ok(answer)
+    }
+
+    /// Stops the preview being fetched, if any, the listing's next items being read, and its count.
     pub fn cancel(&self) {
         if let Some(current) = lock(&self.current).take() {
             current.cancel();
         }
         self.cancel_more();
+        self.cancel_counting();
     }
 
     /// Stops the listing's next items being read, if any (`fetch_more`), keeping what was read.
     pub fn cancel_more(&self) {
         if let Some(more) = lock(&self.more).take() {
             more.cancel();
+        }
+    }
+
+    /// Stops the listing's count being read, if any (`count_more`).
+    fn cancel_counting(&self) {
+        if let Some(counting) = lock(&self.counting).take() {
+            counting.cancel();
         }
     }
 }

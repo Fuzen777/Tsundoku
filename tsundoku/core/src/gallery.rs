@@ -130,9 +130,10 @@ pub(crate) fn run_logged(
 const CURSOR_LENGTH: usize = 1024;
 
 /// Where gallery-dl was in an account's posts when it stopped, from the last "Cursor: …" line it logged with
-/// `--verbose`: Instagram logs it each time it moves on to the next page of 12, so it's the page after the last one
-/// read whole. `-o cursor=<it>` starts a later read on that page. `None` when it logged none, or one that doesn't look
-/// like a cursor (letters, digits and `-_=+/.:%`), which isn't passed on.
+/// `--verbose`: Instagram logs it each time it moves on to the next page of 12 (X does too, but Tsundoku doesn't start
+/// X from it: `listing::X_PAGING` says why), so it's the page after the last one read whole. `-o cursor=<it>` starts a
+/// later read on that page. `None` when it logged none, or one that doesn't look like a cursor (letters, digits and
+/// `-_=+/.:%`), which isn't passed on.
 pub(crate) fn last_cursor(log: &[String]) -> Option<String> {
     let cursor = log
         .iter()
@@ -267,8 +268,8 @@ pub(crate) fn parse_posts(json: &str, link: &str) -> Result<FoundPosts, PreviewE
 
 /// The account whose posts are listed, from a post's `user`, in each site's fields: Instagram's `username`,
 /// `full_name`, `profile_pic_url` and `media_count` (its posts), X's `name` (the handle), `nick` and `profile_image`.
-/// X's `media_count` is left out: whether it counts posts or the pictures and videos in them isn't known, and the
-/// listing calls its total posts.
+/// X's `media_count` is left out: it matches neither the posts with pictures or videos nor their files (110 for 81
+/// posts of 98 files), and the listing calls its total posts.
 fn account_info(post: &Value) -> Option<AccountInfo> {
     let user = post.get("user").filter(|user| user.is_object())?;
     let on_x = text(post, "category").as_deref() == Some("twitter");
@@ -703,6 +704,13 @@ mod tests {
             ]))
             .as_deref(),
             Some("3502010472215348212_25025320")
+        );
+        assert_eq!(
+            last_cursor(&log(&[
+                "[twitter][debug] Cursor: DAABCgABGUjK5Zw__-sKAAIZSJ4JK1uQAAgAAwAAAAIAAA"
+            ]))
+            .as_deref(),
+            Some("DAABCgABGUjK5Zw__-sKAAIZSJ4JK1uQAAgAAwAAAAIAAA")
         );
         assert_eq!(
             last_cursor(&log(&["[instagram][debug] Cursor: None"])),

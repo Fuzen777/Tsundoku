@@ -30,6 +30,7 @@ import type { PickerLayouts } from "./bindings/PickerLayouts"
 import type { ListingKind } from "./bindings/ListingKind"
 import type { ListingMore } from "./bindings/ListingMore"
 import type { MoreItems } from "./bindings/MoreItems"
+import type { MoreRead } from "./bindings/MoreRead"
 import type { MovedFiles } from "./bindings/MovedFiles"
 import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
@@ -303,22 +304,33 @@ export async function cancelPreview(): Promise<void> {
 }
 
 /**
- * Reads the items after those a listing on the preview card has: the next ones (Load More), or all the rest (`all`,
- * Load All), calling `onItems` with each batch as it's read. Resolves once they're read; rejects with a PreviewError,
- * `cancelled` after `cancelLoadingMore` or once another preview starts. A batch may still arrive just after.
+ * Reads the items after those a listing on the preview card has, as `read` says: the next ones (Load More), on until
+ * enough new ones (Load New) or all the rest (Load All), calling `onItems` with each batch as it's read. Resolves once
+ * they're read; rejects with a PreviewError, `cancelled` after `cancelLoadingMore` or once another preview starts. A
+ * batch may still arrive just after.
  */
 export async function loadMoreOfListing(
   more: ListingMore,
-  all: boolean,
+  read: MoreRead,
   onItems: (batch: MoreItems) => void,
 ): Promise<void> {
-  if (!isTauri()) return standIns.loadMoreOfListing(more, all, onItems)
+  if (!isTauri()) return standIns.loadMoreOfListing(more, read, onItems)
   const channel = new Channel<MoreItems>()
   channel.onmessage = onItems
-  await invoke("load_more_of_listing", { more, all, onItems: channel })
+  await invoke("load_more_of_listing", { more, read, onItems: channel })
 }
 
-/** Stops Load More or Load All, keeping what was read. */
+/**
+ * How many items a listing on the preview card holds in all, when its first read didn't say and another read can (a
+ * YouTube channel's videos), for Load All to say; null when no read can. Rejects with a PreviewError, `cancelled` once
+ * the card closes or another preview starts.
+ */
+export function countListing(more: ListingMore): Promise<number | null> {
+  if (!isTauri()) return standIns.countListing(more)
+  return invoke<number | null>("count_listing", { more })
+}
+
+/** Stops Load More, Load New or Load All, keeping what was read. */
 export async function cancelLoadingMore(): Promise<void> {
   if (!isTauri()) return standIns.cancelLoadingMore()
   await invoke("cancel_loading_more")

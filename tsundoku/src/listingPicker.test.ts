@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { ListedItem } from "./bindings/ListedItem"
 import type { PastDownload } from "./bindings/PastDownload"
 import {
+  firstNewSince,
   initialSelection,
   isKnown,
   itemKey,
@@ -210,5 +211,20 @@ describe("the type filter", () => {
   it("shows the items of the type", () => {
     expect(ofType(account, "all")).toBe(account)
     expect(ofType(account, "images").map((entry) => entry.video.videoId)).toEqual(["photos", "more"])
+  })
+})
+
+describe("firstNewSince", () => {
+  it("finds the first new item Load New listed, past the known ones and those listed before", () => {
+    const listed = [
+      item("old new"),
+      item("downloaded", { lastDownload: downloadedWith("Best Video") }),
+      item("queued", { inQueue: true }),
+      item("first new"),
+      item("second new"),
+    ]
+    const before = new Set([itemKey(listed[0])])
+    expect(firstNewSince(listed, before)?.video.videoId).toBe("first new")
+    expect(firstNewSince(listed.slice(0, 3), before)).toBeUndefined()
   })
 })

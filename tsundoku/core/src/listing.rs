@@ -9,6 +9,7 @@
 //!
 //! Tested against real answers saved under `tests/fixtures/listing`.
 
+use std::collections::HashSet;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -33,19 +34,53 @@ pub const PINNED_AT_MOST: usize = 3;
 /// A listing can take a while: a long playlist is read 100 videos per request, Instagram waits between requests.
 const LISTING_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
-/// How many more items Load More lists on a YouTube channel or an X account: as many as the first read.
+/// How many more items Load More lists on a YouTube channel: as many as the first read.
 pub const MORE_COUNT: u32 = NEWEST_COUNT;
 
-/// Instagram answers an account's posts 12 at a time, and gallery-dl's cursor (`gallery::last_cursor`) only moves on
-/// after a whole page of them. Each read after the first asks for whole pages, so the next one starts on the page
-/// after: Load More 4 pages, each read of Load All 8.
-const INSTAGRAM_PAGE: u32 = 12;
-const INSTAGRAM_MORE: u32 = 4 * INSTAGRAM_PAGE;
-const INSTAGRAM_ALL_STEP: u32 = 8 * INSTAGRAM_PAGE;
+/// The most new items Load New may be asked for.
+const NEW_COUNT_AT_MOST: u32 = 1000;
 
-/// The pause between two of Load All's reads of an Instagram account. gallery-dl already waits 6 to 12 seconds between
-/// its own requests to Instagram, but a new run's first request doesn't.
-const INSTAGRAM_PAUSE: Duration = Duration::from_secs(10);
+/// How an account's posts are read after the first ones, in whole pages: from where the last read stopped when the site
+/// `resumes`, else from the post after `more.read` (`--post-range`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Paging {
+    /// How many posts the site answers per request.
+    page: u32,
+    /// Load More's posts.
+    next: u32,
+    /// Each of Load New's reads, and of Load All's when the site `resumes`, handed over as it ends, so a stop keeps the
+    /// ones before.
+    step: u32,
+    /// Between two reads.
+    pause: Duration,
+    /// A later read starts from gallery-dl's cursor (`gallery::last_cursor`), the page where the last one stopped, so
+    /// the newer pages aren't read again. The cursor only moves on after a whole page, so each read asks for whole pages
+    /// and the next one starts on the page after. Without it, Load All reads the rest in one run.
+    resumes: bool,
+}
+
+/// Instagram answers 12 posts per request and asks to slow down when read quickly. gallery-dl already waits 6 to 12
+/// seconds between its own requests, but a new run's first request doesn't, so Load All waits 10 seconds between runs.
+const INSTAGRAM_PAGING: Paging = Paging {
+    page: 12,
+    next: 48,
+    step: 96,
+    pause: Duration::from_secs(10),
+    resumes: true,
+};
+
+/// X is asked for 50 posts per request (gallery-dl's `limit`) and answers up to that many, fewer at times (21 on a
+/// first page), without waits. It doesn't resume: gallery-dl 1.32.20 reads X's Media tab as two timelines, photos then
+/// videos, and a cursor saved in the photos fails once they end (X refuses it as "Dependency: Unspecified" and the run
+/// aborts, losing what it read; seen 2026-11-15 on x.com/rustlang). So X is read by `--post-range` from `more.read`,
+/// reading the newer pages again each run, which X allows without waits.
+const X_PAGING: Paging = Paging {
+    page: 50,
+    next: 50,
+    step: 200,
+    pause: Duration::ZERO,
+    resumes: false,
+};
 
 /// How long one read after the first may take: up to 8 of Instagram's pages, each after gallery-dl's 6 to 12 seconds,
 /// and a minute's wait or more whenever Instagram asks to slow down.
@@ -55,7 +90,10 @@ const MORE_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const ALL_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 
 /// How many of a channel's videos Load All hands over at a time, as yt-dlp reads them.
-const ENTRIES_PER_BATCH: usize = 100;
+const ENTRIES_PER_BATCH: u32 = 100;
+
+/// How long counting a channel's videos may take (`count_more`): one request for its playlist's first page.
+const COUNT_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// The longest title made from a listing's name.
 const TITLE_LENGTH: usize = 200;
@@ -172,12 +210,12 @@ pub struct Listing {
     /// Only the newest `NEWEST_COUNT` were asked for (a channel or an account); a playlist is listed whole.
     pub newest_only: bool,
     pub items: Vec<ListedItem>,
-    /// Where the items after these start, for Load More and Load All, or `None` when the listing is whole: a playlist,
-    /// or a channel or an account with fewer than `NEWEST_COUNT`.
+    /// Where the items after these start, for Load More, Load New and Load All, or `None` when the listing is whole: a
+    /// playlist, or a channel or an account with fewer than `NEWEST_COUNT`.
     pub more: Option<ListingMore>,
 }
 
-/// Where a listing's next items start, for the picker's Load More and Load All (`read_more`).
+/// Where a listing's next items start, for the picker's Load More, Load New and Load All (`read_more`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -191,6 +229,23 @@ pub struct ListingMore {
     /// Where gallery-dl stopped in an Instagram account's posts (`gallery::last_cursor`): the next read starts there,
     /// without reading the newer pages again. It may start with posts read before, which the picker keeps once.
     pub cursor: Option<String>,
+    /// A YouTube channel's ID ("UC…"), for `count_more` to read how many videos its Videos tab holds, which the tab
+    /// doesn't say.
+    pub channel_id: Option<String>,
+}
+
+/// What the picker asks `read_more` for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum MoreRead {
+    /// The next items (Load More).
+    Next,
+    /// On past what the history and the queue have, until at least `count` items they don't have are listed, or the
+    /// end (Load New): what's new since the last download, when the newest were downloaded.
+    New { count: u32 },
+    /// All the rest (Load All).
+    All,
 }
 
 /// Items after a listing's first ones, as Load More or Load All read them, handed over a batch at a time
@@ -335,15 +390,15 @@ pub fn read(
     if listing.reads_images() {
         let range = format!("1-{NEWEST_COUNT}");
         let mut extra = vec!["--post-range", range.as_str()];
-        let instagram = on_instagram(&listing.link);
-        if instagram {
+        let resumes = paging_of(&listing.link).resumes;
+        if resumes {
             // Its debug lines say where it stopped, for Load More to start there (`gallery::last_cursor`).
             extra.push("--verbose");
         }
         let read = gallery::run_logged(images, &listing.link, &extra, LISTING_TIMEOUT, cancel)
             .and_then(|answer| {
                 let mut found = from_gallery_dl(&answer.json, &listing.link)?;
-                if let Some(more) = found.more.as_mut().filter(|_| instagram) {
+                if let Some(more) = found.more.as_mut().filter(|_| resumes) {
                     more.cursor = gallery::last_cursor(&answer.log);
                 }
                 Ok(found)
@@ -380,58 +435,139 @@ pub fn read_any(
     }))
 }
 
-/// Lists the items after those a listing read so far (`more`): the next ones for Load More, or all the rest for Load
-/// All (`all`), handing them to `on_batch` as they're read. `on_batch` can stop it with an error, which it then returns.
+/// Lists the items after those a listing read so far (`more`): the next ones (`MoreRead::Next`), on until enough new
+/// ones (`MoreRead::New`) or all the rest (`MoreRead::All`), handing them to `on_batch` as they're read. `on_batch`
+/// answers how many of a batch's items the history and the queue don't have, once it marked them, for Load New to
+/// know when it has enough; it can stop the read with an error, which it then returns.
 ///
-/// - A YouTube channel: yt-dlp from the entry after `more.read`, the next `MORE_COUNT` (`--playlist-items`); all the
-///   rest as yt-dlp reads them, `ENTRIES_PER_BATCH` at a time (`metadata::run_entries`).
+/// - A YouTube channel: yt-dlp from the entry after `more.read`, the next `MORE_COUNT` (`--playlist-items`); or the
+///   rest as yt-dlp reads them (`metadata::run_entries`), handed over `ENTRIES_PER_BATCH` at a time, or for Load New,
+///   once some new ones came, as many at a time as are still wanted, so it stops close to the count asked for.
 /// - An Instagram account: gallery-dl from `more.cursor`, the page where the last read stopped, so the pages before
-///   aren't read again (Instagram is the site that asks to slow down). Load More reads 4 pages, Load All 8 at a time
-///   with `INSTAGRAM_PAUSE` between, each read handed over once it ends, so a stop keeps what was read. Without a
-///   cursor, from the post after `more.read`, as for X.
-/// - An X account: gallery-dl from the post after `more.read`, the next `MORE_COUNT` or all the rest in one read
-///   (`--post-range`). X answers 50 posts per request without waits, so reading the newer ones again costs little.
+///   aren't read again (Instagram is the site that asks to slow down), in whole pages (`Paging`): Load More's posts, or
+///   reads of `Paging::step` with `Paging::pause` between, each handed over once it ends, so a stop keeps what was
+///   read. Load New asks for as many pages as are still wanted once some new ones came. Without a cursor, from the post
+///   after `more.read` (`--post-range`).
+/// - An X account: gallery-dl from the post after `more.read` (`--post-range`; `X_PAGING` says why): Load More's 50,
+///   Load New in reads of 200 (then the whole pages still wanted), Load All the rest in one read.
 ///
 /// A playlist is listed whole, so it has nothing more. The first batch may repeat items read before, when a read
-/// starts on a page it ended in.
+/// starts on a page it ended in; later ones leave out what this read handed over already.
 pub fn read_more(
     videos: &FetchTools,
     images: &GalleryTools,
     more: &ListingMore,
-    all: bool,
+    read: MoreRead,
     cancel: &CancelToken,
-    on_batch: &mut dyn FnMut(MoreItems) -> Result<(), PreviewError>,
+    on_batch: &mut dyn FnMut(MoreItems) -> Result<u32, PreviewError>,
 ) -> Result<(), PreviewError> {
     // Only a link `listing_link` gives is read: the picker hands back what `read` gave it.
     let listing = listing_link(&more.link)
         .filter(|listing| listing.link == more.link && listing.kind != ListingKind::Playlist)
         .ok_or_else(|| not_listable(&more.link))?;
+    let wanted = match read {
+        MoreRead::New { count } => Some(count.clamp(1, NEW_COUNT_AT_MOST)),
+        MoreRead::Next | MoreRead::All => None,
+    };
     if !listing.reads_images() {
-        return if all {
-            channel_rest(videos, more, cancel, on_batch)
-        } else {
-            on_batch(channel_more(videos, more, cancel)?)
+        return match read {
+            MoreRead::Next => on_batch(channel_more(videos, more, cancel)?).map(|_| ()),
+            MoreRead::New { .. } | MoreRead::All => {
+                channel_rest(videos, more, wanted, cancel, on_batch)
+            }
         };
     }
-    let instagram = on_instagram(&more.link);
+    let paging = paging_of(&more.link);
     let mut from = more.clone();
+    let mut handed = HashSet::new();
+    let mut found = 0;
     loop {
-        let count = match (instagram, all) {
-            (true, false) => Some(INSTAGRAM_MORE),
-            (true, true) => Some(INSTAGRAM_ALL_STEP),
-            (false, false) => Some(MORE_COUNT),
-            (false, true) => None,
+        let count = match (read, wanted) {
+            (MoreRead::Next, _) => Some(paging.next),
+            (_, Some(wanted)) if found > 0 => {
+                Some(whole_pages(wanted.saturating_sub(found), paging.page))
+            }
+            (MoreRead::All, _) if !paging.resumes => None,
+            _ => Some(paging.step),
         };
-        let batch = account_more(images, &from, count, instagram, cancel)
+        let mut batch = account_more(images, &from, count, paging.resumes, cancel)
             .map_err(|error| signed_out_failure(error, images.cookies.is_some()))?;
+        batch
+            .items
+            .retain(|item| handed.insert((item.video.site.clone(), item.video.video_id.clone())));
         let next = batch.more.clone();
-        on_batch(batch)?;
+        found += on_batch(batch)?;
+        let enough = match (read, wanted) {
+            (MoreRead::Next, _) => true,
+            (_, Some(wanted)) => found >= wanted,
+            (_, None) => false,
+        };
         match next {
-            Some(next) if all => from = next,
+            Some(next) if !enough => from = next,
             _ => return Ok(()),
         }
-        pause(INSTAGRAM_PAUSE, cancel)?;
+        pause(paging.pause, cancel)?;
     }
+}
+
+/// How an account's site is read after the first posts.
+fn paging_of(link: &str) -> Paging {
+    if on_instagram(link) {
+        INSTAGRAM_PAGING
+    } else {
+        X_PAGING
+    }
+}
+
+/// `count` posts rounded up to whole pages of `page`, at least one page.
+fn whole_pages(count: u32, page: u32) -> u32 {
+    count.div_ceil(page).max(1) * page
+}
+
+/// How many items a listing holds in all, when its first read didn't say and another read can, for Load All to say how
+/// many it would list: a YouTube channel's Videos tab, as the channel's playlist of its uploads that are videos says
+/// (`videos_playlist`), which holds the same videos. `None` for a listing no read can count: an X account, whose count
+/// of media doesn't match its posts (an Instagram account says at once), or when the count is less than was read.
+pub fn count_more(
+    videos: &FetchTools,
+    more: &ListingMore,
+    cancel: &CancelToken,
+) -> Result<Option<u32>, PreviewError> {
+    let channel = listing_link(&more.link)
+        .is_some_and(|listing| listing.link == more.link && listing.kind == ListingKind::Channel);
+    let Some(playlist) = more
+        .channel_id
+        .as_deref()
+        .and_then(videos_playlist)
+        .filter(|_| channel)
+    else {
+        return Ok(None);
+    };
+    let answer = metadata::run(
+        videos,
+        &playlist,
+        &["--playlist-items", "1"],
+        COUNT_TIMEOUT,
+        cancel,
+    )?;
+    let answer: Value =
+        serde_json::from_str(&answer.json).map_err(|error| PreviewError::Failed {
+            detail: format!("yt-dlp's answer can't be read: {error}"),
+        })?;
+    Ok(count_field(&answer, "playlist_count").filter(|total| *total >= more.read))
+}
+
+/// The playlist of a YouTube channel's uploads that are videos, without Shorts and live streams: "UULF" and the
+/// channel's ID after "UC". It holds the Videos tab's videos and says how many there are, which the tab doesn't. `None`
+/// for anything that isn't a channel's ID.
+fn videos_playlist(channel_id: &str) -> Option<String> {
+    let id = channel_id.strip_prefix("UC").filter(|id| {
+        id.len() == 22
+            && id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+    })?;
+    Some(format!("https://www.youtube.com/playlist?list=UULF{id}"))
 }
 
 /// The next `MORE_COUNT` of a channel's videos after `more.read`.
@@ -468,38 +604,47 @@ fn channel_more(
         items: found.items,
         more: found.more.map(|next| ListingMore {
             title: more.title.clone(),
+            channel_id: more.channel_id.clone(),
             ..next
         }),
         total: found.total,
     })
 }
 
-/// All of a channel's videos after `more.read`, handed over `ENTRIES_PER_BATCH` at a time as yt-dlp reads them, then
-/// a last batch with no `more`. When the read fails or is stopped, what was read is handed over first, with where it
-/// stopped as its `more`.
+/// A channel's videos after `more.read` as yt-dlp reads them, handed over `ENTRIES_PER_BATCH` at a time, then a last
+/// batch with no `more`. For Load New (`wanted`), it stops once `on_batch` counted that many new ones, handing over
+/// only as many at a time as are still wanted once some came. When the read fails or is stopped, what was read is
+/// handed over first, with where it stopped as its `more`.
 fn channel_rest(
     videos: &FetchTools,
     more: &ListingMore,
+    wanted: Option<u32>,
     cancel: &CancelToken,
-    on_batch: &mut dyn FnMut(MoreItems) -> Result<(), PreviewError>,
+    on_batch: &mut dyn FnMut(MoreItems) -> Result<u32, PreviewError>,
 ) -> Result<(), PreviewError> {
     let items_from = format!("{}:", more.read + 1);
     let mut read = more.read;
     let mut batch: Vec<ListedItem> = Vec::new();
+    let mut found = 0;
     let mut refused = None;
+    let mut enough = false;
     let stop = cancel.clone();
     let mut hand_over = |items: Vec<ListedItem>, read: u32, refused: &mut Option<PreviewError>| {
         let next = ListingMore {
             read,
             ..more.clone()
         };
-        if let Err(error) = on_batch(MoreItems {
+        match on_batch(MoreItems {
             items,
             more: Some(next),
             total: None,
         }) {
-            *refused = Some(error);
-            stop.cancel();
+            Ok(new) => new,
+            Err(error) => {
+                *refused = Some(error);
+                stop.cancel();
+                0
+            }
         }
     };
     let result = metadata::run_entries(
@@ -514,7 +659,7 @@ fn channel_rest(
         ALL_TIMEOUT,
         cancel,
         &mut |line| {
-            if refused.is_some() {
+            if refused.is_some() || enough {
                 return;
             }
             let Ok(entry) = serde_json::from_str::<Value>(line) else {
@@ -522,13 +667,26 @@ fn channel_rest(
             };
             read += 1;
             batch.extend(channel_entry(entry, &more.title));
-            if batch.len() >= ENTRIES_PER_BATCH {
-                hand_over(std::mem::take(&mut batch), read, &mut refused);
+            let size = match wanted {
+                Some(wanted) if found > 0 => {
+                    wanted.saturating_sub(found).clamp(1, ENTRIES_PER_BATCH)
+                }
+                _ => ENTRIES_PER_BATCH,
+            };
+            if count_of(batch.len()) >= size {
+                found += hand_over(std::mem::take(&mut batch), read, &mut refused);
+                if wanted.is_some_and(|wanted| found >= wanted) {
+                    enough = true;
+                    stop.cancel();
+                }
             }
         },
     );
     if let Some(error) = refused {
         return Err(error);
+    }
+    if enough {
+        return Ok(());
     }
     if let Err(error) = result {
         if !batch.is_empty() {
@@ -541,6 +699,7 @@ fn channel_rest(
         more: None,
         total: Some(read),
     })
+    .map(|_| ())
 }
 
 /// One of a channel's videos from yt-dlp's line for it (`metadata::run_entries`), as `from_yt_dlp` makes it from the
@@ -569,20 +728,19 @@ fn channel_entry(mut entry: Value, title: &str) -> Option<ListedItem> {
     Some(item)
 }
 
-/// An account's posts after those read so far: from `more.cursor` on Instagram (`instagram`), else from the post after
-/// `more.read`; at most `count`, or all the rest. The answer's end comes before `count` once the account's end is
-/// reached.
+/// An account's posts after those read so far, at most `count`, or all the rest: from `more.cursor` when there's one,
+/// else from the post after `more.read`. The answer's end comes before `count` once the account's end is reached. When
+/// the site `resumes`, the next read starts from where this one stopped.
 fn account_more(
     images: &GalleryTools,
     more: &ListingMore,
     count: Option<u32>,
-    instagram: bool,
+    resumes: bool,
     cancel: &CancelToken,
 ) -> Result<MoreItems, PreviewError> {
     let cursor = more
         .cursor
         .as_deref()
-        .filter(|_| instagram)
         .map(|cursor| format!("cursor={cursor}"));
     let range = match (&cursor, count) {
         (Some(_), Some(count)) => format!("1-{count}"),
@@ -594,7 +752,8 @@ fn account_more(
     if let Some(cursor) = &cursor {
         extra.extend(["-o", cursor.as_str()]);
     }
-    if instagram {
+    if resumes {
+        // Its debug lines say where it stopped, for the next read to start there (`gallery::last_cursor`).
         extra.push("--verbose");
     }
     let timeout = if count.is_some() {
@@ -613,15 +772,11 @@ fn account_more(
     name_items(&mut items, &more.title);
 
     let reached_end = count.is_none_or(|count| answered < count);
-    let next_cursor = if instagram {
-        gallery::last_cursor(&answer.log)
-    } else {
-        None
-    };
     let next = (!reached_end).then(|| ListingMore {
         read: more.read + answered,
         // A cursor that didn't move would read the same posts again: from `read` instead.
-        cursor: next_cursor.filter(|next| more.cursor.as_ref() != Some(next)),
+        cursor: gallery::last_cursor(&answer.log)
+            .filter(|next| resumes && more.cursor.as_ref() != Some(next)),
         ..more.clone()
     });
     Ok(MoreItems {
@@ -824,6 +979,11 @@ fn from_yt_dlp_window(
             title: title.clone(),
             read: window.start + count_of(entries.len()),
             cursor: None,
+            // A channel's tab is its channel's ID too.
+            channel_id: (kind == ListingKind::Channel)
+                .then(|| text(&answer, "channel_id").or_else(|| text(&answer, "id")))
+                .flatten()
+                .filter(|id| videos_playlist(id).is_some()),
         })
         .filter(|more| total.is_none_or(|total| more.read < total));
     Ok(Listing {
@@ -999,6 +1159,7 @@ pub(crate) fn from_gallery_dl(json: &str, link: &str) -> Result<Listing, Preview
             title: title.clone(),
             read: count_of(answered),
             cursor: None,
+            channel_id: None,
         })
         .filter(|more| total.is_none_or(|total| more.read < total));
     Ok(Listing {

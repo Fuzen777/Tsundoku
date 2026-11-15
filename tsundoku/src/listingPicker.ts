@@ -98,6 +98,15 @@ export function picksFor(
   return picks
 }
 
+/** How many new items Load New lists on to: as many as Load More's. */
+export const LOAD_NEW_COUNT = 50
+
+/** The first of `items` that's new (neither the history nor the queue has it) and wasn't among `before`'s keys: where
+ * the picker scrolls once Load New has listed on past what's known. */
+export function firstNewSince(items: readonly ListedItem[], before: ReadonlySet<string>): ListedItem | undefined {
+  return items.find((item) => !isKnown(item) && !before.has(itemKey(item)))
+}
+
 /** A picker's items and which of them are ticked, kept together so items loaded later can be ticked as they arrive. */
 export interface PickerItems {
   items: readonly ListedItem[]

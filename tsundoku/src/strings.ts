@@ -556,14 +556,38 @@ export const strings = {
     allHidden: "Everything listed so far is downloaded or in the queue.",
     loadMore: "Load More",
     loadMoreHint: (noun: readonly [string, string]) => `Lists the next ${noun[1]}, older than these.`,
+    /** Lists on past what's downloaded until this many new ones are listed. */
+    loadNew: (count: number) => `Load ${count} New`,
+    loadNewHint: (count: number, noun: readonly [string, string]) =>
+      `Lists on past the ${noun[1]} downloaded or in the queue until ${count} that aren't are listed, or the last one is. Stop keeps what's listed by then.`,
     /** "Load All (8,634)", with how many the site says it holds, when it says. */
     loadAll: (total: number | null) => (total === null ? "Load All" : `Load All (${total.toLocaleString()})`),
-    loadAllHint: "Lists everything, a page at a time. Stop keeps what's listed by then.",
-    /** While Load All reads: "Listing… 150 of 8,634 posts". */
-    loadingAll: (count: number, total: number | null, noun: readonly [string, string]) =>
-      total !== null && total > count
-        ? `Listing… ${count.toLocaleString()} of ${total.toLocaleString()} ${noun[1]}`
-        : `Listing… ${count.toLocaleString()} ${count === 1 ? noun[0] : noun[1]}`,
+    /** Without a total: whether it's being counted (a YouTube channel's videos), the count couldn't be read, or the
+     * site doesn't say. */
+    loadAllHint: (
+      count: number,
+      total: number | null,
+      noun: readonly [string, string],
+      counted: "counting" | "failed" | null,
+    ) => {
+      const keeps = "Stop keeps what's listed by then."
+      if (total !== null) {
+        return `Lists the other ${Math.max(total - count, 0).toLocaleString()} ${noun[1]}, a page at a time. ${keeps}`
+      }
+      const unknown = {
+        counting: `Counting how many ${noun[1]} there are…`,
+        failed: `How many ${noun[1]} there are couldn't be read.`,
+        none: `The site doesn't say how many ${noun[1]} there are.`,
+      }[counted ?? "none"]
+      return `Lists everything, a page at a time. ${unknown} ${keeps}`
+    },
+    /** While Load New or Load All reads: "Listing… 150 of 8,634 posts · 12 new". */
+    loadingAll: (count: number, total: number | null, noun: readonly [string, string], fresh: number) =>
+      `${
+        total !== null && total > count
+          ? `Listing… ${count.toLocaleString()} of ${total.toLocaleString()} ${noun[1]}`
+          : `Listing… ${count.toLocaleString()} ${count === 1 ? noun[0] : noun[1]}`
+      } · ${fresh.toLocaleString()} new`,
     /** Under Load All's count on Instagram, which asks to slow down when read quickly. */
     loadingSlowly: "Instagram is read a page of 12 at a time, about 10 seconds apart, so it doesn't ask to slow down.",
     stopLoading: "Stop",

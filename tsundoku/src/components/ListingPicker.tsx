@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react"
 import { Film, Images, Play, X } from "lucide-react"
-import { addManyToQueue, cancelLoadingMore, confirmWithUser, loadMoreOfListing } from "../api"
+import { addManyToQueue, cancelLoadingMore, confirmWithUser, countListing, loadMoreOfListing } from "../api"
 import type { ListedItem } from "../bindings/ListedItem"
 import type { Listing } from "../bindings/Listing"
 import type { ListingMore } from "../bindings/ListingMore"
+import type { MoreRead } from "../bindings/MoreRead"
 import type { PickerLayout } from "../bindings/PickerLayout"
 import { describeDownloadError, describePreviewError, isCancelled, type ErrorDescription } from "../errors"
 import {
@@ -15,9 +16,11 @@ import {
   joinDetails,
 } from "../format"
 import {
+  firstNewSince,
   isKnown,
   isQueued,
   itemKey,
+  LOAD_NEW_COUNT,
   nounOf,
   pickerItems,
   picksFor,
@@ -31,6 +34,7 @@ import {
   type PickedPreset,
 } from "../listingPicker"
 import { usePickerLayout, usePresets, useRulePresets } from "../queries"
+import { scrollWithin } from "../scrollWithin"
 import { strings } from "../strings"
 import { useTypeFilter } from "../useTypeFilter"
 import { Button } from "./Button"
@@ -54,20 +58,28 @@ interface ListingPickerProps {
   onWatched: () => void
 }
 
-/** What the picker is loading: the next items (Load More) or all the rest (Load All). */
-type Loading = "more" | "all"
+/** What the picker is loading: the next items (Load More), on until enough new ones (Load New) or all the rest (Load
+ * All). */
+type Loading = MoreRead["kind"]
+
+/** Where Load All's count is, when the first read didn't say: another read counting it (a YouTube channel's videos), or
+ * that read failed. */
+type Counted = "counting" | "failed" | null
 
 /**
  * The preview card for a channel, playlist or account: what it is, its items with a box each (the new ones ticked,
  * those downloaded before or in the queue greyed, or hidden with Hide Downloaded), a type filter when they're of
- * several types (only the images of an account, say), Load More and Load All when only the newest were listed, and
- * Download Selected, which queues each ticked item shown as its own download. A video starts with the preset a rule
- * picks for it, else the one picked here.
+ * several types (only the images of an account, say), Load More, Load New and Load All when only the newest were
+ * listed, and Download Selected, which queues each ticked item shown as its own download. A video starts with the
+ * preset a rule picks for it, else the one picked here.
  */
 export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingPickerProps) {
   const [{ items, selection }, setPicker] = useState(() => pickerItems(listing.items))
   const [more, setMore] = useState<ListingMore | null>(listing.more)
   const [total, setTotal] = useState(listing.total)
+  const [counted, setCounted] = useState<Counted>(() =>
+    listing.total === null && listing.more?.channelId ? "counting" : null,
+  )
   const [loading, setLoading] = useState<Loading | null>(null)
   const [stopping, setStopping] = useState(false)
   const [loadError, setLoadError] = useState<ErrorDescription | null>(null)
@@ -81,6 +93,9 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
   const presetId = chosenId ?? presets?.defaultId ?? null
   // Batches that arrive after the card closed are dropped; closing it stops the load.
   const open = useRef(true)
+  // Once Load New ends, the items listed before it, so the list can scroll to the first new one after them.
+  const listedBeforeNew = useRef<ReadonlySet<string> | null>(null)
+  const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
     open.current = true
     return () => {
@@ -88,6 +103,28 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
       void cancelLoadingMore()
     }
   }, [])
+
+  // A YouTube channel's Videos tab doesn't say how many videos it holds: another read counts them, for Load All to say.
+  // Closing the card stops it.
+  useEffect(() => {
+    const from = listing.more
+    if (listing.total !== null || !from?.channelId) return
+    let current = true
+    countListing(from).then(
+      (count) => {
+        if (!current) return
+        // Unless Load All reached the end meanwhile, which says.
+        if (count !== null) setTotal((total) => total ?? count)
+        setCounted(null)
+      },
+      (caught: unknown) => {
+        if (current && !isCancelled(caught)) setCounted("failed")
+      },
+    )
+    return () => {
+      current = false
+    }
+  }, [listing])
 
   const setSelection = (update: (selection: ReadonlySet<string>) => ReadonlySet<string>) =>
     setPicker((current) => ({ ...current, selection: update(current.selection) }))
@@ -108,14 +145,28 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
   }
   const picks = presets ? picksFor(shown, selection, presetFor) : null
 
-  /** Lists the next items, or all the rest, adding each batch as it comes; new ones are ticked if anything is. */
-  async function load(all: boolean) {
+  // After Load New, the list scrolls to the first new item it listed, past the known ones before it. Its last batch may
+  // come just after it ends, so until one is found it keeps looking.
+  useEffect(() => {
+    const before = listedBeforeNew.current
+    if (loading !== null || !before) return
+    const first = firstNewSince(shown, before)
+    const tile = first && list.current?.querySelector<HTMLElement>(`[data-item="${CSS.escape(itemKey(first))}"]`)
+    if (!tile) return
+    listedBeforeNew.current = null
+    scrollWithin(tile, "start", "smooth")
+  }, [loading, shown])
+
+  /** Lists the next items, on until enough new ones, or all the rest, adding each batch as it comes; new ones are
+   * ticked if anything is. */
+  async function load(read: MoreRead) {
     if (!more || loading) return
-    setLoading(all ? "all" : "more")
+    setLoading(read.kind)
     setLoadError(null)
     const tickNew = selection.size > 0
+    listedBeforeNew.current = read.kind === "new" ? new Set(items.map(itemKey)) : null
     try {
-      await loadMoreOfListing(more, all, (batch) => {
+      await loadMoreOfListing(more, read, (batch) => {
         if (!open.current) return
         setPicker((current) => withMoreItems(current, batch.items, listing.kind, tickNew))
         setMore(batch.more)
@@ -168,12 +219,14 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
       stopping={stopping}
       canLoad={more !== null}
       count={items.length}
+      fresh={items.filter((item) => !isKnown(item)).length}
       total={total}
+      counted={total === null ? counted : null}
       noun={noun}
       slowly={listing.kind === "account" && listing.siteName === "instagram.com"}
       error={loadError}
       disabled={adding}
-      onLoad={(all) => void load(all)}
+      onLoad={(read) => void load(read)}
       onStop={stop}
     />
   )
@@ -234,18 +287,20 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
               <PickerViewControls layout={layout} onChange={changeLayout} />
             </div>
           </div>
-          {shown.length === 0 ? (
-            <p className="text-fg-secondary">{strings.picker.allHidden}</p>
-          ) : (
-            <ListedItems
-              items={shown}
-              layout={layout}
-              showUploader={listing.kind === "playlist"}
-              isSelected={(item) => selection.has(itemKey(item))}
-              disabled={adding}
-              onSelect={(item, ticked) => setSelection((current) => withItem(current, item, ticked))}
-            />
-          )}
+          <div ref={list}>
+            {shown.length === 0 ? (
+              <p className="text-fg-secondary">{strings.picker.allHidden}</p>
+            ) : (
+              <ListedItems
+                items={shown}
+                layout={layout}
+                showUploader={listing.kind === "playlist"}
+                isSelected={(item) => selection.has(itemKey(item))}
+                disabled={adding}
+                onSelect={(item, ticked) => setSelection((current) => withItem(current, item, ticked))}
+              />
+            )}
+          </div>
           {loadRow}
           {watching ? (
             <WatchForm listing={{ ...listing, items: [...items] }} onCancel={() => setWatching(false)} onWatched={onWatched} />
@@ -302,28 +357,35 @@ interface LoadRowProps {
   stopping: boolean
   /** There's more to list. */
   canLoad: boolean
-  /** How many are listed so far, and how many there are in all when the site says. */
+  /** How many are listed so far, how many of them the history and the queue don't have, and how many there are in all
+   * when the site says. */
   count: number
+  fresh: number
   total: number | null
+  /** Without a total, whether another read is counting it, or couldn't. */
+  counted: Counted
   noun: readonly [string, string]
   /** Instagram: Load All goes a page at a time, slowly, which a line under it says. */
   slowly: boolean
   error: ErrorDescription | null
   disabled: boolean
-  onLoad: (all: boolean) => void
+  onLoad: (read: MoreRead) => void
   onStop: () => void
 }
 
 /**
- * Under the items: Load More and Load All (with how many there are, when the site says), or while Load All lists them,
- * how many are listed so far and Stop. What went wrong shows over them, and they stay to try again.
+ * Under the items: Load More, Load New and Load All (with how many there are, when the site says or another read
+ * counted them), or while Load New or Load All lists them, how many are listed so far and how many are new, and Stop.
+ * What went wrong shows over them, and they stay to try again.
  */
 function LoadRow({
   loading,
   stopping,
   canLoad,
   count,
+  fresh,
   total,
+  counted,
   noun,
   slowly,
   error,
@@ -335,11 +397,11 @@ function LoadRow({
   return (
     <div className="flex flex-col items-center gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
-      {loading === "all" ? (
+      {loading === "all" || loading === "new" ? (
         <>
           <div className="flex items-center gap-3">
             <p className="text-fg-secondary tabular-nums" role="status">
-              {text.loadingAll(count, total, noun)}
+              {text.loadingAll(count, total, noun, fresh)}
             </p>
             <Button size="sm" disabled={stopping} onClick={onStop}>
               {text.stopLoading}
@@ -352,18 +414,26 @@ function LoadRow({
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              loading={loading === "more"}
+              loading={loading === "next"}
               disabled={disabled}
               title={text.loadMoreHint(noun)}
-              onClick={() => onLoad(false)}
+              onClick={() => onLoad({ kind: "next" })}
             >
               {text.loadMore}
             </Button>
             <Button
               size="sm"
               disabled={disabled || loading !== null}
-              title={text.loadAllHint}
-              onClick={() => onLoad(true)}
+              title={text.loadNewHint(LOAD_NEW_COUNT, noun)}
+              onClick={() => onLoad({ kind: "new", count: LOAD_NEW_COUNT })}
+            >
+              {text.loadNew(LOAD_NEW_COUNT)}
+            </Button>
+            <Button
+              size="sm"
+              disabled={disabled || loading !== null}
+              title={text.loadAllHint(count, total, noun, counted)}
+              onClick={() => onLoad({ kind: "all" })}
             >
               {text.loadAll(total)}
             </Button>
@@ -422,7 +492,7 @@ export function ListedRow({ item, showUploader, source = null, selected, disable
   const known = isKnown(item)
   const queued = isQueued(item)
   return (
-    <li className="[contain-intrinsic-size:auto_4.25rem] [content-visibility:auto]">
+    <li data-item={itemKey(item)} className="[contain-intrinsic-size:auto_4.25rem] [content-visibility:auto]">
       <label
         className={classes(
           "flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors",

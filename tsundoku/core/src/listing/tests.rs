@@ -171,8 +171,9 @@ fn reads_a_youtube_channels_newest_videos() {
             title: "NASA".to_owned(),
             read: 50,
             cursor: None,
+            channel_id: Some("UCLA_DiR1FfKNvjuUpBHmylQ".to_owned()),
         }),
-        "50 answered of the 50 asked: there may be more"
+        "50 answered of the 50 asked: there may be more, which the channel's ID can count"
     );
     assert!(
         listing
@@ -737,4 +738,32 @@ fn turns_timestamps_into_days() {
     assert_eq!(date_of_timestamp(951_782_400), "2000-02-29");
     assert_eq!(date_of_timestamp(1_383_782_399), "2013-11-06");
     assert_eq!(date_of_timestamp(-86_400), "1969-12-31");
+}
+
+#[test]
+fn counts_a_channels_videos_with_its_playlist_of_videos() {
+    assert_eq!(
+        videos_playlist("UCLA_DiR1FfKNvjuUpBHmylQ").as_deref(),
+        Some("https://www.youtube.com/playlist?list=UULFLA_DiR1FfKNvjuUpBHmylQ")
+    );
+    assert_eq!(
+        videos_playlist("UULFLA_DiR1FfKNvjuUpBHmylQ"),
+        None,
+        "not a channel's ID"
+    );
+    assert_eq!(
+        videos_playlist("UCLA_DiR1FfKNvjuUpBHmyl"),
+        None,
+        "one short"
+    );
+    assert_eq!(videos_playlist("UCLA_DiR1FfKNvjuUpBHmyl&"), None);
+    assert_eq!(videos_playlist("@NASA"), None);
+}
+
+#[test]
+fn reads_whole_pages() {
+    assert_eq!(whole_pages(1, 12), 12);
+    assert_eq!(whole_pages(12, 12), 12);
+    assert_eq!(whole_pages(13, 12), 24);
+    assert_eq!(whole_pages(0, 12), 12, "at least a page");
 }
