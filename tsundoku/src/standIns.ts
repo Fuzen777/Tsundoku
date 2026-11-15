@@ -1098,6 +1098,7 @@ function listedStandIn(kind: ListingKind, index: number): ListedItem {
       url: `${base.url}#${index}`,
       title: posts ? `Post number ${index + 1}, with a caption long enough to need cutting short` : `Video number ${index + 1}`,
       thumbnailUrl: posts ? standInPicture(index) : base.thumbnailUrl,
+      post: posts ? STAND_IN_POSTS[index % STAND_IN_POSTS.length] : null,
       durationSeconds: posts ? null : 45 + index * 97,
       uploadDate: posts ? daysAgo(index * 3) : null,
     },
@@ -1106,6 +1107,14 @@ function listedStandIn(kind: ListingKind, index: number): ListedItem {
     inQueue: index === 4,
   }
 }
+
+/** What an account's posts hold, in turn: images, a video, an image, both, so the type filter has types to offer. */
+const STAND_IN_POSTS = [
+  { images: 3, videos: 0, others: 0 },
+  { images: 0, videos: 1, others: 0 },
+  { images: 1, videos: 0, others: 0 },
+  { images: 2, videos: 1, others: 0 },
+]
 
 /** The shapes an account's posts come in (square, portrait, a reel's, landscape), as width over height. */
 const STAND_IN_SHAPES = [1, 4 / 5, 9 / 16, 1.91, 3 / 4, 4 / 5, 1, 16 / 9]

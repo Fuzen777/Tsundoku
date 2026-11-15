@@ -6,6 +6,8 @@ interface SegmentedOption<Value extends string> {
   label: string
   /** Shown instead of the label, which becomes the option's tooltip and its name for screen readers. */
   icon?: LucideIcon
+  /** What a worded option means, as its hover text. */
+  hint?: string
 }
 
 interface SegmentedControlProps<Value extends string> {
@@ -37,12 +39,13 @@ export function SegmentedControl<Value extends string>({
             role="radio"
             aria-checked={selected}
             aria-label={Icon ? option.label : undefined}
+            title={Icon ? undefined : option.hint}
             disabled={disabled}
             onClick={() => {
               if (!selected) onChange(option.value)
             }}
             className={`h-6 rounded text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40 ${
-              Icon ? "inline-flex items-center px-2" : "px-3"
+              Icon ? "inline-flex items-center px-2" : "px-3 whitespace-nowrap"
             } ${selected ? "bg-accent-fill text-on-accent" : "text-fg-secondary hover:text-fg"}`}
           >
             {Icon ? <Icon size={14} /> : option.label}

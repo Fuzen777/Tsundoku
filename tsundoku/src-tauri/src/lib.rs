@@ -420,7 +420,7 @@ pub fn run() {
             watched::download_watched_items,
             watched::download_new_watched_items,
             watched::skip_watched_items,
-            watched::skip_every_new_watched_item,
+            watched::skip_new_watched_items,
             pending::links_in_text,
             pending::check_link_file,
             pending::links_in_link_file,

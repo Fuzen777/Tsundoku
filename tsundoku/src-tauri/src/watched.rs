@@ -66,37 +66,44 @@ pub fn check_watched_sources(watched: Watched<'_>, ids: Vec<i64>) -> Result<(), 
     watched.check_many(&ids)
 }
 
-/// Download Selected (with `skip_rest`, the new items not picked are skipped), or Download on a skipped item. How many
-/// were queued.
+/// Download Selected: the picked items are queued and the new ones of `skipped` (the picker's other items shown) are
+/// skipped; or Download on skipped items, with none skipped. How many were queued.
 #[tauri::command]
 pub fn download_watched_items(
     watched: Watched<'_>,
     id: i64,
     items: Vec<ItemKey>,
-    skip_rest: bool,
+    skipped: Vec<ItemKey>,
 ) -> Result<usize, WatchedError> {
-    watched.download(id, &items, skip_rest)
+    watched.download(id, &items, &skipped)
 }
 
-/// Skip All: every new item of the source is skipped.
+/// Skip All: these items of the source, those the picker shows, are skipped.
 #[tauri::command]
-pub fn skip_watched_items(watched: Watched<'_>, id: i64) -> Result<(), WatchedError> {
-    watched.skip_new(id)
+pub fn skip_watched_items(
+    watched: Watched<'_>,
+    id: i64,
+    items: Vec<ItemKey>,
+) -> Result<(), WatchedError> {
+    watched.skip(id, &items)
 }
 
-/// All New Items' Download Selected: the picked new items of every source, each with its source's folder and preset
-/// (with `skip_rest`, every other new item is skipped). How many were queued.
+/// All New Items' Download Selected: the picked new items of every source, each with its source's folder and preset,
+/// and the new ones of `skipped` skipped. How many were queued.
 #[tauri::command]
 pub fn download_new_watched_items(
     watched: Watched<'_>,
     items: Vec<ItemKey>,
-    skip_rest: bool,
+    skipped: Vec<ItemKey>,
 ) -> Result<usize, WatchedError> {
-    watched.download_new(&items, skip_rest)
+    watched.download_new(&items, &skipped)
 }
 
-/// All New Items' Skip All: every new item of every source is skipped.
+/// All New Items' Skip All: these items, those it shows, are skipped in every source where they're new.
 #[tauri::command]
-pub fn skip_every_new_watched_item(watched: Watched<'_>) -> Result<(), WatchedError> {
-    watched.skip_every_new()
+pub fn skip_new_watched_items(
+    watched: Watched<'_>,
+    items: Vec<ItemKey>,
+) -> Result<(), WatchedError> {
+    watched.skip_new(&items)
 }

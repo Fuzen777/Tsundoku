@@ -11,7 +11,7 @@ import {
   openDownload,
   pickFolder,
   removeWatchedSource,
-  skipEveryNewWatchedItem,
+  skipNewWatchedItems,
   skipWatchedItems,
 } from "../api"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
@@ -28,6 +28,7 @@ import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { Field, SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
+import { ItemTypeFilter } from "../components/ItemTypeFilter"
 import { ExpandToggle } from "../components/LinkButton"
 import { ListedItems, ListingPicture } from "../components/ListingPicker"
 import { Menu } from "../components/Menu"
@@ -56,6 +57,7 @@ import {
   useWatchedSources,
 } from "../queries"
 import { strings } from "../strings"
+import { useTypeFilter } from "../useTypeFilter"
 import {
   allNewItems,
   arrangeSources,
@@ -495,7 +497,7 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
 
 /**
  * What checks found: each item ticked unless the history or the queue has it. Download Selected queues the ticked ones
- * and skips the rest.
+ * and skips the rest shown; Skip All skips what's shown. Those another type hides stay new.
  */
 function NewItems({ source }: { source: WatchedSource }) {
   return (
@@ -503,9 +505,14 @@ function NewItems({ source }: { source: WatchedSource }) {
       items={source.newItems}
       startsTicked={(item) => !item.lastDownload}
       showUploader={source.kind === "playlist"}
-      actions={(picked, run, busy) => (
+      actions={({ picked, unpicked, shown }, run, busy) => (
         <>
-          <Button variant="ghost" disabled={busy} onClick={() => run(() => skipWatchedItems(source.id))}>
+          <Button
+            variant="ghost"
+            disabled={busy}
+            title={text.skipAllHint}
+            onClick={() => run(() => skipWatchedItems(source.id, keysOf(shown)))}
+          >
             {text.skipAll}
           </Button>
           <Button
@@ -513,7 +520,7 @@ function NewItems({ source }: { source: WatchedSource }) {
             loading={busy}
             disabled={picked.length === 0}
             title={text.downloadSelectedHint}
-            onClick={() => run(() => downloadWatchedItems(source.id, keysOf(picked), true))}
+            onClick={() => run(() => downloadWatchedItems(source.id, keysOf(picked), keysOf(unpicked)))}
           >
             {text.downloadSelected(picked.length)}
           </Button>
@@ -538,12 +545,12 @@ function SkippedItems({ source }: { source: WatchedSource }) {
           items={source.skippedItems}
           startsTicked={() => false}
           showUploader={source.kind === "playlist"}
-          actions={(picked, run, busy) => (
+          actions={({ picked }, run, busy) => (
             <Button
               variant="secondary"
               loading={busy}
               disabled={picked.length === 0}
-              onClick={() => run(() => downloadWatchedItems(source.id, keysOf(picked), false))}
+              onClick={() => run(() => downloadWatchedItems(source.id, keysOf(picked), []))}
             >
               {text.downloadSelected(picked.length)}
             </Button>
@@ -555,7 +562,7 @@ function SkippedItems({ source }: { source: WatchedSource }) {
 }
 
 /** All New Items: every source's new items in one picker, each named with its source. Download Selected queues the
- * ticked ones, each with its source's folder and preset, and skips the rest. */
+ * ticked ones, each with its source's folder and preset, and skips the rest shown. */
 function AllNewItems({ sources }: { sources: readonly WatchedSource[] }) {
   const items = allNewItems(sources)
   if (items.length === 0) return <p className="text-fg-secondary">{text.allNewNone}</p>
@@ -566,9 +573,14 @@ function AllNewItems({ sources }: { sources: readonly WatchedSource[] }) {
         startsTicked={(item) => !item.lastDownload}
         showUploader={false}
         sourceOf={(item: SourcedItem) => item.sourceName}
-        actions={(picked, run, busy) => (
+        actions={({ picked, unpicked, shown }, run, busy) => (
           <>
-            <Button variant="ghost" disabled={busy} onClick={() => run(skipEveryNewWatchedItem)}>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              title={text.skipAllHint}
+              onClick={() => run(() => skipNewWatchedItems(keysOf(shown)))}
+            >
               {text.skipAll}
             </Button>
             <Button
@@ -576,7 +588,7 @@ function AllNewItems({ sources }: { sources: readonly WatchedSource[] }) {
               loading={busy}
               disabled={picked.length === 0}
               title={text.downloadSelectedHint}
-              onClick={() => run(() => downloadNewWatchedItems(keysOf(picked), true))}
+              onClick={() => run(() => downloadNewWatchedItems(keysOf(picked), keysOf(unpicked)))}
             >
               {text.downloadSelected(picked.length)}
             </Button>
@@ -593,22 +605,33 @@ interface ItemPickerProps<Item extends WatchedItem> {
   startsTicked: (item: Item) => boolean
   showUploader: boolean
   sourceOf?: (item: Item) => string
-  /** The buttons under the items, given the ticked ones, a way to run an action (which shows its error, and starts the
-   * ticks again once it's done) and whether one runs. */
-  actions: (picked: Item[], run: (action: () => Promise<unknown>) => void, busy: boolean) => ReactNode
+  /** The buttons under the items, given those shown (the type filter's) and which of them are ticked, a way to run an
+   * action (which shows its error, and starts the ticks again once it's done) and whether one runs. */
+  actions: (shownItems: ShownItems<Item>, run: (action: () => Promise<unknown>) => void, busy: boolean) => ReactNode
+}
+
+/** The items a picker shows, ticked or not. */
+interface ShownItems<Item> {
+  shown: readonly Item[]
+  picked: Item[]
+  unpicked: Item[]
 }
 
 /** A list of a source's items in the picker's view (shared with the preview card's), with a box that ticks them all,
- * how many are ticked, and the actions under them. */
+ * how many are ticked, the type filter when they're of several types, and the actions under them. */
 function ItemPicker<Item extends WatchedItem>({ items, startsTicked, showUploader, sourceOf, actions }: ItemPickerProps<Item>) {
   const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const { layout, change: changeLayout } = usePickerLayout("items")
+  const types = useTypeFilter(items)
+  const shown = types.shown
   const isTicked = (item: Item) => !isQueued(item) && (chosen.get(itemKey(item)) ?? startsTicked(item))
-  const picked = items.filter(isTicked)
-  const selectable = items.filter((item) => !isQueued(item))
+  const picked = shown.filter(isTicked)
+  const unpicked = shown.filter((item) => !isTicked(item))
+  const selectable = shown.filter((item) => !isQueued(item))
   const allTicked = selectable.length > 0 && picked.length === selectable.length
+  const hidden = items.length - shown.length
 
   const tick = (item: Item, on: boolean) => setChosen((current) => new Map(current).set(itemKey(item), on))
 
@@ -635,14 +658,27 @@ function ItemPicker<Item extends WatchedItem>({ items, startsTicked, showUploade
               if (box) box.indeterminate = picked.length > 0 && !allTicked
             }}
             disabled={busy || selectable.length === 0}
-            onChange={(event) => setChosen(new Map(selectable.map((item) => [itemKey(item), event.target.checked])))}
+            onChange={(event) => {
+              const ticked = event.target.checked
+              // Only the items shown: those another type hides keep their ticks.
+              setChosen((current) => {
+                const next = new Map(current)
+                for (const item of selectable) next.set(itemKey(item), ticked)
+                return next
+              })
+            }}
           />
-          <span className="whitespace-nowrap tabular-nums">{text.selected(picked.length, items.length)}</span>
+          <span className="whitespace-nowrap tabular-nums">
+            {joinDetails([text.selected(picked.length, shown.length), hidden > 0 && strings.picker.hidden(hidden)])}
+          </span>
         </label>
-        <PickerViewControls layout={layout} onChange={changeLayout} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <ItemTypeFilter counts={types.counts} value={types.type} onChange={types.choose} disabled={busy} />
+          <PickerViewControls layout={layout} onChange={changeLayout} />
+        </div>
       </div>
       <ListedItems
-        items={items}
+        items={shown}
         layout={layout}
         showUploader={showUploader}
         sourceOf={sourceOf}
@@ -651,7 +687,7 @@ function ItemPicker<Item extends WatchedItem>({ items, startsTicked, showUploade
         onSelect={tick}
       />
       {error && <StatusMessage tone="danger" {...error} />}
-      <div className="flex justify-end gap-2">{actions(picked, run, busy)}</div>
+      <div className="flex justify-end gap-2">{actions({ shown, picked, unpicked }, run, busy)}</div>
     </div>
   )
 }

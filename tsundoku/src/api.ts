@@ -897,29 +897,30 @@ export async function checkWatchedSources(ids: number[]): Promise<void> {
   await invoke("check_watched_sources", { ids })
 }
 
-/** Queues these items of a source; with `skipRest`, its other new items are skipped. Resolves to how many were queued. */
-export function downloadWatchedItems(id: number, items: ItemKey[], skipRest: boolean): Promise<number> {
+/** Queues these items of a source and skips those of `skipped` that are new (the picker's other items shown). Resolves
+ * to how many were queued. */
+export function downloadWatchedItems(id: number, items: ItemKey[], skipped: ItemKey[]): Promise<number> {
   if (!isTauri()) return outsideTauri()
-  return invoke<number>("download_watched_items", { id, items, skipRest })
+  return invoke<number>("download_watched_items", { id, items, skipped })
 }
 
-/** Skip All: every new item of the source is skipped. */
-export async function skipWatchedItems(id: number): Promise<void> {
+/** Skip All: these items of the source, those its picker shows, are skipped. */
+export async function skipWatchedItems(id: number, items: ItemKey[]): Promise<void> {
   if (!isTauri()) return outsideTauri()
-  await invoke("skip_watched_items", { id })
+  await invoke("skip_watched_items", { id, items })
 }
 
 /** All New Items' Download Selected: queues these new items, whichever sources found them, each with its source's
- * folder and preset; with `skipRest`, every other new item is skipped. Resolves to how many were queued. */
-export function downloadNewWatchedItems(items: ItemKey[], skipRest: boolean): Promise<number> {
+ * folder and preset, and skips those of `skipped` (the other items shown). Resolves to how many were queued. */
+export function downloadNewWatchedItems(items: ItemKey[], skipped: ItemKey[]): Promise<number> {
   if (!isTauri()) return outsideTauri()
-  return invoke<number>("download_new_watched_items", { items, skipRest })
+  return invoke<number>("download_new_watched_items", { items, skipped })
 }
 
-/** All New Items' Skip All: every new item of every source is skipped. */
-export async function skipEveryNewWatchedItem(): Promise<void> {
+/** All New Items' Skip All: these items, those it shows, are skipped in every source where they're new. */
+export async function skipNewWatchedItems(items: ItemKey[]): Promise<void> {
   if (!isTauri()) return outsideTauri()
-  await invoke("skip_every_new_watched_item")
+  await invoke("skip_new_watched_items", { items })
 }
 
 export function onWatchedChanged(handler: (sources: WatchedSource[]) => void): Promise<UnlistenFn> {

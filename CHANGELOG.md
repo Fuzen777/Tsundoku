@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.146 · 2026-11-15
+
+### Added
+
+- **Pick only one type from a list**: when a channel's, playlist's or account's list holds several types of items, a row of choices above it shows them all or only one: Images (posts of pictures only), Videos (videos, and posts of videos only), Mixed (posts of both) or Files, each with how many there are. Choose Images on an X account's list, say, and only its posts of pictures show, and Download Selected takes only those. Select All ticks or unticks only what's shown. It works the same on a watched source's new items and in All New Items, where Download Selected and Skip All then skip only what's shown, so the items another type hides stay new.
+
 ## 0.1.145 · 2026-11-15
 
 ### Added

@@ -536,8 +536,20 @@ export const strings = {
     selectAll: "Select All",
     select: "Select",
     selected: (selected: number, count: number) => `${selected.toLocaleString()} of ${count.toLocaleString()} selected`,
-    /** After the count, while Hide Downloaded leaves some out. */
+    /** After the count, while Hide Downloaded or the type leaves some out. */
     hidden: (count: number) => `${count.toLocaleString()} hidden`,
+    /** The type filter (ItemTypeFilter.tsx), offered while the items are of several types. */
+    type: "Type",
+    types: { all: "All", images: "Images", videos: "Videos", mixed: "Mixed", files: "Files" },
+    /** A type with how many items are of it: "Images (32)". */
+    typeCount: (type: string, count: number) => `${type} (${count.toLocaleString()})`,
+    typeHints: {
+      all: "Shows every type.",
+      images: "Shows only posts of images.",
+      videos: "Shows only videos, and posts of videos only.",
+      mixed: "Shows only posts holding several kinds of files, such as images and videos.",
+      files: "Shows only other files, such as archives.",
+    },
     hideDownloaded: "Hide Downloaded",
     hideDownloadedHint: "Hides what's downloaded or already in the queue.",
     allHidden: "Everything listed so far is downloaded or in the queue.",
@@ -654,8 +666,10 @@ export const strings = {
     selectAll: "Select All",
     selected: (selected: number, count: number) => `${selected} of ${count} selected`,
     downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count.toLocaleString()})`),
-    downloadSelectedHint: "The new items you leave unticked are skipped, and never come back as new.",
+    downloadSelectedHint:
+      "The items shown that you leave unticked are skipped, and never come back as new. Those another type hides stay new.",
     skipAll: "Skip All",
+    skipAllHint: "Skips every item shown. Those another type hides stay new.",
     skipped: (count: number) => `Skipped Before (${count})`,
     download: "Download",
     save: "Save",

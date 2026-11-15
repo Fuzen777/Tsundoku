@@ -340,13 +340,13 @@ impl WatchedSources {
         true
     }
 
-    /// Download Selected: queues these items with the source's folder and preset. With `skip_rest`, the new items not
-    /// picked become skipped. How many were queued.
+    /// Download Selected: queues the picked items with the source's folder and preset, and skips the new ones of
+    /// `skipped` (the picker's other items, among those it shows). How many were queued.
     pub fn download(
         &self,
         id: i64,
         picked: &[ItemKey],
-        skip_rest: bool,
+        skipped: &[ItemKey],
     ) -> Result<usize, WatchedError> {
         let source = self.store.source(id)?.ok_or(WatchedError::NotFound)?;
         let items = self.store.items(id)?;
@@ -362,26 +362,28 @@ impl WatchedSources {
             .queue
             .add_many(picks, Some(queue_source(&source)))
             .map_err(|error| WatchedError::Queue { error })?;
-        let queued: Vec<ItemKey> = picked.into_iter().cloned().collect();
+        let queued: Vec<ItemKey> = picked.iter().map(|&key| key.clone()).collect();
         self.store.set_state(id, &queued, ItemState::Queued)?;
-        if skip_rest {
-            let rest: Vec<ItemKey> = items
-                .iter()
-                .filter(|item| item.state == ItemState::New)
-                .map(|item| ItemKey::of(&item.video))
-                .filter(|key| !queued.contains(key))
-                .collect();
-            self.store.set_state(id, &rest, ItemState::Skipped)?;
-        }
+        let skipped: HashSet<&ItemKey> =
+            skipped.iter().filter(|key| !picked.contains(key)).collect();
+        self.store
+            .set_state(id, &new_among(&items, &skipped), ItemState::Skipped)?;
         self.notify();
         Ok(added)
     }
 
     /// All New Items' Download Selected: queues the picked items of every source's new ones, each with its own
-    /// source's folder and preset. An item two sources found is queued once, from the first source added, and leaves
-    /// both. With `skip_rest`, every other new item becomes skipped. How many were queued.
-    pub fn download_new(&self, picked: &[ItemKey], skip_rest: bool) -> Result<usize, WatchedError> {
+    /// source's folder and preset, and skips the new ones of `skipped`. An item two sources found is queued once, from
+    /// the first source added, and leaves both; one skipped is skipped in every source that has it. How many were
+    /// queued.
+    pub fn download_new(
+        &self,
+        picked: &[ItemKey],
+        skipped: &[ItemKey],
+    ) -> Result<usize, WatchedError> {
         let picked: HashSet<&ItemKey> = picked.iter().collect();
+        let skipped: HashSet<&ItemKey> =
+            skipped.iter().filter(|key| !picked.contains(key)).collect();
         let settings = self.settings.get();
         let download_folder = settings.downloads.resolved_folder();
         let mut queued_here = HashSet::new();
@@ -390,11 +392,9 @@ impl WatchedSources {
             let items = self.store.items(source.id)?;
             let mut picks = Vec::new();
             let mut taken = Vec::new();
-            let mut rest = Vec::new();
             for item in items.iter().filter(|item| item.state == ItemState::New) {
                 let key = ItemKey::of(&item.video);
                 if !picked.contains(&key) {
-                    rest.push(key);
                     continue;
                 }
                 if queued_here.insert(key.clone()) {
@@ -409,38 +409,33 @@ impl WatchedSources {
                     .map_err(|error| WatchedError::Queue { error })?;
             }
             self.store.set_state(source.id, &taken, ItemState::Queued)?;
-            if skip_rest {
-                self.store.set_state(source.id, &rest, ItemState::Skipped)?;
-            }
+            self.store
+                .set_state(source.id, &new_among(&items, &skipped), ItemState::Skipped)?;
         }
         self.notify();
         Ok(added)
     }
 
-    /// Skip All: every new item of the source becomes skipped.
-    pub fn skip_new(&self, id: i64) -> Result<(), WatchedError> {
-        self.skip_new_of(id)?;
+    /// Skip All: these items of the source (what its picker shows) become skipped, those still new.
+    pub fn skip(&self, id: i64, keys: &[ItemKey]) -> Result<(), WatchedError> {
+        let items = self.store.items(id)?;
+        let keys: HashSet<&ItemKey> = keys.iter().collect();
+        self.store
+            .set_state(id, &new_among(&items, &keys), ItemState::Skipped)?;
         self.notify();
         Ok(())
     }
 
-    /// All New Items' Skip All: every new item of every source becomes skipped.
-    pub fn skip_every_new(&self) -> Result<(), WatchedError> {
+    /// All New Items' Skip All: these items (what it shows) become skipped in every source where they're still new.
+    pub fn skip_new(&self, keys: &[ItemKey]) -> Result<(), WatchedError> {
+        let keys: HashSet<&ItemKey> = keys.iter().collect();
         for source in self.store.sources()? {
-            self.skip_new_of(source.id)?;
+            let items = self.store.items(source.id)?;
+            self.store
+                .set_state(source.id, &new_among(&items, &keys), ItemState::Skipped)?;
         }
         self.notify();
         Ok(())
-    }
-
-    fn skip_new_of(&self, id: i64) -> Result<(), WatchedError> {
-        let items = self.store.items(id)?;
-        let new: Vec<ItemKey> = items
-            .iter()
-            .filter(|item| item.state == ItemState::New)
-            .map(|item| ItemKey::of(&item.video))
-            .collect();
-        self.store.set_state(id, &new, ItemState::Skipped)
     }
 
     /// How many new items wait across every source, for the sidebar's count.
@@ -662,6 +657,16 @@ fn queue_source(source: &StoredSource) -> QueueSource {
         site_name: source.site_name.clone(),
         thumbnail_url: source.thumbnail_url.clone(),
     }
+}
+
+/// The keys of `items` that are still new and among `keys`, so a skip never touches one queued or seen meanwhile.
+fn new_among(items: &[StoredItem], keys: &HashSet<&ItemKey>) -> Vec<ItemKey> {
+    items
+        .iter()
+        .filter(|item| item.state == ItemState::New)
+        .map(|item| ItemKey::of(&item.video))
+        .filter(|key| keys.contains(key))
+        .collect()
 }
 
 fn blank_to_none(value: Option<String>) -> Option<String> {

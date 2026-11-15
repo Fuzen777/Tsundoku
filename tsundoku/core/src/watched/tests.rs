@@ -330,7 +330,12 @@ fn downloading_queues_the_picked_and_skips_the_rest() {
     test.sources
         .edit(id, Some(" Channels\\{uploader} ".to_owned()), None)
         .unwrap();
-    assert_eq!(test.sources.download(id, &[key("a")], true).unwrap(), 1);
+    assert_eq!(
+        test.sources
+            .download(id, &[key("a")], &[key("b"), key("c")])
+            .unwrap(),
+        1
+    );
     let source = test.source(id);
     assert!(source.new_items.is_empty());
     assert_eq!(ids(&source.skipped_items), ["b", "c"]);
@@ -361,7 +366,7 @@ fn downloading_queues_the_picked_and_skips_the_rest() {
     assert!(queued[0].preset.is_some());
 
     // A skipped item can still be downloaded, and a check never finds it again.
-    test.sources.download(id, &[key("c")], false).unwrap();
+    test.sources.download(id, &[key("c")], &[]).unwrap();
     assert_eq!(ids(&test.source(id).skipped_items), ["b"]);
     test.reader.lists(&["c", "b", "a"]);
     test.check(id);
@@ -494,7 +499,7 @@ fn downloading_from_every_source_queues_each_with_its_own_choices() {
         .unwrap();
     let added = test
         .sources
-        .download_new(&[key("a"), key("shared"), key("c")], true)
+        .download_new(&[key("a"), key("shared"), key("c")], &[key("b"), key("d")])
         .unwrap();
     assert_eq!(added, 3, "the item both found is queued once");
     let queued: Vec<(String, bool)> = test
@@ -544,22 +549,64 @@ fn downloading_from_every_source_queues_each_with_its_own_choices() {
 fn downloading_from_every_source_can_leave_the_rest_new() {
     let test = Test::new();
     let id = test.add(&["a", "b"], FirstItems::All);
-    test.sources.download_new(&[key("b")], false).unwrap();
+    test.sources.download_new(&[key("b")], &[]).unwrap();
     assert_eq!(test.new_ids(id), ["a"]);
     assert!(test.source(id).skipped_items.is_empty());
 }
 
 #[test]
-fn skip_all_of_every_source_skips_every_new_item() {
+fn skip_all_of_every_source_skips_what_it_shows() {
+    let test = Test::new();
+    let first = test.add(&["a", "shared", "b"], FirstItems::All);
+    let second = test.add_at(
+        "https://www.youtube.com/@other/videos",
+        &["shared", "c", "d"],
+        FirstItems::All,
+    );
+    test.sources
+        .skip_new(&[key("a"), key("shared"), key("c")])
+        .unwrap();
+    assert_eq!(ids(&test.source(first).skipped_items), ["a", "shared"]);
+    assert_eq!(test.new_ids(first), ["b"], "what it didn't show stays new");
+    assert_eq!(ids(&test.source(second).skipped_items), ["shared", "c"]);
+    assert_eq!(test.new_ids(second), ["d"]);
+}
+
+#[test]
+fn downloading_skips_only_the_items_the_picker_showed() {
+    let test = Test::new();
+    let id = test.add(&["a", "b", "c", "d"], FirstItems::All);
+    // The picker showed a, b and c (d is another type): a is picked, the rest shown is skipped, d stays new.
+    test.sources
+        .download(id, &[key("a")], &[key("a"), key("b"), key("c")])
+        .unwrap();
+    let source = test.source(id);
+    assert_eq!(ids(&source.new_items), ["d"]);
+    assert_eq!(
+        ids(&source.skipped_items),
+        ["b", "c"],
+        "a picked item is never skipped"
+    );
+    assert_eq!(test.queue.items().len(), 1);
+
+    // Skip All skips what it's given, only while it's new: the queued item stays queued.
+    test.sources.skip(id, &[key("a"), key("d")]).unwrap();
+    let source = test.source(id);
+    assert!(source.new_items.is_empty());
+    assert_eq!(ids(&source.skipped_items), ["b", "c", "d"]);
+}
+
+#[test]
+fn downloading_from_every_source_skips_only_what_it_showed() {
     let test = Test::new();
     let first = test.add(&["a", "b"], FirstItems::All);
     let second = test.add_at(
         "https://www.youtube.com/@other/videos",
-        &["c"],
+        &["c", "d"],
         FirstItems::All,
     );
-    test.sources.skip_every_new().unwrap();
-    assert_eq!(ids(&test.source(first).skipped_items), ["a", "b"]);
+    test.sources.download_new(&[key("a")], &[key("c")]).unwrap();
+    assert_eq!(test.new_ids(first), ["b"]);
     assert_eq!(ids(&test.source(second).skipped_items), ["c"]);
-    assert!(test.source(second).new_items.is_empty());
+    assert_eq!(test.new_ids(second), ["d"]);
 }

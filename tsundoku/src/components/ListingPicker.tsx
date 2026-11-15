@@ -32,9 +32,11 @@ import {
 } from "../listingPicker"
 import { usePickerLayout, usePresets, useRulePresets } from "../queries"
 import { strings } from "../strings"
+import { useTypeFilter } from "../useTypeFilter"
 import { Button } from "./Button"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
+import { ItemTypeFilter } from "./ItemTypeFilter"
 import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
 import { PickerViewControls } from "./PickerViewControls"
 import { ToggleButton } from "./SegmentedControl"
@@ -57,9 +59,10 @@ type Loading = "more" | "all"
 
 /**
  * The preview card for a channel, playlist or account: what it is, its items with a box each (the new ones ticked,
- * those downloaded before or in the queue greyed, or hidden with Hide Downloaded), Load More and Load All when only the
- * newest were listed, and Download Selected, which queues each ticked item shown as its own download. A video starts
- * with the preset a rule picks for it, else the one picked here.
+ * those downloaded before or in the queue greyed, or hidden with Hide Downloaded), a type filter when they're of
+ * several types (only the images of an account, say), Load More and Load All when only the newest were listed, and
+ * Download Selected, which queues each ticked item shown as its own download. A video starts with the preset a rule
+ * picks for it, else the one picked here.
  */
 export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingPickerProps) {
   const [{ items, selection }, setPicker] = useState(() => pickerItems(listing.items))
@@ -88,12 +91,13 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
 
   const setSelection = (update: (selection: ReadonlySet<string>) => ReadonlySet<string>) =>
     setPicker((current) => ({ ...current, selection: update(current.selection) }))
-  const shown = shownItems(items, layout.hideDownloaded)
+  const types = useTypeFilter(shownItems(items, layout.hideDownloaded))
+  const shown = types.shown
   const hidden = items.length - shown.length
   const picked = selectedItems(shown, selection)
   const selectable = shown.filter((item) => !isQueued(item)).length
   const allSelected = selectable > 0 && picked.length === selectable
-  const hasVideos = items.some(takesPreset)
+  const hasVideos = shown.some(takesPreset)
   const placeOf = new Map(items.map((item, index) => [itemKey(item), index]))
   const presetFor = (item: ListedItem): PickedPreset | null => {
     const byRule = rulePresets[placeOf.get(itemKey(item)) ?? -1]
@@ -209,7 +213,7 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
                 disabled={adding || selectable === 0}
                 onChange={(event) => {
                   const ticked = event.target.checked
-                  setSelection(() => selectEvery(shown, ticked))
+                  setSelection((current) => selectEvery(current, shown, ticked))
                 }}
               />
               <span className="whitespace-nowrap tabular-nums">
@@ -219,7 +223,8 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
                 ])}
               </span>
             </label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <ItemTypeFilter counts={types.counts} value={types.type} onChange={types.choose} disabled={adding} />
               <ToggleButton
                 label={strings.picker.hideDownloaded}
                 hint={strings.picker.hideDownloadedHint}

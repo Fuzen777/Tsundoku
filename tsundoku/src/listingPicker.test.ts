@@ -5,11 +5,15 @@ import {
   initialSelection,
   isKnown,
   itemKey,
+  itemType,
+  ofType,
   pickerItems,
   picksFor,
   selectedItems,
   selectEvery,
   shownItems,
+  typeCounts,
+  typeInEffect,
   withItem,
   withMoreItems,
   type PickedPreset,
@@ -68,8 +72,14 @@ describe("the picker's selection", () => {
   })
 
   it("ticks every item but queued ones, or none", () => {
-    expect([...selectEvery(items, true)]).toEqual(["youtube new", "youtube downloaded", "instagram post"])
-    expect(selectEvery(items, false).size).toBe(0)
+    expect([...selectEvery(new Set(), items, true)]).toEqual(["youtube new", "youtube downloaded", "instagram post"])
+    expect(selectEvery(new Set(["youtube new"]), items, false).size).toBe(0)
+  })
+
+  it("leaves the ticks of items it isn't given", () => {
+    const ticked = selectEvery(new Set(["youtube other"]), items.slice(0, 2), true)
+    expect([...ticked]).toEqual(["youtube other", "youtube new", "youtube downloaded"])
+    expect([...selectEvery(ticked, items.slice(0, 2), false)]).toEqual(["youtube other"])
   })
 
   it("lets a downloaded item be ticked, not a queued one", () => {
@@ -82,7 +92,7 @@ describe("the picker's selection", () => {
   })
 
   it("leaves out an item queued since it was ticked", () => {
-    const selection = selectEvery(items, true)
+    const selection = selectEvery(new Set(), items, true)
     const nowQueued = items.map((listed) => (listed.video.videoId === "new" ? { ...listed, inQueue: true } : listed))
     expect(selectedItems(nowQueued, selection).map((listed) => listed.video.videoId)).toEqual(["downloaded", "post"])
   })
@@ -90,7 +100,7 @@ describe("the picker's selection", () => {
 
 describe("what Download Selected queues", () => {
   it("gives each video its preset and a post none, in the listing's order", () => {
-    const picks = picksFor(items, selectEvery(items, true), () => bestAudio)
+    const picks = picksFor(items, selectEvery(new Set(), items, true), () => bestAudio)
     expect(picks?.map((pick) => [pick.video.videoId, pick.presetId, pick.overwrite])).toEqual([
       ["new", "best-audio", false],
       ["downloaded", "best-audio", false],
@@ -99,19 +109,19 @@ describe("what Download Selected queues", () => {
   })
 
   it("replaces a file made before with the same preset", () => {
-    const picks = picksFor(items, selectEvery(items, true), () => bestVideo)
+    const picks = picksFor(items, selectEvery(new Set(), items, true), () => bestVideo)
     expect(picks?.find((pick) => pick.video.videoId === "downloaded")?.overwrite).toBe(true)
   })
 
   it("follows the preset each video starts with", () => {
-    const picks = picksFor(items, selectEvery(items, true), (listed) =>
+    const picks = picksFor(items, selectEvery(new Set(), items, true), (listed) =>
       listed.video.videoId === "new" ? bestAudio : bestVideo,
     )
     expect(picks?.map((pick) => pick.presetId)).toEqual(["best-audio", "best-video", null])
   })
 
   it("waits while a ticked video's preset isn't known", () => {
-    expect(picksFor(items, selectEvery(items, true), () => null)).toBeNull()
+    expect(picksFor(items, selectEvery(new Set(), items, true), () => null)).toBeNull()
     expect(picksFor(items, new Set([itemKey(items[3])]), () => null)).toHaveLength(1)
   })
 })
@@ -157,5 +167,48 @@ describe("shownItems", () => {
   it("hides what the history or the queue has only when asked", () => {
     expect(shownItems(items, false)).toBe(items)
     expect(shownItems(items, true).map((entry) => entry.video.videoId)).toEqual(["new", "post"])
+  })
+})
+
+describe("the type filter", () => {
+  const post = (videoId: string, images: number, videos: number, others = 0) => {
+    const listed = item(videoId, {}, true)
+    return { ...listed, video: { ...listed.video, post: { images, videos, others } } }
+  }
+  const account = [
+    post("photos", 3, 0),
+    post("clip", 0, 1),
+    post("both", 2, 1),
+    post("zip", 0, 0, 1),
+    post("more", 1, 0),
+  ]
+
+  it("tells what each item holds", () => {
+    expect(account.map(itemType)).toEqual(["images", "videos", "mixed", "files", "images"])
+    expect(itemType(item("video"))).toBe("videos")
+    expect(itemType(post("unknown", 0, 0))).toBe("images")
+    expect(itemType(post("zip and picture", 1, 0, 1))).toBe("mixed")
+  })
+
+  it("counts the types there are, in the filter's order", () => {
+    expect(typeCounts(account)).toEqual([
+      { type: "images", count: 2 },
+      { type: "videos", count: 1 },
+      { type: "mixed", count: 1 },
+      { type: "files", count: 1 },
+    ])
+    expect(typeCounts([item("a"), post("b", 0, 2)])).toEqual([{ type: "videos", count: 2 }])
+  })
+
+  it("keeps the type chosen only while the items are of several types and some are of it", () => {
+    const counts = typeCounts(account)
+    expect(typeInEffect("images", counts)).toBe("images")
+    expect(typeInEffect("images", typeCounts([post("clip", 0, 1), post("both", 2, 1)]))).toBe("all")
+    expect(typeInEffect("videos", typeCounts([post("clip", 0, 1)]))).toBe("all")
+  })
+
+  it("shows the items of the type", () => {
+    expect(ofType(account, "all")).toBe(account)
+    expect(ofType(account, "images").map((entry) => entry.video.videoId)).toEqual(["photos", "more"])
   })
 })

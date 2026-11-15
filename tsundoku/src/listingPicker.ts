@@ -3,6 +3,7 @@ import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
 import type { QueuePick } from "./bindings/QueuePick"
 import type { QueueSource } from "./bindings/QueueSource"
+import type { VideoInfo } from "./bindings/VideoInfo"
 import { strings } from "./strings"
 
 /*
@@ -30,9 +31,19 @@ export function initialSelection(items: readonly ListedItem[]): Set<string> {
   return new Set(items.filter((item) => !isKnown(item)).map(itemKey))
 }
 
-/** Every item that can be ticked, downloaded ones included, or none. */
-export function selectEvery(items: readonly ListedItem[], ticked: boolean): Set<string> {
-  return new Set(ticked ? items.filter((item) => !isQueued(item)).map(itemKey) : [])
+/** The selection with every item of `items` that can be ticked (downloaded ones included) ticked, or none of them;
+ * the ticks of items not among them, such as those another type hides, stay. */
+export function selectEvery(
+  selection: ReadonlySet<string>,
+  items: readonly ListedItem[],
+  ticked: boolean,
+): Set<string> {
+  const next = new Set(selection)
+  for (const item of items) {
+    if (ticked && !isQueued(item)) next.add(itemKey(item))
+    else next.delete(itemKey(item))
+  }
+  return next
 }
 
 /** The selection with one item ticked or unticked. */
@@ -142,9 +153,65 @@ function newestFirst(items: readonly ListedItem[]): ListedItem[] {
     .map(({ item }) => item)
 }
 
-/** The items the picker shows: all of them, or with Hide Downloaded, those neither the history nor the queue has. */
+/** The items Hide Downloaded leaves: all of them, or with it, those neither the history nor the queue has. */
 export function shownItems(items: readonly ListedItem[], hideDownloaded: boolean): readonly ListedItem[] {
   return hideDownloaded ? items.filter((item) => !isKnown(item)) : items
+}
+
+/**
+ * What an item holds, for the pickers' type filter: a post of images only, videos (a video, or a post of videos only),
+ * a post of both, or a post of other files (a .zip). A post of other files and images or videos counts as mixed, and a
+ * post whose files aren't known as images, as its picture shows it.
+ */
+export type ItemType = "images" | "videos" | "mixed" | "files"
+
+/** A type, or every one. */
+export type TypeFilter = ItemType | "all"
+
+/** The types in the order the filter offers them. */
+export const ITEM_TYPES: readonly ItemType[] = ["images", "videos", "mixed", "files"]
+
+/** What the type filter reads of an item. */
+type Typed = { video: Pick<VideoInfo, "post" | "files"> }
+
+export function itemType({ video }: Typed): ItemType {
+  const { post } = video
+  if (!post) return video.files ? "files" : "videos"
+  const held: ItemType[] = []
+  if (post.images > 0) held.push("images")
+  if (post.videos > 0) held.push("videos")
+  if (post.others > 0) held.push("files")
+  if (held.length > 1) return "mixed"
+  return held[0] ?? "images"
+}
+
+/** How many items are of one type. */
+export interface TypeCount {
+  type: ItemType
+  count: number
+}
+
+/** How many of the items are of each type among them, in the filter's order. */
+export function typeCounts(items: readonly Typed[]): TypeCount[] {
+  const counts = new Map<ItemType, number>()
+  for (const item of items) {
+    const type = itemType(item)
+    counts.set(type, (counts.get(type) ?? 0) + 1)
+  }
+  return ITEM_TYPES.flatMap((type) => {
+    const count = counts.get(type)
+    return count === undefined ? [] : [{ type, count }]
+  })
+}
+
+/** The filter in effect: the type chosen while the items are of several types and some are of it, else every type. */
+export function typeInEffect(chosen: TypeFilter, counts: readonly TypeCount[]): TypeFilter {
+  return counts.length > 1 && counts.some(({ type }) => type === chosen) ? chosen : "all"
+}
+
+/** The items of the type, or all of them. */
+export function ofType<Item extends Typed>(items: readonly Item[], filter: TypeFilter): readonly Item[] {
+  return filter === "all" ? items : items.filter((item) => itemType(item) === filter)
 }
 
 /** What a listing's items are called: an account's posts, YouTube's videos, anything else's items. */
