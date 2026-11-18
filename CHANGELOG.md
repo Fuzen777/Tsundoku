@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.155 · 2026-11-18
+
+### Fixed
+
+- **X accounts list their videos again**: since gallery-dl 1.32.20, which the daily update installed on 15 November, an X account's list held only its posts with photos as long as it had more than the 50 shown, and a watched X account never found a new video. X now keeps an account's photos and videos as two lists, and gallery-dl read every photo post before the first video. Tsundoku now reads both lists side by side and merges them by date, so the newest 50 are the newest posts again, photos and videos mixed (NASA's held 11 videos among them, the newest third from the top), and Load More, Load 50 New and Load All carry on through both. A watched X account's check reads both too, in about as long as before (2.6 to 3 seconds). The first check of an X account you already watch may count as new a few older videos it never saw. Posts of an animated GIF only are in neither list, so they can't be listed anymore (rustlang's two from 2018).
+
 ## 0.1.154 · 2026-11-18
 
 ### Changed

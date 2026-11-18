@@ -3,7 +3,8 @@
 //! Instagram account's posts, an X account's Media tab); `read` lists what it holds without reading each item, newest
 //! first for a channel or an account, in its own order for a playlist. `read_more` lists the items after those, for the
 //! picker's Load More and Load All. `read_for_check` reads one for a watched source's check, an account a page
-//! first. `mark` says which items the history or the queue has. Another site's playlist is
+//! first. An X account's Media tab is read as its two lists, photos and videos, merged by date (`x_media`).
+//! `mark` says which items the history or the queue has. Another site's playlist is
 //! listed when yt-dlp answers one with a link and ID for each item (`from_yt_dlp`);
 //! otherwise, and for image sites' accounts other than Instagram's and X's, the link is refused as
 //! `PreviewError::NotListable`.
@@ -19,7 +20,7 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::cancel::CancelToken;
-use crate::gallery::{self, GalleryTools};
+use crate::gallery::{self, AccountInfo, GalleryTools};
 use crate::history::PastDownload;
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::sites;
@@ -78,10 +79,11 @@ const INSTAGRAM_PAGING: Paging = Paging {
 };
 
 /// X is asked for 50 posts per request (gallery-dl's `limit`) and answers up to that many, fewer at times (21 on a
-/// first page), without waits. It doesn't resume: gallery-dl 1.32.20 reads X's Media tab as two timelines, photos then
-/// videos, and a cursor saved in the photos fails once they end (X refuses it as "Dependency: Unspecified" and the run
-/// aborts, losing what it read; seen 2026-11-15 on x.com/rustlang). So X is read by `--post-range` from `more.read`,
-/// reading the newer pages again each run, which X allows without waits.
+/// first page), without waits. Its Media tab is two lists, photos and videos (`x_media`), each read this way and
+/// merged. It doesn't resume: when gallery-dl 1.32.20 read the tab as one, photos then videos, a cursor saved in the
+/// photos failed once they ended (X refused it as "Dependency: Unspecified" and the run aborted, losing what it read;
+/// seen 2026-11-15 on x.com/rustlang). So each list is read by `--post-range` from its place (`MediaPlaces`), reading
+/// the newer pages again each run, which X allows without waits.
 const X_PAGING: Paging = Paging {
     page: 50,
     next: 50,
@@ -91,9 +93,9 @@ const X_PAGING: Paging = Paging {
     check_first: X_CHECK_FIRST,
 };
 
-/// How many of an X account's newest posts a watched source's check reads first: X's first answer for a Media tab
-/// holds 20 to 40 posts (21, 26 and 39 seen), though 50 are asked for, so the newest 50 take a second page or more,
-/// half a second to a second each, after the request for the account itself.
+/// How many of an X account's newest posts a watched source's check reads first, from each of its two lists: X's
+/// first answer for a Media tab holds 20 to 40 posts (21, 26 and 39 seen), though 50 are asked for, so the newest 50
+/// take a second page or more, half a second to a second each, after the request for the account itself.
 /// Pinned posts aren't on the Media tab, so a check reaches what it saw before within these unless 16 or so came since.
 const X_CHECK_FIRST: u32 = 19;
 
@@ -247,6 +249,18 @@ pub struct ListingMore {
     /// A YouTube channel's ID ("UC…"), for `count_more` to read how many videos its Videos tab holds, which the tab
     /// doesn't say.
     pub channel_id: Option<String>,
+    /// Where an X account's two lists of posts, with photos and with videos, were read up to (`x_media`): its next
+    /// posts are read from there rather than from `read`.
+    pub media: Option<MediaPlaces>,
+}
+
+/// Where an X account's posts with photos and its posts with videos were read up to, each list on its own
+/// (`x_media`): how many of each were read, or `None` once that list ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct MediaPlaces {
+    pub photos: Option<u32>,
+    pub videos: Option<u32>,
 }
 
 /// What the picker asks `read_more` for.
@@ -370,9 +384,14 @@ fn on_x(host: &str) -> bool {
     sites::on_domain(host, "x.com") || sites::on_domain(host, "twitter.com")
 }
 
+/// Whether a listing's page is on X.
+fn is_on_x(link: &str) -> bool {
+    sites::host(link).is_some_and(|host| on_x(&host))
+}
+
 /// An account's own page, on the site of its listing's page (`link`).
 fn account_page(link: &str, name: &str) -> String {
-    if sites::host(link).is_some_and(|host| on_x(&host)) {
+    if is_on_x(link) {
         format!("https://x.com/{name}")
     } else {
         format!("https://www.instagram.com/{name}/")
@@ -418,13 +437,17 @@ pub fn read(
     from_yt_dlp(&answer.json, Some(listing.kind), &listing.link)
 }
 
-/// An account's newest `count` posts, with gallery-dl.
+/// An account's newest `count` posts, with gallery-dl: an X account's from both its lists (`read_x_account`).
 fn read_account(
     images: &GalleryTools,
     listing: &ListingLink,
     count: u32,
     cancel: &CancelToken,
 ) -> Result<Listing, PreviewError> {
+    if is_on_x(&listing.link) {
+        return read_x_account(images, &listing.link, count, cancel)
+            .map_err(|error| signed_out_failure(error, images.cookies.is_some()));
+    }
     let range = format!("1-{count}");
     let mut extra = vec!["--post-range", range.as_str()];
     let resumes = paging_of(&listing.link).resumes;
@@ -441,6 +464,37 @@ fn read_account(
             Ok(found)
         });
     read.map_err(|error| signed_out_failure(error, images.cookies.is_some()))
+}
+
+/// An X account's newest `count` posts: the newest `count` of each of its lists (photos and videos), merged by date,
+/// and the newest `count` of those (`x_media`).
+fn read_x_account(
+    images: &GalleryTools,
+    link: &str,
+    count: u32,
+    cancel: &CancelToken,
+) -> Result<Listing, PreviewError> {
+    let merged = x_media::read(
+        images,
+        link,
+        x_media::FROM_THE_START,
+        Some(count),
+        Some(count as usize),
+        LISTING_TIMEOUT,
+        cancel,
+    )?;
+    let items = listed(merged.posts);
+    let read = count_of(items.len());
+    Ok(account_listing(merged.account, link, items, |title, _| {
+        merged.next.map(|places| ListingMore {
+            link: link.to_owned(),
+            title: title.to_owned(),
+            read,
+            cursor: None,
+            channel_id: None,
+            media: Some(places),
+        })
+    }))
 }
 
 /// Reads a listing for a watched source's check, which only needs its items up to what the source saw before. An
@@ -514,8 +568,10 @@ pub fn read_any(
 ///   reads of `Paging::step` with `Paging::pause` between, each handed over once it ends, so a stop keeps what was
 ///   read. Load New asks for as many pages as are still wanted once some new ones came. Without a cursor, from the post
 ///   after `more.read` (`--post-range`).
-/// - An X account: gallery-dl from the post after `more.read` (`--post-range`; `X_PAGING` says why): Load More's 50,
-///   Load New in reads of 200 (then the whole pages still wanted), Load All the rest in one read.
+/// - An X account: each of its two lists, photos and videos, from the post after its place in `more.media`
+///   (`--post-range`; `X_PAGING` says why), both at once, merged by date (`x_media`): Load More's 50 of each, keeping
+///   the newest 50, Load New in reads of 200 of each (then the whole pages still wanted), Load All the rest in one
+///   read.
 ///
 /// A playlist is listed whole, so it has nothing more. The first batch may repeat items read before, when a read
 /// starts on a page it ended in; later ones leave out what this read handed over already.
@@ -556,8 +612,14 @@ pub fn read_more(
             (MoreRead::All, _) if !paging.resumes => None,
             _ => Some(paging.step),
         };
-        let mut batch = account_more(images, &from, count, paging.resumes, cancel)
-            .map_err(|error| signed_out_failure(error, images.cookies.is_some()))?;
+        let batch = if is_on_x(&from.link) {
+            let keep_at_most = (read == MoreRead::Next).then_some(paging.next as usize);
+            x_more(images, &from, count, keep_at_most, cancel)
+        } else {
+            account_more(images, &from, count, paging.resumes, cancel)
+        };
+        let mut batch =
+            batch.map_err(|error| signed_out_failure(error, images.cookies.is_some()))?;
         batch
             .items
             .retain(|item| handed.insert((item.video.site.clone(), item.video.video_id.clone())));
@@ -852,6 +914,44 @@ fn account_more(
     })
 }
 
+/// An X account's posts after those read so far, from both its lists from their places in `more.media`
+/// (`x_media`): at most `count` of each, or all the rest, and at most `keep_at_most` of the newest of those.
+fn x_more(
+    images: &GalleryTools,
+    more: &ListingMore,
+    count: Option<u32>,
+    keep_at_most: Option<usize>,
+    cancel: &CancelToken,
+) -> Result<MoreItems, PreviewError> {
+    let timeout = if count.is_some() {
+        MORE_TIMEOUT
+    } else {
+        ALL_TIMEOUT
+    };
+    let from = more.media.unwrap_or(x_media::FROM_THE_START);
+    let merged = x_media::read(
+        images,
+        &more.link,
+        from,
+        count,
+        keep_at_most,
+        timeout,
+        cancel,
+    )?;
+    let mut items = listed(merged.posts);
+    name_items(&mut items, &more.title);
+    let next = merged.next.map(|places| ListingMore {
+        read: more.read + count_of(items.len()),
+        media: Some(places),
+        ..more.clone()
+    });
+    Ok(MoreItems {
+        items,
+        more: next,
+        total: None,
+    })
+}
+
 /// Waits `length`, unless it's cancelled meanwhile.
 fn pause(length: Duration, cancel: &CancelToken) -> Result<(), PreviewError> {
     let until = Instant::now() + length;
@@ -1050,6 +1150,7 @@ fn from_yt_dlp_window(
                 .then(|| text(&answer, "channel_id").or_else(|| text(&answer, "id")))
                 .flatten()
                 .filter(|id| videos_playlist(id).is_some()),
+            media: None,
         })
         .filter(|more| total.is_none_or(|total| more.read < total));
     Ok(Listing {
@@ -1197,10 +1298,36 @@ fn entry_thumbnail(entry: &Value) -> Option<String> {
 /// would make it, newest first (pinned posts come first in the answer). An answer of all the posts asked may have more.
 fn from_gallery_dl(json: &str, link: &str, asked: u32) -> Result<Listing, PreviewError> {
     let found = gallery::parse_posts(json, link)?;
-    let answered = found.answered;
-    let mut items = newest_first(found.posts);
+    let answered = count_of(found.answered);
+    Ok(account_listing(
+        found.account,
+        link,
+        newest_first(found.posts),
+        |title, total| {
+            (answered >= asked)
+                .then(|| ListingMore {
+                    link: link.to_owned(),
+                    title: title.to_owned(),
+                    read: answered,
+                    cursor: None,
+                    channel_id: None,
+                    media: None,
+                })
+                .filter(|more| total.is_none_or(|total| more.read < total))
+        },
+    ))
+}
 
-    let account = found.account.unwrap_or_default();
+/// An account's listing of `items` (newest first), named after the account, else the name in its link (`link`, the
+/// listing's page), with where its next items start: `more`, given the listing's title and how many posts the account
+/// says it has.
+fn account_listing(
+    account: Option<AccountInfo>,
+    link: &str,
+    mut items: Vec<ListedItem>,
+    more: impl FnOnce(&str, Option<u32>) -> Option<ListingMore>,
+) -> Listing {
+    let account = account.unwrap_or_default();
     let name_in_link = sites::host(link).and_then(|_| {
         path_and_query(link)
             .0
@@ -1219,16 +1346,8 @@ fn from_gallery_dl(json: &str, link: &str, asked: u32) -> Result<Listing, Previe
     let total = account
         .post_count
         .filter(|total| *total as usize >= items.len());
-    let more = (count_of(answered) >= asked)
-        .then(|| ListingMore {
-            link: link.to_owned(),
-            title: title.clone(),
-            read: count_of(answered),
-            cursor: None,
-            channel_id: None,
-        })
-        .filter(|more| total.is_none_or(|total| more.read < total));
-    Ok(Listing {
+    let more = more(&title, total);
+    Listing {
         kind: ListingKind::Account,
         title,
         uploader: None,
@@ -1242,13 +1361,12 @@ fn from_gallery_dl(json: &str, link: &str, asked: u32) -> Result<Listing, Previe
         newest_only: true,
         items,
         more,
-    })
+    }
 }
 
-/// An account's posts as items, newest first. Stable, so posts of one day keep the answer's order; a post without a
-/// date goes last. Pinned posts, which come first in the answer, go where their date puts them.
-fn newest_first(posts: Vec<VideoInfo>) -> Vec<ListedItem> {
-    let mut items: Vec<ListedItem> = posts
+/// An account's posts as items, in their order.
+fn listed(posts: Vec<VideoInfo>) -> Vec<ListedItem> {
+    posts
         .into_iter()
         .map(|video| ListedItem {
             video,
@@ -1256,7 +1374,13 @@ fn newest_first(posts: Vec<VideoInfo>) -> Vec<ListedItem> {
             last_download: None,
             in_queue: false,
         })
-        .collect();
+        .collect()
+}
+
+/// An account's posts as items, newest first. Stable, so posts of one day keep the answer's order; a post without a
+/// date goes last. Pinned posts, which come first in the answer, go where their date puts them.
+fn newest_first(posts: Vec<VideoInfo>) -> Vec<ListedItem> {
+    let mut items = listed(posts);
     items.sort_by(|first, second| {
         let date = |item: &ListedItem| item.video.upload_date.clone();
         match (date(first), date(second)) {
@@ -1375,6 +1499,8 @@ fn text(value: &Value, field: &str) -> Option<String> {
         _ => None,
     }
 }
+
+mod x_media;
 
 #[cfg(test)]
 mod tests;

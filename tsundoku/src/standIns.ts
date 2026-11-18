@@ -1125,7 +1125,7 @@ function listingStandIn(kind: ListingKind): Listing {
     more:
       kind === "playlist"
         ? null
-        : { link, title, read: count, cursor: null, channelId: posts ? null : "UC4QobU6STFB0P71PMvOGN5A" },
+        : { link, title, read: count, cursor: null, channelId: posts ? null : "UC4QobU6STFB0P71PMvOGN5A", media: null },
   }
 }
 

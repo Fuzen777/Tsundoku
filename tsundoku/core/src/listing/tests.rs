@@ -172,6 +172,7 @@ fn reads_a_youtube_channels_newest_videos() {
             read: 50,
             cursor: None,
             channel_id: Some("UCLA_DiR1FfKNvjuUpBHmylQ".to_owned()),
+            media: None,
         }),
         "50 answered of the 50 asked: there may be more, which the channel's ID can count"
     );
@@ -801,6 +802,7 @@ fn a_check_of_an_account_reads_its_first_answer_then_the_newest_only_when_it_mus
             read: count,
             cursor: None,
             channel_id: None,
+            media: None,
         }),
     };
     // What a check asked for, how often it paused, and which answer it kept, for whether the first answer reached
