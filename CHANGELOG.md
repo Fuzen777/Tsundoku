@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.1.154 · 2026-11-18
+
+### Changed
+
+- **All New Items fills the view**: its list now takes what the window's height leaves it and scrolls on its own, with Skip All and Download Selected always in sight, instead of stopping at half the window or 28 rem, so there's more to go through at a glance. In a 720 px window the list is 425 px high instead of 360, and it keeps growing with the window. When the view is short (the What's New card above it), the list keeps about 10 rem and the view scrolls.
+- **All New Items opens by itself when a check finds something**: once Check Now, Check All or Check All Under a site finds new items, Watched switches to All New Items, so what came in is in one list to go through; the choice is kept as if you'd picked it, and Sources is one click away. It does so from any view, so Watched opens on it next. A check that finds nothing, and the items a new source starts with, leave it as it was.
+
 ## 0.1.153 · 2026-11-15
 
 ### Changed

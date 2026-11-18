@@ -5,6 +5,7 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  type QueryClient,
   type QueryObserverResult,
 } from "@tanstack/react-query"
 import {
@@ -348,17 +349,34 @@ function useListArrangements() {
   const [error, setError] = useState<ErrorDescription | null>(null)
   const change = async (update: (current: ListArrangements) => ListArrangements) => {
     if (!arrangements) return
-    const changed = update(arrangements)
     setError(null)
-    queryClient.setQueryData(queryKeys.listArrangements, changed)
     try {
-      await saveListArrangements(changed)
+      await changeListArrangements(queryClient, update)
     } catch (caught) {
-      queryClient.setQueryData(queryKeys.listArrangements, arrangements)
       setError(describeDownloadError(caught))
     }
   }
   return { arrangements, change, error }
+}
+
+/** A change to every list's arrangement, made from the latest one (read first if it isn't yet), which takes effect at
+ * once and is saved; if saving fails, it's undone and the promise rejects with the error. */
+export async function changeListArrangements(
+  queryClient: QueryClient,
+  update: (current: ListArrangements) => ListArrangements,
+): Promise<void> {
+  const arrangements = await queryClient.ensureQueryData({
+    queryKey: queryKeys.listArrangements,
+    queryFn: getListArrangements,
+  })
+  const changed = update(arrangements)
+  queryClient.setQueryData(queryKeys.listArrangements, changed)
+  try {
+    await saveListArrangements(changed)
+  } catch (caught) {
+    queryClient.setQueryData(queryKeys.listArrangements, arrangements)
+    throw caught
+  }
 }
 
 /** The pickers' layouts being saved, one after another, so quick clicks on the size buttons are saved in order. */

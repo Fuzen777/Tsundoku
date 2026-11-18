@@ -561,11 +561,14 @@ interface ListedItemsProps<Item extends ListedItem> {
   isSelected: (item: Item) => boolean
   disabled: boolean
   onSelect: (item: Item, ticked: boolean) => void
+  /** In All New Items: the items take what the view's height leaves them (in a column that shrinks to the view), rather
+   * than at most 28 rem or half the window. */
+  fill?: boolean
 }
 
 /**
  * A listing's items as the picker's view shows them: a row each (List), or their pictures (Masonry, Gallery), each with
- * its box. Gallery cuts a video's picture to 16:9 and a post's to a square.
+ * its box. Gallery cuts a video's picture to 16:9 and a post's to a square. They scroll on their own.
  */
 export function ListedItems<Item extends ListedItem>({
   items,
@@ -575,10 +578,12 @@ export function ListedItems<Item extends ListedItem>({
   isSelected,
   disabled,
   onSelect,
+  fill = false,
 }: ListedItemsProps<Item>) {
+  const height = fill ? "min-h-0" : "max-h-[min(28rem,50vh)]"
   if (layout.view === "list") {
     return (
-      <ul className="-mx-2 flex max-h-[min(28rem,50vh)] flex-col overflow-y-auto">
+      <ul className={classes("-mx-2 flex flex-col overflow-y-auto", height)}>
         {items.map((item) => (
           <ListedRow
             key={itemKey(item)}
@@ -603,7 +608,7 @@ export function ListedItems<Item extends ListedItem>({
       size={layout.size}
       galleryRatio={posts ? 1 : 16 / 9}
       disabled={disabled}
-      className="-mx-1 max-h-[min(28rem,50vh)]"
+      className={classes("-mx-1", height)}
     />
   )
 }

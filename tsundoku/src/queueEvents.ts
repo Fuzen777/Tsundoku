@@ -1,4 +1,4 @@
-import type { QueryClient } from "@tanstack/react-query"
+import { hashKey, type QueryClient } from "@tanstack/react-query"
 import {
   confirmWithUser,
   getBackgroundOptions,
@@ -10,15 +10,20 @@ import {
   queryKeys,
 } from "./api"
 import type { DownloadProgress } from "./bindings/DownloadProgress"
+import type { ListArrangements } from "./bindings/ListArrangements"
 import type { QueueItem } from "./bindings/QueueItem"
+import type { WatchedSource } from "./bindings/WatchedSource"
 import { createLiveStore } from "./liveStore"
+import { changeListArrangements } from "./queries"
 import { combinedFraction } from "./queueSources"
 import { strings } from "./strings"
+import { checkFoundItems } from "./watchedSources"
 
 /*
-  Keeps the UI's copy of the download queue and the pending links current from the core's events: queue-changed and
-  pending-changed replace them in React Query, and download-progress updates each running item's progress several
-  times a second, outside it.
+  Keeps the UI's copy of the download queue, the pending links and the watched sources current from the core's events:
+  queue-changed, pending-changed and watched-changed replace them in React Query (a check that finds something also
+  turns Watched to All New Items), and download-progress updates each running item's progress several times a second,
+  outside it.
 */
 
 const progress = createLiveStore<number, DownloadProgress>()
@@ -54,6 +59,7 @@ export function trackQueue(queryClient: QueryClient): void {
   })
   void onPendingChanged((links) => queryClient.setQueryData(queryKeys.pending, links))
   void onWatchedChanged((sources) => queryClient.setQueryData(queryKeys.watched, sources))
+  showAllNewWhenFound(queryClient)
   void onDownloadProgress(({ id, progress: value }) => progress.set(id, value))
   void onCloseRequested(async () => {
     // Read again each time: the tray's setting may have changed since the window opened.
@@ -69,6 +75,32 @@ export function trackQueue(queryClient: QueryClient): void {
       cancelLabel: strings.dialogs.cancel,
     })
     return confirmed ? "close" : "stay"
+  })
+}
+
+/**
+ * Turns the Watched view to All New Items once a check finds something, whichever view shows, so what it found is in
+ * one list to go through (Fuzen's choice). The choice is saved as the Show toggle's own is; Sources shows again when
+ * picked. Every copy of the sources React Query gets (an event, a refetch) is compared with the one before it, so a
+ * refetch can't hide a find; the first copy, read when the app starts, is compared with nothing.
+ */
+function showAllNewWhenFound(queryClient: QueryClient): void {
+  const watchedHash = hashKey(queryKeys.watched)
+  let before: WatchedSource[] | undefined
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || event.query.queryHash !== watchedHash) return
+    const after = event.query.state.data as WatchedSource[] | undefined
+    if (after === undefined || after === before) return
+    const found = before !== undefined && checkFoundItems(before, after)
+    before = after
+    const shown = queryClient.getQueryData<ListArrangements>(queryKeys.listArrangements)?.watched.show
+    if (!found || shown === "allNew") return
+    void changeListArrangements(queryClient, (current) => ({
+      ...current,
+      watched: { ...current.watched, show: "allNew" },
+    })).catch(() => {
+      // Saving failed and the toggle stayed on Sources, where the new items show on their cards anyway.
+    })
   })
 }
 

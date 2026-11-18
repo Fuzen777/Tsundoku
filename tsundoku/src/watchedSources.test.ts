@@ -4,6 +4,7 @@ import type { WatchedSource } from "./bindings/WatchedSource"
 import {
   allNewItems,
   arrangeSources,
+  checkFoundItems,
   DEFAULT_WATCHED_ARRANGEMENT,
   isExpanded,
   latestDownloadsQuery,
@@ -180,6 +181,27 @@ describe("newCount and isExpanded", () => {
     expect(isExpanded(busy, new Map())).toBe(true)
     expect(isExpanded(busy, new Map([[2, false]]))).toBe(false)
     expect(isExpanded(quiet, new Map([[1, true]]))).toBe(true)
+  })
+})
+
+describe("checkFoundItems", () => {
+  const before = [source(1, { newItems: [item("a")] }), source(2)]
+
+  it("tells when a source has a new item it didn't have", () => {
+    expect(checkFoundItems(before, [source(1, { newItems: [item("b"), item("a")] }), source(2)])).toBe(true)
+    expect(checkFoundItems(before, [source(1, { newItems: [item("a")] }), source(2, { newItems: [item("c")] })])).toBe(
+      true,
+    )
+  })
+
+  it("is quiet while nothing new came: the same items, fewer, or a check that found none", () => {
+    expect(checkFoundItems(before, before)).toBe(false)
+    expect(checkFoundItems(before, [source(1), source(2)])).toBe(false)
+    expect(checkFoundItems(before, [source(1, { newItems: [item("a")], lastCheckedAt: 9000 }), source(2)])).toBe(false)
+  })
+
+  it("doesn't count a source added since, whose new items came with the adding", () => {
+    expect(checkFoundItems(before, [...before, source(3, { newItems: [item("d")] })])).toBe(false)
   })
 })
 

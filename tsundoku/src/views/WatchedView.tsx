@@ -130,7 +130,10 @@ export function WatchedView() {
       {sources.length === 0 ? (
         <EmptyState icon={Eye} title={text.emptyTitle} body={text.emptyBody} />
       ) : (
-        <div className="flex max-w-4xl flex-col gap-3">
+        // All New Items fits the view's height, its card shrinking to it, so its list scrolls with its buttons in sight;
+        // where the view is shorter than 20 rem (the What's New card above it), the list keeps about 10 rem and the
+        // view scrolls.
+        <div className={classes("flex max-w-4xl flex-col gap-3", showingAll && "h-full min-h-80")}>
           <div className="flex flex-wrap items-center gap-2">
             <SegmentedControl
               label={text.show}
@@ -561,14 +564,16 @@ function SkippedItems({ source }: { source: WatchedSource }) {
   )
 }
 
-/** All New Items: every source's new items in one picker, each named with its source. Download Selected queues the
- * ticked ones, each with its source's folder and preset, and skips the rest shown. */
+/** All New Items: every source's new items in one picker, each named with its source, taking what the view's height
+ * leaves it. Download Selected queues the ticked ones, each with its source's folder and preset, and skips the rest
+ * shown. */
 function AllNewItems({ sources }: { sources: readonly WatchedSource[] }) {
   const items = allNewItems(sources)
   if (items.length === 0) return <p className="text-fg-secondary">{text.allNewNone}</p>
   return (
-    <Card className="p-4">
+    <Card className="flex min-h-0 flex-col p-4">
       <ItemPicker
+        fill
         items={items}
         startsTicked={(item) => !item.lastDownload}
         showUploader={false}
@@ -608,6 +613,8 @@ interface ItemPickerProps<Item extends WatchedItem> {
   /** The buttons under the items, given those shown (the type filter's) and which of them are ticked, a way to run an
    * action (which shows its error, and starts the ticks again once it's done) and whether one runs. */
   actions: (shownItems: ShownItems<Item>, run: (action: () => Promise<unknown>) => void, busy: boolean) => ReactNode
+  /** The items take what the height of the column it's in leaves them (`ListedItems`' `fill`). */
+  fill?: boolean
 }
 
 /** The items a picker shows, ticked or not. */
@@ -619,7 +626,14 @@ interface ShownItems<Item> {
 
 /** A list of a source's items in the picker's view (shared with the preview card's), with a box that ticks them all,
  * how many are ticked, the type filter when they're of several types, and the actions under them. */
-function ItemPicker<Item extends WatchedItem>({ items, startsTicked, showUploader, sourceOf, actions }: ItemPickerProps<Item>) {
+function ItemPicker<Item extends WatchedItem>({
+  items,
+  startsTicked,
+  showUploader,
+  sourceOf,
+  actions,
+  fill = false,
+}: ItemPickerProps<Item>) {
   const [chosen, setChosen] = useState<ReadonlyMap<string, boolean>>(new Map())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
@@ -645,7 +659,7 @@ function ItemPicker<Item extends WatchedItem>({ items, startsTicked, showUploade
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className={classes("flex flex-col gap-2", fill && "min-h-0")}>
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <label className="flex items-center gap-2 text-fg-secondary">
           <input
@@ -685,6 +699,7 @@ function ItemPicker<Item extends WatchedItem>({ items, startsTicked, showUploade
         isSelected={isTicked}
         disabled={busy}
         onSelect={tick}
+        fill={fill}
       />
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex justify-end gap-2">{actions({ shown, picked, unpicked }, run, busy)}</div>

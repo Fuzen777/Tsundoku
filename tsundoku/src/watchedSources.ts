@@ -156,6 +156,18 @@ function postedDay({ video, approximateDate, firstSeenAt }: WatchedItem): string
   return video.uploadDate ?? approximateDate ?? new Date(firstSeenAt * 1000).toISOString().slice(0, 10)
 }
 
+/**
+ * Whether a check found something between two copies of the sources: a source in both has a new item it didn't have.
+ * Only a check makes an item of a source new after it's added, so a source added since doesn't count.
+ */
+export function checkFoundItems(before: readonly WatchedSource[], after: readonly WatchedSource[]): boolean {
+  const knownBefore = new Map(before.map((source) => [source.id, new Set(source.newItems.map(itemKey))]))
+  return after.some((source) => {
+    const known = knownBefore.get(source.id)
+    return known !== undefined && source.newItems.some((item) => !known.has(itemKey(item)))
+  })
+}
+
 /** How many new items wait across these sources. */
 export function newCount(sources: readonly WatchedSource[]): number {
   return sources.reduce((total, source) => total + source.newItems.length, 0)
