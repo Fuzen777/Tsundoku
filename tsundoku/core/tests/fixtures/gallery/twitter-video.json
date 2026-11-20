@@ -8,10 +8,16 @@
       },
       "category": "twitter",
       "content": "@Space_Station @astro_anil @csa_asc POV: Your office is in the sky. \n \n@Astro_Anil is seen moving toward his spacewalk teammate, Joshua Kutryk of @CSA_ASC, as Earth glows below.",
-      "count": 1,
+      "count": 2,
       "date": "2026-11-05 17:39:44",
       "subcategory": "tweet",
-      "tweet_id": 2118397868562071609
+      "tweet_id": 2118397868562071609,
+      "user": {
+        "media_count": 28260,
+        "name": "NASA",
+        "nick": "NASA",
+        "profile_image": "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB.jpg"
+      }
     }
   ],
   [
@@ -24,7 +30,7 @@
       },
       "category": "twitter",
       "content": "@Space_Station @astro_anil @csa_asc POV: Your office is in the sky. \n \n@Astro_Anil is seen moving toward his spacewalk teammate, Joshua Kutryk of @CSA_ASC, as Earth glows below.",
-      "count": 1,
+      "count": 2,
       "date": "2026-11-05 17:39:44",
       "description": null,
       "extension": "mp4",
@@ -33,6 +39,40 @@
       "subcategory": "tweet",
       "tweet_id": 2118397868562071609,
       "type": "video",
+      "user": {
+        "media_count": 28260,
+        "name": "NASA",
+        "nick": "NASA",
+        "profile_image": "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB.jpg"
+      },
+      "width": 3840
+    }
+  ],
+  [
+    3,
+    "https://pbs.twimg.com/amplify_video_thumb/2118397784684470272/img/jd3D4CZ8mj74hxWc",
+    {
+      "author": {
+        "name": "NASA",
+        "nick": "NASA"
+      },
+      "category": "twitter",
+      "content": "@Space_Station @astro_anil @csa_asc POV: Your office is in the sky. \n \n@Astro_Anil is seen moving toward his spacewalk teammate, Joshua Kutryk of @CSA_ASC, as Earth glows below.",
+      "count": 2,
+      "date": "2026-11-05 17:39:44",
+      "description": null,
+      "extension": "jpg",
+      "height": 2160,
+      "num": 2,
+      "subcategory": "tweet",
+      "tweet_id": 2118397868562071609,
+      "type": "preview",
+      "user": {
+        "media_count": 28260,
+        "name": "NASA",
+        "nick": "NASA",
+        "profile_image": "https://pbs.twimg.com/profile_images/1321163587679784960/0ZxKlEKB.jpg"
+      },
       "width": 3840
     }
   ]

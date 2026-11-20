@@ -562,7 +562,8 @@ impl WatchedSources {
     }
 
     /// Stores the items of `found` that aren't known (`is_known`), as new, and the source's name and picture as the
-    /// listing has them now.
+    /// listing has them now. The items it has without a picture take the one read now, from the listing's items or
+    /// from what it read past them (`Listing::also_read`).
     fn keep_new(
         &self,
         source: &StoredSource,
@@ -589,6 +590,16 @@ impl WatchedSources {
                 position: i64::try_from(position).unwrap_or(i64::MAX),
             })
             .collect();
+        let pictured: Vec<&VideoInfo> = found
+            .items
+            .iter()
+            .map(|item| &item.video)
+            .chain(&found.also_read)
+            .filter(|video| video.thumbnail_url.is_some())
+            .collect();
+        self.store
+            .add_pictures(source.id, &pictured)
+            .map_err(storage_failure)?;
         self.store
             .insert_items(
                 source.id,

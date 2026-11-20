@@ -176,8 +176,9 @@ if ($Capture -ne "Metadata") {
     ) | Where-Object { $_.Cookies }
     foreach ($account in $accounts) {
         $galleryDl = Find-Tool "gallery-dl" "gallery-dl"
-        $json = & $galleryDl --config-ignore --dump-json --cookies-from-browser $account.Cookies --post-range 1-12 `
-            -- $account.Url
+        # As core\src\gallery.rs runs it: X's videos listed with their covers.
+        $json = & $galleryDl --config-ignore --dump-json -o extractor.twitter.previews=true `
+            --cookies-from-browser $account.Cookies --post-range 1-12 -- $account.Url
         if ($LASTEXITCODE -ne 0) { throw "gallery-dl failed for $($account.Name)" }
         Set-Content -Path (Join-Path $listingFixtures "$($account.Name).json") -Value ($json -join "`n") `
             -Encoding utf8NoBOM

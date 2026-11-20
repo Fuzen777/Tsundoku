@@ -2,7 +2,7 @@
 //! once, so what was added stays in it to look at.
 
 use std::sync::Condvar;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use super::*;
@@ -27,6 +27,10 @@ struct FakeReader {
     started: Mutex<Vec<String>>,
     held: Mutex<HashSet<String>>,
     released: Condvar,
+    /// Whether the listing gives each item a picture (`picture_of`).
+    pictures: AtomicBool,
+    /// What the read met past its items (`Listing::also_read`).
+    also_read: Mutex<Vec<String>>,
 }
 
 impl FakeReader {
@@ -70,6 +74,10 @@ impl ListingReader for FakeReader {
         if let Some(error) = lock(&self.failure).clone() {
             return Err(error);
         }
+        let read = |id: &String| VideoInfo {
+            thumbnail_url: self.pictures.load(Ordering::SeqCst).then(|| picture_of(id)),
+            ..video(id)
+        };
         let listing = Listing {
             kind: ListingKind::Channel,
             title: "Renamed Channel".to_owned(),
@@ -83,13 +91,14 @@ impl ListingReader for FakeReader {
             items: lock(&self.listing)
                 .iter()
                 .map(|id| ListedItem {
-                    video: video(id),
+                    video: read(id),
                     approximate_date: None,
                     last_download: None,
                     in_queue: false,
                 })
                 .collect(),
             more: None,
+            also_read: lock(&self.also_read).iter().map(read).collect(),
         };
         *lock(&self.reached) = Some(reached(&listing));
         Ok(listing)
@@ -283,6 +292,10 @@ fn video(id: &str) -> VideoInfo {
     }
 }
 
+fn picture_of(id: &str) -> String {
+    format!("https://pictures.example/{id}.jpg")
+}
+
 fn key(id: &str) -> ItemKey {
     ItemKey::of(&video(id))
 }
@@ -359,6 +372,74 @@ fn a_check_keeps_only_what_it_doesnt_know() {
         test.new_ids(id),
         ["n", "a"],
         "the latest find first, each found once"
+    );
+}
+
+#[test]
+fn a_check_gives_the_items_it_has_the_pictures_it_reads_for_them() {
+    let test = Test::new();
+    // Listed without pictures, as an X account's videos were before their covers were read.
+    let id = test.add(&["b", "c", "d"], FirstItems::All);
+    let pictures = |test: &Test| -> Vec<(String, Option<String>)> {
+        test.source(id)
+            .new_items
+            .iter()
+            .map(|item| {
+                (
+                    item.video.video_id.clone(),
+                    item.video.thumbnail_url.clone(),
+                )
+            })
+            .collect()
+    };
+    assert!(pictures(&test).iter().all(|(_, picture)| picture.is_none()));
+
+    test.sources.skip(id, &[key("d")]).unwrap();
+    test.reader.pictures.store(true, Ordering::SeqCst);
+    test.reader.lists(&["a", "b", "c", "d"]);
+    test.check(id);
+    assert_eq!(
+        pictures(&test),
+        [
+            ("a".to_owned(), Some(picture_of("a"))),
+            ("b".to_owned(), Some(picture_of("b"))),
+            ("c".to_owned(), Some(picture_of("c"))),
+        ],
+        "the new one and the ones it had, which stay new in their places"
+    );
+    let source = test.source(id);
+    assert_eq!(ids(&source.skipped_items), ["d"], "still skipped");
+    assert_eq!(
+        source.skipped_items[0].video.thumbnail_url,
+        Some(picture_of("d"))
+    );
+
+    // A picture it has is kept, whatever a later read gives or lacks.
+    test.reader.pictures.store(false, Ordering::SeqCst);
+    test.check(id);
+    assert_eq!(pictures(&test)[1].1, Some(picture_of("b")));
+}
+
+#[test]
+fn a_check_takes_pictures_from_what_it_read_past_its_items_too() {
+    let test = Test::new();
+    let id = test.add(&["b", "c", "old"], FirstItems::All);
+    // As an X account's check reads: "old" came with the videos, past where the photos stopped, so it isn't listed.
+    test.reader.pictures.store(true, Ordering::SeqCst);
+    test.reader.lists(&["a", "b", "c"]);
+    *lock(&test.reader.also_read) = vec!["old".to_owned(), "older".to_owned()];
+    test.check(id);
+    let source = test.source(id);
+    assert_eq!(
+        ids(&source.new_items),
+        ["a", "b", "c", "old"],
+        "one the source never listed isn't taken from there"
+    );
+    assert!(
+        source
+            .new_items
+            .iter()
+            .all(|item| item.video.thumbnail_url == Some(picture_of(&item.video.video_id)))
     );
 }
 

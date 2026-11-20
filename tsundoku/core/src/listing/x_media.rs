@@ -66,6 +66,9 @@ struct ListAnswer {
 pub(super) struct Merged {
     /// Newest first, each post once.
     pub posts: Vec<VideoInfo>,
+    /// The posts read that aren't among `posts`, each once: older than where a list that goes on stopped, or past the
+    /// newest asked for. A later read gives them their place; what they are is known already.
+    pub set_aside: Vec<VideoInfo>,
     /// Where the next read starts, or `None` once both lists ended and every post read was handed over.
     pub next: Option<MediaPlaces>,
     /// The account, from whichever list gave it.
@@ -190,8 +193,20 @@ fn merge(
         photos: next_place(MediaList::Photos, photos),
         videos: next_place(MediaList::Videos, videos),
     };
+    let kept: HashSet<&str> = posts.iter().map(|post| post.video_id.as_str()).collect();
+    let mut set_aside_ids = HashSet::new();
+    let set_aside = answers
+        .iter()
+        .flatten()
+        .flat_map(|answer| &answer.posts)
+        .filter(|post| {
+            !kept.contains(post.video_id.as_str()) && set_aside_ids.insert(post.video_id.as_str())
+        })
+        .cloned()
+        .collect();
     Merged {
         posts: posts.into_iter().cloned().collect(),
+        set_aside,
         next: (next.photos.is_some() || next.videos.is_some()).then_some(next),
         account: answers
             .iter()
@@ -240,6 +255,10 @@ mod tests {
         merged.posts.iter().map(order).collect()
     }
 
+    fn set_aside(merged: &Merged) -> Vec<u64> {
+        merged.set_aside.iter().map(order).collect()
+    }
+
     fn places(photos: Option<u32>, videos: Option<u32>) -> Option<MediaPlaces> {
         Some(MediaPlaces { photos, videos })
     }
@@ -266,6 +285,7 @@ mod tests {
         );
         assert_eq!(ids(&merged), [90, 80, 70, 60, 50]);
         assert_eq!(merged.next, None, "nothing more");
+        assert!(merged.set_aside.is_empty());
     }
 
     #[test]
@@ -284,6 +304,11 @@ mod tests {
             merged.next,
             places(Some(3), Some(1)),
             "the photos after their 3, the videos after the one kept"
+        );
+        assert_eq!(
+            set_aside(&merged),
+            [40, 10],
+            "read, but without a place yet"
         );
 
         // Both go on: down to the newer of the two places where they stopped.
@@ -318,6 +343,7 @@ mod tests {
             places(Some(2), Some(1)),
             "each list starts after the posts it gave that were kept"
         );
+        assert_eq!(set_aside(&merged), [50, 30, 60]);
     }
 
     #[test]
@@ -352,6 +378,7 @@ mod tests {
             None,
         );
         assert_eq!(ids(&merged), [90, 80, 70]);
+        assert!(merged.set_aside.is_empty());
     }
 
     #[test]

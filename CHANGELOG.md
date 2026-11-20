@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.2 · 2026-11-20
+
+### Fixed
+
+- **X videos' pictures**: a video or GIF posted on X now shows its cover wherever its picture goes: an account's list in List, Masonry and Gallery, the preview card and its strip of a post's files, Pending, Watched and the Queue. Before, they showed an empty tile. Watched items listed earlier without a picture get theirs the next time a check reads them, which covers an account's newest posts; downloads already in the queue keep the empty tile.
+
 ## 0.2.1 · 2026-11-20
 
 ### Added

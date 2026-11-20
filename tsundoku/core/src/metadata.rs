@@ -115,6 +115,32 @@ impl VideoInfo {
             bytes: picked.map(|file| file.size).sum(),
         })
     }
+
+    /// Takes the pictures a later read of the same item has and this one lacks: its own, and those of its post's
+    /// files, each by its number. Whether it took any. For an item kept from before its pictures could be read, such
+    /// as an X video listed before 0.2.2.
+    pub fn take_missing_pictures(&mut self, read: &Self) -> bool {
+        let mut took_any = false;
+        if self.thumbnail_url.is_none() && read.thumbnail_url.is_some() {
+            self.thumbnail_url.clone_from(&read.thumbnail_url);
+            took_any = true;
+        }
+        for file in &mut self.post_files {
+            if file.thumbnail_url.is_some() {
+                continue;
+            }
+            let picture = read
+                .post_files
+                .iter()
+                .find(|other| other.number == file.number && other.video == file.video)
+                .and_then(|other| other.thumbnail_url.as_ref());
+            if let Some(picture) = picture {
+                file.thumbnail_url = Some(picture.clone());
+                took_any = true;
+            }
+        }
+        took_any
+    }
 }
 
 /// The files of a post, such as an Instagram carousel.
@@ -138,8 +164,7 @@ pub struct PostFile {
     pub number: u32,
     /// A video rather than an image.
     pub video: bool,
-    /// A small picture of it: the image itself, or a video's cover when the site gives one (Instagram does, X
-    /// doesn't).
+    /// A small picture of it: the image itself, or a video's cover when the site gives one (Instagram and X do).
     pub thumbnail_url: Option<String>,
     /// Whether the download takes it. Every file does to start with; a strip unticks the ones not wanted.
     #[serde(default = "picked_by_default")]

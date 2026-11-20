@@ -234,6 +234,12 @@ pub struct Listing {
     /// Where the items after these start, for Load More, Load New and Load All, or `None` when the listing is whole: a
     /// playlist, or a channel or an account with fewer than `NEWEST_COUNT`.
     pub more: Option<ListingMore>,
+    /// Posts the read met past `items` without knowing their place among them yet (an X account's:
+    /// `x_media::Merged::set_aside`). They aren't listed, and the UI never gets them: a watched source's check takes
+    /// their pictures for the items it has (`WatchedStore::add_pictures`).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub also_read: Vec<VideoInfo>,
 }
 
 /// Where a listing's next items start, for the picker's Load More, Load New and Load All (`read_more`).
@@ -489,7 +495,7 @@ fn read_x_account(
     )?;
     let items = listed(merged.posts);
     let read = count_of(items.len());
-    Ok(account_listing(merged.account, link, items, |title, _| {
+    let mut listing = account_listing(merged.account, link, items, |title, _| {
         merged.next.map(|places| ListingMore {
             link: link.to_owned(),
             title: title.to_owned(),
@@ -498,7 +504,9 @@ fn read_x_account(
             channel_id: None,
             media: Some(places),
         })
-    }))
+    });
+    listing.also_read = merged.set_aside;
+    Ok(listing)
 }
 
 /// Reads a listing for a watched source's check, which only needs its items up to what the source saw before. An
@@ -1176,6 +1184,7 @@ fn from_yt_dlp_window(
         url,
         items,
         more,
+        also_read: Vec::new(),
     })
 }
 
@@ -1368,6 +1377,7 @@ fn account_listing(
         newest_only: true,
         items,
         more,
+        also_read: Vec::new(),
     }
 }
 

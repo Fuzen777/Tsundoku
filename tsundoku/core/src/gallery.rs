@@ -29,6 +29,9 @@ const IMAGE_EXTENSIONS: [&str; 13] = [
     "jpg", "jpeg", "png", "gif", "webp", "avif", "bmp", "heic", "heif", "jxl", "tif", "tiff", "svg",
 ];
 
+/// gallery-dl's option that lists the cover of each of X's videos and animated GIFs (`extractor.twitter.previews`).
+const X_COVERS: &str = "extractor.twitter.previews=true";
+
 /// What a post's file is, by its extension, or its MIME type when the extension says nothing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FileKind {
@@ -156,6 +159,11 @@ fn command(tools: &GalleryTools, gallery_dl: &Path, extra: &[&str], link: &str) 
         "--config-ignore",
         // Every file's details as JSON, without downloading.
         "--dump-json",
+        // X's videos come with their cover as a file of its own after them (`is_cover`), which is their only picture:
+        // gallery-dl says nothing of it in the video's own details. For X alone, since other sites' `previews` add
+        // files that are theirs to download.
+        "-o",
+        X_COVERS,
     ]);
     if let Some(cookies) = &tools.cookies {
         command = command.arg("--cookies-from-browser").arg(cookies);
@@ -219,7 +227,15 @@ pub(crate) struct FoundPosts {
 /// A post of gallery-dl's answer: its metadata (`[2, metadata]`, or its first file's when there's none) and its files.
 struct PostMessages<'a> {
     post: &'a Value,
-    files: Vec<(&'a str, &'a Value)>,
+    files: Vec<FoundFile<'a>>,
+}
+
+/// One of a post's files (`[3, url, details]`).
+struct FoundFile<'a> {
+    url: &'a str,
+    details: &'a Value,
+    /// The address of its cover, when the answer gives it as a message of its own after the file: X's videos.
+    cover: Option<&'a str>,
 }
 
 /// gallery-dl's answer, sorted into posts.
@@ -333,11 +349,28 @@ fn sort_answer(messages: &[Value]) -> Result<SortedAnswer<'_>, PreviewError> {
             }
             (Some(3), 3) => {
                 if let Some(url) = parts[1].as_str() {
+                    let details = &parts[2];
+                    if is_cover(details) {
+                        // Never a file of its own: a download doesn't ask for covers, so it would get one file less.
+                        let video = posts
+                            .last_mut()
+                            .and_then(|last| last.files.last_mut())
+                            .filter(|file| kind_of(file.details) == FileKind::Video);
+                        if let Some(video) = video {
+                            video.cover.get_or_insert(url);
+                        }
+                        continue;
+                    }
+                    let file = FoundFile {
+                        url,
+                        details,
+                        cover: None,
+                    };
                     match posts.last_mut() {
-                        Some(last) => last.files.push((url, &parts[2])),
+                        Some(last) => last.files.push(file),
                         None => posts.push(PostMessages {
-                            post: &parts[2],
-                            files: vec![(url, &parts[2])],
+                            post: details,
+                            files: vec![file],
                         }),
                     }
                 }
@@ -353,6 +386,13 @@ fn sort_answer(messages: &[Value]) -> Result<SortedAnswer<'_>, PreviewError> {
         links_elsewhere,
         answered,
     })
+}
+
+/// Whether a file of the answer is the cover of the video before it rather than one of the post's files: on X, where
+/// `X_COVERS` asks for them, a file whose `type` is "preview".
+fn is_cover(file: &Value) -> bool {
+    text(file, "category").as_deref() == Some("twitter")
+        && text(file, "type").as_deref() == Some("preview")
 }
 
 /// Whether two posts' metadata name the same post, by their site and ID. Without an ID to tell them apart, they're
@@ -383,7 +423,7 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         count(
             files
                 .iter()
-                .filter(|(_, file)| kind_of(file) == kind)
+                .filter(|file| kind_of(file.details) == kind)
                 .count(),
         )
     };
@@ -587,27 +627,32 @@ fn caption_title(post: &Value) -> Option<String> {
     })
 }
 
-/// The first image (X's at its small size, since an X account's list shows 50 of them), or a video's poster
-/// (Instagram gives one as `display_url`). A file of another kind has none: its address is the file itself, which may
-/// be gigabytes.
-fn thumbnail(files: &[(&str, &Value)]) -> Option<String> {
-    files.iter().find_map(|(url, file)| match kind_of(file) {
-        FileKind::Image => Some(small_image(url)),
-        FileKind::Video => text(file, "display_url"),
+/// The first image (X's at its small size, since an X account's list shows 50 of them), or a video's cover. A file of
+/// another kind has none: its address is the file itself, which may be gigabytes.
+fn thumbnail(files: &[FoundFile]) -> Option<String> {
+    files.iter().find_map(|file| match kind_of(file.details) {
+        FileKind::Image => Some(small_image(file.url)),
+        FileKind::Video => cover(file),
         FileKind::Other => None,
     })
 }
 
+/// A file's picture when it isn't the file itself: Instagram's `display_url`, which its videos have as their cover,
+/// or the cover X lists after a video (`is_cover`), at its small size.
+fn cover(file: &FoundFile) -> Option<String> {
+    text(file.details, "display_url").or_else(|| file.cover.map(small_image))
+}
+
 /// The name of a post's only file when it's neither an image nor a video, such as a .zip shared on Pixeldrain: the
 /// post's best title when it has no caption or uploader.
-fn lone_file_name(files: &[(&str, &Value)]) -> Option<String> {
-    let [(_, file)] = files else {
+fn lone_file_name(files: &[FoundFile]) -> Option<String> {
+    let [file] = files else {
         return None;
     };
-    if kind_of(file) != FileKind::Other {
+    if kind_of(file.details) != FileKind::Other {
         return None;
     }
-    file_name(file)
+    file_name(file.details)
 }
 
 /// A file's name with its extension, as the site gives it: `name`, else `filename` and `extension`.
@@ -623,27 +668,28 @@ fn file_name(file: &Value) -> Option<String> {
 
 /// The post's files for the strip, numbered from 1 in the answer's order, which is the order gallery-dl's `--range`
 /// counts in when it downloads them, all picked, with their names and sizes when the site gives them.
-fn post_files(files: &[(&str, &Value)]) -> Vec<crate::metadata::PostFile> {
+fn post_files(files: &[FoundFile]) -> Vec<crate::metadata::PostFile> {
     files
         .iter()
         .zip(1..)
-        .map(|((url, file), number)| {
-            let kind = kind_of(file);
+        .map(|(file, number)| {
+            let kind = kind_of(file.details);
             crate::metadata::PostFile {
                 number,
                 video: kind == FileKind::Video,
-                thumbnail_url: text(file, "display_url")
-                    .or_else(|| (kind == FileKind::Image).then(|| small_image(url)))
+                thumbnail_url: cover(file)
+                    .or_else(|| (kind == FileKind::Image).then(|| small_image(file.url)))
                     .filter(|url| url.starts_with("https://")),
                 picked: true,
-                name: file_name(file),
-                size: file.get("size").and_then(Value::as_u64),
+                name: file_name(file.details),
+                size: file.details.get("size").and_then(Value::as_u64),
             }
         })
         .collect()
 }
 
-/// An image's address, asking X for its small size rather than the original, which can be 4K.
+/// An image's address, asking X for its small size rather than the original, which can be 4K. X's covers take the
+/// same sizes as its images.
 fn small_image(url: &str) -> String {
     if url.starts_with("https://pbs.twimg.com/") {
         url.replace("name=orig", "name=small")
@@ -763,11 +809,19 @@ mod tests {
             "https://x.com/NASA/status/2118397868562071609",
         )
         .unwrap();
-        assert_eq!(video.post_files.len(), 1);
         assert_eq!(
-            video.post_files[0].thumbnail_url, None,
-            "X gives no cover for a video"
+            video.post_files.len(),
+            1,
+            "the cover listed after the video isn't a file of the post"
         );
+        assert_eq!(
+            video.post_files[0].thumbnail_url.as_deref(),
+            Some(
+                "https://pbs.twimg.com/amplify_video_thumb/2118397784684470272/img/jd3D4CZ8mj74hxWc"
+            ),
+            "X's cover for the video"
+        );
+        assert_eq!(video.thumbnail_url, video.post_files[0].thumbnail_url);
 
         let images = parse_answer(
             r#"[[2, {"category": "twitter", "tweet_id": 1}],
@@ -784,6 +838,94 @@ mod tests {
             Some("https://pbs.twimg.com/media/A?format=jpg&name=small"),
             "the post's picture too, as an account's list shows many"
         );
+    }
+
+    #[test]
+    fn an_x_videos_cover_is_its_picture_and_never_a_file() {
+        // As gallery-dl answers with `X_COVERS`: each video and animated GIF (an MP4 on X) is followed by its cover.
+        let file = |kind: &str, extension: &str, number: u32| {
+            format!(
+                r#"{{"category": "twitter", "tweet_id": 5, "type": "{kind}", "extension": "{extension}",
+                    "num": {number}, "count": 5}}"#
+            )
+        };
+        let json = format!(
+            r#"[[2, {{"category": "twitter", "tweet_id": 5, "author": {{"name": "nasa"}}, "count": 5}}],
+                [3, "https://pbs.twimg.com/media/A?format=jpg&name=orig", {photo}],
+                [3, "https://video.twimg.com/amplify_video/1/vid/avc1/1280x720/b.mp4?tag=14", {video}],
+                [3, "https://pbs.twimg.com/amplify_video_thumb/1/img/B?format=jpg&name=orig", {video_cover}],
+                [3, "https://video.twimg.com/tweet_video/c.mp4", {gif}],
+                [3, "https://pbs.twimg.com/tweet_video_thumb/C?format=jpg&name=orig", {gif_cover}]]"#,
+            photo = file("photo", "jpg", 1),
+            video = file("video", "mp4", 2),
+            video_cover = file("preview", "jpg", 3),
+            gif = file("animated_gif", "mp4", 4),
+            gif_cover = file("preview", "jpg", 5),
+        );
+        let post = parse_answer(&json, "https://x.com/nasa/status/5").unwrap();
+        assert_eq!(
+            post.post,
+            Some(PostContents {
+                images: 1,
+                videos: 2,
+                others: 0,
+            }),
+            "the covers aren't counted: a download doesn't get them"
+        );
+        let numbers: Vec<u32> = post.post_files.iter().map(|file| file.number).collect();
+        assert_eq!(numbers, [1, 2, 3], "numbered as a download counts them");
+        let pictures: Vec<Option<&str>> = post
+            .post_files
+            .iter()
+            .map(|file| file.thumbnail_url.as_deref())
+            .collect();
+        assert_eq!(
+            pictures,
+            [
+                Some("https://pbs.twimg.com/media/A?format=jpg&name=small"),
+                Some("https://pbs.twimg.com/amplify_video_thumb/1/img/B?format=jpg&name=small"),
+                Some("https://pbs.twimg.com/tweet_video_thumb/C?format=jpg&name=small"),
+            ],
+            "each at its small size"
+        );
+
+        // A post of one video: its cover is the post's picture.
+        let json = format!(
+            r#"[[2, {{"category": "twitter", "tweet_id": 6}}],
+                [3, "https://video.twimg.com/ext_tw_video/2/pu/vid/avc1/720x1280/d.mp4", {video}],
+                [3, "https://pbs.twimg.com/ext_tw_video_thumb/2/pu/img/D?format=jpg&name=orig", {cover}]]"#,
+            video = file("video", "mp4", 1),
+            cover = file("preview", "jpg", 2),
+        );
+        let post = parse_answer(&json, "https://x.com/nasa/status/6").unwrap();
+        assert_eq!(
+            post.thumbnail_url.as_deref(),
+            Some("https://pbs.twimg.com/ext_tw_video_thumb/2/pu/img/D?format=jpg&name=small")
+        );
+        assert_eq!(post.post_file_count(), Some(1));
+
+        // A cover with no video before it is still no file.
+        let json = format!(
+            r#"[[2, {{"category": "twitter", "tweet_id": 7}}],
+                [3, "https://pbs.twimg.com/media/E?format=jpg&name=orig", {photo}],
+                [3, "https://pbs.twimg.com/amplify_video_thumb/3/img/F?format=jpg&name=orig", {cover}]]"#,
+            photo = file("photo", "jpg", 1),
+            cover = file("preview", "jpg", 2),
+        );
+        let post = parse_answer(&json, "https://x.com/nasa/status/7").unwrap();
+        assert_eq!(post.post_files.len(), 1);
+        assert_eq!(
+            post.post_files[0].thumbnail_url.as_deref(),
+            Some("https://pbs.twimg.com/media/E?format=jpg&name=small"),
+            "a photo keeps its own picture"
+        );
+
+        // Another site's file of that type is one of its files.
+        let json = r#"[[2, {"category": "example", "id": "1"}],
+            [3, "https://cdn.example/1.mp4", {"category": "example", "extension": "mp4"}],
+            [3, "https://cdn.example/1.jpg", {"category": "example", "type": "preview", "extension": "jpg"}]]"#;
+        let post = parse_answer(json, "https://example.com/post/1").unwrap();
+        assert_eq!(post.post_files.len(), 2);
     }
 
     #[test]
@@ -1299,6 +1441,8 @@ mod tests {
             [
                 "--config-ignore",
                 "--dump-json",
+                "-o",
+                "extractor.twitter.previews=true",
                 "--cookies-from-browser",
                 "firefox",
                 "--",

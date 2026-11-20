@@ -13,8 +13,7 @@ number: number,
  */
 video: boolean, 
 /**
- * A small picture of it: the image itself, or a video's cover when the site gives one (Instagram does, X
- * doesn't).
+ * A small picture of it: the image itself, or a video's cover when the site gives one (Instagram and X do).
  */
 thumbnailUrl: string | null, 
 /**

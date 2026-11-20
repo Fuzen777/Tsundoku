@@ -846,6 +846,7 @@ fn a_check_of_an_account_reads_its_first_answer_then_the_newest_only_when_it_mus
             channel_id: None,
             media: None,
         }),
+        also_read: Vec::new(),
     };
     // What a check asked for, how often it paused, and which answer it kept, for whether the first answer reached
     // what was seen before and whether the account had more.

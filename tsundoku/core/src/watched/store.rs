@@ -231,6 +231,36 @@ impl WatchedStore {
         transaction.commit().map_err(storage_error)
     }
 
+    /// Gives the source's items the pictures a check read for them, where they had none
+    /// (`VideoInfo::take_missing_pictures`). Items the source doesn't have are passed over.
+    pub fn add_pictures(&self, source: i64, read: &[&VideoInfo]) -> Result<(), WatchedError> {
+        let mut connection = self.database.lock();
+        let transaction = connection.transaction().map_err(storage_error)?;
+        for video in read {
+            let kept: Option<String> = transaction
+                .query_row(
+                    "SELECT video FROM watched_items WHERE source = ?1 AND site = ?2 AND item_id = ?3",
+                    params![source, video.site, video.video_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(storage_error)?;
+            let Some(mut kept) = kept.and_then(|json| from_json::<VideoInfo>(&json)) else {
+                continue;
+            };
+            if !kept.take_missing_pictures(video) {
+                continue;
+            }
+            transaction
+                .execute(
+                    "UPDATE watched_items SET video = ?4 WHERE source = ?1 AND site = ?2 AND item_id = ?3",
+                    params![source, video.site, video.video_id, to_json(&kept)],
+                )
+                .map_err(storage_error)?;
+        }
+        transaction.commit().map_err(storage_error)
+    }
+
     /// Records a check: when, and its error or none.
     pub fn set_checked(
         &self,
