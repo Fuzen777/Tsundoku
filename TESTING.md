@@ -409,5 +409,4 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] After Check for Updates on ffmpeg found an update, Update All installs it and the card's Update button goes back to Check for Updates.
 
 **40. Portable copy and the first-run setup** · 0.1.20, 0.1.22, 0.1.24, 0.1.25, 0.1.26
-- [ ] Run `Scripts\Build-Portable.cmd` while the portable copy runs → it quits that copy (never the installed one or a dev build), replaces it and starts it again.
 - [ ] For a first start from nothing, quit Tsundoku, run `Scripts\Build-Portable.cmd D:\Dev\tsundoku\portable-fresh` and start the `Tsundoku.exe` it makes there. The first screen asks where the tools, their caches and downloads go, with caches and downloads unpicked and Continue waiting for them; Tools offers In AppData, picked when the installed copy's tools are there, which are then used without downloading. Back from the tools screen keeps the picks; the tools screen includes gallery-dl and wraps long paths; Continue Without shows if only Deno or gallery-dl fails. Delete the folder afterwards.
