@@ -21,6 +21,7 @@ import {
   isQueued,
   itemKey,
   LOAD_NEW_COUNT,
+  mediaCount,
   nounOf,
   pickerItems,
   picksFor,
@@ -31,6 +32,7 @@ import {
   takesPreset,
   withItem,
   withMoreItems,
+  type MediaCount,
   type PickedPreset,
 } from "../listingPicker"
 import { usePickerLayout, usePresets, useRulePresets } from "../queries"
@@ -221,6 +223,7 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
       count={items.length}
       fresh={items.filter((item) => !isKnown(item)).length}
       total={total}
+      media={mediaCount(listing, items, total)}
       counted={total === null ? counted : null}
       noun={noun}
       slowly={listing.kind === "account" && listing.siteName === "instagram.com"}
@@ -362,6 +365,9 @@ interface LoadRowProps {
   count: number
   fresh: number
   total: number | null
+  /** Without a total, on an account whose site counts its photos and videos instead (X): that count, and how many of
+   * them the posts listed so far hold. */
+  media: MediaCount | null
   /** Without a total, whether another read is counting it, or couldn't. */
   counted: Counted
   noun: readonly [string, string]
@@ -375,8 +381,8 @@ interface LoadRowProps {
 
 /**
  * Under the items: Load More, Load New and Load All (with how many there are, when the site says or another read
- * counted them), or while Load New or Load All lists them, how many are listed so far and how many are new, and Stop.
- * What went wrong shows over them, and they stay to try again.
+ * counted them, or on X how many photos and videos the site counts), or while Load New or Load All lists them, how many
+ * are listed so far and how many are new, and Stop. What went wrong shows over them, and they stay to try again.
  */
 function LoadRow({
   loading,
@@ -385,6 +391,7 @@ function LoadRow({
   count,
   fresh,
   total,
+  media,
   counted,
   noun,
   slowly,
@@ -401,7 +408,7 @@ function LoadRow({
         <>
           <div className="flex items-center gap-3">
             <p className="text-fg-secondary tabular-nums" role="status">
-              {text.loadingAll(count, total, noun, fresh)}
+              {text.loadingAll(count, total, noun, fresh, media)}
             </p>
             <Button size="sm" disabled={stopping} onClick={onStop}>
               {text.stopLoading}
@@ -432,10 +439,10 @@ function LoadRow({
             <Button
               size="sm"
               disabled={disabled || loading !== null}
-              title={text.loadAllHint(count, total, noun, counted)}
+              title={text.loadAllHint(count, total, noun, counted, media)}
               onClick={() => onLoad({ kind: "all" })}
             >
-              {text.loadAll(total)}
+              {text.loadAll(total, media?.total ?? null)}
             </Button>
           </div>
         )

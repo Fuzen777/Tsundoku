@@ -199,8 +199,11 @@ pub(crate) struct AccountInfo {
     pub full_name: Option<String>,
     /// Its profile picture.
     pub picture: Option<String>,
-    /// How many posts it has in all.
+    /// How many posts it has in all (Instagram). `None` on X, which doesn't say.
     pub post_count: Option<u32>,
+    /// X only: how many photos and videos the site counts on the account, as its Media tab words it ("372 photos &
+    /// videos"). Files rather than posts, and some of them in posts its lists don't hold (`account_info`).
+    pub media_count: Option<u32>,
 }
 
 /// The posts of gallery-dl's answer for an account's page, each as reading its own link would describe it, and the
@@ -267,9 +270,15 @@ pub(crate) fn parse_posts(json: &str, link: &str) -> Result<FoundPosts, PreviewE
 }
 
 /// The account whose posts are listed, from a post's `user`, in each site's fields: Instagram's `username`,
-/// `full_name`, `profile_pic_url` and `media_count` (its posts), X's `name` (the handle), `nick` and `profile_image`.
-/// X's `media_count` is left out: it matches neither the posts with pictures or videos nor their files (110 for 81
-/// posts of 98 files), and the listing calls its total posts.
+/// `full_name`, `profile_pic_url` and `media_count` (its posts), X's `name` (the handle), `nick`, `profile_image` and
+/// `media_count`.
+///
+/// X's `media_count` (its own `tweet_counts.media_tweets`, which its Media tab shows as "372 photos & videos") is kept
+/// apart from the posts' count, since it isn't one. Against both of an account's lists read whole on 2026-11-20, it was
+/// never below their files: within 1 to 3 of them on accounts of photos (IRURI 372 against 371 files in 369 posts,
+/// rustlang 110 against 109 files in 92 posts), and 23 to 35 above on zen_browser (141 against 118 files in 112 posts)
+/// and rerundotio (393 against 358 in 340). It also counts what neither list holds: X's search gave zen_browser 16
+/// posts of an animated GIF and 8 replies with a video that the lists don't have, 142 files in all.
 fn account_info(post: &Value) -> Option<AccountInfo> {
     let user = post.get("user").filter(|user| user.is_object())?;
     let on_x = text(post, "category").as_deref() == Some("twitter");
@@ -278,15 +287,16 @@ fn account_info(post: &Value) -> Option<AccountInfo> {
     } else {
         ("username", "full_name", "profile_pic_url")
     };
+    let count = user
+        .get("media_count")
+        .and_then(Value::as_u64)
+        .and_then(|count| u32::try_from(count).ok());
     Some(AccountInfo {
         username: text(user, username),
         full_name: text(user, full_name),
         picture: text(user, picture),
-        post_count: user
-            .get("media_count")
-            .and_then(Value::as_u64)
-            .and_then(|count| u32::try_from(count).ok())
-            .filter(|_| !on_x),
+        post_count: count.filter(|_| !on_x),
+        media_count: count.filter(|_| on_x),
     })
 }
 
@@ -831,6 +841,36 @@ mod tests {
         );
         // The reel's poster.
         assert!(post.thumbnail_url.is_some());
+    }
+
+    #[test]
+    fn an_x_accounts_count_is_of_its_photos_and_videos_and_instagrams_of_its_posts() {
+        let on_x = serde_json::json!({
+            "category": "twitter",
+            "user": {"name": "iruri_rapulras", "nick": "IRURI", "profile_image": "https://pbs.twimg.com/a.jpg",
+                     "media_count": 372, "statuses_count": 13781},
+        });
+        let account = account_info(&on_x).unwrap();
+        assert_eq!(account.username.as_deref(), Some("iruri_rapulras"));
+        assert_eq!(account.full_name.as_deref(), Some("IRURI"));
+        assert_eq!(account.media_count, Some(372));
+        assert_eq!(
+            account.post_count, None,
+            "X never says how many posts: 372 photos and videos were 369 posts"
+        );
+
+        let on_instagram = serde_json::json!({
+            "category": "instagram",
+            "user": {"username": "instagram", "full_name": "Instagram", "media_count": 8634},
+        });
+        let account = account_info(&on_instagram).unwrap();
+        assert_eq!(account.post_count, Some(8634));
+        assert_eq!(account.media_count, None);
+
+        // Without a count, neither.
+        let bare = serde_json::json!({"category": "twitter", "user": {"name": "someone"}});
+        let account = account_info(&bare).unwrap();
+        assert_eq!((account.post_count, account.media_count), (None, None));
     }
 
     #[test]

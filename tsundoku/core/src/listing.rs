@@ -224,6 +224,10 @@ pub struct Listing {
     pub thumbnail_url: Option<String>,
     /// How many it holds in all, when the site says, which is more than `items` when only the newest were listed.
     pub total: Option<u32>,
+    /// An X account only: how many photos and videos the site says it holds, as its Media tab words it ("372 photos &
+    /// videos"). It counts files, not posts, and more of them than its posts listed whole hold (`gallery::account_info`
+    /// has the measures), so `total` stays empty beside it and the picker shows it in the site's words.
+    pub media_total: Option<u32>,
     /// Only the newest `NEWEST_COUNT` were asked for (a channel or an account); a playlist is listed whole.
     pub newest_only: bool,
     pub items: Vec<ListedItem>,
@@ -654,8 +658,9 @@ fn whole_pages(count: u32, page: u32) -> u32 {
 
 /// How many items a listing holds in all, when its first read didn't say and another read can, for Load All to say how
 /// many it would list: a YouTube channel's Videos tab, as the channel's playlist of its uploads that are videos says
-/// (`videos_playlist`), which holds the same videos. `None` for a listing no read can count: an X account, whose count
-/// of media doesn't match its posts (an Instagram account says at once), or when the count is less than was read.
+/// (`videos_playlist`), which holds the same videos. `None` for a listing no read can count, or when the count is less
+/// than was read. An Instagram account says at once. An X account never says how many posts it has: what it counts is
+/// its photos and videos, which its first read gives as `Listing.media_total`.
 pub fn count_more(
     videos: &FetchTools,
     more: &ListingMore,
@@ -1166,6 +1171,7 @@ fn from_yt_dlp_window(
                 .and_then(|item| item.video.thumbnail_url.clone())
         }),
         total,
+        media_total: None,
         newest_only: kind == ListingKind::Channel,
         url,
         items,
@@ -1358,6 +1364,7 @@ fn account_listing(
             .map_or_else(|| link.to_owned(), |name| account_page(link, name)),
         thumbnail_url: account.picture,
         total,
+        media_total: account.media_count,
         newest_only: true,
         items,
         more,

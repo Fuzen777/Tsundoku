@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest"
 import type { ListedItem } from "./bindings/ListedItem"
 import type { PastDownload } from "./bindings/PastDownload"
 import {
+  filesIn,
   firstNewSince,
   initialSelection,
   isKnown,
   itemKey,
   itemType,
+  mediaCount,
   ofType,
   pickerItems,
   picksFor,
@@ -19,6 +21,7 @@ import {
   withMoreItems,
   type PickedPreset,
 } from "./listingPicker"
+import { strings } from "./strings"
 
 function item(videoId: string, fields: Partial<ListedItem> = {}, post = false): ListedItem {
   return {
@@ -211,6 +214,71 @@ describe("the type filter", () => {
   it("shows the items of the type", () => {
     expect(ofType(account, "all")).toBe(account)
     expect(ofType(account, "images").map((entry) => entry.video.videoId)).toEqual(["photos", "more"])
+  })
+})
+
+describe("an account that counts its photos and videos", () => {
+  const post = (videoId: string, images: number, videos: number, others = 0) => {
+    const listed = item(videoId, {}, true)
+    return { ...listed, video: { ...listed.video, post: { images, videos, others } } }
+  }
+  const posts = [post("photos", 4, 0), post("clip", 0, 1), post("both", 2, 1), post("zip", 0, 0, 1)]
+  const postNoun = strings.picker.nouns.post
+  const text = strings.picker
+
+  it("counts the files of the posts listed, one for a video or a post whose files aren't known", () => {
+    expect(filesIn(posts)).toBe(9)
+    expect(filesIn([item("video"), post("unknown", 0, 0)])).toBe(2)
+    expect(filesIn([])).toBe(0)
+  })
+
+  it("sets the site's count against the files listed, unless the posts' count is known", () => {
+    expect(mediaCount({ mediaTotal: 372 }, posts, null)).toEqual({ total: 372, listed: 9 })
+    expect(mediaCount({ mediaTotal: null }, posts, null)).toBeNull()
+    expect(mediaCount({ mediaTotal: 372 }, posts, 369)).toBeNull()
+  })
+
+  it("says the count in the site's words on Load All, never as posts", () => {
+    expect(text.loadAll(null, 372)).toBe("Load All (372 Photos & Videos)")
+    expect(text.loadAll(null, 28259)).toBe(`Load All (${(28259).toLocaleString()} Photos & Videos)`)
+    expect(text.loadAll(null, 1)).toBe("Load All (1 Photo or Video)")
+    expect(text.loadAll(8634)).toBe(`Load All (${(8634).toLocaleString()})`)
+    expect(text.loadAll(8634, 372)).toBe(`Load All (${(8634).toLocaleString()})`)
+    expect(text.loadAll(null)).toBe("Load All")
+  })
+
+  it("explains the count in Load All's hint", () => {
+    expect(text.loadAllHint(50, null, postNoun, null, { total: 372, listed: 86 })).toBe(
+      "Lists everything, a page at a time. The site counts 372 photos and videos here, not posts: the 50 posts listed hold 86 of them. Its count includes some it doesn't list, GIFs for one. Stop keeps what's listed by then.",
+    )
+    expect(text.loadAllHint(1, null, postNoun, null, { total: 372, listed: 4 })).toContain(
+      "not posts: the 1 post listed holds 4 of them.",
+    )
+    // Posts that hold as many as the site counts say nothing of how far the list is.
+    expect(text.loadAllHint(50, null, postNoun, null, { total: 60, listed: 64 })).toBe(
+      "Lists everything, a page at a time. The site counts 60 photos and videos here, not posts. Its count includes some it doesn't list, GIFs for one. Stop keeps what's listed by then.",
+    )
+    // Other listings keep their hints.
+    expect(text.loadAllHint(50, null, postNoun, null)).toBe(
+      "Lists everything, a page at a time. The site doesn't say how many posts there are. Stop keeps what's listed by then.",
+    )
+    expect(text.loadAllHint(50, 8634, postNoun, null)).toBe(
+      `Lists the other ${(8584).toLocaleString()} posts, a page at a time. Stop keeps what's listed by then.`,
+    )
+  })
+
+  it("counts up against the site's count while listing", () => {
+    expect(text.loadingAll(150, null, postNoun, 12, { total: 372, listed: 212 })).toBe(
+      "Listing… 150 posts · 212 of 372 photos & videos · 12 new",
+    )
+    expect(text.loadingAll(369, null, postNoun, 300, { total: 372, listed: 372 })).toBe(
+      "Listing… 369 posts · 372 photos & videos · 300 new",
+    )
+    expect(text.loadingAll(369, null, postNoun, 300, { total: 372, listed: 380 })).toBe(
+      "Listing… 369 posts · 380 photos & videos · 300 new",
+    )
+    expect(text.loadingAll(150, 8634, postNoun, 12)).toBe(`Listing… 150 of ${(8634).toLocaleString()} posts · 12 new`)
+    expect(text.loadingAll(150, null, strings.picker.nouns.video, 12)).toBe("Listing… 150 videos · 12 new")
   })
 })
 

@@ -274,6 +274,7 @@ fn reads_a_youtube_playlist_whole() {
     assert_eq!(listing.uploader.as_deref(), Some("Christiaan008"));
     assert!(!listing.newest_only);
     assert_eq!(listing.total, Some(96));
+    assert_eq!(listing.media_total, None, "only an X account has one");
     assert_eq!(
         listing.items.len(),
         95,
@@ -464,6 +465,10 @@ fn reads_an_instagram_accounts_newest_posts() {
     assert_eq!(listing.site_name, "instagram.com");
     assert_eq!(listing.url, "https://www.instagram.com/instagram/");
     assert_eq!(listing.total, Some(8634));
+    assert_eq!(
+        listing.media_total, None,
+        "Instagram's count is of its posts"
+    );
     assert!(listing.newest_only);
     assert!(listing.thumbnail_url.is_some(), "the account's picture");
     assert_eq!(listing.items.len(), 12);
@@ -533,7 +538,12 @@ fn reads_an_x_accounts_newest_posts() {
     );
     assert_eq!(
         listing.total, None,
-        "X's count may be of pictures and videos rather than posts"
+        "X counts photos and videos, never posts"
+    );
+    assert_eq!(
+        listing.media_total,
+        Some(28249),
+        "its photos and videos, as its Media tab says"
     );
     assert!(listing.newest_only);
     assert_eq!(
@@ -603,6 +613,37 @@ fn reads_an_x_accounts_newest_posts() {
     let mut newest_first = dates.clone();
     newest_first.sort_by(|first, second| second.cmp(first));
     assert_eq!(dates, newest_first);
+}
+
+#[test]
+fn an_x_account_says_how_many_photos_and_videos_it_holds_never_how_many_posts() {
+    // As `x_media` hands the account over, from whichever list gave it.
+    let account = AccountInfo {
+        username: Some("iruri_rapulras".to_owned()),
+        full_name: Some("IRURI".to_owned()),
+        media_count: Some(372),
+        ..AccountInfo::default()
+    };
+    let listing = account_listing(
+        Some(account),
+        "https://x.com/iruri_rapulras/media",
+        Vec::new(),
+        |_, total| {
+            assert_eq!(total, None, "no count of posts to stop Load More at");
+            None
+        },
+    );
+    assert_eq!(listing.media_total, Some(372));
+    assert_eq!(listing.total, None);
+
+    // The UI reads it under its own name, beside an empty total.
+    let json = serde_json::to_value(&listing).unwrap();
+    assert_eq!(json["mediaTotal"], 372);
+    assert_eq!(json["total"], Value::Null);
+
+    // An account that says nothing has neither.
+    let listing = account_listing(None, "https://x.com/someone/media", Vec::new(), |_, _| None);
+    assert_eq!((listing.total, listing.media_total), (None, None));
 }
 
 #[test]
@@ -794,6 +835,7 @@ fn a_check_of_an_account_reads_its_first_answer_then_the_newest_only_when_it_mus
         url: "https://www.instagram.com/someone/".to_owned(),
         thumbnail_url: None,
         total: Some(count),
+        media_total: None,
         newest_only: true,
         items: Vec::new(),
         more: more.then(|| ListingMore {

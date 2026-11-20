@@ -78,6 +78,7 @@ impl ListingReader for FakeReader {
             url: url.to_owned(),
             thumbnail_url: None,
             total: None,
+            media_total: None,
             newest_only: true,
             items: lock(&self.listing)
                 .iter()

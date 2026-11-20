@@ -7,6 +7,14 @@ function listOf(items: string[]): string {
   return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`
 }
 
+/** An X account's photos and videos, as the site counts them: "372 Photos & Videos" on a button (`label`), "372 photos
+ * & videos" in a line of details, or "372 photos and videos" in a sentence. */
+function photosAndVideos(count: number, style: "label" | "details" | "sentence"): string {
+  if (count === 1) return style === "label" ? "1 Photo or Video" : "1 photo or video"
+  const words = { label: "Photos & Videos", details: "photos & videos", sentence: "photos and videos" }[style]
+  return `${count.toLocaleString()} ${words}`
+}
+
 export const strings = {
   appName: "Tsundoku",
   appNameJapanese: "積ん読",
@@ -582,19 +590,33 @@ export const strings = {
     loadNew: (count: number) => `Load ${count} New`,
     loadNewHint: (count: number, noun: readonly [string, string]) =>
       `Lists on past the ${noun[1]} downloaded or in the queue until ${count} that aren't are listed, or the last one is. Stop keeps what's listed by then.`,
-    /** "Load All (8,634)", with how many the site says it holds, when it says. */
-    loadAll: (total: number | null) => (total === null ? "Load All" : `Load All (${total.toLocaleString()})`),
+    /** "Load All (8,634)", with how many the site says it holds, when it says. An X account says how many photos and
+     * videos it holds (`media`), never how many posts: "Load All (372 Photos & Videos)". */
+    loadAll: (total: number | null, media: number | null = null) => {
+      if (total !== null) return `Load All (${total.toLocaleString()})`
+      return media === null ? "Load All" : `Load All (${photosAndVideos(media, "label")})`
+    },
     /** Without a total: whether it's being counted (a YouTube channel's videos), the count couldn't be read, or the
-     * site doesn't say. */
+     * site doesn't say. On an X account (`media`), what the site counts instead: its photos and videos, `total` of
+     * them, of which the posts listed so far hold `listed`. */
     loadAllHint: (
       count: number,
       total: number | null,
       noun: readonly [string, string],
       counted: "counting" | "failed" | null,
+      media: { total: number; listed: number } | null = null,
     ) => {
       const keeps = "Stop keeps what's listed by then."
       if (total !== null) {
         return `Lists the other ${Math.max(total - count, 0).toLocaleString()} ${noun[1]}, a page at a time. ${keeps}`
+      }
+      if (media !== null) {
+        // Posts listed that hold as many as the site counts, or more, say nothing about how far along the list is.
+        const held =
+          media.listed < media.total
+            ? `: the ${count.toLocaleString()} ${count === 1 ? noun[0] : noun[1]} listed ${count === 1 ? "holds" : "hold"} ${media.listed.toLocaleString()} of them`
+            : ""
+        return `Lists everything, a page at a time. The site counts ${photosAndVideos(media.total, "sentence")} here, not ${noun[1]}${held}. Its count includes some it doesn't list, GIFs for one. ${keeps}`
       }
       const unknown = {
         counting: `Counting how many ${noun[1]} there are…`,
@@ -603,13 +625,30 @@ export const strings = {
       }[counted ?? "none"]
       return `Lists everything, a page at a time. ${unknown} ${keeps}`
     },
-    /** While Load New or Load All reads: "Listing… 150 of 8,634 posts · 12 new". */
-    loadingAll: (count: number, total: number | null, noun: readonly [string, string], fresh: number) =>
-      `${
+    /** While Load New or Load All reads: "Listing… 150 of 8,634 posts · 12 new". On an X account (`media`), whose count
+     * is of photos and videos: "Listing… 150 posts · 212 of 372 photos & videos · 12 new", without "of 372" once the
+     * posts listed hold as many or more. */
+    loadingAll: (
+      count: number,
+      total: number | null,
+      noun: readonly [string, string],
+      fresh: number,
+      media: { total: number; listed: number } | null = null,
+    ) => {
+      const listing =
         total !== null && total > count
           ? `Listing… ${count.toLocaleString()} of ${total.toLocaleString()} ${noun[1]}`
           : `Listing… ${count.toLocaleString()} ${count === 1 ? noun[0] : noun[1]}`
-      } · ${fresh.toLocaleString()} new`,
+      const held =
+        total !== null || media === null
+          ? []
+          : [
+              media.listed < media.total
+                ? `${media.listed.toLocaleString()} of ${photosAndVideos(media.total, "details")}`
+                : photosAndVideos(media.listed, "details"),
+            ]
+      return [listing, ...held, `${fresh.toLocaleString()} new`].join(" · ")
+    },
     /** Under Load All's count on Instagram, which asks to slow down when read quickly. */
     loadingSlowly: "Instagram is read a page of 12 at a time, about 10 seconds apart, so it doesn't ask to slow down.",
     stopLoading: "Stop",

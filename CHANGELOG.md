@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.1 · 2026-11-20
+
+### Added
+
+- **X's count on Load All**: an X account's Load All now says how many photos and videos the site counts on it, as its Media tab does ("Load All (372 Photos & Videos)"). X counts files there, not posts, so the button's hint says how many of them the posts listed so far hold, and the line shown while listing counts up against it ("Listing… 150 posts · 212 of 372 photos & videos · 12 new"). The site's count runs a little ahead of what can be listed: it includes GIFs and videos posted in replies, which its lists leave out.
+
 ## 0.2.0 · 2026-11-18
 
 Everything since 0.1.0. Tsundoku now downloads posts of images and shared files as well as videos, lists channels, playlists and accounts to pick from, watches them for what's new, and takes links in many more ways.

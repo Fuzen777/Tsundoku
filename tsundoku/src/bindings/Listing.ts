@@ -32,6 +32,12 @@ thumbnailUrl: string | null,
  */
 total: number | null, 
 /**
+ * An X account only: how many photos and videos the site says it holds, as its Media tab words it ("372 photos &
+ * videos"). It counts files, not posts, and more of them than its posts listed whole hold (`gallery::account_info`
+ * has the measures), so `total` stays empty beside it and the picker shows it in the site's words.
+ */
+mediaTotal: number | null, 
+/**
  * Only the newest `NEWEST_COUNT` were asked for (a channel or an account); a playlist is listed whole.
  */
 newestOnly: boolean, items: Array<ListedItem>, 

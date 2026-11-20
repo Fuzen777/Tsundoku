@@ -918,7 +918,7 @@ export const standIns = {
         } else if (link.includes("images")) {
           reject({ kind: "imagesNotSetUp" })
         } else if (kind) {
-          resolve({ kind: "listing", listing: listingStandIn(kind) })
+          resolve({ kind: "listing", listing: listingStandIn(kind, isOnX(link)) })
         } else if (link.includes("instagram")) {
           resolve({ kind: "video", ...postStandIn })
         } else if (link.includes("gofile.io")) {
@@ -939,14 +939,16 @@ export const standIns = {
   /**
    * The items after a stand-in listing's first ones, a batch every 600 ms: 50 for Load More (48 on the account), and
    * for Load New and Load All batches of 100 (96 on the account) up to 1,000 videos on the channel or the account's
-   * 8,634 posts, Load New until it has as many new ones as asked. A link containing "fail" fails after the first batch;
+   * 8,634 posts, Load New until it has as many new ones as asked. The X account has 369 posts, which no batch says: its
+   * 372 photos and videos are all the site counts. A link containing "fail" fails after the first batch;
    * `cancelLoadingMore` stops it.
    */
   loadMoreOfListing(more: ListingMore, read: MoreRead, onItems: (batch: MoreItems) => void): Promise<void> {
-    const account = more.link.includes("instagram.com")
-    const total = account ? 8634 : 1000
+    const onX = isOnX(more.link)
+    const account = onX || more.link.includes("instagram.com")
+    const total = onX ? 369 : account ? 8634 : 1000
     const all = read.kind !== "next"
-    const step = account ? (all ? 96 : 48) : all ? 100 : 50
+    const step = onX ? (all ? 100 : 50) : account ? (all ? 96 : 48) : all ? 100 : 50
     loadingMore.stopped = false
     return new Promise((resolve, reject) => {
       let index = more.read
@@ -965,7 +967,8 @@ export const standIns = {
         index += count
         found += items.filter((item) => item.lastDownload === null && !item.inQueue).length
         const ended = index >= total
-        onItems({ items, more: ended ? null : { ...more, read: index }, total: account || ended ? total : null })
+        const said = onX ? null : account || ended ? total : null
+        onItems({ items, more: ended ? null : { ...more, read: index }, total: said })
         if (ended || read.kind === "next" || (read.kind === "new" && found >= read.count)) resolve()
         else loadingMore.timer = setTimeout(next, 600)
       }
@@ -989,13 +992,19 @@ export const standIns = {
       }, 1500),
     )
   },
-  /** As the core tells them: a YouTube channel (`/@name`) or playlist (`/playlist?list=`), an Instagram account. */
+  /** As the core tells them: a YouTube channel (`/@name`) or playlist (`/playlist?list=`), an Instagram or X account. */
   listingKind(link: string): ListingKind | null {
     if (/youtube\.com\/(@[^/?#]+|channel\/|c\/|user\/)/.test(link)) return "channel"
     if (/youtube\.com\/playlist\?list=/.test(link)) return "playlist"
     if (/instagram\.com\/(?!p\/|reels?\/|stories\/|explore\/)[\w.]+\/?(posts\/?|reels\/?)?$/.test(link)) return "account"
+    if (isOnX(link) && /\.com\/(?!i\/|home\b|explore\b|search\b)\w{1,15}\/?(media\/?)?$/.test(link)) return "account"
     return null
   },
+}
+
+/** Whether a link is on X, whose accounts count their photos and videos rather than their posts. */
+function isOnX(link: string): boolean {
+  return /^(https?:\/\/)?(www\.)?(x|twitter)\.com\//.test(link)
 }
 
 /** A listing with a downloaded item and a queued one: 60 for a channel or an account, 300 for a playlist, to check a
@@ -1107,9 +1116,28 @@ function watchedStandIns(): WatchedSource[] {
 /** The stand-in's Load More or Load All in progress, which `cancelLoadingMore` stops. */
 const loadingMore: { stopped: boolean; timer: ReturnType<typeof setTimeout> | null } = { stopped: false, timer: null }
 
-function listingStandIn(kind: ListingKind): Listing {
+/** A channel, a playlist or an account: Instagram's, which says how many posts it has, or with `onX` X's, which says
+ * how many photos and videos instead. */
+function listingStandIn(kind: ListingKind, onX = false): Listing {
   const posts = kind === "account"
   const count = kind === "playlist" ? 300 : 50
+  if (posts && onX) {
+    const link = "https://x.com/someone/media"
+    const title = "Someone on X"
+    return {
+      kind,
+      title,
+      uploader: null,
+      siteName: "x.com",
+      url: "https://x.com/someone",
+      thumbnailUrl: previewStandIn.video.thumbnailUrl,
+      total: null,
+      mediaTotal: 372,
+      newestOnly: true,
+      items: Array.from({ length: count }, (_, index) => listedStandIn(kind, index)),
+      more: { link, title, read: count, cursor: null, channelId: null, media: { photos: 40, videos: 10 } },
+    }
+  }
   const title = { channel: "jawed", playlist: "A Long Playlist", account: "Some Account" }[kind]
   const link = posts ? "https://www.instagram.com/someaccount/posts/" : "https://www.youtube.com/@jawed/videos"
   return {
@@ -1120,6 +1148,7 @@ function listingStandIn(kind: ListingKind): Listing {
     url: posts ? "https://www.instagram.com/someaccount/" : link,
     thumbnailUrl: previewStandIn.video.thumbnailUrl,
     total: posts ? 8634 : null,
+    mediaTotal: null,
     newestOnly: kind !== "playlist",
     items: Array.from({ length: count }, (_, index) => listedStandIn(kind, index)),
     more:

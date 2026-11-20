@@ -223,6 +223,35 @@ export function ofType<Item extends Typed>(items: readonly Item[], filter: TypeF
   return filter === "all" ? items : items.filter((item) => itemType(item) === filter)
 }
 
+/** How many files the items hold: a post's images, videos and other files; one for a video, or for a post whose files
+ * aren't known. */
+export function filesIn(items: readonly Typed[]): number {
+  return items.reduce((files, { video: { post } }) => {
+    return files + (post ? Math.max(post.images + post.videos + post.others, 1) : 1)
+  }, 0)
+}
+
+/** An X account's photos and videos: how many the site counts (`Listing.mediaTotal`), and how many the posts listed
+ * so far hold. */
+export interface MediaCount {
+  total: number
+  listed: number
+}
+
+/**
+ * What Load All says of an account that counts its photos and videos rather than its posts (X): the site's count
+ * against the files in the posts listed so far. Null for a listing without such a count, or once how many posts it
+ * holds is known (`postTotal`), which says more.
+ */
+export function mediaCount(
+  listing: Pick<Listing, "mediaTotal">,
+  items: readonly Typed[],
+  postTotal: number | null,
+): MediaCount | null {
+  if (listing.mediaTotal === null || postTotal !== null) return null
+  return { total: listing.mediaTotal, listed: filesIn(items) }
+}
+
 /** What a listing's items are called: an account's posts, YouTube's videos, anything else's items. */
 export function nounOf(listing: Pick<Listing, "kind" | "siteName">): keyof typeof strings.picker.nouns {
   if (listing.kind === "account") return "post"
