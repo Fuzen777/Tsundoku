@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { isWebLink, parseNotes, parseSpans } from "./notes"
+import type { ChangelogSection } from "./bindings/ChangelogSection"
+import { isWebLink, parseNotes, parseSpans, sectionDate, sectionToShow } from "./notes"
 
 describe("parseNotes", () => {
   it("reads a CHANGELOG section's headings and lists", () => {
@@ -61,6 +62,39 @@ describe("parseSpans", () => {
 
   it("leaves a lone asterisk or backtick as it is", () => {
     expect(parseSpans("5 * 3 and a ` mark")).toEqual([{ kind: "text", text: "5 * 3 and a ` mark" }])
+  })
+})
+
+describe("sectionToShow", () => {
+  const section = (version: string): ChangelogSection => ({ version, date: null, body: "" })
+  const sections = [section("0.2.1"), section("0.2.0"), section("0.1.0")]
+
+  it("starts on the running version's changes", () => {
+    expect(sectionToShow(sections, null, "0.2.0")?.version).toBe("0.2.0")
+  })
+
+  it("shows the version picked", () => {
+    expect(sectionToShow(sections, "0.1.0", "0.2.1")?.version).toBe("0.1.0")
+  })
+
+  it("falls back to the newest when the running version has no section", () => {
+    expect(sectionToShow(sections, null, "0.2.2")?.version).toBe("0.2.1")
+    expect(sectionToShow(sections, "0.0.1", undefined)?.version).toBe("0.2.1")
+  })
+
+  it("has nothing to show without sections", () => {
+    expect(sectionToShow([], null, "0.2.1")).toBeNull()
+  })
+})
+
+describe("sectionDate", () => {
+  it("writes a calendar date as the reader does", () => {
+    expect(sectionDate({ version: "0.2.1", date: "2026-11-20", body: "" }, "en-US")).toBe("Nov 20, 2026")
+  })
+
+  it("leaves anything else as the changelog has it", () => {
+    expect(sectionDate({ version: "0.2.1", date: "Unreleased", body: "" }, "en-US")).toBe("Unreleased")
+    expect(sectionDate({ version: "0.2.1", date: null, body: "" }, "en-US")).toBeNull()
   })
 })
 

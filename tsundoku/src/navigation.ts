@@ -81,6 +81,9 @@ export interface AppActions {
   addFileLinks: (read: LinkFilesRead) => void
   /** Opens the history at a watched source's downloads: its Source filter set, the others cleared. */
   showWatchedDownloads: (sourceId: number) => void
+  /** Opens the What's New card under the add bar on the running version's changes, with the earlier versions' to
+   * pick from. */
+  showWhatsNew: () => void
 }
 
 /** What the history opens showing, when another view sends the user there: a new object each time, so the history
@@ -96,6 +99,7 @@ export const AppActionsContext = createContext<AppActions>({
   addText: () => {},
   addFileLinks: () => {},
   showWatchedDownloads: () => {},
+  showWhatsNew: () => {},
 })
 
 export function useAppActions(): AppActions {

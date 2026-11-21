@@ -102,6 +102,7 @@ export const queryKeys = {
   supportedSites: ["supported-sites"],
   appUpdate: ["app-update"],
   whatsNew: ["whats-new"],
+  releaseNotes: ["release-notes"],
 } as const
 
 /** Sent by the core while a tool is installed or updated. */
@@ -1203,6 +1204,13 @@ export async function checkForAppUpdate(): Promise<AppUpdate | null> {
 export function getWhatsNew(): Promise<ChangelogSection[]> {
   if (!isTauri()) return Promise.resolve(addressHas("whatsnew") ? standIns.whatsNew : [])
   return invoke<ChangelogSection[]>("whats_new")
+}
+
+/** Every version's changes up to the running one, newest first, for the What's New card opened by hand, which browses
+ * them. In a browser, stand-ins. */
+export function getReleaseNotes(): Promise<ChangelogSection[]> {
+  if (!isTauri()) return Promise.resolve(standIns.releaseNotes)
+  return invoke<ChangelogSection[]>("release_notes")
 }
 
 /** Closes the What's New card until a newer version runs. Rejects with a DownloadError. */

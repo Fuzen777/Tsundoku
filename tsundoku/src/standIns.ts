@@ -457,6 +457,34 @@ export const standIns = {
       body: "### Fixed\n\n- **Copy Details' labels**: the button says its name when you hover it, and `Copied` once it has copied.",
     },
   ] satisfies ChangelogSection[],
+  /** Every version's changes, for the What's New card opened from Settings → About. */
+  releaseNotes: [
+    {
+      version: "0.1.47",
+      date: "2026-11-06",
+      body: "### Added\n\n- **What's New after an update**: the first start on a newer version says what changed, once.",
+    },
+    {
+      version: "0.1.46",
+      date: "2026-11-06",
+      body: "### Fixed\n\n- **Copy Details' labels**: the button says its name when you hover it, and `Copied` once it has copied.",
+    },
+    {
+      version: "0.1.0",
+      date: "2026-11-05",
+      body: [
+        "The first release.",
+        "",
+        "### Added",
+        "",
+        ...Array.from(
+          { length: 14 },
+          (_, index) => `- **Feature ${index + 1}**: what it does, in a sentence long enough to wrap at the window's minimum width.`,
+        ),
+      ].join("\n"),
+    },
+    { version: "0.0.9", date: null, body: "- **Before the first release**: a section without a date." },
+  ] satisfies ChangelogSection[],
   appInfo: {
     version: "browser",
     hasMicaBackdrop: false,

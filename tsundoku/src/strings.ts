@@ -482,10 +482,15 @@ export const strings = {
     whatsNew: "What's New",
     releaseNotes: "Release Notes",
   },
-  /** The card that says what changed after an update. */
+  /** The card that says what changed after an update, or any version's changes when it's opened from Settings. */
   whatsNew: {
     title: (version: string) => `What's New in Tsundoku ${version}`,
     close: "Close",
+    open: "What's New",
+    browseTitle: "What's New in Tsundoku",
+    version: "Version",
+    versionOption: (version: string, date: string | null) => (date === null ? version : `${version} · ${date}`),
+    none: "This copy of Tsundoku came without its release notes.",
   },
   pending: {
     emptyTitle: "Nothing Pending",

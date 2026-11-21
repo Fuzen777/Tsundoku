@@ -409,6 +409,7 @@ pub fn run() {
             report::download_details,
             whats_new::whats_new,
             whats_new::dismiss_whats_new,
+            whats_new::release_notes,
             downloads::list_arrangements,
             downloads::save_list_arrangements,
             downloads::picker_layouts,

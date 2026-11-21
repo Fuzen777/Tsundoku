@@ -3,6 +3,9 @@
   **bold**, `code` and [links](https://…). The What's New card and the update banner show them through ReleaseNotes.
 */
 
+import type { ChangelogSection } from "./bindings/ChangelogSection"
+import { formatCalendarDate } from "./format"
+
 /** A piece of a line. */
 export type NoteSpan =
   | { kind: "text"; text: string }
@@ -77,6 +80,26 @@ export function parseSpans(text: string): NoteSpan[] {
   }
   if (end < text.length) spans.push({ kind: "text", text: text.slice(end) })
   return spans
+}
+
+/**
+ * The version whose changes the What's New card shows while it's browsed: the one picked, else the running version's,
+ * else the newest there is (a build whose own version has no section). None when there are no sections at all.
+ */
+export function sectionToShow(
+  sections: readonly ChangelogSection[],
+  picked: string | null,
+  running: string | undefined,
+): ChangelogSection | null {
+  const of = (version: string | null | undefined) => sections.find((section) => section.version === version)
+  return of(picked) ?? of(running) ?? sections[0] ?? null
+}
+
+/** A section's date as the reader writes dates, or as the changelog has it when it isn't a calendar date. */
+export function sectionDate(section: ChangelogSection, locale?: string): string | null {
+  if (section.date === null) return null
+  const isCalendarDate = !Number.isNaN(Date.parse(`${section.date}T00:00:00Z`))
+  return isCalendarDate ? formatCalendarDate(section.date, locale) : section.date
 }
 
 /** Whether a link in the notes may be opened: only web pages. */

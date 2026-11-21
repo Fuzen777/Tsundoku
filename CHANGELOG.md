@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.3 · 2026-11-21
+
+### Added
+
+- **What's New whenever you want**: Settings → About has a What's New button beside the version. It opens the What's New card again, on this version's changes, with a list of every earlier version to pick from, so what an update brought can be read again after its card was closed.
+
 ## 0.2.2 · 2026-11-20
 
 ### Fixed

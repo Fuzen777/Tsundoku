@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode, SelectHTMLAttributes } from "react"
+import type { ComponentProps, ReactNode } from "react"
 import { classes, INPUT_CLASSES } from "./styles"
 
 interface FieldProps {
@@ -36,8 +36,8 @@ export function TextInput({ className, ...props }: ComponentProps<"input">) {
   return <input type="text" spellCheck={false} autoComplete="off" className={classes(INPUT_CLASSES, className)} {...props} />
 }
 
-/** A native select, whose list follows the theme (Settings → Appearance). */
-export function SelectInput({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+/** A native select, whose list follows the theme (Settings → Appearance). Takes a `ref`, for a caller that focuses it. */
+export function SelectInput({ className, ...props }: ComponentProps<"select">) {
   return <select className={classes(INPUT_CLASSES, "pr-8", className)} {...props} />
 }
 

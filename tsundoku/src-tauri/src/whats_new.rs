@@ -1,4 +1,5 @@
-//! What's New after an update: `tsundoku_core::changelog` over the CHANGELOG.md this build was made with.
+//! What's New, after an update or opened by hand: `tsundoku_core::changelog` over the CHANGELOG.md this build was
+//! made with.
 
 use std::sync::Arc;
 
@@ -29,6 +30,13 @@ pub fn whats_new(app: AppHandle, settings: State<'_, Arc<SettingsStore>>) -> Vec
         CHANGELOG,
         &app.package_info().version.to_string(),
     )
+}
+
+/// Every version's changes up to the running one, newest first, for the What's New card opened by hand (Settings →
+/// About), which browses them.
+#[tauri::command]
+pub fn release_notes(app: AppHandle) -> Vec<ChangelogSection> {
+    changelog::up_to(CHANGELOG, &app.package_info().version.to_string())
 }
 
 /// The What's New card was closed: it doesn't show again until a newer version runs.

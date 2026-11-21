@@ -1,5 +1,6 @@
 //! What's New after an update: the sections of CHANGELOG.md newer than the version Tsundoku last ran, up to the one
-//! running. The app crate embeds CHANGELOG.md when it's built, so a copy shows its own changes without the network.
+//! running; opened by hand, every section up to the one running. The app crate embeds CHANGELOG.md when it's built,
+//! so a copy shows its own changes without the network.
 
 use std::cmp::Ordering;
 
@@ -66,6 +67,18 @@ fn with_body(section: ChangelogSection, lines: &[&str]) -> ChangelogSection {
     }
 }
 
+/// Every version's section up to `current`, newest first: what What's New browses when it's opened by hand
+/// (Settings → About). A section newer than the running version, which a build made between versions can have,
+/// is left out.
+pub fn up_to(changelog: &str, current: &str) -> Vec<ChangelogSection> {
+    let mut shown: Vec<ChangelogSection> = sections(changelog)
+        .into_iter()
+        .filter(|section| compare_versions(&section.version, current) != Ordering::Greater)
+        .collect();
+    shown.sort_by(|left, right| compare_versions(&right.version, &left.version));
+    shown
+}
+
 /// The sections to show on a start of `current` after `last_run`, newest first: those newer than `last_run`, up to
 /// `current`. Without a `last_run` (an install from before Tsundoku kept it), just `current`'s own.
 pub fn changes_since(
@@ -73,21 +86,13 @@ pub fn changes_since(
     last_run: Option<&str>,
     current: &str,
 ) -> Vec<ChangelogSection> {
-    let mut shown: Vec<ChangelogSection> = sections(changelog)
+    up_to(changelog, current)
         .into_iter()
-        .filter(|section| {
-            let up_to_current = compare_versions(&section.version, current) != Ordering::Greater;
-            match last_run {
-                Some(last_run) => {
-                    up_to_current
-                        && compare_versions(&section.version, last_run) == Ordering::Greater
-                }
-                None => compare_versions(&section.version, current) == Ordering::Equal,
-            }
+        .filter(|section| match last_run {
+            Some(last_run) => compare_versions(&section.version, last_run) == Ordering::Greater,
+            None => compare_versions(&section.version, current) == Ordering::Equal,
         })
-        .collect();
-    shown.sort_by(|left, right| compare_versions(&right.version, &left.version));
-    shown
+        .collect()
 }
 
 /// At startup: a first install (whose tools aren't set up yet) has nothing new to tell, so it records the running
@@ -226,6 +231,35 @@ All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://s
             ["0.1.10"],
             "without a last run, only this version's own"
         );
+    }
+
+    #[test]
+    fn browses_every_version_up_to_this_one() {
+        assert_eq!(
+            versions(&up_to(CHANGELOG, "0.2.0")),
+            ["0.2.0", "0.1.10", "0.1.9", "0.1.8"]
+        );
+        assert_eq!(
+            versions(&up_to(CHANGELOG, "0.1.10")),
+            ["0.1.10", "0.1.9", "0.1.8"],
+            "nothing newer than the running version"
+        );
+        assert_eq!(
+            versions(&up_to(
+                "## 0.1.9
+
+- Nine.
+
+## 0.1.10
+
+- Ten.
+",
+                "0.1.10"
+            )),
+            ["0.1.10", "0.1.9"],
+            "the newest first, whatever the file's order"
+        );
+        assert!(up_to(CHANGELOG, "0.1.7").is_empty());
     }
 
     #[test]

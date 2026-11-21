@@ -37,6 +37,7 @@ import {
   getPresetArguments,
   getPendingLinks,
   getPresetsOverview,
+  getReleaseNotes,
   getQueueItems,
   getRulePreset,
   getWatchedSources,
@@ -604,6 +605,11 @@ export function useAppUpdate() {
 /** What changed since the version that ran last, read once at startup, for the What's New card. */
 export function useWhatsNew() {
   return useQuery({ queryKey: queryKeys.whatsNew, queryFn: getWhatsNew, staleTime: Infinity })
+}
+
+/** Every version's changes up to the running one, for the What's New card opened by hand: read when it first opens. */
+export function useReleaseNotes() {
+  return useQuery({ queryKey: queryKeys.releaseNotes, queryFn: getReleaseNotes, staleTime: Infinity })
 }
 
 /** Closes the What's New card until a newer version runs, with the error if that couldn't be saved. */

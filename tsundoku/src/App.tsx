@@ -194,6 +194,9 @@ export function App() {
     setShownView("history")
     setHistoryTarget({ watchedSource: sourceId })
   }, [])
+  // The What's New card opened by hand (Settings → About), to browse every version's changes, until it's closed.
+  const [browsingWhatsNew, setBrowsingWhatsNew] = useState(false)
+  const showWhatsNew = useCallback(() => setBrowsingWhatsNew(true), [])
   const actions = useMemo(
     () => ({
       navigate,
@@ -202,8 +205,9 @@ export function App() {
       addText: takeText,
       addFileLinks: (read: LinkFilesRead) => void addFileLinks(read),
       showWatchedDownloads,
+      showWhatsNew,
     }),
-    [navigate, showLink, pickFromPending, takeText, addFileLinks, showWatchedDownloads],
+    [navigate, showLink, pickFromPending, takeText, addFileLinks, showWatchedDownloads, showWhatsNew],
   )
 
   if (needsSetup) return <SetupView />
@@ -230,7 +234,7 @@ export function App() {
         {/* Hidden while it has nothing to show, so the row takes no room. */}
         <div className="col-start-2 row-start-2 flex flex-col gap-3 pr-4 pb-3 empty:hidden">
           <UpdateBanner />
-          <WhatsNewCard />
+          <WhatsNewCard browsing={browsingWhatsNew} onStopBrowsing={() => setBrowsingWhatsNew(false)} />
           {addError && (
             <Card className="flex items-start gap-3 p-4">
               <div className="min-w-0 flex-1">

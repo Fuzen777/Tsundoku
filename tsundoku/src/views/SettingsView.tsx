@@ -5,7 +5,13 @@ import { Card } from "../components/Card"
 import { Page } from "../components/Page"
 import { Section } from "../components/Section"
 import { StatusMessage } from "../components/StatusMessage"
-import { isSettingsSection, SETTINGS_SECTIONS, type SettingsSectionId, type SettingsTarget } from "../navigation"
+import {
+  isSettingsSection,
+  SETTINGS_SECTIONS,
+  type SettingsSectionId,
+  type SettingsTarget,
+  useAppActions,
+} from "../navigation"
 import { useAppInfo, useAppUpdate } from "../queries"
 import { scrollWithin } from "../scrollWithin"
 import { strings } from "../strings"
@@ -115,10 +121,12 @@ const SECTION_CONTENTS: Record<SettingsSectionId, () => ReactNode> = {
 }
 
 /**
- * The version and Check for Updates, then the data folder and Open Folder. A newer release shows as the banner under
- * the add bar. A portable copy says it doesn't update itself instead.
+ * The version with What's New, which opens the What's New card on this version's changes, and Check for Updates, then
+ * the data folder and Open Folder. A newer release shows as the banner under the add bar. A portable copy says it
+ * doesn't update itself instead.
  */
 function AboutSection() {
+  const { showWhatsNew } = useAppActions()
   const { data: appInfo } = useAppInfo()
   const update = useAppUpdate()
   const checked = update.isFetchedAfterMount
@@ -145,6 +153,9 @@ function AboutSection() {
               </p>
             )}
           </div>
+          <Button size="sm" onClick={showWhatsNew}>
+            {strings.whatsNew.open}
+          </Button>
           {appInfo && !appInfo.portable && (
             <Button size="sm" loading={update.isFetching} onClick={() => void update.refetch()}>
               {strings.appUpdate.check}
