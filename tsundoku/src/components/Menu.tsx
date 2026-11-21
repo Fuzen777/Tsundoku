@@ -9,6 +9,9 @@ export interface MenuItem {
   danger?: boolean
   /** Shown before the label in a right-click menu (ContextMenu), as the button it stands for. */
   icon?: LucideIcon
+  /** In a `Menu`, the heading of the items that share it, shown over the first of them: Apply a Rule… lists the
+   * manual rules, then the automatic ones. */
+  group?: string
 }
 
 interface MenuProps {
@@ -19,14 +22,28 @@ interface MenuProps {
   icon?: LucideIcon
 }
 
-/** A ghost icon button that opens a short list of actions under it. Escape or a click elsewhere closes it. */
+/** A ghost icon button that opens a short list of actions under it, under the headings of their groups, if any. Escape
+ * or a click elsewhere closes it. */
 export function Menu({ label, items, icon = MoreHorizontal }: MenuProps) {
   return (
     <Popover label={label} icon={icon} role="menu" panelClassName="flex min-w-44 flex-col p-1">
       {(close) =>
-        items.map((item) => (
+        items.flatMap((item, index) => [
+          item.group !== undefined && item.group !== items[index - 1]?.group && (
+            <p
+              key={`group-${index}`}
+              role="presentation"
+              className={classes(
+                "px-3 pb-1 text-xs font-medium text-fg-muted",
+                index > 0 ? "mt-1 border-t border-line pt-2.5" : "pt-1.5",
+              )}
+            >
+              {item.group}
+            </p>
+          ),
           <button
-            key={item.label}
+            // Two items can share a label (two rules with one name), so their place tells them apart.
+            key={index}
             type="button"
             role="menuitem"
             onClick={() => {
@@ -39,8 +56,8 @@ export function Menu({ label, items, icon = MoreHorizontal }: MenuProps) {
             )}
           >
             {item.label}
-          </button>
-        ))
+          </button>,
+        ])
       }
     </Popover>
   )

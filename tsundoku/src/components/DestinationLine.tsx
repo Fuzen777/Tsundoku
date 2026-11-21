@@ -1,11 +1,12 @@
 import { Folder, FolderPen, FolderTree, Undo2 } from "lucide-react"
 import { pickFolder } from "../api"
 import type { Destination } from "../bindings/Destination"
+import type { FolderRule } from "../bindings/FolderRule"
 import { useAppActions } from "../navigation"
 import { useFolderRules, useRuleLabel } from "../queries"
 import { strings } from "../strings"
 import { IconButton } from "./IconButton"
-import { Menu } from "./Menu"
+import { Menu, type MenuItem } from "./Menu"
 import { classes } from "./styles"
 
 interface DestinationLineProps {
@@ -29,8 +30,9 @@ interface DestinationLineProps {
  * Where a download will go, and what picked that folder: a rule, the preset or the download folder, each opening
  * where it's set, or a folder picked for this one. With `onChoose`, Change Folder… picks another for it, and Use the
  * Usual Folder drops it. With `onChooseRule`, Apply a Rule… picks a rule whose folder, preset and file name win over
- * the others' for it, whatever its conditions, and Use the Matching Rules drops it; the line names the rule picked. The
- * preview card and each pending link show it. Until it's known, an empty box with `className` holds its place.
+ * the others' for it, whatever its conditions, the manual rules listed first, and Use the Matching Rules drops it; the
+ * line names the rule picked. The preview card, each pending link and Test a Link show it. Until it's known, an empty
+ * box with `className` holds its place.
  */
 export function DestinationLine({
   destination,
@@ -132,10 +134,7 @@ export function DestinationLine({
               <Menu
                 label={strings.preview.applyRule}
                 icon={FolderTree}
-                items={rules.map((rule, index) => ({
-                  label: rule.enabled ? ruleLabel(index + 1) : strings.preview.ruleOff(ruleLabel(index + 1)),
-                  onSelect: () => onChooseRule(rule.id),
-                }))}
+                items={ruleChoices(rules, ruleLabel, onChooseRule)}
               />
               {pickedRule && (
                 <IconButton
@@ -150,5 +149,24 @@ export function DestinationLine({
         </span>
       )}
     </div>
+  )
+}
+
+/** Apply a Rule…'s list: every rule by its name or number, "(Off)" after one that's off. With manual rules, they come
+ * first under their heading, since they're only ever applied this way, then the automatic ones under theirs. */
+function ruleChoices(
+  rules: readonly FolderRule[],
+  ruleLabel: (number: number) => string,
+  onChooseRule: (ruleId: string) => void,
+): MenuItem[] {
+  const hasManual = rules.some((rule) => rule.manual)
+  const sections = strings.rules.sections
+  const numbered = rules.map((rule, index) => ({ rule, number: index + 1 }))
+  return [...numbered.filter(({ rule }) => rule.manual), ...numbered.filter(({ rule }) => !rule.manual)].map(
+    ({ rule, number }) => ({
+      label: rule.enabled ? ruleLabel(number) : strings.preview.ruleOff(ruleLabel(number)),
+      onSelect: () => onChooseRule(rule.id),
+      group: hasManual ? (rule.manual ? sections.manual : sections.automatic) : undefined,
+    }),
   )
 }

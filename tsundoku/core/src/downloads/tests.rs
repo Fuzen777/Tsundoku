@@ -2094,6 +2094,7 @@ fn a_rule_picks_the_folder() {
                 id: "rule-1".to_owned(),
                 name: String::new(),
                 enabled: true,
+                manual: false,
                 conditions: vec![RuleCondition {
                     field: RuleField::Site,
                     operator: RuleOperator::Is,

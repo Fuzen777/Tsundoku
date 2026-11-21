@@ -53,6 +53,12 @@ pub struct FolderRule {
     pub name: String,
     /// A rule that's off is kept but skipped.
     pub enabled: bool,
+    /// Applied only by hand, to one link at a time (Apply a Rule…), never because it matches (`applies_by_itself`):
+    /// whatever its conditions, it then decides what it sets, and its conditions only fill `{1}` to `{9}` from that
+    /// link. Always on, never the catch-all, it doesn't pick Download Right Away (decided before anything is picked by
+    /// hand), and it comes after the other rules (`with_catch_all_first`). Missing (false) in rules saved before 0.2.7.
+    #[serde(default)]
+    pub manual: bool,
     /// Each joined to the one before by its own `join`: conditions joined by OR are alternatives, and AND joins those
     /// groups, so "A OR B AND C" is (A or B) and C. A rule without any matches every download.
     pub conditions: Vec<RuleCondition>,
@@ -337,15 +343,17 @@ impl Default for RulesSettings {
 /// The rules with the catch-all first, where it always is, without conditions, since it takes everything, and picking
 /// only a folder. The posts rule of 0.1.11 to 0.1.29 ("kind is post → {site}") becomes it, keeping its folder and
 /// whether it's on. A list without either (the posts rule could be deleted in 0.1.11 to 0.1.18) gets it back turned
-/// off, so where downloads go doesn't change.
+/// off, so where downloads go doesn't change. Manual rules come last, in their order, on and without Download Right
+/// Away (`FolderRule::manual`).
 pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
-    let (found, mut rules): (Vec<_>, Vec<_>) = rules
+    let (found, rules): (Vec<_>, Vec<_>) = rules
         .into_iter()
         .map(FolderRule::with_joins_on_conditions)
         .partition(|rule| rule.id == CATCH_ALL_RULE_ID || rule.id == POSTS_RULE_ID);
     let catch_all = match found.into_iter().next() {
         Some(rule) => FolderRule {
             id: CATCH_ALL_RULE_ID.to_owned(),
+            manual: false,
             conditions: Vec::new(),
             file_name: String::new(),
             preset_id: None,
@@ -359,8 +367,16 @@ pub fn with_catch_all_first(rules: Vec<FolderRule>) -> Vec<FolderRule> {
             ..catch_all_rule()
         },
     };
-    rules.insert(0, catch_all);
-    rules
+    let (manual, automatic): (Vec<_>, Vec<_>) = rules.into_iter().partition(|rule| rule.manual);
+    let manual = manual.into_iter().map(|rule| FolderRule {
+        enabled: true,
+        download_right_away: None,
+        ..rule
+    });
+    std::iter::once(catch_all)
+        .chain(automatic)
+        .chain(manual)
+        .collect()
 }
 
 /// The rule every install starts with: every download no other rule takes, and whose preset has no folder of its
@@ -370,6 +386,7 @@ pub fn catch_all_rule() -> FolderRule {
         id: CATCH_ALL_RULE_ID.to_owned(),
         name: String::new(),
         enabled: true,
+        manual: false,
         conditions: Vec::new(),
         folder: format!("{{{SITE_PLACEHOLDER}}}"),
         file_name: String::new(),
@@ -387,6 +404,7 @@ pub fn posts_folder_rule(folder: &str) -> FolderRule {
         id: "rule-1".to_owned(),
         name: String::new(),
         enabled: true,
+        manual: false,
         conditions: vec![RuleCondition {
             field: RuleField::Kind,
             operator: RuleOperator::Is,
@@ -474,6 +492,11 @@ impl FolderRule {
     /// Whether it's the catch-all, which comes after a preset's own folder.
     pub fn is_catch_all(&self) -> bool {
         self.id == CATCH_ALL_RULE_ID
+    }
+
+    /// Whether it takes the downloads it matches by itself: when it's on and isn't applied only by hand.
+    fn applies_by_itself(&self) -> bool {
+        self.enabled && !self.manual
     }
 
     /// Whether the conditions match the download: OR binds first, so the conditions joined by OR form groups of which
@@ -714,7 +737,7 @@ fn destination_on(
             .enumerate()
             .rev()
             .find(|(_, rule)| {
-                rule.enabled
+                rule.applies_by_itself()
                     && rule.is_catch_all() == catch_all
                     && rule.picks_folder()
                     && rule.matches(subject)
@@ -783,7 +806,7 @@ pub fn start_preset(
         .and_then(|(index, rule)| preset_of(index, rule))
         .or_else(|| {
             rules.iter().enumerate().rev().find_map(|(index, rule)| {
-                (rule.enabled && rule.matches(&subject))
+                (rule.applies_by_itself() && rule.matches(&subject))
                     .then(|| preset_of(index, rule))
                     .flatten()
             })
@@ -800,7 +823,7 @@ pub fn download_right_away(rules: &[FolderRule], subject: &RuleSubject<'_>) -> O
 pub fn right_away_rule(rules: &[FolderRule], subject: &RuleSubject<'_>) -> Option<RightAwayRule> {
     rules.iter().enumerate().rev().find_map(|(index, rule)| {
         let download_right_away = rule.download_right_away?;
-        (rule.enabled && rule.matches(subject)).then(|| RightAwayRule {
+        (rule.applies_by_itself() && rule.matches(subject)).then(|| RightAwayRule {
             download_right_away,
             rule: rule_number(index),
         })
@@ -824,7 +847,7 @@ pub fn unpacking_rule(
         .and_then(|(index, rule)| decided(index, rule))
         .or_else(|| {
             rules.iter().enumerate().rev().find_map(|(index, rule)| {
-                (rule.enabled && rule.matches(subject))
+                (rule.applies_by_itself() && rule.matches(subject))
                     .then(|| decided(index, rule))
                     .flatten()
             })
@@ -874,7 +897,7 @@ pub fn file_name(
             rules
                 .iter()
                 .rev()
-                .find(|rule| rule.enabled && names_files(rule) && rule.matches(subject))
+                .find(|rule| rule.applies_by_itself() && names_files(rule) && rule.matches(subject))
         })?;
     let captured = rule.captured(subject);
     let filled = post_names::fill_rule_name(
@@ -1293,6 +1316,7 @@ mod tests {
             id: String::new(),
             name: String::new(),
             enabled: true,
+            manual: false,
             conditions,
             folder: folder.to_owned(),
             file_name: String::new(),
@@ -1682,6 +1706,132 @@ mod tests {
             start_preset(&rules, &track, Some("rule-2"), |id| id != "audio").map(|pick| pick.rule),
             Some(4),
             "a preset that's gone is passed over"
+        );
+    }
+
+    #[test]
+    fn a_manual_rule_is_applied_only_by_hand() {
+        // Rule 2 matches every title with an RJ code, but it's manual, so it's never taken by itself.
+        let rules = vec![
+            catch_all_rule(),
+            FolderRule {
+                id: "rule-2".to_owned(),
+                manual: true,
+                file_name: "{1}".to_owned(),
+                preset_id: Some("audio".to_owned()),
+                download_right_away: Some(true),
+                unpack: Some(RuleUnpacking::InPlace),
+                ..rule(
+                    vec![condition(
+                        RuleField::Title,
+                        RuleOperator::Matches,
+                        r"(RJ\d+)",
+                    )],
+                    r"D:\Voice\{1}",
+                )
+            },
+        ];
+        let track = VideoInfo {
+            title: "Sleep RJ01234567".to_owned(),
+            ..soundcloud_track()
+        };
+        let pack = VideoInfo {
+            title: "Voice RJ01234567.zip".to_owned(),
+            ..mega_file()
+        };
+        fn subject(video: &VideoInfo) -> RuleSubject<'_> {
+            RuleSubject {
+                video,
+                preset: None,
+            }
+        }
+        let folder = |video: &VideoInfo, picked: Option<&str>| {
+            destination(&rules, &subject(video), picked, Path::new(DOWNLOADS))
+        };
+
+        assert_eq!(
+            folder(&track, None).source,
+            DestinationSource::Rule { number: 1 },
+            "the catch-all, though the manual rule matches"
+        );
+        assert_eq!(start_preset(&rules, &track, None, any_preset), None);
+        assert_eq!(unpacking_rule(&rules, &subject(&pack), None), None);
+        assert_eq!(file_name(&rules, &subject(&pack), None), None);
+        assert_eq!(right_away_rule(&rules, &subject(&track)), None);
+
+        assert_eq!(
+            folder(&track, Some("rule-2")),
+            Destination {
+                folder: r"D:\Voice\RJ01234567".to_owned(),
+                source: DestinationSource::Rule { number: 2 },
+            },
+            "applied by hand, its pattern fills {{1}}"
+        );
+        assert_eq!(
+            start_preset(&rules, &track, Some("rule-2"), any_preset),
+            Some(RulePreset {
+                preset_id: "audio".to_owned(),
+                rule: 2
+            })
+        );
+        assert_eq!(
+            unpacking_rule(&rules, &subject(&pack), Some("rule-2")),
+            Some(UnpackingRule {
+                unpacking: RuleUnpacking::InPlace,
+                rule: 2
+            })
+        );
+        assert_eq!(
+            file_name(&rules, &subject(&pack), Some("rule-2")).as_deref(),
+            Some("RJ01234567")
+        );
+        assert_eq!(
+            folder(&video(), Some("rule-2")).folder,
+            r"D:\Voice\Unknown",
+            "on a link its pattern doesn't match, whatever its conditions, with {{1}} empty"
+        );
+    }
+
+    #[test]
+    fn keeps_manual_rules_last_on_and_without_download_right_away() {
+        let named = |id: &str, manual: bool| FolderRule {
+            id: id.to_owned(),
+            manual,
+            ..rule(Vec::new(), "Folder")
+        };
+        let rules = with_catch_all_first(vec![
+            FolderRule {
+                enabled: false,
+                download_right_away: Some(true),
+                ..named("rule-1", true)
+            },
+            named("rule-2", false),
+            FolderRule {
+                manual: true,
+                ..catch_all_rule()
+            },
+            named("rule-3", true),
+            named("rule-4", false),
+        ]);
+        let order: Vec<_> = rules
+            .iter()
+            .map(|rule| (rule.id.as_str(), rule.manual))
+            .collect();
+        assert_eq!(
+            order,
+            [
+                ("catch-all", false),
+                ("rule-2", false),
+                ("rule-4", false),
+                ("rule-1", true),
+                ("rule-3", true),
+            ],
+            "the catch-all first and never manual, then the others, then the manual ones, each in their order"
+        );
+        assert!(rules[3].enabled, "a manual rule is always on");
+        assert_eq!(
+            rules[3].download_right_away, None,
+            "and decides nothing before it's applied"
         );
     }
 

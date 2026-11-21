@@ -1053,6 +1053,11 @@ export const strings = {
       ],
       downloadRightAway:
         "Whether matching links you copy, or that the clipboard shortcut or your browser send, start downloading once they're read. Leave as Is follows Settings.",
+      manual: [
+        "Manual rules never take a download by themselves. Apply one to a link with Apply a Rule…, the rules button beside where it will be saved, on its card, in Pending or in Test a Link: it then decides the folder, file name, preset and unpacking it sets for that link, before every other rule and whatever its conditions.",
+        "Their conditions are there for their patterns: what a Matches pattern captures in parentheses fills {1}, {2} and so on in the folder and the file name. On a link the pattern doesn't match, those have no value, as When a Placeholder Has No Value says.",
+        "They're always on, and have no Download Right Away, since copied links are decided before a rule is applied. A rule's More Actions menu moves it to the other list.",
+      ],
       unpackArchives: [
         "Whether the zip, 7z and rar archives that matching downloads bring are unpacked, and where. Default follows Settings → Archives. Skip leaves them as they're downloaded, even while Settings unpacks.",
         "Smart puts an archive's one file or folder beside it as it is, and several in a folder named after the archive. In Place puts everything beside the archive as it is, with no folder made for it. Folder puts everything in a folder named after the archive, even a single file.",
@@ -1060,6 +1065,14 @@ export const strings = {
       ],
     },
     addRule: "Add Rule",
+    /** The two lists of rules: those that take the downloads they match, and those only applied by hand. */
+    sections: { automatic: "Automatic Rules", manual: "Manual Rules" },
+    manualIntro:
+      "Manual rules never pick downloads by themselves: apply one to a link with Apply a Rule…, beside where it will be saved. It then decides what it sets for that link, whatever its conditions, and what its patterns capture fills {1}, {2} and so on.",
+    addManualRule: "Add Manual Rule",
+    noManualRules: "No manual rules yet.",
+    moveToManual: "Move to Manual Rules",
+    moveToAutomatic: "Move to Automatic Rules",
     emptyTitle: "No Rules",
     emptyBody:
       "Add a rule to pick the folder, the preset, Download Right Away or unpacking for downloads by site, uploader, title, link, kind or preset.",
@@ -1101,6 +1114,8 @@ export const strings = {
     save: "Save",
     discard: "Discard",
     when: "When",
+    /** A manual rule's conditions, which only fill its placeholders, in place of When. */
+    conditions: "Conditions",
     /** Between two conditions, in capitals as in the rules' sentences; a click switches it. */
     join: { all: "AND", any: "OR" },
     joinHint: {
@@ -1196,6 +1211,8 @@ export const strings = {
       matchingCase: "(matching case)",
       everythingElse: "Everything else",
       when: (conditions: string) => `When ${conditions}`,
+      /** A manual rule's conditions, which don't decide when it applies. */
+      manual: (conditions: string) => `Conditions: ${conditions}`,
       fields: {
         site: "the site",
         uploader: "the uploader",

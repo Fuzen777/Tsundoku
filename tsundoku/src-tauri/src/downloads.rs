@@ -169,21 +169,22 @@ pub fn rule_download_right_away(
     rules::right_away_rule(&manager.list(), &subject)
 }
 
-/// Whether a rule unpacks a video's archives, and where, and which rule, for Rules' Test a Link: `None` when
-/// Settings → Archives decides.
+/// Whether a rule unpacks a video's archives, and where, and which rule, the one picked for it first, for Rules' Test
+/// a Link: `None` when Settings → Archives decides.
 #[tauri::command]
 pub fn rule_unpacking(
     manager: Rules<'_>,
     presets: Presets<'_>,
     video: VideoInfo,
     preset_id: Option<String>,
+    rule_id: Option<String>,
 ) -> Option<UnpackingRule> {
     let preset = preset_id.and_then(|id| presets.get(&id));
     let subject = RuleSubject {
         video: &video,
         preset: preset.as_ref(),
     };
-    rules::unpacking_rule(&manager.list(), &subject, None)
+    rules::unpacking_rule(&manager.list(), &subject, rule_id.as_deref())
 }
 
 #[tauri::command]
@@ -198,23 +199,25 @@ pub fn add_to_queue(
     preset_id: String,
     overwrite: bool,
     folder: Option<String>,
+    rule_id: Option<String>,
     password: Option<String>,
 ) -> Result<QueueItem, DownloadError> {
     let password = password.and_then(Password::new);
-    queue.add_in(video, &preset_id, overwrite, folder, None, password)
+    queue.add_in(video, &preset_id, overwrite, folder, rule_id, password)
 }
 
 /// Adds a post of images, whose files all go into the site's folder in the posts folder, or a file host's link, with
-/// the password that opened it.
+/// the rule picked for it, if any, and the password that opened it.
 #[tauri::command]
 pub fn add_post_to_queue(
     queue: Queue<'_>,
     video: VideoInfo,
     folder: Option<String>,
+    rule_id: Option<String>,
     password: Option<String>,
 ) -> Result<QueueItem, DownloadError> {
     let password = password.and_then(Password::new);
-    queue.add_post_in(video, folder, None, password)
+    queue.add_post_in(video, folder, rule_id, password)
 }
 
 /// Enter Password, for a download that waits for one: it starts with it.

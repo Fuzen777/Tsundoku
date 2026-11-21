@@ -160,17 +160,20 @@ interface DownloadControlsProps {
 }
 
 /** The preset picker and Download. The preset a rule picks comes first, with the rule beside it, else the default one.
- * Downloading again with the preset used before asks first, since the new file replaces the old one. */
+ * Downloading again with the preset used before asks first, since the new file replaces the old one. Apply a Rule…,
+ * beside the folder, picks a rule for this download, a manual one too. */
 function DownloadControls({ preview, password, onAdded }: DownloadControlsProps) {
   const { data: presets } = usePresets()
-  const { data: rulePreset, isPending: pickingPreset } = useRulePreset(preview.video)
+  // A rule picked for this download, which decides what it sets before the matching rules.
+  const [chosenRuleId, setChosenRuleId] = useState<string | null>(null)
+  const { data: rulePreset, isPending: pickingPreset } = useRulePreset(preview.video, chosenRuleId)
   const [chosenId, setChosenId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
   const presetId = chosenId ?? rulePreset?.presetId ?? presets?.defaultId ?? null
   const pickedByRule = rulePreset && rulePreset.presetId === presetId ? rulePreset.rule : null
   const ready = presetId !== null && !pickingPreset
-  const { data: destination } = useDownloadDestination(preview.video, presetId, ready)
+  const { data: destination } = useDownloadDestination(preview.video, presetId, ready, chosenRuleId)
   // A folder picked for this download instead of the one the rules give.
   const [chosenFolder, setChosenFolder] = useState<string | null>(null)
 
@@ -192,7 +195,7 @@ function DownloadControls({ preview, password, onAdded }: DownloadControlsProps)
     setAdding(true)
     setError(null)
     try {
-      await addToQueue(preview.video, preset.id, sameAsBefore, chosenFolder, password)
+      await addToQueue(preview.video, preset.id, sameAsBefore, chosenFolder, chosenRuleId, password)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))
@@ -208,6 +211,8 @@ function DownloadControls({ preview, password, onAdded }: DownloadControlsProps)
           destination={destination}
           chosenFolder={chosenFolder}
           onChoose={setChosenFolder}
+          chosenRuleId={chosenRuleId}
+          onChooseRule={setChosenRuleId}
           disabled={adding}
           className="flex-1"
         />
@@ -251,7 +256,8 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
   const picked = chosen ?? (picksSharedFiles ? defaultSharedPick(sharedFiles, leftOutShared) : defaultPick(files, leftOut))
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
-  const { data: destination } = useDownloadDestination(video, null)
+  const [chosenRuleId, setChosenRuleId] = useState<string | null>(null)
+  const { data: destination } = useDownloadDestination(video, null, true, chosenRuleId)
   const [chosenFolder, setChosenFolder] = useState<string | null>(null)
   // Until the history says which files were left out, the ticks may still change.
   const askingHistory =
@@ -262,7 +268,7 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
     setError(null)
     try {
       const picks = picksSharedFiles ? withSharedPicked(video, picked) : picksFiles ? withPicked(video, picked) : video
-      await addPostToQueue(picks, chosenFolder, password)
+      await addPostToQueue(picks, chosenFolder, chosenRuleId, password)
       onAdded()
     } catch (caught) {
       setError(describeDownloadError(caught))
@@ -306,6 +312,8 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
             destination={destination}
             chosenFolder={chosenFolder}
             onChoose={setChosenFolder}
+            chosenRuleId={chosenRuleId}
+            onChooseRule={setChosenRuleId}
             disabled={adding}
             className="flex-1"
           />

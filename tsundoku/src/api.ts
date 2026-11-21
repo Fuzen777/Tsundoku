@@ -445,10 +445,11 @@ export function addToQueue(
   presetId: string,
   overwrite: boolean,
   folder: string | null = null,
+  ruleId: string | null = null,
   password: string | null = null,
 ): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
-  return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite, folder, password })
+  return invoke<QueueItem>("add_to_queue", { video, presetId, overwrite, folder, ruleId, password })
 }
 
 /** Adds a post of images, with the files its `postFiles` tick (all of them when it lists none), into the folder the
@@ -456,10 +457,11 @@ export function addToQueue(
 export function addPostToQueue(
   video: VideoInfo,
   folder: string | null = null,
+  ruleId: string | null = null,
   password: string | null = null,
 ): Promise<QueueItem> {
   if (!isTauri()) return outsideTauri()
-  return invoke<QueueItem>("add_post_to_queue", { video, folder, password })
+  return invoke<QueueItem>("add_post_to_queue", { video, folder, ruleId, password })
 }
 
 /** Saves a download that isn't running in a folder picked for it, or back in the usual one (`null`). A stopped one
@@ -527,11 +529,16 @@ export function getRuleRightAway(video: VideoInfo, presetId: string | null): Pro
   return invoke<RightAwayRule | null>("rule_download_right_away", { video, presetId })
 }
 
-/** Whether a rule unpacks a video's archives, and where, and which rule: null when Settings → Archives decides.
- * `presetId` is the preset it would start with, none for a post or a file host's files. */
-export function getRuleUnpacking(video: VideoInfo, presetId: string | null): Promise<UnpackingRule | null> {
-  if (!isTauri()) return Promise.resolve(standIns.ruleUnpacking(video))
-  return invoke<UnpackingRule | null>("rule_unpacking", { video, presetId })
+/** Whether a rule unpacks a video's archives, and where, and which rule, `ruleId`'s first when one was picked for
+ * it: null when Settings → Archives decides. `presetId` is the preset it would start with, none for a post or a file
+ * host's files. */
+export function getRuleUnpacking(
+  video: VideoInfo,
+  presetId: string | null,
+  ruleId: string | null = null,
+): Promise<UnpackingRule | null> {
+  if (!isTauri()) return Promise.resolve(standIns.ruleUnpacking(video, ruleId))
+  return invoke<UnpackingRule | null>("rule_unpacking", { video, presetId, ruleId })
 }
 
 /** Where downloads go when no folder is chosen: a Tsundoku folder in Downloads. */

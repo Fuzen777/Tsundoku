@@ -78,7 +78,8 @@ interface RuleEditorProps {
 }
 
 /** One rule's conditions and what it does (its folder, the preset videos start with, Download Right Away, unpacking),
- * kept as a draft until Save. The catch-all has no conditions, only a folder. */
+ * kept as a draft until Save. The catch-all has no conditions, only a folder. A manual rule's conditions are its
+ * Conditions rather than When, since they only fill its placeholders, and it has no Download Right Away. */
 export function RuleEditor({
   draft,
   number,
@@ -123,7 +124,7 @@ export function RuleEditor({
           <p className="text-fg-secondary">{text.catchAllWhen}</p>
         </Field>
       ) : (
-        <Field label={text.when}>
+        <Field label={draft.manual ? text.conditions : text.when}>
           <div className="flex flex-col gap-2">
             {draft.conditions.map((condition, index) => (
               <ConditionRow
@@ -228,9 +229,9 @@ interface RuleActionsProps {
   onChange: (changes: Partial<FolderRule>) => void
 }
 
-/** What a rule does besides picking a folder: the preset matching videos start with, Download Right Away, and whether
- * and where archives are unpacked. A rule that checks the kind or the preset can't pick the preset, so Start As is off
- * for it, or says why it can't stay. */
+/** What a rule does besides picking a folder: the preset matching videos start with, Download Right Away (not for a
+ * manual rule, applied once copied links are decided), and whether and where archives are unpacked. A rule that checks
+ * the kind or the preset can't pick the preset, so Start As is off for it, or says why it can't stay. */
 function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
   const presetAllowed = canPickPreset(draft.conditions)
   const presetMissing = draft.presetId !== null && !presets.some((preset) => preset.id === draft.presetId)
@@ -259,14 +260,16 @@ function RuleActions({ draft, presets, onChange }: RuleActionsProps) {
           {presetMissing && <option value={draft.presetId ?? ""}>{text.deletedPreset}</option>}
         </SelectInput>
       </Field>
-      <Field label={text.downloadRightAway}>
-        <SegmentedControl
-          label={text.downloadRightAway}
-          options={RIGHT_AWAY_CHOICES}
-          value={rightAway}
-          onChange={(choice) => onChange({ downloadRightAway: choice === "unset" ? null : choice === "on" })}
-        />
-      </Field>
+      {!draft.manual && (
+        <Field label={text.downloadRightAway}>
+          <SegmentedControl
+            label={text.downloadRightAway}
+            options={RIGHT_AWAY_CHOICES}
+            value={rightAway}
+            onChange={(choice) => onChange({ downloadRightAway: choice === "unset" ? null : choice === "on" })}
+          />
+        </Field>
+      )}
       <Field label={text.unpackArchives}>
         <SegmentedControl
           label={text.unpackArchives}

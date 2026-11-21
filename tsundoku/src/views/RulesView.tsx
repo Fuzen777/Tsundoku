@@ -11,6 +11,7 @@ import { HelpMenu, type HelpTopic } from "../components/HelpMenu"
 import { IconButton } from "../components/IconButton"
 import { Menu, type MenuItem } from "../components/Menu"
 import { Page } from "../components/Page"
+import { Section } from "../components/Section"
 import { StatusMessage } from "../components/StatusMessage"
 import { Tooltip } from "../components/Tooltip"
 import { classes } from "../components/styles"
@@ -24,9 +25,11 @@ import { RuleEditor } from "./rules/RuleEditor"
 import { RuleTester } from "./rules/RuleTester"
 import {
   CATCH_ALL_RULE_ID,
+  RULES_SECTION_IDS,
   copyOfRule,
   describeActions,
   describeConditions,
+  describeManualConditions,
   movedRule,
   newRule,
   ruleLabel,
@@ -46,10 +49,12 @@ interface Editing {
   isNew: boolean
 }
 
-/** The folder rules, where the last that matches decides: each as a sentence with its folder. One rule is edited at a
- * time, as a draft until Save; moving (with its arrows or by dragging its grip), turning off and deleting save at
- * once. Duplicate opens a copy as a new rule just below the original, saved like any new one. The catch-all stays first, so every other rule overrides it: it
- * can't be moved, duplicated or deleted, and new rules go at the bottom. */
+/** The folder rules, in two lists: the automatic ones, where the last that matches decides, then the manual ones, only
+ * ever applied by hand (Apply a Rule…). Each is a sentence with its folder. One rule is edited at a time, as a draft
+ * until Save; moving (with its arrows or by dragging its grip, within its list), turning off, moving to the other list
+ * and deleting save at once. Duplicate opens a copy as a new rule just below the original, saved like any new one. The
+ * catch-all stays first, so every other rule overrides it: it can't be moved, duplicated or deleted, and new rules go
+ * at the bottom of their list. The core keeps the manual rules after the others, so each list is a run of the rules. */
 export function RulesView() {
   const queryClient = useQueryClient()
   const { navigate } = useAppActions()
@@ -69,8 +74,13 @@ export function RulesView() {
   const presets = presetsOverview?.presets ?? []
   const downloadFolder = options?.folder ?? defaultFolder ?? ""
   const busy = saving || editing !== null
-  // The core keeps the catch-all first, so rules below it are the ones that move.
+  // The core keeps the catch-all first, so rules below it are the ones that move, and the manual rules last.
   const firstMovable = rules[0]?.id === CATCH_ALL_RULE_ID ? 1 : 0
+  const firstManual = rules.findIndex((rule) => rule.manual)
+  const manualStart = firstManual < 0 ? rules.length : firstManual
+  // Where the list a rule is in starts (past the catch-all) and ends (past its last rule): a rule moves within its list.
+  const listStart = (index: number) => (index < manualStart ? firstMovable : manualStart)
+  const listEnd = (index: number) => (index < manualStart ? manualStart : rules.length)
   // A new rule shows where it will go, so the rules after it are numbered one further.
   const numberOf = (index: number) => index + 1 + (editing?.isNew && index >= editing.index ? 1 : 0)
 
@@ -83,6 +93,7 @@ export function RulesView() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.downloadDestination })
       void queryClient.invalidateQueries({ queryKey: queryKeys.rulePreset })
       void queryClient.invalidateQueries({ queryKey: queryKeys.ruleRightAway })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.ruleUnpacking })
       return true
     } catch (caught) {
       setError(describeRuleError(caught))
@@ -107,14 +118,15 @@ export function RulesView() {
     setDropBefore(null)
   }
 
-  /** Over a rule's row: the rule dragged would go before it, or after it past its middle, never above the catch-all. */
+  /** Over a rule's row: the rule dragged would go before it, or after it past its middle, within the dragged rule's own
+   * list, never above the catch-all. */
   function dragOver(event: DragEvent<HTMLDivElement>, index: number) {
     if (dragged === null) return
     event.preventDefault()
     event.dataTransfer.dropEffect = "move"
     const box = event.currentTarget.getBoundingClientRect()
     const before = event.clientY > box.top + box.height / 2 ? index + 1 : index
-    setDropBefore(Math.max(before, firstMovable))
+    setDropBefore(Math.min(Math.max(before, listStart(dragged)), listEnd(dragged)))
   }
 
   /** A drop anywhere in the list, rows and the gaps between them, puts the rule where the line shows. */
@@ -128,6 +140,13 @@ export function RulesView() {
   function toggle(index: number) {
     if (!rules) return
     void store(rules.map((rule, at) => (at === index ? { ...rule, enabled: !rule.enabled } : rule)))
+  }
+
+  /** Moves a rule to the other list: the core puts a rule made manual first among the manual ones, on, and one made
+   * automatic last among the automatic ones. */
+  function setManual(index: number, manual: boolean) {
+    if (!rules) return
+    void store(rules.map((rule, at) => (at === index ? { ...rule, manual, enabled: rule.enabled || manual } : rule)))
   }
 
   async function remove(index: number) {
@@ -166,7 +185,9 @@ export function RulesView() {
     />
   )
 
-  const rows: ReactNode[] = rules.map((rule, index) =>
+  // Where the list of the rule being dragged ends: the line shows after its last rule, never before the other list's.
+  const draggedEnd = dragged === null ? 0 : listEnd(dragged)
+  const rowOf = (rule: FolderRule, index: number): ReactNode =>
     editing && !editing.isNew && editing.index === index ? (
       editor(editing)
     ) : (
@@ -177,8 +198,8 @@ export function RulesView() {
         presets={presets}
         folder={rule.folder ? shownFolder(rule.folder, downloadFolder) : null}
         disabled={busy}
-        canMoveUp={index > firstMovable}
-        canMoveDown={index >= firstMovable && index < rules.length - 1}
+        canMoveUp={index > listStart(index)}
+        canMoveDown={index >= firstMovable && index < listEnd(index) - 1}
         onEdit={() => startEditing(index, rule, false)}
         onDuplicate={() => startEditing(index + 1, copyOfRule(rule), true)}
         onMove={(by) => moveBefore(index, by < 0 ? index - 1 : index + 2)}
@@ -186,9 +207,9 @@ export function RulesView() {
         dropMark={
           dragged === null || dropBefore === null || movedRule(rules, dragged, dropBefore) === null
             ? null
-            : dropBefore === index
+            : dropBefore === index && index < draggedEnd
               ? "before"
-              : dropBefore === index + 1 && index === rules.length - 1
+              : dropBefore === index + 1 && index === draggedEnd - 1
                 ? "after"
                 : null
         }
@@ -200,13 +221,17 @@ export function RulesView() {
         onDragEnd={endDrag}
         onDragOver={(event) => dragOver(event, index)}
         onToggle={() => toggle(index)}
+        onSetManual={(manual) => setManual(index, manual)}
         onDelete={() => void remove(index)}
       />
-    ),
-  )
-  const shownRows = editing?.isNew
-    ? [...rows.slice(0, editing.index), editor(editing), ...rows.slice(editing.index)]
-    : rows
+    )
+  const automaticRows = rules.slice(0, manualStart).map((rule, at) => rowOf(rule, at))
+  const manualRows = rules.slice(manualStart).map((rule, at) => rowOf(rule, manualStart + at))
+  // A new rule's editor goes where it will be saved, in its own list.
+  if (editing?.isNew) {
+    if (editing.draft.manual) manualRows.splice(editing.index - manualStart, 0, editor(editing))
+    else automaticRows.splice(editing.index, 0, editor(editing))
+  }
 
   return (
     <Page
@@ -214,7 +239,7 @@ export function RulesView() {
       actions={
         <>
           <HelpMenu label={text.help.label} topics={helpTopics(downloadFolder)} />
-          <Button size="sm" disabled={busy} onClick={() => startEditing(rules.length, newRule(), true)}>
+          <Button size="sm" disabled={busy} onClick={() => startEditing(manualStart, newRule(), true)}>
             <Plus size={14} />
             {text.addRule}
           </Button>
@@ -231,12 +256,40 @@ export function RulesView() {
         <p className="text-fg-secondary">{text.intro}</p>
         <RuleTester />
         {error && !editing && <StatusMessage tone="danger" {...error} />}
-        {shownRows}
-        {rules.length === 0 && !editing && (
-          <div className="py-8">
-            <EmptyState icon={FolderTree} title={text.emptyTitle} body={text.emptyBody} />
-          </div>
-        )}
+        <div id={RULES_SECTION_IDS.automatic} className="mt-3 scroll-mt-4">
+          <Section title={text.sections.automatic}>
+            <div className="flex flex-col gap-3">
+              {automaticRows}
+              {rules.length === 0 && !editing && (
+                <div className="py-8">
+                  <EmptyState icon={FolderTree} title={text.emptyTitle} body={text.emptyBody} />
+                </div>
+              )}
+            </div>
+          </Section>
+        </div>
+        <div id={RULES_SECTION_IDS.manual} className="mt-3 scroll-mt-4">
+          <Section
+            title={text.sections.manual}
+            actions={
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => startEditing(rules.length, newRule(true), true)}
+              >
+                <Plus size={14} />
+                {text.addManualRule}
+              </Button>
+            }
+          >
+            <div className="flex flex-col gap-3">
+              <p className="text-fg-secondary">{text.manualIntro}</p>
+              {manualRows}
+              {manualRows.length === 0 && <p className="text-xs text-fg-muted">{text.noManualRules}</p>}
+            </div>
+          </Section>
+        </div>
         {downloadFolder && (
           <div className="flex items-center gap-3">
             <p className="min-w-0 flex-1 truncate text-xs text-fg-muted" title={downloadFolder}>
@@ -270,6 +323,7 @@ function helpTopics(downloadFolder: string): HelpTopic[] {
     { title: text.startAs, paragraphs: help.startAs },
     { title: text.downloadRightAway, paragraphs: [help.downloadRightAway] },
     { title: text.unpackArchives, paragraphs: help.unpackArchives },
+    { title: text.sections.manual, paragraphs: help.manual },
   ]
 }
 
@@ -294,12 +348,14 @@ interface RuleRowProps {
   onDragEnd: () => void
   onDragOver: (event: DragEvent<HTMLDivElement>) => void
   onToggle: () => void
+  /** Moves it to the manual rules, or back to the automatic ones. */
+  onSetManual: (manual: boolean) => void
   onDelete: () => void
 }
 
 /** A rule as a sentence, its folder and what else it does, with a grip to drag it, its number, moving, Edit, Duplicate
- * and a menu. The catch-all says it's always first, and can't be moved, duplicated or deleted. A line above or below
- * shows where a dragged rule would go. */
+ * and a menu. The catch-all says it's always first, and can't be moved, duplicated or deleted. A manual rule names its
+ * conditions without "When", and is never off. A line above or below shows where a dragged rule would go. */
 function RuleRow({
   rule,
   number,
@@ -317,15 +373,23 @@ function RuleRow({
   onDragEnd,
   onDragOver,
   onToggle,
+  onSetManual,
   onDelete,
 }: RuleRowProps) {
   const isCatchAll = rule.id === CATCH_ALL_RULE_ID
-  const sentence = isCatchAll ? text.sentence.everythingElse : describeConditions(rule.conditions, presets)
+  const sentence = isCatchAll
+    ? text.sentence.everythingElse
+    : rule.manual
+      ? describeManualConditions(rule.conditions, presets)
+      : describeConditions(rule.conditions, presets)
   const actions = describeActions(rule, presets)
   const toggleItem: MenuItem = { label: rule.enabled ? text.turnOff : text.turnOn, onSelect: onToggle }
+  const deleteItem: MenuItem = { label: text.delete, onSelect: onDelete, danger: true }
   const menuItems: MenuItem[] = isCatchAll
     ? [toggleItem]
-    : [toggleItem, { label: text.delete, onSelect: onDelete, danger: true }]
+    : rule.manual
+      ? [{ label: text.moveToAutomatic, onSelect: () => onSetManual(false) }, deleteItem]
+      : [toggleItem, { label: text.moveToManual, onSelect: () => onSetManual(true) }, deleteItem]
   return (
     <div data-rule-row className="relative" onDragOver={onDragOver}>
       {dropMark && (
@@ -375,7 +439,7 @@ function RuleRow({
         </span>
         <div className={classes("flex min-w-0 flex-1 flex-col gap-0.5", !rule.enabled && "opacity-60")}>
           {rule.name.trim() && <p className="font-semibold break-words">{rule.name.trim()}</p>}
-          <p className="break-words">{sentence}</p>
+          {sentence && <p className="break-words">{sentence}</p>}
           {folder && (
             <p className="truncate font-mono text-xs text-fg-secondary" title={folder}>
               {folder}

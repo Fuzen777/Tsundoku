@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { RuleCondition } from "../../bindings/RuleCondition"
-import { capturedGroups, describeConditions, shownFolder } from "./ruleLabels"
+import { capturedGroups, describeConditions, describeManualConditions, newRule, shownFolder } from "./ruleLabels"
 
 const matches = (value: string): RuleCondition => ({
   field: "title",
@@ -58,6 +58,20 @@ describe("describeConditions", () => {
     expect(
       describeConditions([condition("site", "X"), condition("site", "Bluesky", "any"), condition("title", "cat")], []),
     ).toBe("When the site is X OR the site is Bluesky AND the title contains “cat”")
+  })
+
+  it("names a manual rule's conditions without When, and nothing without any", () => {
+    expect(describeManualConditions([matches(String.raw`(RJ\d+)`), condition("site", "DLsite", "any")], [])).toBe(
+      String.raw`Conditions: the title matches “(RJ\d+)” OR the site is DLsite`,
+    )
+    expect(describeManualConditions([], [])).toBeNull()
+  })
+})
+
+describe("newRule", () => {
+  it("starts a manual rule with a pattern on the title, to fill its placeholders", () => {
+    expect(newRule(true)).toMatchObject({ manual: true, conditions: [{ field: "title", operator: "matches" }] })
+    expect(newRule()).toMatchObject({ manual: false, conditions: [{ field: "site", operator: "is" }] })
   })
 })
 

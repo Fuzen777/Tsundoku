@@ -249,11 +249,17 @@ export function useRuleRightAway(video: VideoInfo | null, presetId: string | nul
   })
 }
 
-/** Whether a rule unpacks a video's archives, and where, and which rule: null when Settings → Archives decides. */
-export function useRuleUnpacking(video: VideoInfo | null, presetId: string | null, enabled: boolean) {
+/** Whether a rule unpacks a video's archives, and where, and which rule, the one picked for it (`ruleId`) first: null
+ * when Settings → Archives decides. */
+export function useRuleUnpacking(
+  video: VideoInfo | null,
+  presetId: string | null,
+  enabled: boolean,
+  ruleId: string | null = null,
+) {
   return useQuery({
-    queryKey: [...queryKeys.ruleUnpacking, video?.site, video?.videoId, presetId],
-    queryFn: () => (video ? getRuleUnpacking(video, presetId) : null),
+    queryKey: [...queryKeys.ruleUnpacking, video?.site, video?.videoId, presetId, ruleId],
+    queryFn: () => (video ? getRuleUnpacking(video, presetId, ruleId) : null),
     enabled: enabled && video !== null,
   })
 }
@@ -263,10 +269,10 @@ export function useWatchedSources() {
   return useQuery({ queryKey: queryKeys.watched, queryFn: getWatchedSources, staleTime: Infinity })
 }
 
-/** The preset a rule picks for a video, and which rule: null when none does. Not asked for a post or a file host's
- * files, which have no preset. */
-export function useRulePreset(video: VideoInfo) {
-  return useQuery(rulePresetQuery(video))
+/** The preset a rule picks for a video, the one picked for it (`ruleId`) first, and which rule: null when none does.
+ * Not asked for a post or a file host's files, which have no preset. */
+export function useRulePreset(video: VideoInfo, ruleId: string | null = null) {
+  return useQuery(rulePresetQuery(video, ruleId))
 }
 
 /** The presets rules pick for several videos, in the order asked, each with the rule picked for it in `ruleIds`

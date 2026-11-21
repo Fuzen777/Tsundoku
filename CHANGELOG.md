@@ -2,6 +2,18 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.7 · 2026-11-21
+
+### Added
+
+- **Manual rules**: Rules has a second list, Manual Rules, for rules that never pick downloads by themselves. Apply one to a link with Apply a Rule…, beside where it will be saved: it then decides the folder, file name, preset and unpacking it sets for that link, whatever its conditions. Its conditions are there for their patterns: what a Matches pattern captures fills {1}, {2} and so on in the folder and the file name, so a manual rule "title matches `(RJ\d+)`, save in `D:\Voice\{1}`" sorts only the links you apply it to by their code. Add Manual Rule beside the list's heading adds one, and a rule's More Actions menu moves it from one list to the other. Manual rules are always on, have no Download Right Away, and Apply a Rule… lists them first.
+- **Apply a Rule… on the link's card**: the card that opens for a pasted link has Apply a Rule… beside its folder too, as Pending's links have, so one link can take a rule, a manual one included, without going through Pending.
+- **Try a rule in Test a Link**: Rules' Test a Link has Apply a Rule… beside its folder, to see what a rule applied by hand gives a link, and it stays picked for the next link tested.
+
+### Fixed
+
+- **Test a Link's Archives follows the rules as they're edited**, as its other answers do.
+
 ## 0.2.6 · 2026-11-21
 
 ### Added

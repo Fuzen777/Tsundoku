@@ -787,6 +787,7 @@ fn no_actions() -> rules::FolderRule {
         id: String::new(),
         name: String::new(),
         enabled: true,
+        manual: false,
         conditions: Vec::new(),
         folder: String::new(),
         file_name: String::new(),

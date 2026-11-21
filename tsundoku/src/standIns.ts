@@ -640,6 +640,7 @@ export const standIns = {
       id: "catch-all",
       name: "",
       enabled: true,
+      manual: false,
       conditions: [],
       folder: "{site}",
       fileName: "",
@@ -652,6 +653,7 @@ export const standIns = {
       id: "rule-1",
       name: "Nat Geo",
       enabled: true,
+      manual: false,
       conditions: [
         { field: "site", operator: "is", value: "Instagram", caseSensitive: false, join: "all" },
         { field: "uploader", operator: "is", value: "natgeo", caseSensitive: false, join: "all" },
@@ -667,6 +669,7 @@ export const standIns = {
       id: "rule-2",
       name: "",
       enabled: false,
+      manual: false,
       conditions: [
         { field: "kind", operator: "is", value: "audio", caseSensitive: false, join: "all" },
         { field: "title", operator: "contains", value: "podcast", caseSensitive: false, join: "all" },
@@ -682,6 +685,7 @@ export const standIns = {
       id: "rule-3",
       name: "",
       enabled: true,
+      manual: false,
       conditions: [{ field: "title", operator: "contains", value: "zoo", caseSensitive: false, join: "all" }],
       folder: "",
       fileName: "",
@@ -694,6 +698,7 @@ export const standIns = {
       id: "rule-4",
       name: "MEGA Packs",
       enabled: true,
+      manual: false,
       conditions: [{ field: "site", operator: "is", value: "MEGA", caseSensitive: false, join: "all" }],
       folder: "",
       fileName: "",
@@ -702,12 +707,28 @@ export const standIns = {
       downloadRightAway: null,
       unpack: "inPlace",
     },
+    {
+      id: "rule-5",
+      name: "Voice Works",
+      enabled: true,
+      manual: true,
+      conditions: [{ field: "title", operator: "matches", value: String.raw`(RJ\d+)`, caseSensitive: false, join: "all" }],
+      folder: String.raw`D:\Voice\{1}`,
+      fileName: "{1}",
+      missingValues: "leaveOut",
+      presetId: null,
+      downloadRightAway: null,
+      unpack: "archiveFolder",
+    },
   ] satisfies FolderRule[],
   /** The first rule's folder for the video's site, as a new install has it, or the folder of the rule picked for it. */
   destination(video: VideoInfo, ruleId: string | null = null): Destination {
     const picked = standIns.folderRules.findIndex((rule) => rule.id === ruleId && rule.folder !== "")
     if (picked >= 0) {
-      const folder = standIns.folderRules[picked].folder.replace("{site}", video.siteName).replace("{account}", "natgeo")
+      const folder = standIns.folderRules[picked].folder
+        .replace("{site}", video.siteName)
+        .replace("{account}", "natgeo")
+        .replace("{1}", /RJ\d+/i.exec(video.title)?.[0] ?? "Unknown")
       return { folder, source: { kind: "rule", number: picked + 1 } }
     }
     return {
@@ -721,7 +742,10 @@ export const standIns = {
     // As the stand-in rules have it: rule 3 downloads videos with "zoo" in their title right away.
     return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 4 } : null
   },
-  ruleUnpacking(video: VideoInfo): UnpackingRule | null {
+  ruleUnpacking(video: VideoInfo, ruleId: string | null = null): UnpackingRule | null {
+    const picked = standIns.folderRules.findIndex((rule) => rule.id === ruleId && rule.unpack !== null)
+    const unpacking = standIns.folderRules[picked]?.unpack
+    if (unpacking) return { unpacking, rule: picked + 1 }
     // As the stand-in rules have it: rule 5 unpacks MEGA's archives in place.
     return video.site === "mega" ? { unpacking: "inPlace", rule: 5 } : null
   },

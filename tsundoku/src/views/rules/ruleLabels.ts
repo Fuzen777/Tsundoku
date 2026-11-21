@@ -12,6 +12,9 @@ const text = strings.rules
  * (`rules::CATCH_ALL_RULE_ID` in the core). */
 export const CATCH_ALL_RULE_ID = "catch-all"
 
+/** The elements of the Rules view's two lists of rules, which the sidebar can scroll to. */
+export const RULES_SECTION_IDS = { automatic: "rules-automatic", manual: "rules-manual" } as const
+
 /** What a rule's folder can hold, filled in with the download's own (`rules::placeholder_value` in the core). Besides
  * these, `{1}` to `{9}` take what the rule's pattern captured (`capturedGroups`). */
 export const FOLDER_PLACEHOLDERS = [
@@ -86,13 +89,15 @@ export function newCondition(field: RuleField, defaultPresetId: string): RuleCon
   }
 }
 
-/** A rule not saved yet: one empty condition on the site, and nothing it does yet. Saving gives it its ID. */
-export function newRule(): FolderRule {
+/** A rule not saved yet: one empty condition on the site (a manual one's on the title, for a pattern to fill its
+ * placeholders), and nothing it does yet. Saving gives it its ID. */
+export function newRule(manual = false): FolderRule {
   return {
     id: "",
     name: "",
     enabled: true,
-    conditions: [newCondition("site", "")],
+    manual,
+    conditions: [manual ? { ...newCondition("title", ""), operator: "matches" } : newCondition("site", "")],
     folder: "",
     fileName: "",
     missingValues: "standIn",
@@ -159,15 +164,26 @@ export function describeActions(rule: FolderRule, presets: readonly Preset[]): s
  * Instagram AND the uploader is “natgeo”". */
 export function describeConditions(conditions: readonly RuleCondition[], presets: readonly Preset[]): string {
   if (conditions.length === 0) return text.sentence.every
-  return text.sentence.when(
-    conditions
-      .map((condition, index) =>
-        index === 0
-          ? describeCondition(condition, presets)
-          : `${text.join[condition.join]} ${describeCondition(condition, presets)}`,
-      )
-      .join(" "),
-  )
+  return text.sentence.when(joinedConditions(conditions, presets))
+}
+
+/** A manual rule's conditions, which don't decide when it applies: "Conditions: the title matches “(RJ\d+)”", or
+ * `null` without any. */
+export function describeManualConditions(
+  conditions: readonly RuleCondition[],
+  presets: readonly Preset[],
+): string | null {
+  return conditions.length === 0 ? null : text.sentence.manual(joinedConditions(conditions, presets))
+}
+
+function joinedConditions(conditions: readonly RuleCondition[], presets: readonly Preset[]): string {
+  return conditions
+    .map((condition, index) =>
+      index === 0
+        ? describeCondition(condition, presets)
+        : `${text.join[condition.join]} ${describeCondition(condition, presets)}`,
+    )
+    .join(" ")
 }
 
 function describeCondition(condition: RuleCondition, presets: readonly Preset[]): string {

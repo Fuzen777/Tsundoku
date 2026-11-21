@@ -24,6 +24,13 @@ name: string,
  */
 enabled: boolean, 
 /**
+ * Applied only by hand, to one link at a time (Apply a Rule…), never because it matches (`applies_by_itself`):
+ * whatever its conditions, it then decides what it sets, and its conditions only fill `{1}` to `{9}` from that
+ * link. Always on, never the catch-all, it doesn't pick Download Right Away (decided before anything is picked by
+ * hand), and it comes after the other rules (`with_catch_all_first`). Missing (false) in rules saved before 0.2.7.
+ */
+manual: boolean, 
+/**
  * Each joined to the one before by its own `join`: conditions joined by OR are alternatives, and AND joins those
  * groups, so "A OR B AND C" is (A or B) and C. A rule without any matches every download.
  */
