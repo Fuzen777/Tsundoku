@@ -5,7 +5,7 @@ import type { LinkPreview } from "../../bindings/LinkPreview"
 import type { VideoInfo } from "../../bindings/VideoInfo"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
-import { DestinationLine } from "../../components/DestinationLine"
+import { DestinationLine, PickedRuleWarning } from "../../components/DestinationLine"
 import { TextInput } from "../../components/Field"
 import { StatusMessage } from "../../components/StatusMessage"
 import { describePreviewError, type ErrorDescription } from "../../errors"
@@ -183,6 +183,7 @@ function TrialOutcome({ video, ruleId, onChooseRule }: TrialOutcomeProps) {
           )}
         </Row>
       </dl>
+      <PickedRuleWarning destination={destination} />
     </div>
   )
 }

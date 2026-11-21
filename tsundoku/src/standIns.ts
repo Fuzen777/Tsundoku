@@ -739,7 +739,11 @@ export const standIns = {
         .replace("{site}", video.siteName)
         .replace("{account}", "natgeo")
         .replace("{1}", /RJ\d+/i.exec(video.title)?.[0] ?? "Unknown")
-      return { folder, source: { kind: "rule", number: picked + 1 } }
+      const rule = standIns.folderRules[picked]
+      // As the stand-in manual rule has it: its pattern finds an RJ code in the title.
+      const pickedMismatch =
+        rule.manual && !/RJ\d+/i.test(video.title) ? { rule: picked + 1, nothingCaptured: true } : undefined
+      return { folder, source: { kind: "rule", number: picked + 1 }, pickedMismatch }
     }
     return {
       folder: ["C:", "Users", "You", "Downloads", "Tsundoku", video.siteName].join("\\"),

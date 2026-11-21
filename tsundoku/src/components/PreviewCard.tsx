@@ -19,7 +19,7 @@ import { strings } from "../strings"
 import type { PreviewState } from "../usePreview"
 import { Button } from "./Button"
 import { Card } from "./Card"
-import { DestinationLine } from "./DestinationLine"
+import { DestinationLine, PickedRuleWarning } from "./DestinationLine"
 import { FailureFixes, InstallTool } from "./FailureFixes"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
@@ -234,6 +234,7 @@ function DownloadControls({ preview, password, onAdded }: DownloadControlsProps)
           {preview.lastDownload ? strings.preview.downloadAgain : strings.preview.download}
         </Button>
       </div>
+      <PickedRuleWarning destination={destination} className="self-stretch" />
     </div>
   )
 }
@@ -326,6 +327,7 @@ function PostDownloadControls({ preview, password, onAdded }: DownloadControlsPr
             {lastDownload ? strings.preview.downloadAgain : strings.preview.download}
           </Button>
         </div>
+        <PickedRuleWarning destination={destination} className="self-stretch" />
       </div>
     </div>
   )

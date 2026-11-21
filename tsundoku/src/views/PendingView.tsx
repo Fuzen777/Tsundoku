@@ -33,7 +33,7 @@ import type { VideoInfo } from "../bindings/VideoInfo"
 import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
-import { DestinationLine } from "../components/DestinationLine"
+import { DestinationLine, PickedRuleWarning } from "../components/DestinationLine"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { PostFilesPicker } from "../components/PostFilesPicker"
@@ -661,7 +661,8 @@ function useHeldTicks(
 }
 
 /** Where a read link will be saved, and what picked the folder, as the preview card shows it: with the preset it would
- * start with, or none for a post or a file host's files, and the rule picked for it. Nothing until it's known. */
+ * start with, or none for a post or a file host's files, and the rule picked for it, with a warning under it when that's
+ * a manual rule that doesn't match the link. Nothing until it's known. */
 function PendingDestination({
   video,
   presetId,
@@ -687,14 +688,17 @@ function PendingDestination({
     request.ruleId,
   )
   return destination || chosenFolder ? (
-    <DestinationLine
-      destination={destination}
-      chosenFolder={chosenFolder}
-      folderShown={!folderInHeading}
-      onChoose={onChoose}
-      chosenRuleId={chosenRuleId}
-      onChooseRule={onChooseRule}
-    />
+    <>
+      <DestinationLine
+        destination={destination}
+        chosenFolder={chosenFolder}
+        folderShown={!folderInHeading}
+        onChoose={onChoose}
+        chosenRuleId={chosenRuleId}
+        onChooseRule={onChooseRule}
+      />
+      <PickedRuleWarning destination={destination} />
+    </>
   ) : null
 }
 

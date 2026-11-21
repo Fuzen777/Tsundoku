@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.11 · 2026-11-22
+
+### Added
+
+- **A warning when a manual rule doesn't match**: a manual rule applied to a link its conditions don't match still applies, as before, but an orange warning under the folder line now says so, and that {1}, {2}… have no value when its pattern finds nothing in the link. It shows on the link's card, in Pending and in Test a Link, without asking anything.
+
 ## 0.2.10 · 2026-11-21
 
 ### Added

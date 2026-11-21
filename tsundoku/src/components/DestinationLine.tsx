@@ -7,6 +7,7 @@ import { useFolderRules, useRuleLabel } from "../queries"
 import { strings } from "../strings"
 import { IconButton } from "./IconButton"
 import { Menu, type MenuItem } from "./Menu"
+import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
 
 interface DestinationLineProps {
@@ -148,6 +149,31 @@ export function DestinationLine({
           )}
         </span>
       )}
+    </div>
+  )
+}
+
+/** Under where a download goes, a warning when the manual rule picked for it doesn't match it, which still applies
+ * (`Destination.pickedMismatch`): whether its pattern found nothing, leaving `{1}`… without a value, or only its other
+ * conditions miss. Nothing otherwise. */
+export function PickedRuleWarning({
+  destination,
+  className,
+}: {
+  destination: Destination | undefined
+  className?: string
+}) {
+  const ruleLabel = useRuleLabel()
+  const mismatch = destination?.pickedMismatch
+  if (!mismatch) return null
+  const text = strings.preview.pickedMismatch
+  const rule = ruleLabel(mismatch.rule)
+  return (
+    <div className={className}>
+      <StatusMessage
+        tone="warning"
+        message={mismatch.nothingCaptured ? text.nothingCaptured(rule) : text.conditions(rule)}
+      />
     </div>
   )
 }

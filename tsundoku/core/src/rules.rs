@@ -269,6 +269,22 @@ pub struct UnpackingRule {
 pub struct Destination {
     pub folder: String,
     pub source: DestinationSource,
+    /// When the rule picked for the download is a manual one its conditions don't match, which still applies: the UI
+    /// warns of it (Fuzen's answer to `manual-rule-not-matching` on Open Decisions).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub picked_mismatch: Option<PickedMismatch>,
+}
+
+/// A manual rule picked for a download whose conditions don't match it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PickedMismatch {
+    /// The rule, numbered from 1 as the Rules view lists them.
+    pub rule: u32,
+    /// Whether its pattern found nothing in the download, so `{1}` to `{9}` have no value.
+    pub nothing_captured: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
@@ -776,7 +792,24 @@ fn destination_on(
     Destination {
         folder: folder.display().to_string(),
         source,
+        picked_mismatch: picked_mismatch(rules, subject, picked),
     }
+}
+
+/// How the manual rule picked for a download misses it, when its conditions don't match it. An automatic rule picked
+/// by hand is picked because it doesn't match, so it's never a mismatch.
+fn picked_mismatch(
+    rules: &[FolderRule],
+    subject: &RuleSubject<'_>,
+    picked: Option<&str>,
+) -> Option<PickedMismatch> {
+    let (index, rule) = picked_rule(rules, picked)?;
+    (rule.manual && !rule.matches(subject)).then(|| PickedMismatch {
+        rule: rule_number(index),
+        nothing_captured: rule
+            .captured_when_picked(subject)
+            .is_some_and(|captured| captured.is_empty()),
+    })
 }
 
 /// The preset a video starts with by the rules: that of the rule picked for it (`picked`, by ID) when it picks one,
@@ -1485,6 +1518,7 @@ mod tests {
             Destination {
                 folder: r"D:\YouTube".to_owned(),
                 source: DestinationSource::Rule { number: 2 },
+                picked_mismatch: None,
             }
         );
     }
@@ -1662,6 +1696,7 @@ mod tests {
         let by_rule = |folder: &str, number| Destination {
             folder: folder.to_owned(),
             source: DestinationSource::Rule { number },
+            picked_mismatch: None,
         };
         assert_eq!(folder(None), by_rule(r"D:\X", 3));
         assert_eq!(
@@ -1764,6 +1799,7 @@ mod tests {
             Destination {
                 folder: r"D:\Voice\RJ01234567".to_owned(),
                 source: DestinationSource::Rule { number: 2 },
+                picked_mismatch: None,
             },
             "applied by hand, its pattern fills {{1}}"
         );
@@ -1789,6 +1825,68 @@ mod tests {
             folder(&video(), Some("rule-2")).folder,
             r"D:\Voice\Unknown",
             "on a link its pattern doesn't match, whatever its conditions, with {{1}} empty"
+        );
+        assert_eq!(
+            folder(&video(), Some("rule-2")).picked_mismatch,
+            Some(PickedMismatch {
+                rule: 2,
+                nothing_captured: true
+            }),
+            "and the UI is told so"
+        );
+        assert_eq!(
+            folder(&track, Some("rule-2")).picked_mismatch,
+            None,
+            "not on one it matches"
+        );
+    }
+
+    #[test]
+    fn tells_a_manual_rule_whose_other_conditions_dont_match_from_one_that_captured_nothing() {
+        let rules = vec![
+            catch_all_rule(),
+            FolderRule {
+                id: "rule-2".to_owned(),
+                manual: true,
+                ..rule(
+                    vec![
+                        condition(RuleField::Title, RuleOperator::Matches, r"(RJ\d+)"),
+                        condition(RuleField::Site, RuleOperator::Is, "SoundCloud"),
+                    ],
+                    r"D:\Voice\{1}",
+                )
+            },
+            FolderRule {
+                id: "rule-3".to_owned(),
+                ..rule(
+                    vec![condition(RuleField::Site, RuleOperator::Is, "Vimeo")],
+                    r"D:\Vimeo",
+                )
+            },
+        ];
+        let video = VideoInfo {
+            title: "Voice RJ01234567".to_owned(),
+            ..video()
+        };
+        let subject = RuleSubject {
+            video: &video,
+            preset: None,
+        };
+        let mismatch = |picked| {
+            destination(&rules, &subject, Some(picked), Path::new(DOWNLOADS)).picked_mismatch
+        };
+        assert_eq!(
+            mismatch("rule-2"),
+            Some(PickedMismatch {
+                rule: 2,
+                nothing_captured: false
+            }),
+            "on YouTube, though its pattern found the code"
+        );
+        assert_eq!(
+            mismatch("rule-3"),
+            None,
+            "an automatic rule picked by hand is picked because it doesn't match"
         );
     }
 
@@ -1982,6 +2080,7 @@ mod tests {
             Destination {
                 folder: DOWNLOADS.to_owned(),
                 source: DestinationSource::DownloadFolder,
+                picked_mismatch: None,
             }
         );
         mine.folder = Some(r"D:\Videos".to_owned());
@@ -1990,6 +2089,7 @@ mod tests {
             Destination {
                 folder: r"D:\Videos".to_owned(),
                 source: DestinationSource::Preset,
+                picked_mismatch: None,
             }
         );
         let any = rule(Vec::new(), r"D:\Rule");
@@ -2382,6 +2482,7 @@ mod tests {
             Destination {
                 folder: r"D:\Tsundoku\YouTube".to_owned(),
                 source: DestinationSource::Rule { number: 1 },
+                picked_mismatch: None,
             },
             "a video no rule takes"
         );
@@ -2424,6 +2525,7 @@ mod tests {
             Destination {
                 folder: r"D:\Music".to_owned(),
                 source: DestinationSource::Rule { number: 2 },
+                picked_mismatch: None,
             }
         );
         let only_preset = vec![catch_all_rule(), preset_rule(soundcloud(), "audio-mp3")];

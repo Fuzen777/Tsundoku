@@ -882,6 +882,13 @@ export const strings = {
     /** In Apply a Rule's list, a rule that's off, which still applies when picked. */
     ruleOff: (rule: string) => `${rule} (Off)`,
     matchingRules: "Use the Matching Rules",
+    /** Under where a download goes, when the manual rule picked for it doesn't match it (it still applies). */
+    pickedMismatch: {
+      nothingCaptured: (rule: string) =>
+        `${rule}'s conditions don't match this link. It still applies, but its pattern finds nothing here, so {1}, {2}… have no value.`,
+      conditions: (rule: string) =>
+        `${rule}'s conditions don't match this link. It still applies, since it was picked for it.`,
+    },
     /** Beside the preset picker when a rule picked the preset, opening the rules. */
     presetByRule: (rule: string) => rule,
     presetByRuleHint: (rule: string) => `${rule} picks this preset`,
