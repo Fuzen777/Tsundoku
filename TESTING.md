@@ -211,13 +211,18 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Settings → Downloads: Open Folder opens the download folder in File Explorer (made first if it wasn't there). The same button sits at the end of Rules.
 - [ ] Settings: the links at the top (Downloads … About) each scroll to their section.
 - [ ] With Deno not set up (rename `tools\deno` with the app closed), a YouTube preview's warning has Set Up Deno → it installs, and the preview is read again without the warning.
-- [ ] Queue: a finished download's × (Remove from Queue) removes it with "Removed “…” from the queue" and Undo, which puts it back in its place. History still has it.
+- [ ] Downloads: a finished download's × (Remove from Downloads) removes it with "Removed “…” from Downloads" and Undo, which puts it back in its place. History still has it.
 - [ ] Pending grouped by Folder: rows show "Rule 3" (or what else picked the folder) without the path; the box on a heading ticks every link in that group, part-ticked when only some are.
-- [ ] Fold a group in Pending, go to the Queue and back → it's still folded. A restart unfolds it.
+- [ ] Fold a group in Pending, go to Downloads and back → it's still folded. A restart unfolds it.
 - Seen in the browser preview with stand-in data.
 
 **23. Copy Details** · 0.1.41, 0.1.46
 - [ ] On a failed row (the `Z:\` rule above), hovering Copy Details says its name, and it says Copied after a click. Pasted in Notepad: Tsundoku's version, each tool's version, Windows' version and build, the link, the error and the log's last lines, with your user name blanked out.
+
+**79. Downloads grouped by rule, on your own downloads** · 0.2.9
+- [ ] Open Downloads with your own downloads, grouped by Rule. Those added before 0.2.9 sit under the rule that still gives them the folder they have, else under "Unknown Rule · <their folder>": none of them under Games unless Games gave them their folder.
+- [ ] Add a download, then add or move a rule that would now match it → it stays under the rule it was added with.
+- Tried by Claude in a test copy with its own downloads and rules, not on yours.
 
 ## Waiting and Retrying
 

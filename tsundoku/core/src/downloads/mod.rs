@@ -42,7 +42,7 @@ use crate::passwords::{KnownPasswords, Password};
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
-use crate::rules::{self, Destination, RuleSubject};
+use crate::rules::{self, Destination, DestinationSource, RuleSubject};
 use crate::settings::{DownloadSettings, SettingsStore, UnpackSettings};
 use crate::site_limits::{SiteLimits, now_ms};
 use crate::sites::{self, PacedSite};
@@ -88,6 +88,11 @@ pub struct QueueItem {
     /// `None` when none was.
     #[serde(default)]
     pub rule_id: Option<String>,
+    /// What gave it its folder when the rules did, decided when it was added (or when its folder went back to the
+    /// rules'), so the Downloads view groups it by that rather than by what the rules would say now. `None` for a folder
+    /// picked for it, and for downloads added before it was kept.
+    #[serde(default)]
+    pub folder_from: Option<FolderFrom>,
     /// The channel, playlist or account it was picked from (the picker's Download Selected, or a watched source's),
     /// which the Queue shows its downloads together under. `None` for a link added on its own.
     #[serde(default)]
@@ -138,6 +143,19 @@ pub struct QueueItem {
     #[serde(skip)]
     #[ts(skip)]
     pub archive_password: Option<Password>,
+}
+
+/// What gave a download its folder (`QueueItem::folder_from`), as the rules decided when it was added.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum FolderFrom {
+    /// A rule, by its ID, which stays the same when the rules are reordered or renamed.
+    Rule { id: String },
+    /// The preset's own folder.
+    Preset,
+    /// The download folder (Settings → Downloads).
+    DownloadFolder,
 }
 
 /// How much of a log the Queue's log viewer shows: its end.
@@ -576,10 +594,10 @@ impl DownloadQueue {
         }
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
-        let folder = chosen.unwrap_or_else(|| {
-            self.destination(&video, Some(&preset), rule_id.as_deref())
-                .folder
-        });
+        let (folder, folder_from) = match chosen {
+            Some(folder) => (folder, None),
+            None => self.folder_by_rules(&video, Some(&preset), rule_id.as_deref()),
+        };
         let file_name = None;
         let password = self.password_for(&video, password);
         let mut item = QueueItem {
@@ -587,6 +605,7 @@ impl DownloadQueue {
             folder,
             folder_chosen,
             rule_id,
+            folder_from,
             source,
             file_name,
             password,
@@ -711,8 +730,10 @@ impl DownloadQueue {
         }
         let chosen = self.chosen_folder(chosen);
         let folder_chosen = chosen.is_some();
-        let folder =
-            chosen.unwrap_or_else(|| self.destination(&video, None, rule_id.as_deref()).folder);
+        let (folder, folder_from) = match chosen {
+            Some(folder) => (folder, None),
+            None => self.folder_by_rules(&video, None, rule_id.as_deref()),
+        };
         let file_name = self.rule_file_name(&video, rule_id.as_deref());
         let password = self.password_for(&video, password);
         let mut item = QueueItem {
@@ -720,6 +741,7 @@ impl DownloadQueue {
             folder,
             folder_chosen,
             rule_id,
+            folder_from,
             source,
             file_name,
             password,
@@ -921,11 +943,10 @@ impl DownloadQueue {
                 return Err(DownloadError::WrongState);
             }
             let folder_chosen = chosen.is_some();
-            let folder = match chosen {
-                Some(folder) => folder,
+            let (folder, folder_from) = match chosen {
+                Some(folder) => (folder, None),
                 None => {
-                    self.destination(&item.video, item.preset.as_ref(), item.rule_id.as_deref())
-                        .folder
+                    self.folder_by_rules(&item.video, item.preset.as_ref(), item.rule_id.as_deref())
                 }
             };
             if folder != item.folder {
@@ -935,6 +956,7 @@ impl DownloadQueue {
             }
             item.folder = folder;
             item.folder_chosen = folder_chosen;
+            item.folder_from = folder_from;
             self.store.set_folder(item)?;
             item.clone()
         };
@@ -1218,6 +1240,36 @@ impl DownloadQueue {
             picked,
             &settings.downloads.resolved_folder(),
         )
+    }
+
+    /// The folder the rules give a download of `video` (`destination`), and what gave it, kept with the download: the
+    /// rule by its ID, since its number changes when the rules are reordered.
+    fn folder_by_rules(
+        &self,
+        video: &VideoInfo,
+        preset: Option<&Preset>,
+        picked: Option<&str>,
+    ) -> (String, Option<FolderFrom>) {
+        let settings = self.settings.get();
+        let rules = &settings.rules.list;
+        let destination = rules::destination(
+            rules,
+            &RuleSubject { video, preset },
+            picked,
+            &settings.downloads.resolved_folder(),
+        );
+        let from = match destination.source {
+            DestinationSource::Rule { number } => (number as usize)
+                .checked_sub(1)
+                .and_then(|index| rules.get(index))
+                .map(|rule| FolderFrom::Rule {
+                    id: rule.id.clone(),
+                }),
+            DestinationSource::Preset => Some(FolderFrom::Preset),
+            DestinationSource::DownloadFolder => Some(FolderFrom::DownloadFolder),
+            DestinationSource::Chosen => None,
+        };
+        (destination.folder, from)
     }
 
     /// How downloads run: where they go, how many at once, the speed limit, the cookies browser, and how fast posts

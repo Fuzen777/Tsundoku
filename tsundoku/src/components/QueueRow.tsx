@@ -19,7 +19,16 @@ import { formatContents, joinDetails } from "../format"
 import { canTryNow, describeHold, holdEnd, useTimeLeft } from "../holds"
 import { pickSummary } from "../postFiles"
 import { useDownloadProgress } from "../queueEvents"
-import { changeFolder, moveToFolder, onAControl, sizeDetails, stageLabel, useItemActions } from "../queueItems"
+import {
+  changeFolder,
+  moveToFolder,
+  onAControl,
+  shownStage,
+  sizeDetails,
+  stageLabel,
+  useItemActions,
+  useQueueLook,
+} from "../queueItems"
 import { strings } from "../strings"
 import { Button } from "./Button"
 import { Card } from "./Card"
@@ -44,8 +53,8 @@ interface QueueRowProps {
   onHide?: () => void
 }
 
-/** A download in the Queue: its picture, title, what it's doing and its actions. A double-click on a finished one opens
- * its file, as Open File does. */
+/** A download in the Downloads view: its picture, title, what it's doing (left out where its status's heading says it)
+ * and its actions. A double-click on a finished one opens its file, as Open File does. */
 export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
   const progress = useDownloadProgress(item)
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
@@ -60,6 +69,7 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
   const [sendingPassword, setSendingPassword] = useState(false)
   const { act, removeWithUndo, actOnFile } = useItemActions(item, setActionError)
   const opensFile = item.state === "done" && item.result !== null
+  const look = useQueueLook()
 
   return (
     <Card
@@ -80,7 +90,7 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
         <p className="truncate text-xs text-fg-secondary tabular-nums">
           {joinDetails([
             item.preset?.name ?? pickSummary(item.video) ?? formatContents(item.video),
-            stage,
+            shownStage(stage, item, look),
             ...sizeDetails(item, progress),
           ])}
         </p>

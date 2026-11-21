@@ -89,17 +89,21 @@ export const strings = {
     dismiss: "Dismiss",
   },
   nav: {
-    queue: "Queue",
+    /** The downloads added and not cleared yet, running or done (`QueueView`), apart from History's, which keeps every
+     * download ever made. */
+    queue: "Downloads",
     pending: "Pending",
     watched: "Watched",
     history: "History",
     presets: "Presets",
     rules: "Rules",
     settings: "Settings",
+    /** The list of a view's chapters under it in the sidebar. */
+    chapters: (view: string) => `Jump Within ${view}`,
   },
   /** The window's keyboard shortcuts (shortcuts.ts), as hover texts and Settings → Keyboard Shortcuts show them. */
   shortcuts: {
-    /** A control's hover text with its shortcut: "Queue (Ctrl+1)". */
+    /** A control's hover text with its shortcut: "Downloads (Ctrl+1)". */
     withKeys: (label: string, keys: string) => `${label} (${keys})`,
     paste: "Ctrl+V",
     pasteAnywhere: "Ctrl+V Anywhere",
@@ -165,7 +169,7 @@ export const strings = {
     },
   },
   queue: {
-    emptyTitle: "Nothing in the Queue",
+    emptyTitle: "Nothing in Downloads",
     emptyBody: "Add a link to a video, a post of images or a shared file, and it downloads here.",
     clearFinished: "Clear Finished",
     pauseAll: "Pause All",
@@ -221,8 +225,8 @@ export const strings = {
     timeLeft: (time: string) => `${time} left`,
     count: (count: number) => `${count} ${count === 1 ? "download" : "downloads"}`,
     cleared: (count: number) => `Cleared ${count} finished ${count === 1 ? "download" : "downloads"}`,
-    removeFinished: "Remove from Queue",
-    removed: (title: string) => `Removed “${title}” from the queue`,
+    removeFinished: "Remove from Downloads",
+    removed: (title: string) => `Removed “${title}” from Downloads`,
     groups: {
       running: "Downloading",
       waiting: "Waiting",
@@ -230,7 +234,7 @@ export const strings = {
       failed: "Failed",
       done: "Done",
     },
-    /** A source's downloads as pictures, in Masonry or Gallery (QueueTiles). */
+    /** Downloads as pictures, in Masonry or Gallery (QueueTiles). */
     tiles: {
       hint: "Right-click for its actions, or click for its details.",
       openHint: "Double-click to open it.",
@@ -258,7 +262,7 @@ export const strings = {
         `Cancel ${count} ${count === 1 ? "Download" : "Downloads"} from ${name}?`,
       cancelMessage: (count: number, finished: number) =>
         `${count === 1 ? "What it has" : "What they have"} downloaded so far is deleted.${
-          finished === 0 ? "" : ` The ${finished} finished ${finished === 1 ? "one stays" : "ones stay"} in the queue.`
+          finished === 0 ? "" : ` The ${finished} finished ${finished === 1 ? "one stays" : "ones stay"} in Downloads.`
         }`,
       cancelConfirm: (count: number) => (count === 1 ? "Cancel Download" : "Cancel Downloads"),
       keep: (count: number) => (count === 1 ? "Keep It" : "Keep Them"),
@@ -299,13 +303,13 @@ export const strings = {
     errors: {
       folder: "Couldn't create the download folder.",
       noFile: "The download finished without saying which file it made.",
-      alreadyQueued: "This is already in the queue.",
-      notFound: "This download isn't in the queue anymore.",
+      alreadyQueued: "This is already in Downloads.",
+      notFound: "This download isn't in Downloads anymore.",
       wrongState: "That can't be done to this download right now.",
       damaged: (file: string) => `${file} arrived damaged and was deleted. Retry to download it again.`,
       windowDownloadStopped: (site: string) =>
         `The download in ${site}'s check window stopped before the file arrived. Retry to open the check again.`,
-      storage: "Couldn't save the queue or the history.",
+      storage: "Couldn't save Downloads or the history.",
       logMissing: "This download has no log yet.",
       invalidRateLimit: "Use a number of bytes per second, with K, M or G after it if you like, such as 500K or 2M.",
       nothingPicked: "Tick at least one file to download it.",
@@ -457,7 +461,7 @@ export const strings = {
       openFailed: "Windows couldn't open it.",
     },
   },
-  /** The Pending and Queue views' grouping and sorting. */
+  /** The Pending and Downloads views' grouping and sorting. */
   lists: {
     groupBy: "Group By",
     groups: {
@@ -471,7 +475,13 @@ export const strings = {
     ruleGroup: (rule: string, folder: string) => `${rule} · ${folder}`,
     presetFolderGroup: (folder: string) => `Preset's Folder · ${folder}`,
     downloadFolderGroup: (folder: string) => `Download Folder · ${folder}`,
+    /** The download folder's group in the sidebar, without its path. */
+    downloadFolderChapter: "Download Folder",
     chosenFolderGroup: (folder: string) => `Picked Folder · ${folder}`,
+    /** Downloads added by a rule deleted since. */
+    deletedRuleGroup: "Deleted Rule",
+    /** Downloads added before Tsundoku kept which rule gave their folder, when the rules give them another now. */
+    unknownRuleGroup: (folder: string) => `Unknown Rule · ${folder}`,
     collapse: (group: string) => `Collapse ${group}`,
     expand: (group: string) => `Expand ${group}`,
     selectGroup: (group: string) => `Select Everything in ${group}`,
@@ -550,7 +560,7 @@ export const strings = {
       other: "This link lists several items. Pick which to download.",
     },
     pick: "Pick What to Download",
-    inQueue: "Already in the queue.",
+    inQueue: "Already in Downloads.",
     overwriteTitle: "Download Again?",
     overwriteMessage: (count: number) =>
       count === 1
@@ -565,7 +575,7 @@ export const strings = {
       notRead: "Not Read Yet",
       needsPassword: "Needs a Password",
       failed: "Couldn't Be Read",
-      inQueue: "In the Queue",
+      inQueue: "In Downloads",
     },
     /** The heading over the links that don't need attention, while some do and the list isn't grouped. */
     otherLinks: "Other Links",
@@ -604,14 +614,14 @@ export const strings = {
       files: "Shows only other files, such as archives.",
     },
     hideDownloaded: "Hide Downloaded",
-    hideDownloadedHint: "Hides what's downloaded or already in the queue.",
-    allHidden: "Everything listed so far is downloaded or in the queue.",
+    hideDownloadedHint: "Hides what's downloaded or already in Downloads.",
+    allHidden: "Everything listed so far is downloaded or in Downloads.",
     loadMore: "Load More",
     loadMoreHint: (noun: readonly [string, string]) => `Lists the next ${noun[1]}, older than these.`,
     /** Lists on past what's downloaded until this many new ones are listed. */
     loadNew: (count: number) => `Load ${count} New`,
     loadNewHint: (count: number, noun: readonly [string, string]) =>
-      `Lists on past the ${noun[1]} downloaded or in the queue until ${count} that aren't are listed, or the last one is. Stop keeps what's listed by then.`,
+      `Lists on past the ${noun[1]} downloaded or in Downloads until ${count} that aren't are listed, or the last one is. Stop keeps what's listed by then.`,
     /** "Load All (8,634)", with how many the site says it holds, when it says. An X account says how many photos and
      * videos it holds (`media`), never how many posts: "Load All (372 Photos & Videos)". */
     loadAll: (total: number | null, media: number | null = null) => {
@@ -702,8 +712,8 @@ export const strings = {
     },
     stopLoading: "Stop",
     downloaded: "Downloaded",
-    inQueue: "In Queue",
-    inQueueHint: "Already in the queue.",
+    inQueue: "In Downloads",
+    inQueueHint: "Already in Downloads.",
     videosStartAs: "Videos Start As",
     videosStartAsHint: "For videos no rule picks a preset for.",
     downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count.toLocaleString()})`),
@@ -788,7 +798,7 @@ export const strings = {
     remove: "Stop Watching",
     removeTitle: "Stop Watching?",
     removeMessage: (name: string) =>
-      `${name} leaves Watched, with what it found. Its downloads stay in the queue and the history.`,
+      `${name} leaves Watched, with what it found. Its downloads stay in Downloads and the history.`,
     removeConfirm: "Stop Watching",
     moreActions: "More Actions",
     checked: (ago: string) => `Checked ${ago}`,
@@ -875,7 +885,7 @@ export const strings = {
     /** Beside the preset picker when a rule picked the preset, opening the rules. */
     presetByRule: (rule: string) => rule,
     presetByRuleHint: (rule: string) => `${rule} picks this preset`,
-    inQueue: "This is already in the queue.",
+    inQueue: "This is already in Downloads.",
     overwriteTitle: "Download Again?",
     overwriteMessage: (preset: string) =>
       `It was already downloaded with ${preset}, so the new file will replace the one made before.`,
@@ -1238,7 +1248,7 @@ export const strings = {
       quoted: (value: string) => `“${value}”`,
     },
     deleteTitle: "Delete Rule?",
-    deleteMessage: (rule: string) => `Delete ${rule}? Downloads already in the queue keep their folder.`,
+    deleteMessage: (rule: string) => `Delete ${rule}? Downloads added already keep their folder.`,
     errors: {
       emptyFolder: (rule: number) => `Rule ${rule} needs a folder.`,
       noAction: (rule: number) =>
@@ -1391,12 +1401,11 @@ export const strings = {
       usualFolders: "Usual Folders",
     },
     usualCacheFolders: "Each tool's own folder in your user folder.",
-    jumpTo: "Jump to a Section",
     downloads: "Downloads",
     adding: "Adding Links",
     watchClipboard: "Watch Clipboard",
     watchClipboardHint:
-      "Links you copy in any app go to Pending while Tsundoku is open, even minimized or in the tray. Copies holding anything besides links are left alone, and so are links to sites Tsundoku can't download from and links already downloaded or in the queue.",
+      "Links you copy in any app go to Pending while Tsundoku is open, even minimized or in the tray. Copies holding anything besides links are left alone, and so are links to sites Tsundoku can't download from and links already downloaded or in Downloads.",
     clipboardShortcut: "Clipboard Shortcut",
     clipboardShortcutHint:
       "Press it in any app to add the links you copied to Pending, as if you'd pasted them there. Works without Watch Clipboard.",

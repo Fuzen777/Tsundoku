@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react"
+import { useLayoutEffect, useRef, useState } from "react"
 import {
   Check,
   ChevronUp,
@@ -40,14 +40,24 @@ import { joinDetails } from "../format"
 import { describeHold } from "../holds"
 import { ownShape } from "../pickerLayout"
 import { useDownloadProgress } from "../queueEvents"
-import { changeFolder, copyDownloadDetails, moveToFolder, sizeDetails, stageLabel, useItemActions } from "../queueItems"
+import {
+  changeFolder,
+  copyDownloadDetails,
+  moveToFolder,
+  shownStage,
+  sizeDetails,
+  stageLabel,
+  useItemActions,
+  useQueueLook,
+} from "../queueItems"
 import { tileActions, type TileAction } from "../queueSources"
 import { strings } from "../strings"
 import { ContextMenu, type MenuClose } from "./ContextMenu"
 import { TiledItems, TileLabel, type TileLabels } from "./MediaTiles"
 import type { MenuItem } from "./Menu"
 import { ProgressBar } from "./ProgressBar"
-import type { RowOpening } from "./QueueRow"
+import { QueueRow, type RowOpening } from "./QueueRow"
+import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
 
 const text = strings.queue.tiles
@@ -57,50 +67,107 @@ interface QueueTilesProps {
   view: "masonry" | "gallery"
   /** The step of the size buttons (`TILE_WIDTHS`). */
   size: number
-  /** Gallery's one shape for every picture, as width over height. */
-  galleryRatio: number
-  /** The download whose row is shown, if any. */
-  shownId: number | null
-  /** Its row, shown across the width under its line of pictures. */
-  details: ReactNode
-  /** Shows a download's row, opened on its log or its password field, or on neither. */
-  onShow: (id: number, opens: RowOpening) => void
-  onHide: () => void
-  /** Called with why an action failed, and with null when a new one starts. */
-  onError: (error: ErrorDescription | null) => void
+}
+
+/** A download's row shown under its line of pictures, opened as asked; `opened` counts each ask, so asking again opens
+ * it afresh (on its log, say, when it's already shown). */
+interface ShownRow {
+  id: number
+  opens: RowOpening
+  opened: number
 }
 
 /**
- * A source's downloads as pictures, in Masonry or Gallery: each with where it stands in its corner, a bar while it
- * downloads, and its title and progress under it. A right-click (or the menu key) opens its actions, which its row shows
- * as buttons in List; a click shows its row under its line of pictures, with everything a row has (its error, log,
- * password field), and a second click hides it. A double-click on a finished one opens its file.
+ * Downloads as pictures, in Masonry or Gallery: a run of them in the Downloads view, or a source's under its heading.
+ * Each is its picture alone (its title when it has none), with where it stands in its corner (left out where its
+ * status's heading says it) and a bar while it downloads; its title and status are its hover text. A right-click (or
+ * the menu key) opens its actions, which its row shows as buttons in List; a click shows its row under its line of
+ * pictures, with everything a row has (its error, log, password field), keeping the picture where it was on screen, and
+ * a second click hides it. A double-click on a finished one opens its file. Gallery cuts them to squares when they're
+ * all posts, else to 16:9.
  */
-export function QueueTiles(props: QueueTilesProps) {
-  const { items, view, size, galleryRatio, shownId, details, onShow, onHide, onError } = props
-  const shownIndex = items.findIndex((item) => item.id === shownId)
+export function QueueTiles({ items, view, size }: QueueTilesProps) {
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const [shownRow, setShownRow] = useState<ShownRow | null>(null)
+  const shownItem = shownRow && items.find((item) => item.id === shownRow.id)
+  const shownBox = useRef<HTMLDivElement>(null)
+  const box = useRef<HTMLDivElement>(null)
+  // Where the picture asked about was, so it stays there as the row moves from under another line to under its own.
+  const held = useRef<{ id: number; top: number } | null>(null)
+  const galleryRatio = items.every((item) => item.video.post !== null) ? 1 : 16 / 9
+
+  const pictureOf = (id: number) => box.current?.querySelector(`[data-download="${id}"]`)
+  const showRow = (id: number, opens: RowOpening) => {
+    const top = pictureOf(id)?.getBoundingClientRect().top
+    held.current = top === undefined ? null : { id, top }
+    setShownRow((shown) => ({ id, opens, opened: (shown?.opened ?? 0) + 1 }))
+  }
+  const hideRow = () => setShownRow(null)
+  // Before it's painted: the picture asked about back where it was (a row shown higher up has closed), then the row
+  // shown under it brought into sight, scrolling no more than that takes.
+  useLayoutEffect(() => {
+    const before = held.current
+    held.current = null
+    const picture = before && box.current?.querySelector(`[data-download="${before.id}"]`)
+    if (before && picture) {
+      const moved = picture.getBoundingClientRect().top - before.top
+      const scroller = scrollerOf(picture)
+      if (moved !== 0 && scroller) scroller.scrollTop += moved
+    }
+    if (shownRow) shownBox.current?.scrollIntoView({ block: "nearest" })
+  }, [shownRow])
+
   return (
-    <div className="p-1">
-      <TiledItems
-        items={items}
-        view={view}
-        size={size}
-        after={shownIndex >= 0 ? { index: shownIndex, content: details } : undefined}
-        render={(item, labels) => (
-          <QueueTile
-            key={item.id}
-            item={item}
-            ratio={view === "gallery" ? galleryRatio : null}
-            labels={labels}
-            shown={item.id === shownId}
-            onShow={onShow}
-            onHide={onHide}
-            onError={onError}
-          />
-        )}
-      />
+    <div ref={box} className="flex flex-col gap-2">
+      {error && <StatusMessage tone="danger" {...error} />}
+      {/* Padded for the focus outline. */}
+      <div className="p-1">
+        <TiledItems
+          items={items}
+          view={view}
+          size={size}
+          after={
+            shownItem
+              ? {
+                  index: items.indexOf(shownItem),
+                  content: (
+                    <div ref={shownBox} className="scroll-my-2">
+                      <QueueRow
+                        key={`${shownItem.id}-${shownRow.opened}`}
+                        item={shownItem}
+                        opens={shownRow.opens}
+                        onHide={hideRow}
+                      />
+                    </div>
+                  ),
+                }
+              : undefined
+          }
+          render={(item, labels) => (
+            <QueueTile
+              key={item.id}
+              item={item}
+              ratio={view === "gallery" ? galleryRatio : null}
+              labels={labels}
+              shown={item.id === shownItem?.id}
+              onShow={showRow}
+              onHide={hideRow}
+              onError={setError}
+            />
+          )}
+        />
+      </div>
     </div>
   )
+}
+
+/** The box an element scrolls in: the nearest one above it that scrolls, or the page. */
+function scrollerOf(element: Element): Element | null {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const { overflowY } = getComputedStyle(parent)
+    if ((overflowY === "auto" || overflowY === "scroll") && parent.scrollHeight > parent.clientHeight) return parent
+  }
+  return document.scrollingElement
 }
 
 interface QueueTileProps {
@@ -143,15 +210,21 @@ function QueueTile({ item, ratio, labels, shown, onShow, onHide, onError }: Queu
   // The check window saving the file shows as a download, with its progress.
   const savingInWindow = hold?.kind === "windowDownload"
   const stage = savingInWindow ? strings.queue.stages.downloading : stageLabel(item, progress)
-  const status = joinDetails([stage, ...sizeDetails(item, progress)])
+  const look = useQueueLook()
+  const status = joinDetails([shownStage(stage, item, look), ...sizeDetails(item, progress)])
   const error = state === "failed" && item.error ? describeDownloadError(item.error) : null
   const downloading = state === "running" || savingInWindow
   const percent = downloading && progress?.fraction != null ? Math.round(progress.fraction * 100) : null
   const pictured = video.thumbnailUrl !== null && !failed
   const isPost = video.post !== null
   const FallbackIcon = isPost ? Images : Film
-  const { icon: StateIcon, className: stateColor } = STATE_ICONS[downloading ? "running" : state]
+  const shownState = downloading ? "running" : state
+  const { icon: StateIcon, className: stateColor } = STATE_ICONS[shownState]
+  // Grouped by status, the heading says where it stands, unless the check window downloads it while it waits.
+  const showsState = !(look.byStatus && shownState === state)
+  const cornerLabel = showsState || (percent !== null && labels !== "hidden")
   const opensFile = state === "done" && item.result !== null
+  const dimmed = (state === "waiting" || state === "stopped") && !savingInWindow
   const hint = [video.title, status, hold && describeHold(hold), error?.message, opensFile && text.openHint, text.hint]
     .filter(Boolean)
     .join("\n")
@@ -252,10 +325,7 @@ function QueueTile({ item, ratio, labels, shown, onShow, onHide, onError }: Queu
             alt=""
             loading="lazy"
             referrerPolicy="no-referrer"
-            className={classes(
-              "size-full object-cover transition-opacity",
-              (state === "waiting" || state === "stopped") && !savingInWindow && "opacity-50",
-            )}
+            className={classes("size-full object-cover transition-opacity", dimmed && "opacity-50")}
             onLoad={(event) => {
               const shape = ownShape(event.currentTarget)
               setOwnRatio(shape)
@@ -263,33 +333,39 @@ function QueueTile({ item, ratio, labels, shown, onShow, onHide, onError }: Queu
             }}
             onError={() => setFailed(true)}
           />
-        ) : (
+        ) : labels === "hidden" ? (
           <span className="flex size-full items-center justify-center text-fg-muted">
-            <FallbackIcon size={labels === "full" ? 24 : 16} />
+            <FallbackIcon size={16} />
+          </span>
+        ) : (
+          // Without a picture, its title stands in for it.
+          <span className="flex size-full items-center justify-center overflow-hidden px-2 pt-6 pb-2">
+            <span
+              className={classes(
+                "line-clamp-3 text-center text-xs font-medium break-words",
+                dimmed ? "text-fg-muted" : "text-fg-secondary",
+              )}
+            >
+              {video.title}
+            </span>
           </span>
         )}
-        <span className={classes("absolute top-1 left-1 origin-top-left", labels !== "full" && "scale-75")}>
-          <TileLabel>
-            <span className="flex items-center gap-1">
-              <StateIcon size={12} className={stateColor} />
-              {percent !== null && labels !== "hidden" && `${percent}%`}
-            </span>
-          </TileLabel>
-        </span>
+        {cornerLabel && (
+          <span className={classes("absolute top-1 left-1 origin-top-left", labels !== "full" && "scale-75")}>
+            <TileLabel>
+              <span className="flex items-center gap-1">
+                {showsState && <StateIcon size={12} className={stateColor} />}
+                {percent !== null && labels !== "hidden" && `${percent}%`}
+              </span>
+            </TileLabel>
+          </span>
+        )}
         {downloading && (
           <span className="absolute inset-x-1 bottom-1">
             <ProgressBar value={progress?.fraction ?? undefined} label={stage} />
           </span>
         )}
       </div>
-      {labels !== "hidden" && (
-        <div className="mt-1 flex min-w-0 flex-col">
-          <p className="truncate text-xs font-medium">{video.title}</p>
-          <p className={classes("truncate text-xs tabular-nums", error ? "text-danger" : "text-fg-secondary")}>
-            {status}
-          </p>
-        </div>
-      )}
       {menuAt && (
         <ContextMenu
           label={text.menu(video.title)}

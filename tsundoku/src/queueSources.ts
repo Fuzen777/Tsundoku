@@ -28,12 +28,14 @@ const COUNTED: readonly Exclude<QueueState, "done">[] = ["running", "waiting", "
 
 /**
  * Where a source's downloads stand: "3 of 12 done · 2 downloading · 7 waiting", or only "12 done" or "3 waiting" when
- * they all stand in one place (grouped by status, say).
+ * they all stand in one place, or "3 downloads" when they're under their status's heading (`byStatus`), which says it.
  */
-export function sourceSummary(items: readonly QueueItem[]): string {
+export function sourceSummary(items: readonly QueueItem[], byStatus = false): string {
   const counts = stateCounts(items)
   const text = strings.queue.source
   const counted = COUNTED.filter((state) => counts[state] > 0)
+  const inOnePlace = counts.done === items.length || (counts.done === 0 && counted.length === 1)
+  if (byStatus && inOnePlace) return strings.queue.count(items.length)
   if (counts.done === items.length) return text.allDone(items.length)
   if (counts.done === 0 && counted.length === 1) return text.states[counted[0]](items.length)
   return joinDetails([text.done(counts.done, items.length), ...counted.map((state) => text.states[state](counts[state]))])

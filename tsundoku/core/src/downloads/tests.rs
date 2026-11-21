@@ -863,6 +863,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         folder: String::new(),
         folder_chosen: false,
         rule_id: None,
+        folder_from: None,
         source: None,
         file_name: None,
         state,
@@ -2163,6 +2164,82 @@ fn a_rule_picks_the_folder() {
     );
     assert_eq!(item.folder, destination.folder);
     wait_until("it runs", || test.runner.started().contains(&item.id));
+    test.queue.cancel(item.id).unwrap();
+}
+
+#[test]
+fn a_download_keeps_the_rule_it_was_added_with_whatever_the_rules_say_later() {
+    use crate::rules::{FolderRule, RuleCondition, RuleField, RuleOperator};
+
+    let test = Test::new();
+    let rule = |id: &str, folder: &str, conditions: Vec<RuleCondition>| FolderRule {
+        id: id.to_owned(),
+        enabled: true,
+        folder: test.folder.path().join(folder).display().to_string(),
+        conditions,
+        ..crate::rules::catch_all_rule()
+    };
+    let on_youtube = RuleCondition {
+        field: RuleField::Site,
+        operator: RuleOperator::Is,
+        value: "YouTube".to_owned(),
+        case_sensitive: false,
+        join: crate::rules::ConditionJoin::All,
+    };
+    test.settings
+        .update(|settings| {
+            settings.downloads.at_once = 1;
+            settings
+                .rules
+                .list
+                .push(rule("rule-1", "youtube", vec![on_youtube]))
+        })
+        .unwrap();
+    let item = test.queue.add(video("a"), "best-video", false).unwrap();
+    let by_rule_1 = Some(FolderFrom::Rule {
+        id: "rule-1".to_owned(),
+    });
+    assert_eq!(item.folder_from, by_rule_1);
+    let picked = test
+        .queue
+        .add_in(
+            video("b"),
+            "best-video",
+            false,
+            Some("picked".to_owned()),
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(picked.folder_from, None, "a folder picked for it");
+
+    // A rule added since, matching everything, decides for the downloads added from now on.
+    test.settings
+        .update(|settings| {
+            settings
+                .rules
+                .list
+                .push(rule("rule-2", "games", Vec::new()))
+        })
+        .unwrap();
+    let kept = test
+        .reopen()
+        .items()
+        .into_iter()
+        .find(|kept| kept.id == item.id)
+        .unwrap();
+    assert_eq!(kept.folder_from, by_rule_1, "kept through a restart");
+    let back = test.queue.set_folder(picked.id, None).unwrap();
+    assert_eq!(
+        back.folder_from,
+        Some(FolderFrom::Rule {
+            id: "rule-2".to_owned()
+        }),
+        "back to the rules' folder, as they say now"
+    );
+    let elsewhere = test.folder.path().join("elsewhere").display().to_string();
+    let moved = test.queue.set_folder(back.id, Some(elsewhere)).unwrap();
+    assert_eq!(moved.folder_from, None);
     test.queue.cancel(item.id).unwrap();
 }
 

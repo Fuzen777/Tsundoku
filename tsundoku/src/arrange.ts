@@ -1,4 +1,6 @@
+import type { Chapter } from "./chapters"
 import type { Destination } from "./bindings/Destination"
+import type { FolderFrom } from "./bindings/FolderFrom"
 import type { FolderRule } from "./bindings/FolderRule"
 import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListSort } from "./bindings/ListSort"
@@ -32,6 +34,8 @@ export interface GroupPlace {
   rank: number
   /** The label is a folder's path, shown with a folder icon. */
   folder?: boolean
+  /** What the sidebar calls it, when the label is long: a folder's own name, a rule's name. */
+  chapter?: string
 }
 
 export interface ItemGroup<Item> extends GroupPlace {
@@ -201,7 +205,35 @@ export function firstItems<Item>(groups: readonly ItemGroup<Item>[], count: numb
 
 /** The group of a folder. Windows doesn't tell letter case apart in paths, so neither do the groups. */
 export function folderGroup(folder: string): GroupPlace {
-  return { key: `folder:${folder.toLowerCase()}`, label: folder, rank: 0, folder: true }
+  return { key: `folder:${folder.toLowerCase()}`, label: folder, rank: 0, folder: true, chapter: folderName(folder) }
+}
+
+/** A folder's own name, the last of its path: `Videos` for `D:\Downloads\Videos`, `D:` for `D:\`. */
+export function folderName(folder: string): string {
+  return folder.split(/[\\/]/).filter(Boolean).at(-1) ?? folder
+}
+
+/** How a list names a group's heading (`GroupedList`), from the path of the group holding it ("" at the top): `/done`,
+ * then `/done/site:youtube` for a group inside it. The sidebar's chapters go to it by that name. */
+export function groupPath(parent: string, key: string): string {
+  return `${parent}/${key}`
+}
+
+/** A grouped list's groups as the sidebar's chapters, each with how many items it holds, a status's groups (or any
+ * group's subgroups) as its subchapters. Items in no group have no heading, so no chapter. */
+export function chaptersOf<Item>(groups: readonly ItemGroup<Item>[], parent = ""): Chapter[] {
+  return groups
+    .filter((group) => group.key !== "")
+    .map((group) => {
+      const path = groupPath(parent, group.key)
+      return {
+        id: path,
+        title: group.chapter ?? group.label,
+        hint: group.label,
+        count: group.items.length,
+        subchapters: group.subgroups && chaptersOf(group.subgroups, path),
+      }
+    })
 }
 
 /** Ranks that put a group after every rule's group, and after every group of the list's grouping. */
@@ -219,27 +251,71 @@ export function ruleGroup(destination: Destination, rules: readonly FolderRule[]
     case "rule": {
       const template = rules[source.number - 1]?.folder
       const folder = template ? fixedFolder(template, downloadFolder) : destination.folder
-      const label = strings.lists.ruleGroup(ruleLabel(rules, source.number), folder)
-      return { key: `rule:${source.number}`, label, rank: source.number }
+      const name = ruleLabel(rules, source.number)
+      const label = strings.lists.ruleGroup(name, folder)
+      return { key: `rule:${source.number}`, label, rank: source.number, chapter: name }
     }
     case "preset":
       return {
         key: `preset:${destination.folder.toLowerCase()}`,
         label: strings.lists.presetFolderGroup(destination.folder),
         rank: AFTER_RULES,
+        chapter: strings.lists.presetFolderGroup(folderName(destination.folder)),
       }
     case "downloadFolder":
       return {
         key: "download-folder",
         label: strings.lists.downloadFolderGroup(destination.folder),
         rank: AFTER_RULES + 1,
+        chapter: strings.lists.downloadFolderChapter,
       }
     case "chosen":
       return chosenFolderGroup(destination.folder)
   }
 }
 
+/**
+ * The group of a download by what gave it its folder when it was added (`QueueItem.folderFrom`), rather than what the
+ * rules would give it now: its rule, found by its ID and named and numbered as it is now, the preset's own folder or the
+ * download folder. A rule deleted since has a group of its own, after the others.
+ */
+export function folderFromGroup(
+  from: FolderFrom,
+  folder: string,
+  rules: readonly FolderRule[],
+  downloadFolder: string,
+): GroupPlace {
+  if (from.kind !== "rule") return ruleGroup({ folder, source: from }, rules, downloadFolder)
+  const index = rules.findIndex((rule) => rule.id === from.id)
+  if (index === -1) {
+    const label = strings.lists.deletedRuleGroup
+    return { key: `deleted-rule:${from.id}`, label, rank: AFTER_RULES + 3 }
+  }
+  return ruleGroup({ folder, source: { kind: "rule", number: index + 1 } }, rules, downloadFolder)
+}
+
+/** The group of a download added before what gave its folder was kept, when the rules now give it another folder: its
+ * folder alone, after the others. */
+export function unknownRuleGroup(folder: string): GroupPlace {
+  return {
+    key: `unknown-rule:${folder.toLowerCase()}`,
+    label: strings.lists.unknownRuleGroup(folder),
+    rank: AFTER_RULES + 4,
+    chapter: strings.lists.unknownRuleGroup(folderName(folder)),
+  }
+}
+
+/** Whether two folders are the same one: Windows doesn't tell letter case apart in paths. */
+export function sameFolder(first: string, second: string): boolean {
+  return first.toLowerCase() === second.toLowerCase()
+}
+
 /** The group of downloads whose folder was picked for them, by folder, after the rules' and the presets'. */
 export function chosenFolderGroup(folder: string): GroupPlace {
-  return { key: `chosen:${folder.toLowerCase()}`, label: strings.lists.chosenFolderGroup(folder), rank: AFTER_RULES + 2 }
+  return {
+    key: `chosen:${folder.toLowerCase()}`,
+    label: strings.lists.chosenFolderGroup(folder),
+    rank: AFTER_RULES + 2,
+    chapter: strings.lists.chosenFolderGroup(folderName(folder)),
+  }
 }

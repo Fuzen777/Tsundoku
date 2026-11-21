@@ -135,6 +135,16 @@ function queueStandIn(id: number, state: QueueItem["state"], title: string, extr
     folder: id % 2 ? String.raw`C:\Users\You\Videos` : String.raw`C:\Users\You\Downloads\Tsundoku\youtube.com`,
     folderChosen: false,
     ruleId: null,
+    // The catch-all's {site} folder, or the download folder; a rule deleted since for a few, and one added before what
+    // gave its folder was kept.
+    folderFrom:
+      id % 5 === 0
+        ? { kind: "rule", id: "rule-deleted" }
+        : id === 4
+          ? null
+          : id % 2
+            ? { kind: "downloadFolder" }
+            : { kind: "rule", id: "catch-all" },
     source: null,
     state,
     overwrite: false,

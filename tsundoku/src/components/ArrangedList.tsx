@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react"
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, Folder } from "lucide-react"
-import { bundled, sharedBundles, type ItemGroup } from "../arrange"
+import { bundled, groupPath, sharedBundles, type ItemGroup, type ListEntry } from "../arrange"
 import type { ListArrangement } from "../bindings/ListArrangement"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { ListSort } from "../bindings/ListSort"
@@ -79,6 +79,9 @@ interface GroupedListProps<Item> {
   grouped: boolean
   keyOf: (item: Item) => number
   renderItem: (item: Item) => ReactNode
+  /** With it, the items that follow one another outside a source's heading are drawn together, and so are a source's
+   * (the Downloads view's pictures); without it, each is `renderItem`'s. */
+  renderItems?: (items: readonly Item[]) => ReactNode
   /** With it, each heading has a box that ticks or unticks every item in its group (Pending). */
   selection?: GroupSelection<Item>
   /** What a heading shows after its count, such as a group's new items and its actions (Watched). */
@@ -103,7 +106,7 @@ export interface ShownBundle<Item> {
   items: readonly Item[]
   folded: boolean
   onFold: () => void
-  /** Its items' rows. */
+  /** Its items' rows (or `renderItems`'). */
   rows: ReactNode
 }
 
@@ -119,7 +122,8 @@ export interface GroupSelection<Item> {
  * how many it holds. A status's group holds the other grouping's groups under smaller headings. Clicking a heading
  * folds its group away; each view remembers which while the app runs. With `selection`, a box before each heading
  * ticks its whole group. With `bundles`, the items of a source two or more share sit together under its own heading in
- * each group they're in, where the first of them comes; it folds the same way.
+ * each group they're in, where the first of them comes; it folds the same way. Each heading's section is marked with its
+ * key as `data-chapter`, which the sidebar's chapters go to (`chaptersOf`).
  */
 export function GroupedList<Item>({
   view,
@@ -127,6 +131,7 @@ export function GroupedList<Item>({
   grouped,
   keyOf,
   renderItem,
+  renderItems,
   selection,
   headingExtra,
   folds,
@@ -140,53 +145,68 @@ export function GroupedList<Item>({
   const shared = bundles ? sharedBundles(groups.flatMap((group) => group.items), bundles.keyOf) : null
   // `path` names the group the items are in, so a source's items folded in one group stay unfolded in another.
   const rows = (items: readonly Item[], path: string) => {
-    if (!bundles || !shared) return items.map(row)
     const sharedKeyOf = (item: Item) => {
-      const key = bundles.keyOf(item)
-      return key !== null && shared.has(key) ? key : null
+      const key = bundles?.keyOf(item) ?? null
+      return key !== null && shared?.has(key) ? key : null
     }
-    return bundled(items, sharedKeyOf).map((entry) => {
-      if (!entry.bundle) return row(entry.item)
+    const entries: ListEntry<Item>[] = bundles && shared ? bundled(items, sharedKeyOf) : items.map((item) => ({ item }))
+    const drawn: ReactNode[] = []
+    // Items outside a source's heading that follow one another, drawn together by `renderItems`.
+    let run: Item[] = []
+    const endRun = () => {
+      if (run.length === 0) return
+      drawn.push(<Fragment key={`${path}/run:${drawn.length}`}>{renderItems?.(run)}</Fragment>)
+      run = []
+    }
+    for (const entry of entries) {
+      if (!entry.bundle) {
+        if (renderItems) run.push(entry.item)
+        else drawn.push(row(entry.item))
+        continue
+      }
+      endRun()
       const key = `${path}/bundle:${entry.bundle.key}`
-      return (
+      drawn.push(
         <Fragment key={key}>
-          {bundles.render({
+          {bundles?.render({
             items: entry.bundle.items,
             folded: collapsed.has(key),
             onFold: () => toggle(key),
-            rows: entry.bundle.items.map(row),
+            rows: renderItems ? renderItems(entry.bundle.items) : entry.bundle.items.map(row),
           })}
-        </Fragment>
+        </Fragment>,
       )
-    })
+    }
+    endRun()
+    return drawn
   }
   if (!grouped) return <div className="flex flex-col gap-2">{rows(groups.flatMap((group) => group.items), "")}</div>
 
   const section = (group: ItemGroup<Item>, path: string, nested: boolean): ReactNode => {
-    const key = `${path}/${group.key}`
+    const key = groupPath(path, group.key)
     // Items in no group of the second grouping sit under their status's heading without one of their own.
     if (nested && group.key === "") return <Fragment key={key}>{rows(group.items, key)}</Fragment>
     const isCollapsed = collapsed.has(key)
     const Chevron = isCollapsed ? ChevronRight : ChevronDown
     return (
-      <section key={key} className={`flex flex-col ${nested ? "gap-2" : "gap-3"}`}>
+      <section key={key} data-chapter={key} className={`flex scroll-mt-2 flex-col ${nested ? "gap-2" : "gap-3"}`}>
         <div className={`flex min-w-0 items-center gap-2 ${nested ? "pl-4" : ""}`}>
           {selection && <GroupCheckbox items={group.items} selection={selection} label={group.label} />}
           <button
-          type="button"
-          aria-expanded={!isCollapsed}
-          aria-label={isCollapsed ? text.expand(group.label) : text.collapse(group.label)}
-          onClick={() => toggle(key)}
-          className={`flex min-w-0 items-center gap-1.5 rounded text-left text-xs text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-accent ${
-            nested ? "font-medium" : "font-semibold"
-          }`}
-        >
-          <Chevron size={14} className="shrink-0" aria-hidden />
-          {group.folder && <Folder size={14} className="shrink-0" aria-hidden />}
-          <span className="truncate" title={group.label}>
-            {group.label}
-          </span>
-          <span className="shrink-0 font-normal text-fg-muted tabular-nums">{group.items.length}</span>
+            type="button"
+            aria-expanded={!isCollapsed}
+            aria-label={isCollapsed ? text.expand(group.label) : text.collapse(group.label)}
+            onClick={() => toggle(key)}
+            className={`flex min-w-0 items-center gap-1.5 rounded text-left text-xs text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-accent ${
+              nested ? "font-medium" : "font-semibold"
+            }`}
+          >
+            <Chevron size={14} className="shrink-0" aria-hidden />
+            {group.folder && <Folder size={14} className="shrink-0" aria-hidden />}
+            <span className="truncate" title={group.label}>
+              {group.label}
+            </span>
+            <span className="shrink-0 font-normal text-fg-muted tabular-nums">{group.items.length}</span>
           </button>
           {headingExtra?.(group)}
         </div>

@@ -362,13 +362,13 @@ fn check_notice(checks: &[(&str, &str)]) -> Notice {
         [(title, site)] => Notice {
             title: "A Download Needs You".to_owned(),
             body: format!(
-                "{site} wants to check you're a person before {title}. It waits in the queue until you open the check."
+                "{site} wants to check you're a person before {title}. It waits in Downloads until you open the check."
             ),
         },
         [(first, _), rest @ ..] => Notice {
             title: format!("{} Downloads Need You", checks.len()),
             body: format!(
-                "{first} and {} more wait in the queue until you open their checks.",
+                "{first} and {} more wait in Downloads until you open their checks.",
                 rest.len()
             ),
         },
@@ -730,7 +730,7 @@ mod tests {
         assert_eq!(notice[0].title, "A Download Needs You");
         assert_eq!(
             notice[0].body,
-            "MediaFire wants to check you're a person before Video 1. It waits in the queue until you open the check."
+            "MediaFire wants to check you're a person before Video 1. It waits in Downloads until you open the check."
         );
         assert_eq!(
             notices(&[needs_check.clone(), needs_check.clone()], true, true)[0].title,

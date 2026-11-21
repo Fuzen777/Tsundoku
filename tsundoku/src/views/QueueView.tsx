@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { ListVideo } from "lucide-react"
 import {
   clearFinishedDownloads,
@@ -7,21 +7,45 @@ import {
   retryFailedDownloads,
   stopAllDownloads,
 } from "../api"
-import { arrangeNested, chosenFolderGroup, folderGroup, NO_GROUP, type GroupPlace, type SortFacts } from "../arrange"
+import {
+  arrangeNested,
+  chaptersOf,
+  chosenFolderGroup,
+  folderGroup,
+  groupPath,
+  NO_GROUP,
+  sameFolder,
+  unknownRuleGroup,
+  type GroupPlace,
+  type SortFacts,
+} from "../arrange"
 import type { Destination } from "../bindings/Destination"
+import type { FolderFrom } from "../bindings/FolderFrom"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { QueueItem } from "../bindings/QueueItem"
 import type { QueueState } from "../bindings/QueueState"
+import { useChapters } from "../chapters"
 import { ArrangeControls, GroupedList, type Bundling } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { EmptyState } from "../components/EmptyState"
 import { Page } from "../components/Page"
+import { PickerViewControls } from "../components/PickerViewControls"
 import { QueueRow } from "../components/QueueRow"
 import { QueueSourceGroup } from "../components/QueueSourceGroup"
+import { QueueTiles } from "../components/QueueTiles"
 import { StatusMessage } from "../components/StatusMessage"
 import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
 import { describeDownloadError, type ErrorDescription } from "../errors"
-import { useDownloadDestinations, useListArrangement, useQueue, useRuleGroupOf } from "../queries"
+import { useFoldedGroups } from "../foldedGroups"
+import {
+  useDownloadDestinations,
+  useFolderFromGroupOf,
+  useListArrangement,
+  usePickerLayout,
+  useQueue,
+  useRuleGroupOf,
+} from "../queries"
+import { QueueLookContext } from "../queueItems"
 import { sourceKey } from "../queueSources"
 import { strings } from "../strings"
 import { useOfferUndo, type UndoOffer } from "../undo"
@@ -63,33 +87,54 @@ const BY_SOURCE: Bundling<QueueItem> = {
 /** The ways to add links an empty queue offers: by hand first. */
 const QUEUE_WAYS: readonly WayToAdd[] = ["paste", "drop", "watch", "shortcut", "bookmark", "sendButtons"]
 
-/** Every download added and not cleared yet, grouped and sorted as its toolbar says, those picked together from one
- * source under its heading. */
+/**
+ * The Downloads view (the queue, in the code): every download added and not cleared yet, grouped and sorted as its
+ * toolbar says, those picked together from one source under its heading, as rows (List) or pictures (Masonry, Gallery),
+ * one choice for the whole view. Grouped, the sidebar lists its groups under it as chapters, a status's groups as their
+ * subchapters.
+ */
 export function QueueView() {
   const { data: items = [] } = useQueue()
   const [queueError, setQueueError] = useState<ErrorDescription | null>(null)
   const { arrangement, ready, change: changeArrangement, error: arrangeError } = useListArrangement("queue")
   const { group, byStatus } = arrangement
-  // What picks each download's folder is asked again, since the queue keeps only the folder (and the rule picked for
-  // it in Pending).
+  // Grouped by rule, each download is grouped by what gave it its folder when it was added, which it keeps. One added
+  // before that was kept is asked about again, as the rules say now.
+  const folderFromGroupOf = useFolderFromGroupOf(group === "rule")
   const ruleGroupOf = useRuleGroupOf(group === "rule")
   const destinations = useDownloadDestinations(
     items.map((item) => ({
       video: item.video,
       presetId: item.preset?.id ?? null,
       ruleId: item.ruleId,
-      enabled: group === "rule",
+      enabled: group === "rule" && !item.folderChosen && item.folderFrom === null,
     })),
   )
   const destinationOf = new Map(items.map((item, index) => [item.id, destinations[index]]))
+  const groupers: Groupers = { folderFromGroupOf, ruleGroupOf }
   const groups = arrangeNested(
     items,
     arrangement,
     queueFacts,
     byStatus ? queueStatusGroup : null,
-    group === "none" ? null : (item) => queueGroup(item, group, destinationOf.get(item.id), ruleGroupOf),
+    group === "none" ? null : (item) => queueGroup(item, group, destinationOf.get(item.id), groupers),
   )
   const actions = WHOLE_QUEUE_ACTIONS.filter(({ states }) => items.some((item) => states.includes(item.state)))
+  const grouped = group !== "none" || byStatus
+  const look = useMemo(() => ({ byStatus }), [byStatus])
+  const { layout, change: changeLayout } = usePickerLayout("queueSources")
+  const tiles = layout.view === "list" ? null : layout.view
+
+  const folds = useFoldedGroups("queue")
+  const { scrollRef, markShown } = useChapters({
+    view: "queue",
+    chapters: grouped ? chaptersOf(groups) : [],
+    // A status's group folded away is unfolded to go to one of its groups.
+    reveal: (id) => {
+      const holder = groupPath("", id.split("/")[1])
+      if (holder !== id && folds.collapsed.has(holder)) folds.toggle(holder)
+    },
+  })
 
   const offerUndo = useOfferUndo()
   const actOnAll = (action: (offerUndo: (offer: UndoOffer) => void) => Promise<void>) => {
@@ -100,6 +145,8 @@ export function QueueView() {
   return (
     <Page
       title={strings.nav.queue}
+      scrollRef={scrollRef}
+      onScroll={markShown}
       actions={
         actions.length > 0 &&
         actions.map(({ label, action }) => (
@@ -123,16 +170,23 @@ export function QueueView() {
               disabled={!ready}
               onChange={(changes) => void changeArrangement(changes)}
             />
+            <div className="ml-auto">
+              <PickerViewControls layout={layout} onChange={changeLayout} />
+            </div>
           </div>
           {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
-          <GroupedList
-            view="queue"
-            groups={groups}
-            grouped={group !== "none" || byStatus}
-            keyOf={(item) => item.id}
-            renderItem={(item) => <QueueRow item={item} />}
-            bundles={BY_SOURCE}
-          />
+          <QueueLookContext value={look}>
+            <GroupedList
+              view="queue"
+              groups={groups}
+              grouped={grouped}
+              keyOf={(item) => item.id}
+              renderItem={(item) => <QueueRow item={item} />}
+              renderItems={tiles ? (run) => <QueueTiles items={run} view={tiles} size={layout.size} /> : undefined}
+              bundles={BY_SOURCE}
+              folds={folds}
+            />
+          </QueueLookContext>
         </div>
       )}
     </Page>
@@ -152,12 +206,24 @@ function queueStatusGroup(item: QueueItem): GroupPlace {
   return { key: item.state, label: strings.queue.groups[item.state], rank: QUEUE_STATUSES.indexOf(item.state) }
 }
 
-/** The group a download falls in: its folder, its site, or what picks its folder (none until that's known). */
+/** What groups a download by rule, once the rules are known. */
+interface Groupers {
+  /** By what gave it its folder when it was added. */
+  folderFromGroupOf: ((from: FolderFrom, folder: string) => GroupPlace) | null
+  /** By what the rules give it now. */
+  ruleGroupOf: ((destination: Destination) => GroupPlace) | null
+}
+
+/**
+ * The group a download falls in: its folder, its site, or what gave it its folder when it was added (none until that's
+ * known). One added before that was kept goes by what the rules say now when they still give it the same folder, else
+ * under its folder as an unknown rule's.
+ */
 function queueGroup(
   item: QueueItem,
   group: Exclude<ListGroup, "none">,
   destination: Destination | undefined,
-  ruleGroupOf: ((destination: Destination) => GroupPlace) | null,
+  { folderFromGroupOf, ruleGroupOf }: Groupers,
 ): GroupPlace {
   switch (group) {
     case "destination":
@@ -166,6 +232,8 @@ function queueGroup(
       return { key: item.video.site, label: item.video.siteName, rank: 0 }
     case "rule":
       if (item.folderChosen) return chosenFolderGroup(item.folder)
-      return destination && ruleGroupOf ? ruleGroupOf(destination) : NO_GROUP
+      if (item.folderFrom) return folderFromGroupOf ? folderFromGroupOf(item.folderFrom, item.folder) : NO_GROUP
+      if (!destination || !ruleGroupOf) return NO_GROUP
+      return sameFolder(destination.folder, item.folder) ? ruleGroupOf(destination) : unknownRuleGroup(item.folder)
   }
 }

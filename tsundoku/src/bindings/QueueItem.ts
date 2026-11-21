@@ -2,6 +2,7 @@
 import type { DownloadError } from "./DownloadError";
 import type { DownloadProgress } from "./DownloadProgress";
 import type { DownloadResult } from "./DownloadResult";
+import type { FolderFrom } from "./FolderFrom";
 import type { Hold } from "./Hold";
 import type { Preset } from "./Preset";
 import type { QueueSource } from "./QueueSource";
@@ -29,6 +30,12 @@ folderChosen: boolean,
  * `None` when none was.
  */
 ruleId: string | null, 
+/**
+ * What gave it its folder when the rules did, decided when it was added (or when its folder went back to the
+ * rules'), so the Downloads view groups it by that rather than by what the rules would say now. `None` for a folder
+ * picked for it, and for downloads added before it was kept.
+ */
+folderFrom: FolderFrom | null, 
 /**
  * The channel, playlist or account it was picked from (the picker's Download Selected, or a watched source's),
  * which the Queue shows its downloads together under. `None` for a link added on its own.

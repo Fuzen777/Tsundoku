@@ -2,6 +2,23 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.9 · 2026-11-21
+
+### Changed
+
+- **The Queue is now called Downloads**: it holds the downloads running, waiting and done until you clear them, while History keeps every download ever made. Its button in the sidebar, its title, Remove from Downloads, the In Downloads marks and the notifications say so.
+- **One List, Masonry or Gallery for the whole view**: the view buttons moved from each channel's heading to the toolbar's right, and now show every download that way, posts and videos added on their own included. They start as the headings were set.
+- **Pictures alone**: in Masonry and Gallery, a download is its picture, without its title and progress under it (they show when you point at it); one without a picture shows its title in its place.
+- **Grouped by status, cards don't say it again**: under its status's heading, a row leaves out "Waiting", "Done" or "Downloading" (a stage such as Merging still shows), a picture its corner icon, and a channel's heading says only how many downloads it holds.
+
+### Added
+
+- **Chapters in the sidebar**: grouped, the Downloads view lists its groups under its button in the sidebar, the statuses with their sites, folders or rules under them, each with how many downloads it holds. A click scrolls there, unfolding a folded status, and the one at the top is marked as you scroll, as Settings' sections are.
+
+### Fixed
+
+- **Grouping by rule follows the rule a download was added with**: a rule added later that matches everything no longer pulls every download already there under it. Each download keeps the rule that gave its folder (a rule deleted since shows as Deleted Rule). Downloads added before this version go by the rules as they are now when those give them the same folder, else under Unknown Rule with their folder.
+
 ## 0.2.8 · 2026-11-21
 
 ### Changed

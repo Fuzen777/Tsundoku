@@ -23,7 +23,7 @@ impl QueueStore {
         let mut statement = connection
             .prepare(
                 "SELECT id, video, preset, folder, state, overwrite, added_at, result, error, folder_chosen, file_name,
-                    rule, password, source
+                    rule, password, source, folder_from
                 FROM queue_items ORDER BY position, id",
             )
             .map_err(storage_error)?;
@@ -44,6 +44,7 @@ impl QueueStore {
                     row.get::<_, Option<String>>(11)?,
                     row.get::<_, Option<String>>(12)?,
                     row.get::<_, Option<String>>(13)?,
+                    row.get::<_, Option<String>>(14)?,
                 ))
             })
             .map_err(storage_error)?;
@@ -65,6 +66,7 @@ impl QueueStore {
                 rule_id,
                 password,
                 source,
+                folder_from,
             ) = row.map_err(storage_error)?;
             // An item that can't be read (from a newer version, say) is skipped rather than blocking the queue.
             let (Ok(video), Ok(preset), Some(state)) = (
@@ -81,6 +83,8 @@ impl QueueStore {
                 folder,
                 folder_chosen,
                 rule_id,
+                // What gave it its folder, when it can't be read, is only worked out again as the rules say now.
+                folder_from: folder_from.and_then(|json| serde_json::from_str(&json).ok()),
                 // A source that can't be read only leaves the download on its own.
                 source: source.and_then(|json| serde_json::from_str(&json).ok()),
                 file_name,
@@ -118,8 +122,8 @@ impl QueueStore {
             .query_row(
                 "INSERT INTO queue_items
                     (id, video, preset, folder, state, overwrite, added_at, result, error, position, folder_chosen,
-                    file_name, rule, password, source)
-                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13, ?14, ?15) RETURNING id",
+                    file_name, rule, password, source, folder_from)
+                VALUES (?9, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?10, ?11, ?12, ?13, ?14, ?15, ?16) RETURNING id",
                 params![
                     to_json(&item.video),
                     to_json(&item.preset),
@@ -136,6 +140,7 @@ impl QueueStore {
                     item.rule_id,
                     item.password.as_ref().map(Password::reveal),
                     item.source.as_ref().map(to_json),
+                    item.folder_from.as_ref().map(to_json),
                 ],
                 |row| row.get(0),
             )
@@ -173,13 +178,18 @@ impl QueueStore {
         Ok(())
     }
 
-    /// Saves an item's folder and whether it was picked for it.
+    /// Saves an item's folder, whether it was picked for it, and what gave it otherwise.
     pub fn set_folder(&self, item: &QueueItem) -> Result<(), DownloadError> {
         self.database
             .lock()
             .execute(
-                "UPDATE queue_items SET folder = ?2, folder_chosen = ?3 WHERE id = ?1",
-                params![item.id, item.folder, item.folder_chosen],
+                "UPDATE queue_items SET folder = ?2, folder_chosen = ?3, folder_from = ?4 WHERE id = ?1",
+                params![
+                    item.id,
+                    item.folder,
+                    item.folder_chosen,
+                    item.folder_from.as_ref().map(to_json)
+                ],
             )
             .map_err(storage_error)?;
         Ok(())

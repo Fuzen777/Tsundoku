@@ -9,6 +9,7 @@ import {
   pendingLinkPicked,
   showMainWindow,
 } from "./api"
+import { ChaptersContext, type ChapterTarget, type ShownChapters } from "./chapters"
 import { AddBar, type AddBarHandle } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
 import { Button } from "./components/Button"
@@ -24,7 +25,6 @@ import { ASK_BEFORE_ADDING_OVER, checkingTime, type LinkFilesRead, readLinkFiles
 import {
   AppActionsContext,
   type SettingsPlace,
-  type SettingsSectionId,
   type HistoryTarget,
   type SettingsTarget,
   type ViewId,
@@ -50,8 +50,20 @@ export function App() {
   const [view, setShownView] = useState<ViewId>("queue")
   // What the history shows when a watched source's Show Downloads in History opens it, until another view is opened.
   const [historyTarget, setHistoryTarget] = useState<HistoryTarget | null>(null)
+  // The open view's chapters, which the sidebar lists under it (`useChapters`), and the one asked for last there.
+  const [chapters, setChapters] = useState<ShownChapters | null>(null)
+  const [chapterTarget, setChapterTarget] = useState<ChapterTarget | null>(null)
+  const withdrawChapters = useCallback(
+    (closed: ViewId) => setChapters((shown) => (shown?.view === closed ? null : shown)),
+    [],
+  )
+  const chaptersLink = useMemo(
+    () => ({ publish: setChapters, withdraw: withdrawChapters, target: chapterTarget }),
+    [withdrawChapters, chapterTarget],
+  )
   const setView = useCallback((to: ViewId) => {
     setHistoryTarget(null)
+    setChapterTarget(null)
     setShownView(to)
   }, [])
   // The text of the add bar's field, shown once Type a Link opens it: the link shown last, or what was typed.
@@ -216,8 +228,6 @@ export function App() {
   // Where Settings opens, when another view sends the user to a place in it. A new object each time, so going to the
   // same place again scrolls there again.
   const [settingsPlace, setSettingsPlace] = useState<SettingsTarget | null>(null)
-  // The section at the top of Settings, which the sidebar marks among those it lists under Settings.
-  const [settingsSection, setSettingsSection] = useState<SettingsSectionId | null>(null)
   const navigate = useCallback(
     (to: ViewId, place?: SettingsPlace) => {
       setView(to)
@@ -271,8 +281,8 @@ export function App() {
             watched: newlyWatched,
           }}
           onSelect={setView}
-          settingsSection={settingsSection}
-          onSelectSection={(section) => navigate("settings", section)}
+          chapters={chapters?.view === view ? chapters : null}
+          onSelectChapter={(id) => setChapterTarget({ view, id })}
         />
         {/* Hidden while it has nothing to show, so the row takes no room. */}
         <div className="col-start-2 row-start-2 flex flex-col gap-3 pr-4 pb-3 empty:hidden">
@@ -321,12 +331,9 @@ export function App() {
         <main className="relative col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
           {/* Outside the views, so an offer to undo stays when another view is opened. */}
           <UndoToastProvider>
-            <CurrentView
-              view={view}
-              settingsPlace={settingsPlace}
-              historyTarget={historyTarget}
-              onSettingsSectionShown={setSettingsSection}
-            />
+            <ChaptersContext value={chaptersLink}>
+              <CurrentView view={view} settingsPlace={settingsPlace} historyTarget={historyTarget} />
+            </ChaptersContext>
           </UndoToastProvider>
         </main>
       </div>
@@ -338,10 +345,9 @@ interface CurrentViewProps {
   view: ViewId
   settingsPlace: SettingsTarget | null
   historyTarget: HistoryTarget | null
-  onSettingsSectionShown: (section: SettingsSectionId) => void
 }
 
-function CurrentView({ view, settingsPlace, historyTarget, onSettingsSectionShown }: CurrentViewProps) {
+function CurrentView({ view, settingsPlace, historyTarget }: CurrentViewProps) {
   switch (view) {
     case "queue":
       return <QueueView />
@@ -356,6 +362,6 @@ function CurrentView({ view, settingsPlace, historyTarget, onSettingsSectionShow
     case "rules":
       return <RulesView />
     case "settings":
-      return <SettingsView place={settingsPlace} onSectionShown={onSettingsSectionShown} />
+      return <SettingsView place={settingsPlace} />
   }
 }

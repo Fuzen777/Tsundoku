@@ -1,3 +1,4 @@
+import { createContext, useContext } from "react"
 import {
   confirmWithUser,
   copyText,
@@ -15,9 +16,28 @@ import { strings } from "./strings"
 import { useOfferUndo } from "./undo"
 
 /*
-  What a download in the Queue says and does, shared by its row (components/QueueRow.tsx) and its picture in Masonry
-  and Gallery (components/QueueTiles.tsx).
+  What a download in the Downloads view says and does, shared by its row (components/QueueRow.tsx) and its picture in
+  Masonry and Gallery (components/QueueTiles.tsx).
 */
+
+/** How the Downloads view shows its downloads, for every row, picture and source's heading in it. */
+export interface QueueLook {
+  /** Grouped by status: each heading says where its downloads stand, so they don't say it again. */
+  byStatus: boolean
+}
+
+export const QueueLookContext = createContext<QueueLook>({ byStatus: false })
+
+/** How the Downloads view shows its downloads. */
+export function useQueueLook(): QueueLook {
+  return useContext(QueueLookContext)
+}
+
+/** What a download says it's doing (`stage`), or null when its status's heading already says it: "Waiting" under
+ * Waiting, "Downloading" under Downloading, but "Merging" and a check window's download under Waiting still show. */
+export function shownStage(stage: string, item: QueueItem, look: QueueLook): string | null {
+  return look.byStatus && stage === strings.queue.groups[item.state] ? null : stage
+}
 
 /** What a download's actions run through: each one's error is shown on it, and removing it offers to undo. */
 export function useItemActions(item: QueueItem, setError: (error: ErrorDescription | null) => void) {

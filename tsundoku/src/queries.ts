@@ -56,7 +56,7 @@ import {
   saveListArrangements,
   savePickerLayouts,
 } from "./api"
-import { ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
+import { folderFromGroup, ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
 import { DEFAULT_PICKER_LAYOUTS, sizeStep } from "./pickerLayout"
 import { DEFAULT_WATCHED_ARRANGEMENT, LATEST_DOWNLOADS, latestDownloadsQuery } from "./watchedSources"
 import { ruleLabel } from "./views/rules/ruleLabels"
@@ -65,6 +65,7 @@ import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
+import type { FolderFrom } from "./bindings/FolderFrom"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListArrangements } from "./bindings/ListArrangements"
@@ -650,6 +651,15 @@ export function useRuleGroupOf(enabled: boolean): ((destination: Destination) =>
   const { data: presets } = usePresets()
   if (!enabled || !rules || !presets) return null
   return (destination) => ruleGroup(destination, rules, presets.defaultFolder)
+}
+
+/** Groups a download by what gave it its folder when it was added (`folderFromGroup`), once the rules and the download
+ * folder are known. */
+export function useFolderFromGroupOf(enabled: boolean): ((from: FolderFrom, folder: string) => GroupPlace) | null {
+  const { data: rules } = useFolderRules()
+  const { data: presets } = usePresets()
+  if (!enabled || !rules || !presets) return null
+  return (from, folder) => folderFromGroup(from, folder, rules, presets.defaultFolder)
 }
 
 /** What a rule is called by its number (`ruleLabel`): its name, else "Rule 3". */

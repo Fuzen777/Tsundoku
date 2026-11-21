@@ -14,7 +14,7 @@ items: PickerLayout,
  */
 postFiles: PickerLayout, 
 /**
- * The downloads picked from a channel, playlist or account, under its heading in the Queue (the same choice for
- * every heading).
+ * Every download in the Downloads view: one choice for the whole view. Named for the downloads under a channel's,
+ * playlist's or account's heading, the only ones it was for at first.
  */
 queueSources: PickerLayout, };

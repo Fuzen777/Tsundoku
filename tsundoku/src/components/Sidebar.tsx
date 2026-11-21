@@ -1,12 +1,6 @@
-import { useLayoutEffect, useRef, type RefObject } from "react"
-import {
-  mainNavItems,
-  SETTINGS_SECTIONS,
-  settingsNavItem,
-  type NavItem,
-  type SettingsSectionId,
-  type ViewId,
-} from "../navigation"
+import { useLayoutEffect, useRef, type Ref, type RefObject } from "react"
+import { chapterHolding, type Chapter, type ShownChapters } from "../chapters"
+import { mainNavItems, settingsNavItem, type NavItem, type ViewId } from "../navigation"
 import { viewKeys } from "../shortcuts"
 import { strings } from "../strings"
 import { classes } from "./styles"
@@ -16,49 +10,48 @@ interface SidebarProps {
   onSelect: (view: ViewId) => void
   /** A count shown beside a view's name, such as the downloads not done yet beside Queue. */
   counts?: Partial<Record<ViewId, number>>
-  /** The section of Settings at the top of its view, marked among the sections listed under Settings. */
-  settingsSection: SettingsSectionId | null
-  /** Scrolls Settings to one of its sections. */
-  onSelectSection: (section: SettingsSectionId) => void
+  /** The open view's chapters (Settings' sections, the Downloads view's groups), listed under it, the one at the top of
+   * the view marked. */
+  chapters: ShownChapters | null
+  /** Goes to one of the open view's chapters. */
+  onSelectChapter: (id: string) => void
   /** Its place in the window's grid. */
   className?: string
 }
 
 /**
- * The views, with Settings at the bottom. While Settings is open, it moves up under the views to list its sections
- * beneath it, sliding there and back. Scrolls when they don't fit.
+ * The views, with Settings at the bottom. The open view's chapters are listed under it. While Settings is open, it moves
+ * up under the views to list its sections beneath it, sliding there and back. Scrolls when they don't fit.
  */
-export function Sidebar({ current, onSelect, counts = {}, settingsSection, onSelectSection, className }: SidebarProps) {
+export function Sidebar({ current, onSelect, counts = {}, chapters, onSelectChapter, className }: SidebarProps) {
   const settingsOpen = current === settingsNavItem.id
   const sidebar = useRef<HTMLElement>(null)
   const settingsGroup = useRef<HTMLDivElement>(null)
   const sectionList = useRef<HTMLUListElement>(null)
   useSettingsSlide(settingsOpen, sidebar, settingsGroup, sectionList)
+  // The chapters listed under a view: the open one's, when it has some.
+  const listed = (view: ViewId) => (chapters?.view === view && chapters.chapters.length > 0 ? chapters : null)
   return (
     <nav
       ref={sidebar}
       className={classes("relative flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pb-3 *:shrink-0", className)}
     >
       {mainNavItems.map((item) => (
-        <NavButton
-          key={item.id}
-          item={item}
-          selected={item.id === current}
-          count={counts[item.id]}
-          onSelect={onSelect}
-        />
+        <div key={item.id} className="flex flex-col gap-1">
+          <NavButton item={item} selected={item.id === current} count={counts[item.id]} onSelect={onSelect} />
+          <ChapterList label={strings.nav.chapters(item.label)} listed={listed(item.id)} onSelect={onSelectChapter} />
+        </div>
       ))}
       {!settingsOpen && <div className="flex-1" />}
       <div ref={settingsGroup} className="flex flex-col gap-1">
         <NavButton item={settingsNavItem} selected={settingsOpen} onSelect={onSelect} />
         {settingsOpen && (
-          <ul ref={sectionList} aria-label={strings.settings.jumpTo} className="flex flex-col gap-0.5">
-            {SETTINGS_SECTIONS.map(({ id, title }) => (
-              <li key={id}>
-                <SectionButton title={title} shown={id === settingsSection} onSelect={() => onSelectSection(id)} />
-              </li>
-            ))}
-          </ul>
+          <ChapterList
+            listRef={sectionList}
+            label={strings.nav.chapters(settingsNavItem.label)}
+            listed={listed(settingsNavItem.id)}
+            onSelect={onSelectChapter}
+          />
         )}
       </div>
     </nav>
@@ -146,27 +139,80 @@ function NavButton({ item, selected, count, onSelect }: NavButtonProps) {
   )
 }
 
-interface SectionButtonProps {
-  title: string
-  /** Whether it's the section at the top of Settings. */
-  shown: boolean
-  onSelect: () => void
+interface ChapterListProps {
+  listed: ShownChapters | null
+  onSelect: (id: string) => void
+  label: string
+  listRef?: Ref<HTMLUListElement>
 }
 
-/** One of Settings' sections under Settings: smaller, indented to the views' names, a long title cut short. */
-function SectionButton({ title, shown, onSelect }: SectionButtonProps) {
+/** A view's chapters under it, each one's subchapters under it, indented further. The one at the top of the view is
+ * marked, and so is the chapter holding it. */
+function ChapterList({ listed, onSelect, label, listRef }: ChapterListProps) {
+  if (!listed) return null
+  const { chapters, shown } = listed
+  const holding = chapterHolding(chapters, shown)
+  return (
+    <ul ref={listRef} aria-label={label} className="flex flex-col gap-0.5">
+      {chapters.map((chapter) => (
+        <li key={chapter.id} className="flex flex-col gap-0.5">
+          <ChapterButton
+            chapter={chapter}
+            shown={chapter.id === shown}
+            holdsShown={chapter.id === holding}
+            onSelect={onSelect}
+          />
+          {chapter.subchapters && chapter.subchapters.length > 0 && (
+            <ul className="flex flex-col gap-0.5">
+              {chapter.subchapters.map((subchapter) => (
+                <li key={subchapter.id}>
+                  <ChapterButton
+                    chapter={subchapter}
+                    shown={subchapter.id === shown}
+                    holdsShown={false}
+                    nested
+                    onSelect={onSelect}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+interface ChapterButtonProps {
+  chapter: Chapter
+  /** Whether it's the chapter at the top of the view. */
+  shown: boolean
+  /** Whether the one at the top of the view is one of its subchapters. */
+  holdsShown: boolean
+  /** A subchapter, indented further. */
+  nested?: boolean
+  onSelect: (id: string) => void
+}
+
+/** One of a view's chapters under it: smaller, indented to the views' names (a subchapter further), a long title cut
+ * short, then how many it holds. */
+function ChapterButton({ chapter, shown, holdsShown, nested = false, onSelect }: ChapterButtonProps) {
   return (
     <button
       type="button"
       aria-current={shown ? "location" : undefined}
-      title={title}
-      onClick={onSelect}
+      title={chapter.hint ?? chapter.title}
+      onClick={() => onSelect(chapter.id)}
       className={classes(
-        "flex h-7 w-full items-center truncate rounded-md pr-3 pl-10 text-left text-[13px] transition-colors focus-visible:outline-2 focus-visible:outline-accent",
-        shown ? "font-medium text-fg" : "text-fg-muted hover:bg-input hover:text-fg",
+        "flex h-7 w-full items-center gap-2 rounded-md pr-3 text-left text-[13px] transition-colors focus-visible:outline-2 focus-visible:outline-accent",
+        nested ? "pl-14" : "pl-10",
+        shown || holdsShown ? "font-medium text-fg" : "text-fg-muted hover:bg-input hover:text-fg",
       )}
     >
-      <span className="truncate">{title}</span>
+      <span className="min-w-0 flex-1 truncate">{chapter.title}</span>
+      {chapter.count !== undefined && (
+        <span className="shrink-0 text-xs font-normal text-fg-muted tabular-nums">{chapter.count}</span>
+      )}
     </button>
   )
 }

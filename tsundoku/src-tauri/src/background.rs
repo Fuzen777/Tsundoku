@@ -156,9 +156,9 @@ mod text {
 
     pub fn links_started(count: usize) -> String {
         if count == 1 {
-            "A pending link joined the queue.".to_owned()
+            "A pending link was added to Downloads.".to_owned()
         } else {
-            format!("{count} pending links joined the queue.")
+            format!("{count} pending links were added to Downloads.")
         }
     }
 }

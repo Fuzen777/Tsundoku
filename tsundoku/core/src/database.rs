@@ -178,6 +178,10 @@ const MIGRATIONS: &[&str] = &[
         used_at INTEGER NOT NULL,
         PRIMARY KEY (site, password)
     );",
+    // 20: what gave a queue item its folder when the rules did (`downloads::FolderFrom`: a rule by its ID, the preset's
+    // folder or the download folder), as JSON, so the Downloads view groups it by the rule it was added with rather than
+    // the one that matches now. NULL for a folder picked for it, and for items added before.
+    "ALTER TABLE queue_items ADD COLUMN folder_from TEXT;",
 ];
 
 pub struct Database {

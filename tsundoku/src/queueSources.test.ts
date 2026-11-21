@@ -42,6 +42,12 @@ describe("sourceSummary", () => {
     expect(sourceSummary([item(1, "waiting"), item(2, "waiting"), item(3, "waiting")])).toBe("3 waiting")
     expect(sourceSummary([item(1, "failed")])).toBe("1 failed")
   })
+
+  it("only says how many there are under their status's heading, which says where they stand", () => {
+    expect(sourceSummary([item(1, "done"), item(2, "done")], true)).toBe("2 downloads")
+    expect(sourceSummary([item(1, "waiting")], true)).toBe("1 download")
+    expect(sourceSummary([item(1, "done"), item(2, "waiting")], true)).toBe("1 of 2 done · 1 waiting")
+  })
 })
 
 describe("combinedFraction", () => {
