@@ -2,6 +2,7 @@ import { useState, type DragEvent, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { ArrowDown, ArrowUp, Copy, FolderTree, GripVertical, Pencil, Plus } from "lucide-react"
 import { confirmWithUser, queryKeys, saveFolderRules } from "../api"
+import { useChapters, type Chapter } from "../chapters"
 import type { FolderRule } from "../bindings/FolderRule"
 import type { Preset } from "../bindings/Preset"
 import { Button } from "../components/Button"
@@ -54,7 +55,8 @@ interface Editing {
  * until Save; moving (with its arrows or by dragging its grip, within its list), turning off, moving to the other list
  * and deleting save at once. Duplicate opens a copy as a new rule just below the original, saved like any new one. The
  * catch-all stays first, so every other rule overrides it: it can't be moved, duplicated or deleted, and new rules go
- * at the bottom of their list. The core keeps the manual rules after the others, so each list is a run of the rules. */
+ * at the bottom of their list. The core keeps the manual rules after the others, so each list is a run of the rules. The
+ * two lists are the view's chapters in the sidebar, with how many rules each holds. */
 export function RulesView() {
   const queryClient = useQueryClient()
   const { navigate } = useAppActions()
@@ -69,8 +71,9 @@ export function RulesView() {
   const [dragged, setDragged] = useState<number | null>(null)
   const [dropBefore, setDropBefore] = useState<number | null>(null)
   const openFolder = useOpenDownloadFolder()
+  const { scrollRef, markShown } = useChapters({ view: "rules", chapters: rulesChapters(rules) })
 
-  if (!rules) return <Page title={strings.nav.rules} />
+  if (!rules) return <Page title={strings.nav.rules} scrollRef={scrollRef} onScroll={markShown} />
   const presets = presetsOverview?.presets ?? []
   const downloadFolder = options?.folder ?? defaultFolder ?? ""
   const busy = saving || editing !== null
@@ -236,6 +239,8 @@ export function RulesView() {
   return (
     <Page
       title={strings.nav.rules}
+      scrollRef={scrollRef}
+      onScroll={markShown}
       actions={
         <>
           <HelpMenu label={text.help.label} topics={helpTopics(downloadFolder)} />
@@ -256,7 +261,7 @@ export function RulesView() {
         <p className="text-fg-secondary">{text.intro}</p>
         <RuleTester />
         {error && !editing && <StatusMessage tone="danger" {...error} />}
-        <div id={RULES_SECTION_IDS.automatic} className="mt-3 scroll-mt-4">
+        <div id={RULES_SECTION_IDS.automatic} data-chapter={RULES_SECTION_IDS.automatic} className="mt-3 scroll-mt-4">
           <Section title={text.sections.automatic}>
             <div className="flex flex-col gap-3">
               {automaticRows}
@@ -268,7 +273,7 @@ export function RulesView() {
             </div>
           </Section>
         </div>
-        <div id={RULES_SECTION_IDS.manual} className="mt-3 scroll-mt-4">
+        <div id={RULES_SECTION_IDS.manual} data-chapter={RULES_SECTION_IDS.manual} className="mt-3 scroll-mt-4">
           <Section
             title={text.sections.manual}
             actions={
@@ -309,6 +314,19 @@ export function RulesView() {
       </div>
     </Page>
   )
+}
+
+/** The view's two lists as the sidebar lists them, each with how many rules it holds once they're read. */
+function rulesChapters(rules: readonly FolderRule[] | undefined): Chapter[] {
+  const manual = rules?.filter((rule) => rule.manual).length
+  return [
+    {
+      id: RULES_SECTION_IDS.automatic,
+      title: text.sections.automatic,
+      count: rules && manual !== undefined ? rules.length - manual : undefined,
+    },
+    { id: RULES_SECTION_IDS.manual, title: text.sections.manual, count: manual },
+  ]
 }
 
 /** What each of the rule editor's fields means, in the editor's order, under the field's own label. */

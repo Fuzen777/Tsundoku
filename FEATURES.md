@@ -37,7 +37,7 @@ type: Features
 ## Navigation
 
 - **Sidebar**: Downloads, Pending, Watched, History, Presets and Rules at the top, Settings at the bottom. While Settings is open, it slides up under Rules with its sections listed below it. The sidebar scrolls when the window is too short for it.
-- **Chapters**: the open view's parts are listed under it in the sidebar, to jump to: Settings' sections, and the Downloads view's groups while it's grouped, a status's sites, folders or rules under it, each with how many downloads it holds. A click scrolls the view to it (unfolding its status when it's folded away), and the one at the top is marked as you scroll.
+- **Chapters**: the open view's parts are listed under it in the sidebar, to jump to: Settings' sections, Rules' Automatic Rules and Manual Rules with how many rules each holds, and the Downloads view's groups while it's grouped, a status's sites, folders or rules under it, each with how many downloads it holds. A click scrolls the view to it (unfolding its status when it's folded away), and the one at the top is marked as you scroll.
 - **Keyboard shortcuts**, listed in Settings → Keyboard Shortcuts and shown in each control's hover text ("Downloads (Ctrl+1)"):
   - **Ctrl+V** anywhere in the window but a text field adds the links you copied, as Paste Link does: one link shows its preview, several go to Pending.
   - **Ctrl+L** opens the field to type or edit a link, with its text selected.

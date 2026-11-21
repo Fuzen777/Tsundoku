@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.10 · 2026-11-21
+
+### Added
+
+- **Rules' chapters in the sidebar**: while Rules is open, the sidebar lists Automatic Rules and Manual Rules under it, each with how many rules it holds, to jump straight to either list. The one at the top is marked as you scroll.
+
 ## 0.2.9 · 2026-11-21
 
 ### Changed
