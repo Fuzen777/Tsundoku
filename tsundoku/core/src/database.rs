@@ -169,6 +169,15 @@ const MIGRATIONS: &[&str] = &[
         item TEXT NOT NULL,
         UNIQUE (link, site, video_id)
     );",
+    // 19: the passwords used before (`passwords::known`), kept while Save Past Passwords is on: one that opened a
+    // link or an archive, with the site it came from (`sites::site_of`'s key) and when it last opened something, in
+    // seconds since 1970. They're tried by themselves after Settings → Passwords' list.
+    "CREATE TABLE past_passwords (
+        site TEXT NOT NULL,
+        password TEXT NOT NULL,
+        used_at INTEGER NOT NULL,
+        PRIMARY KEY (site, password)
+    );",
 ];
 
 pub struct Database {

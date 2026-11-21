@@ -1,9 +1,12 @@
 //! The step after a download: unpacking the archives among its files (`unpack`) when Settings → Archives says to. A
 //! split archive whose other parts come with other downloads is unpacked by the download that brings its last part;
 //! the others leave theirs as they are. An archive that can't be unpacked fails the download with its files kept, so
-//! Retry unpacks again without downloading.
+//! Retry unpacks again without downloading. One with a password is tried with the passwords Tsundoku knows
+//! (`passwords::known`), and the queue is told which opened it when it isn't one of Settings' list.
 
+use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use super::runner::{open_log, seconds_since_epoch, write_log};
 use super::{DownloadError, DownloadProgress, DownloadStage, JobOutcome, JobSpec};
@@ -15,13 +18,50 @@ use crate::unpack::{self, ArchiveSet, Completeness, Request, UnpackError};
 /// How often progress is told while unpacking: every this much of an archive.
 const PROGRESS_STEPS: u64 = 200;
 
-/// What unpacking takes from Settings → Archives, and from the rule that says where to unpack.
+/// What unpacking takes from Settings → Archives, from the rule that says where to unpack, and from the passwords
+/// Tsundoku knows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnpackJob {
     pub place: UnpackPlace,
     pub after: AfterUnpacking,
+    /// Tried in order on an archive with a password (`KnownPasswords::for_archive`).
     pub passwords: Vec<String>,
+    /// How many of them, from the first, are Settings → Passwords' list. The others are the download's own and the
+    /// ones used before.
+    pub listed: usize,
+    /// Told each password that opened an archive and isn't the list's, to keep it for the next ones.
+    pub opened: Option<OpenedWith>,
 }
+
+/// What's told a password, not one of Settings' list, that opened an archive (`UnpackJob::opened`).
+#[derive(Clone)]
+pub struct OpenedWith(Arc<dyn Fn(&str) + Send + Sync>);
+
+impl OpenedWith {
+    pub fn new(tell: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(tell))
+    }
+
+    /// Tells it `password` opened an archive.
+    pub fn tell(&self, password: &str) {
+        (self.0)(password);
+    }
+}
+
+impl fmt::Debug for OpenedWith {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("OpenedWith")
+    }
+}
+
+/// The same one only: what two of them do can't be compared.
+impl PartialEq for OpenedWith {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for OpenedWith {}
 
 /// A download's files as unpacking left them, so Resume or Retry unpacks the rest without downloading again.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -203,10 +243,21 @@ fn unpack_one(
         },
         &mut progress,
     )?;
-    let password = unpacked
-        .password
-        .map(|number| format!(", with password {number} from the list"))
-        .unwrap_or_default();
+    // Never the password itself: its place in the list, or that it isn't in it.
+    let password = match unpacked.password {
+        None => String::new(),
+        Some(number) if number <= settings.listed => {
+            format!(", with password {number} from the list")
+        }
+        Some(number) => {
+            if let (Some(opened), Some(password)) =
+                (&settings.opened, settings.passwords.get(number - 1))
+            {
+                opened.tell(password);
+            }
+            ", with a password that isn't in the list".to_owned()
+        }
+    };
     write_log(
         log,
         &format!(
@@ -313,7 +364,63 @@ mod tests {
             place: UnpackPlace::Smart,
             after,
             passwords: Vec::new(),
+            listed: 0,
+            opened: None,
         }
+    }
+
+    /// A zip of one file, opened by `password`.
+    fn locked_zip(path: &Path, password: &str) {
+        use std::io::Write;
+        let mut writer = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        let options = zip::write::SimpleFileOptions::default()
+            .with_aes_encryption(zip::AesMode::Aes256, password);
+        writer.start_file("inside.txt", options).unwrap();
+        writer.write_all(b"inside").unwrap();
+        writer.finish().unwrap();
+    }
+
+    #[test]
+    fn a_password_that_isnt_the_lists_is_told_back_and_never_logged() {
+        use std::sync::Mutex;
+
+        let told = Arc::new(Mutex::new(Vec::<String>::new()));
+        let job = |passwords: &[&str], listed: usize| {
+            let told = Arc::clone(&told);
+            UnpackJob {
+                passwords: passwords.iter().map(|text| (*text).to_owned()).collect(),
+                listed,
+                opened: Some(OpenedWith::new(move |password| {
+                    told.lock().unwrap().push(password.to_owned());
+                })),
+                ..settings(AfterUnpacking::Keep)
+            }
+        };
+        let log_after = |job: &UnpackJob| {
+            let folder = TempDir::new().unwrap();
+            let archive = folder.path().join("Locked.zip");
+            locked_zip(&archive, "open-sesame");
+            let outcome = run_on(folder.path(), downloaded(&[&archive]), job);
+            assert!(
+                matches!(outcome, JobOutcome::Finished { .. }),
+                "{outcome:?}"
+            );
+            fs::read_to_string(folder.path().join("logs").join("1.log")).unwrap()
+        };
+
+        // The list's second password opens it: nothing to keep.
+        let log = log_after(&job(&["nope", "open-sesame", "used before"], 2));
+        assert!(log.contains("with password 2 from the list"), "{log}");
+        assert!(told.lock().unwrap().is_empty());
+
+        // One used before, tried after the list's, opens it: the queue is told which.
+        let log = log_after(&job(&["nope", "used before", "open-sesame"], 1));
+        assert!(
+            log.contains("with a password that isn't in the list"),
+            "{log}"
+        );
+        assert!(!log.contains("open-sesame"), "{log}");
+        assert_eq!(*told.lock().unwrap(), ["open-sesame"]);
     }
 
     fn run_on(folder: &Path, files: DownloadedFiles, settings: &UnpackJob) -> JobOutcome {

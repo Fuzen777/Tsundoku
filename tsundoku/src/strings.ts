@@ -281,10 +281,14 @@ export const strings = {
           : `${site} wants to check you're a person before this download. It waits here until you open the check and start the download on ${site}'s page.`,
       windowDownload: (site: string) =>
         `Downloading in ${site}'s check window, which saves the file itself. Stopping this download stops it.`,
-      needsPassword: (wrong: boolean) =>
+      needsPassword: (wrong: boolean, tried: number) =>
         wrong
           ? "The password didn't open this download. It waits here until you enter the right one."
-          : "This download needs a password. It waits here until you enter it.",
+          : tried === 0
+            ? "This download needs a password. It waits here until you enter it."
+            : `This download needs a password, and ${
+                tried === 1 ? "the one Tsundoku tried didn't open it" : `none of the ${tried} Tsundoku tried opened it`
+              }. It waits here until you enter it.`,
     },
     closeTitle: "Downloads Are Running",
     closeMessage: (count: number) =>
@@ -310,9 +314,11 @@ export const strings = {
       shortcutTaken: (keys: string) => `Another app already uses ${keys}. Pick another shortcut.`,
       unpack: {
         needsPassword: (archive: string) =>
-          `${archive} has a password. Add it here or in Settings → Archives, then Retry: it's unpacked without downloading again.`,
+          `${archive} has a password. Enter it here: it's unpacked without downloading again.`,
         wrongPassword: (archive: string, tried: number) =>
-          `None of your ${tried === 1 ? "password" : `${tried} passwords`} opens ${archive}. Add the right one here or in Settings → Archives, then Retry.`,
+          `${
+            tried === 1 ? "The password Tsundoku tried doesn't open" : `None of the ${tried} passwords Tsundoku tried opens`
+          } ${archive}. Enter the right one here: it's unpacked without downloading again.`,
         missingPart: (archive: string, part: string) =>
           `${archive} goes on in ${part}, which isn't in its folder. Once it is, Retry unpacks it without downloading again.`,
         damaged: (archive: string) => `${archive} is damaged, so it can't be unpacked. It's kept as it is.`,
@@ -333,9 +339,11 @@ export const strings = {
       cookieSettings: "Cookie Settings",
       updated: (version: string | null) =>
         version === null ? "yt-dlp is updated. Try again." : `yt-dlp is now version ${version}. Try again.`,
-      password: "Password",
-      addPasswordAndRetry: "Add and Retry",
-      archiveSettings: "Archive Settings",
+      passwordSettings: "Password Settings",
+      /** Under an archive's password field: what becomes of the password typed, by Save Past Passwords. */
+      archivePasswordKept: "Once it opens the archive, it's kept for the next ones: Save Past Passwords is on.",
+      archivePasswordNotKept:
+        "It's used for this download only. To have it tried on the next archives too, add it to your passwords in Settings, or turn on Save Past Passwords there.",
     },
   },
   history: {
@@ -907,8 +915,14 @@ export const strings = {
       subscribersOnly: (site: string) => `The owner of this ${site} file keeps it for ${site}'s subscribers.`,
       passwordProtected: (site: string) =>
         `This ${site} link needs a password. Tsundoku can't enter passwords for ${site} links yet.`,
-      passwordNeeded: (wrong: boolean) =>
-        wrong ? "That password didn't open this link. Check it and try again." : "This link needs a password.",
+      passwordNeeded: (wrong: boolean, tried: number) =>
+        wrong
+          ? "That password didn't open this link. Check it and try again."
+          : tried === 0
+            ? "This link needs a password."
+            : tried === 1
+              ? "This link needs a password. The one Tsundoku tried didn't open it."
+              : `This link needs a password. None of the ${tried} Tsundoku tried opened it.`,
       linkIncomplete: (site: string) =>
         `This ${site} link is missing its key, or it's cut off. Copy the whole link again.`,
       browserCheck: (site: string) =>
@@ -1519,13 +1533,40 @@ export const strings = {
         "An archive that couldn't be unpacked is always kept, so Retry unpacks it without downloading again.",
       ],
     },
-    archivePasswords: "Passwords",
-    archivePasswordsHint:
-      "Tried in order on an archive that has a password until one opens it. Type one and press Enter to add it. They're kept in Tsundoku's settings as they are, not hidden.",
-    archivePasswordsPlaceholder: "Add a Password",
+    /** In Archives, where the passwords were before 0.2.6. */
+    archivePasswordsElsewhere: "An archive that has a password is opened with the ones in Passwords, below.",
+    passwords: "Passwords",
+    passwordList: "Your Passwords",
+    passwordListHint:
+      "Tried in order on a link or an archive that needs a password, until one opens it. Type one and press Enter to add it. They're kept in Tsundoku's settings as they are, not hidden.",
+    passwordListPlaceholder: "Add a Password",
     removePassword: (password: string) => `Remove ${password}`,
-    archivePasswordsSaved: (count: number) =>
+    passwordListSaved: (count: number) =>
       count === 0 ? "Saved: no passwords." : count === 1 ? "Saved: 1 password." : `Saved: ${count} passwords.`,
+    savePastPasswords: "Save Past Passwords",
+    savePastPasswordsHint:
+      "A password you enter that opens a link or an archive is kept, apart from yours above, and tried after them the next time one is needed.",
+    pastPasswordsKept: (count: number) => (count === 1 ? "1 past password is kept." : `${count} past passwords are kept.`),
+    forgetPastPasswords: "Forget Past Passwords",
+    forgetPastPasswordsQuestion: (count: number) =>
+      count === 1
+        ? "Forget the past password? Your own passwords above stay, and so does the one each download was opened with."
+        : `Forget the ${count} past passwords? Your own passwords above stay, and so does the one each download was opened with.`,
+    forgetPastPasswordsFailed: "Couldn't forget the past passwords.",
+    /** The (?) beside Passwords: what's tried on a link or an archive that needs a password, and what's kept. */
+    passwordsHelp: {
+      label: "How Passwords Are Tried",
+      order: "What's Tried",
+      orderParagraphs: [
+        "When a link or an archive needs a password, Tsundoku tries your passwords first, in their order, then the past ones, and asks you only when none of them opens it.",
+        "A link is tried with at most 20 passwords, and only with the past ones of its own site, since trying a password sends it to that site. An archive is opened on this PC, so every past password is tried on it, and so is the one that opened its link.",
+      ],
+      past: "Past Passwords",
+      pastParagraphs: [
+        "While Save Past Passwords is on, a password you enter on a link, a download or an archive is kept once it has opened it, with the site it came from. Past passwords never join your own list.",
+        "Turning it off stops keeping and trying them, and leaves the ones kept until you forget them. They're kept in Tsundoku's data as they are, not hidden, and never written to a download's log or Copy Details.",
+      ],
+    },
     pacing: "Pacing",
     pacingIntro: "Some sites block accounts that read too fast, so Tsundoku goes easy on these.",
     pacedSites: { instagram: "Instagram", x: "X", pixiv: "Pixiv", tumblr: "Tumblr" },

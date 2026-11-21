@@ -19,6 +19,7 @@ import { AddingSection } from "./settings/AddingSection"
 import { AppearanceSection } from "./settings/AppearanceSection"
 import { ArchivesSection } from "./settings/ArchivesSection"
 import { BackgroundSection } from "./settings/BackgroundSection"
+import { PasswordsSection } from "./settings/PasswordsSection"
 import { BackupRow } from "./settings/BackupRow"
 import { CookiesSection, DownloadsSection, PacingSection, PostsSection } from "./settings/DownloadsSection"
 import { ShortcutsSection } from "./settings/ShortcutsSection"
@@ -108,6 +109,7 @@ const SECTION_REACHED_TOP = 48
 const SECTION_CONTENTS: Record<SettingsSectionId, () => ReactNode> = {
   "settings-downloads": DownloadsSection,
   "settings-archives": ArchivesSection,
+  "settings-passwords": PasswordsSection,
   "settings-adding": AddingSection,
   "settings-background": BackgroundSection,
   "settings-appearance": AppearanceSection,

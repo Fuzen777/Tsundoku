@@ -106,7 +106,7 @@ describe("tileActions", () => {
     const tryNow = tileActions(withHold({ kind: "notEnoughRoom", drive: "D:", free: 0, needed: 1, others: 0, until: 0 }))
     expect(tryNow.slice(0, 2)).toEqual(["stop", "tryNow"])
     expect(tileActions(withHold({ kind: "browserCheck", site: "example.com", files: 1 }))).toContain("openCheck")
-    const password = tileActions(withHold({ kind: "needsPassword", wrong: false }))
+    const password = tileActions(withHold({ kind: "needsPassword", wrong: false, tried: 0 }))
     expect(password).toContain("enterPassword")
     expect(password).not.toContain("tryNow")
   })

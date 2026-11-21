@@ -45,4 +45,10 @@ hourlyFileLimit: number | null,
 /**
  * Unpacking the archives downloads bring (Settings → Archives).
  */
-unpack: UnpackSettings, };
+unpack: UnpackSettings, 
+/**
+ * Save Past Passwords (Settings → Passwords): a password that opens a link or an archive is kept, apart from the
+ * list (`UnpackSettings::passwords`), and tried by itself after it (`passwords::known`). Off unless turned on, and
+ * in settings saved before 0.2.6.
+ */
+savePastPasswords: boolean, };

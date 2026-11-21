@@ -95,6 +95,7 @@ export const queryKeys = {
   leftOutFiles: ["left-out-files"],
   leftOutSharedFiles: ["left-out-shared-files"],
   downloadOptions: ["download-options"],
+  pastPasswordCount: ["past-password-count"],
   addingOptions: ["adding-options"],
   clickNLoad: ["click-n-load"],
   backgroundOptions: ["background-options"],
@@ -565,6 +566,26 @@ export async function tryDownloadNow(id: number): Promise<void> {
 export async function enterDownloadPassword(id: number, password: string): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("enter_download_password", { id, password })
+}
+
+/** A password for an archive a failed download brought, which none of the passwords Tsundoku knows opened: it's tried
+ * with them, and the download retries, which only unpacks. Rejects with a DownloadError. */
+export async function enterArchivePassword(id: number, password: string): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("enter_archive_password", { id, password })
+}
+
+/** How many passwords used before are kept (Settings → Passwords), never the passwords themselves. In a browser,
+ * `?pastPasswords=3` shows that many. */
+export function getPastPasswordCount(): Promise<number> {
+  if (!isTauri()) return Promise.resolve(addressNumber("pastPasswords") ?? 0)
+  return invoke<number>("past_password_count")
+}
+
+/** Forget Past Passwords: forgets every password used before. Rejects with a DownloadError. */
+export async function forgetPastPasswords(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("forget_past_passwords")
 }
 
 /** Open Check: shows the check a download waits for (a site's check that you're a person) in Tsundoku's check window,

@@ -281,11 +281,15 @@ pub enum PreviewError {
     #[error("{site} link with a password")]
     PasswordProtected { site: String },
     /// A link that needs a password Tsundoku can enter: none was given, or the one given didn't open it (`wrong`).
+    /// Before the person is asked, the passwords Tsundoku knows are tried (`passwords::read_trying`).
     /// The preview card, Pending and the queue ask for it.
     #[error("needs a password")]
     PasswordNeeded {
         /// A password the person typed was tried and didn't open it.
         wrong: bool,
+        /// How many passwords Tsundoku tried by itself before asking, none of which opened it.
+        #[serde(default)]
+        tried: u32,
     },
     /// A link missing part of itself, such as a MEGA link without its key, or with a key that doesn't open it.
     #[error("incomplete {site} link")]
@@ -382,21 +386,17 @@ impl PreviewError {
         }
     }
 
+    /// A link that needs a password, as a tool or a host answers it: `wrong` when one was given and didn't open it.
+    pub fn password_needed(wrong: bool) -> Self {
+        Self::PasswordNeeded { wrong, tried: 0 }
+    }
+
     /// A "too many requests" with only the tool's message; the preview fills in the rest.
     pub fn too_many_requests(detail: String) -> Self {
         Self::TooManyRequests {
             detail,
             site: None,
             until: None,
-        }
-    }
-
-    /// The error of a read: a link that still needs a password is `wrong` when the person `typed` the one tried. A
-    /// password Tsundoku had saved (or none) failing only asks for one again.
-    pub fn after_password(self, typed: bool) -> Self {
-        match self {
-            Self::PasswordNeeded { .. } => Self::PasswordNeeded { wrong: typed },
-            other => other,
         }
     }
 }
@@ -842,10 +842,10 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
         PreviewError::InvalidLink
     } else if mentions(&WRONG_PASSWORD_PHRASES) {
         // Before the sign-in phrases: Screencast-O-Matic's says "Unable to login: Invalid password".
-        PreviewError::PasswordNeeded { wrong: true }
+        PreviewError::password_needed(true)
     } else if mentions(&[VIDEO_PASSWORD_OPTION]) {
         // yt-dlp names its option only where it can take the video's password ("use the --video-password option").
-        PreviewError::PasswordNeeded { wrong: false }
+        PreviewError::password_needed(false)
     } else if mentions(&[
         "unsupported url",
         "no suitable extractor",
@@ -1080,11 +1080,11 @@ mod tests {
         // Vimeo's public test video (player.vimeo.com/video/68375962), without its password and with a wrong one.
         assert_eq!(
             failure("password-needed"),
-            PreviewError::PasswordNeeded { wrong: false }
+            PreviewError::password_needed(false)
         );
         assert_eq!(
             failure("password-wrong"),
-            PreviewError::PasswordNeeded { wrong: true }
+            PreviewError::password_needed(true)
         );
     }
 
@@ -1098,7 +1098,7 @@ mod tests {
         ] {
             assert_eq!(
                 classify(line),
-                PreviewError::PasswordNeeded { wrong: false },
+                PreviewError::password_needed(false),
                 "{line}"
             );
         }
@@ -1109,7 +1109,7 @@ mod tests {
         ] {
             assert_eq!(
                 classify(line),
-                PreviewError::PasswordNeeded { wrong: true },
+                PreviewError::password_needed(true),
                 "{line}"
             );
         }
@@ -1120,15 +1120,6 @@ mod tests {
             ),
             PreviewError::SignInRequired { .. }
         ));
-        assert_eq!(
-            PreviewError::PasswordNeeded { wrong: false }.after_password(true),
-            PreviewError::PasswordNeeded { wrong: true }
-        );
-        assert_eq!(
-            PreviewError::PasswordNeeded { wrong: true }.after_password(false),
-            PreviewError::PasswordNeeded { wrong: false },
-            "a saved password that stopped working only asks again"
-        );
     }
 
     #[test]

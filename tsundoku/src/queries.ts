@@ -22,6 +22,7 @@ import {
   getDownloadFiles,
   getDownloadLog,
   getDownloadOptions,
+  getPastPasswordCount,
   getLeftOutFiles,
   getLeftOutSharedFiles,
   getFirstRunOptions,
@@ -493,8 +494,17 @@ export function useDownloadOptions() {
   return useQuery({ queryKey: queryKeys.downloadOptions, queryFn: getDownloadOptions, staleTime: Infinity })
 }
 
-/** Saves download options as they change (Settings → Downloads, Archives, Posts of Images, Pacing, Cookies), with the
- * error if it failed. Each place shows its own error. `save` answers whether it saved. */
+/** How many past passwords are kept (Settings → Passwords), counted again each time it's shown: downloads and links
+ * add to them while Save Past Passwords is on. `forgotten` sets it to none, after Forget Past Passwords. */
+export function usePastPasswordCount() {
+  const queryClient = useQueryClient()
+  const { data: count = 0 } = useQuery({ queryKey: queryKeys.pastPasswordCount, queryFn: getPastPasswordCount })
+  const forgotten = useCallback(() => queryClient.setQueryData(queryKeys.pastPasswordCount, 0), [queryClient])
+  return { count, forgotten }
+}
+
+/** Saves download options as they change (Settings → Downloads, Archives, Passwords, Posts of Images, Pacing,
+ * Cookies), with the error if it failed. Each place shows its own error. `save` answers whether it saved. */
 export function useSaveDownloadOptions() {
   const queryClient = useQueryClient()
   const { data: options } = useDownloadOptions()

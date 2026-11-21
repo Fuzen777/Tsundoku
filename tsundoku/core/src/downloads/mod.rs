@@ -25,12 +25,12 @@ use ts_rs::TS;
 
 pub(crate) use self::file_runner::free_name;
 pub use self::holds::{Hold, Recovery};
-use self::holds::{asked_to_slow_down, watch_holds};
+use self::holds::{PasswordTries, asked_to_slow_down, watch_holds};
 use self::room_check::Reserved;
 pub use self::run::{Notice, QueueRun, RunEvent, RunSummary, TaskbarProgress, notices};
 pub use self::runner::{JobOutcome, JobRunner, JobSpec, PostJob, ToolRunner};
 use self::store::QueueStore;
-pub use self::unpacking::{DownloadedFiles, UnpackJob};
+pub use self::unpacking::{DownloadedFiles, OpenedWith, UnpackJob};
 pub use self::window_offer::{JobOffer, OFFER_WAIT, WindowAnswer, WindowOffer, WindowReply};
 use crate::browsers;
 use crate::cancel::CancelToken;
@@ -38,7 +38,7 @@ use crate::database::Database;
 use crate::history::{History, NewDownload, SavedFile};
 use crate::listing::ListingKind;
 use crate::metadata::{PreviewError, VideoInfo};
-use crate::passwords::Password;
+use crate::passwords::{KnownPasswords, Password};
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
@@ -127,11 +127,17 @@ pub struct QueueItem {
     #[serde(skip)]
     #[ts(skip)]
     pub unpack_files: Option<DownloadedFiles>,
-    /// The password that opens its link, when it needs one: typed by the person or kept by the history. Saved with the
-    /// item, never sent to the UI.
+    /// The password that opens its link, when it needs one: typed by the person, kept by the history, or one Tsundoku
+    /// knows that a run is trying (`try_next_password`). Saved with the item once it opened the link, never sent to
+    /// the UI.
     #[serde(skip)]
     #[ts(skip)]
     pub password: Option<Password>,
+    /// The password the person typed for an archive it brought that none of the known ones opened
+    /// (`enter_archive_password`), tried on its archives with them. In memory only, like `unpack_files`.
+    #[serde(skip)]
+    #[ts(skip)]
+    pub archive_password: Option<Password>,
 }
 
 /// How much of a log the Queue's log viewer shows: its end.
@@ -419,6 +425,9 @@ pub struct DownloadQueue {
     listener: Arc<dyn QueueListener>,
     /// Each site's wait after it answered "too many requests", which the pending links and the preview card follow too.
     limits: SiteLimits,
+    /// Settings → Passwords' list and the passwords used before, tried by themselves on a link or an archive that
+    /// needs one. The preview card and the pending links use the same.
+    passwords: Arc<KnownPasswords>,
     /// The queue's own `Arc`, for the threads it starts.
     myself: Weak<DownloadQueue>,
 }
@@ -427,6 +436,10 @@ impl DownloadQueue {
     /// Loads the saved queue and starts what's waiting. Items that were running when the app closed come back
     /// stopped. Deletes logs older than 30 days.
     pub fn open(services: QueueServices) -> Result<Arc<Self>, DownloadError> {
+        let passwords = Arc::new(KnownPasswords::new(
+            Arc::clone(&services.database),
+            Arc::clone(&services.settings),
+        ));
         let store = QueueStore::new(services.database);
         let mut items = store.load()?;
         for item in items
@@ -453,6 +466,7 @@ impl DownloadQueue {
             runner: services.runner,
             listener: services.listener,
             limits: SiteLimits::new(),
+            passwords,
             myself: myself.clone(),
         });
         queue.schedule();
@@ -463,6 +477,12 @@ impl DownloadQueue {
 
     pub fn items(&self) -> Vec<QueueItem> {
         lock(&self.state).items.clone()
+    }
+
+    /// Settings → Passwords' list and the passwords used before, which the preview card and the pending links try
+    /// too.
+    pub fn passwords(&self) -> &Arc<KnownPasswords> {
+        &self.passwords
     }
 
     /// Whether the video is in the queue and not done yet.
@@ -579,6 +599,7 @@ impl DownloadQueue {
             recovery: Recovery::default(),
             caught_links: Vec::new(),
             unpack_files: None,
+            archive_password: None,
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -711,6 +732,7 @@ impl DownloadQueue {
             recovery: Recovery::default(),
             caught_links: Vec::new(),
             unpack_files: None,
+            archive_password: None,
         };
         item.id = self.store.insert(&item)?;
         lock(&self.state).items.push(item.clone());
@@ -1106,15 +1128,45 @@ impl DownloadQueue {
         first_error.map_or(Ok(restored), Err)
     }
 
-    /// The password a new download's link opens with: the one given, else the one the history keeps for the video, so
+    /// The password a new download's link opens with: the one given, else the one the preview card's read opened it
+    /// with (one Tsundoku knows, which the card never gets), else the one the history keeps for the video, so
     /// downloading it again never asks twice.
     fn password_for(&self, video: &VideoInfo, given: Option<Password>) -> Option<Password> {
-        given.or_else(|| {
-            self.history
-                .password_for(&video.site, &video.video_id)
-                .ok()
-                .flatten()
-        })
+        given
+            .or_else(|| {
+                self.passwords
+                    .kept_for_download(&video.site, &video.video_id)
+            })
+            .or_else(|| {
+                self.history
+                    .password_for(&video.site, &video.video_id)
+                    .ok()
+                    .flatten()
+            })
+    }
+
+    /// After a run found that the item's link needs a password it doesn't have, or that the one it had doesn't open:
+    /// the passwords Tsundoku knows (`KnownPasswords::for_link`) are tried by themselves, a run each, and only once
+    /// none is left does it wait for the person to enter one. One that failed is dropped, and no longer saved if it
+    /// was the item's own. A password the person then enters and that fails asks again without trying them anew.
+    fn try_next_password(&self, item: &mut QueueItem) {
+        let failed = item.password.take();
+        if failed.is_some() {
+            let _ = self.store.set_password(item);
+        }
+        let tries = item.recovery.password_tries.get_or_insert_with(|| {
+            PasswordTries::new(
+                self.passwords
+                    .for_link(&item.video.url)
+                    .into_iter()
+                    .filter(|password| Some(password) != failed.as_ref()),
+            )
+        });
+        match tries.after_failure(failed.is_some()) {
+            // Kept in memory until it opens the link: a run that finishes saves it.
+            Ok(next) => item.password = Some(next),
+            Err(asked) => item.recovery.needs_password = Some(asked),
+        }
     }
 
     /// Enter Password, for a download that waits for one (`Hold::NeedsPassword`): it's kept with the download, saved,
@@ -1194,6 +1246,7 @@ impl DownloadQueue {
                 passwords: UnpackSettings::normalized_passwords(options.unpack.passwords),
                 ..options.unpack
             },
+            save_past_passwords: options.save_past_passwords,
         };
         self.settings
             .update(|settings| settings.downloads = options.clone())
@@ -1346,9 +1399,29 @@ impl DownloadQueue {
         }
     }
 
+    /// A password for an archive the download brought that none of the known ones opened: it's kept with the download
+    /// while the app runs and tried on its archives with them (`unpack_job`), and the download is retried, which only
+    /// unpacks while its files are there. Once it opens an archive, it's kept for the next ones while Save Past
+    /// Passwords is on, never in Settings' list.
+    pub fn enter_archive_password(&self, id: i64, password: Password) -> Result<(), DownloadError> {
+        {
+            let mut state = lock(&self.state);
+            let item = find(&mut state.items, id)?;
+            if item.state != QueueState::Failed {
+                return Err(DownloadError::WrongState);
+            }
+            item.archive_password = Some(password);
+            self.put_back_in_line(item)?;
+        }
+        self.schedule();
+        Ok(())
+    }
+
     /// Whether a run of `item` unpacks its archives, and where: as the rules say when it runs (the one picked for it
-    /// first, `rules::unpacking_rule`), else as Settings → Archives (`settings`) says. The passwords and what becomes of
-    /// an archive are always Settings'.
+    /// first, `rules::unpacking_rule`), else as Settings → Archives (`settings`) says. What becomes of an archive is
+    /// always Settings'. An archive with a password is tried with Settings → Passwords' list, then the one typed for
+    /// this download's archives and the one that opened its link, then the ones used before
+    /// (`KnownPasswords::for_archive`); one that isn't the list's and opens an archive is told back, to be kept.
     fn unpack_job(&self, item: &QueueItem, settings: &UnpackSettings) -> Option<UnpackJob> {
         let decided = rules::unpacking_rule(
             &self.settings.get().rules.list,
@@ -1362,10 +1435,22 @@ impl DownloadQueue {
             Some(decided) => decided.unpacking.place(),
             None => settings.enabled.then_some(settings.place),
         }?;
+        let own: Vec<&Password> = [&item.archive_password, &item.password]
+            .into_iter()
+            .flatten()
+            .collect();
+        let tried = self.passwords.for_archive(&item.video.url, &own);
+        let (known, link) = (Arc::clone(&self.passwords), item.video.url.clone());
         Some(UnpackJob {
             place,
             after: settings.after,
-            passwords: settings.passwords.clone(),
+            passwords: tried.passwords,
+            listed: tried.listed,
+            opened: Some(OpenedWith::new(move |password| {
+                if let Some(password) = Password::new(password) {
+                    known.remember(&link, &password);
+                }
+            })),
         })
     }
 
@@ -1452,8 +1537,8 @@ impl DownloadQueue {
                 (_, JobOutcome::Failed(_)) if retry.is_some() => {
                     item.state = QueueState::Waiting;
                 }
-                // Its link needs a password it doesn't have, or the one it had no longer opens it: it waits for the
-                // person to enter one, without retrying by itself. One that failed is dropped, so it's asked again.
+                // Its link needs a password it doesn't have, or the one it had no longer opens it: it runs again with
+                // each password Tsundoku knows, then waits for the person to enter one.
                 (
                     _,
                     JobOutcome::Failed(DownloadError::YtDlp {
@@ -1461,10 +1546,7 @@ impl DownloadQueue {
                     }),
                 ) => {
                     item.state = QueueState::Waiting;
-                    item.recovery.needs_password = Some(item.password.is_some());
-                    if item.password.take().is_some() {
-                        let _ = self.store.set_password(item);
-                    }
+                    self.try_next_password(item);
                 }
                 // It waits, with the files it could download saved, until a person opens the check. A file the window
                 // saved meanwhile no longer waits for it.
@@ -1496,9 +1578,16 @@ impl DownloadQueue {
                             item.result = Some(result);
                             remove_folder(&job.temp_folder);
                             self.site_worked(&item.video.url);
+                            if let Some(password) = &item.password {
+                                // One Tsundoku tried by itself is saved with the item now that it opened the link,
+                                // and kept for its site's next links while Save Past Passwords is on.
+                                let _ = self.store.set_password(item);
+                                self.passwords.remember(&item.video.url, password);
+                            }
                             item.recovery = Recovery::default();
                             item.caught_links.clear();
                             item.unpack_files = None;
+                            item.archive_password = None;
                         }
                         Err(error) => {
                             item.state = QueueState::Failed;

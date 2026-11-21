@@ -3,6 +3,7 @@ import { ChevronUp, CircleStop, FileText, FolderOpen, Play, RefreshCw, X } from 
 import {
   cancelDownload,
   downloadNext,
+  enterArchivePassword,
   enterDownloadPassword,
   openCheckWindow,
   openDownload,
@@ -120,8 +121,9 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
             {fixFor(item.error) && (
               <FailureFixes
                 error={item.error}
-                // An archive's password, once added, retries at once: it only unpacks.
                 onRetry={item.error.kind === "unpack" ? () => act(retryDownload) : undefined}
+                // An archive's password, once entered, retries at once: it only unpacks.
+                onArchivePassword={(password) => act((id) => enterArchivePassword(id, password))}
               />
             )}
           </StatusMessage>

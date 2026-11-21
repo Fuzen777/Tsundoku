@@ -14,7 +14,11 @@ site: string | null, cookies: SignInCookies, } | { "kind": "limitReached", site:
 /**
  * A password the person typed was tried and didn't open it.
  */
-wrong: boolean, } | { "kind": "linkIncomplete", site: string, } | { "kind": "browserCheck", site: string, } | { "kind": "linkNotRecognized", site: string, } | { "kind": "nestedFolders", site: string, } | { "kind": "network", detail: string, } | { "kind": "tooManyRequests", detail: string, site: string | null, 
+wrong: boolean, 
+/**
+ * How many passwords Tsundoku tried by itself before asking, none of which opened it.
+ */
+tried: number, } | { "kind": "linkIncomplete", site: string, } | { "kind": "browserCheck", site: string, } | { "kind": "linkNotRecognized", site: string, } | { "kind": "nestedFolders", site: string, } | { "kind": "network", detail: string, } | { "kind": "tooManyRequests", detail: string, site: string | null, 
 /**
  * In milliseconds since 1970.
  */

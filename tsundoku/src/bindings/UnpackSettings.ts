@@ -15,6 +15,7 @@ place: UnpackPlace,
  */
 after: AfterUnpacking, 
 /**
- * Tried in order on an archive with a password: no blank one, none twice.
+ * Settings → Passwords' list, tried in order on an archive or a link that needs a password, before the ones used
+ * before (`passwords::known`): no blank one, none twice. Kept here, where it was while it was only for archives.
  */
 passwords: Array<string>, };

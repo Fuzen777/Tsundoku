@@ -31,7 +31,7 @@ export function describeHold(hold: Hold): string {
     case "windowDownload":
       return strings.queue.holds.windowDownload(hold.site)
     case "needsPassword":
-      return strings.queue.holds.needsPassword(hold.wrong)
+      return strings.queue.holds.needsPassword(hold.wrong, hold.tried)
   }
 }
 

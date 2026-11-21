@@ -95,6 +95,7 @@ impl QueueStore {
                 caught_links: Vec::new(),
                 unpack_files: None,
                 password: password.and_then(Password::new),
+                archive_password: None,
             });
         }
         Ok(items)

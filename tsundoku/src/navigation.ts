@@ -32,6 +32,7 @@ export const settingsNavItem: NavItem = {
 export const SETTINGS_SECTIONS = [
   { id: "settings-downloads", title: strings.settings.downloads },
   { id: "settings-archives", title: strings.settings.archives },
+  { id: "settings-passwords", title: strings.settings.passwords },
   { id: "settings-adding", title: strings.settings.adding },
   { id: "settings-background", title: strings.settings.backgroundShort },
   { id: "settings-appearance", title: strings.settings.appearance },

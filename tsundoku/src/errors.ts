@@ -125,7 +125,7 @@ export function describePreviewError(error: unknown): ErrorDescription {
     case "passwordProtected":
       return { message: text.passwordProtected(error.site) }
     case "passwordNeeded":
-      return { message: text.passwordNeeded(error.wrong) }
+      return { message: text.passwordNeeded(error.wrong, error.tried) }
     case "linkIncomplete":
       return { message: text.linkIncomplete(error.site) }
     case "browserCheck":

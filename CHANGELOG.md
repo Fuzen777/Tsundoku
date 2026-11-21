@@ -2,6 +2,21 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.6 · 2026-11-21
+
+### Added
+
+- **Passwords are tried before you're asked**: a link that needs a password is first tried with the passwords Tsundoku knows, and asks only when none of them opens it, saying how many it tried. That goes for the preview card, a link in Pending and a download in the queue, which runs again with each one before waiting for you.
+- **Settings → Passwords**: Your Passwords, the list that was in Settings → Archives, is now tried on links too, in its order, before anything else. The passwords you had there are still there.
+- **Save Past Passwords**: off unless you turn it on. While it's on, a password you enter on a link, a download or an archive is kept once it has opened it, apart from your list, and tried after your list the next time: on links from the same site, and on any archive. Settings says how many are kept, and Forget Past Passwords forgets them all.
+- **An archive is also tried with the password that opened its link**, which is often the same one.
+
+### Changed
+
+- **An archive's password is no longer added to your list**: the Password field on a failed download now unpacks that download with what you type, and keeps it as a past password only while Save Past Passwords is on. It says which under the field. To have a password tried every time without that, add it to Your Passwords in Settings.
+- **Links are tried with care**: with 20 passwords at most, and never with a past password from another site, since trying one sends it to the link's site. Archives are opened on your PC, so every past password is tried on them.
+- **Backups** hold the past passwords, and restoring one brings its own back in place of this PC's.
+
 ## 0.2.5 · 2026-11-21
 
 ### Changed

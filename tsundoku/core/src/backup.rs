@@ -304,8 +304,9 @@ fn required_entry<R: Read + io::Seek>(
     Ok(contents)
 }
 
-/// Replaces the history's rows with those of the database at `backup`, in one transaction. Finished downloads leave
-/// the queue: they name their download in the history by its ID, which the backup's history may give another.
+/// Replaces the history's rows with those of the database at `backup`, in one transaction, and the passwords used
+/// before (`passwords::known`) with them. Finished downloads leave the queue: they name their download in the history
+/// by its ID, which the backup's history may give another.
 fn replace_history(database: &Database, backup: &Path) -> Result<(), BackupError> {
     let backup = path_text(backup).map_err(storage_error)?;
     let mut connection = database.lock();
@@ -320,6 +321,8 @@ fn replace_history(database: &Database, backup: &Path) -> Result<(), BackupError
             INSERT INTO main.videos SELECT * FROM backup.videos;
             INSERT INTO main.downloads SELECT * FROM backup.downloads;
             INSERT INTO main.download_files SELECT * FROM backup.download_files;
+            DELETE FROM main.past_passwords;
+            INSERT INTO main.past_passwords SELECT * FROM backup.past_passwords;
             DELETE FROM main.queue_items WHERE state = 'done';",
         )?;
         transaction.commit()

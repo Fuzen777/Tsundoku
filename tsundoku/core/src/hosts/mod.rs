@@ -265,9 +265,7 @@ impl Host {
         };
         let read = read.map_err(|error| match error {
             PreviewError::PasswordProtected { .. } if unlock.is_some() => {
-                PreviewError::PasswordNeeded {
-                    wrong: password.is_some(),
-                }
+                PreviewError::password_needed(password.is_some())
             }
             other => other,
         });

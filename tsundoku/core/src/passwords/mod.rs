@@ -1,8 +1,14 @@
 //! A password a person typed for a link that needs one: kept with its link (a pending link, a queue item, the history's
 //! video), given to the reader and the download beside the link, and never written anywhere else. Its `Debug` hides
-//! it, it has no `Display` or `Serialize`, and what a download logs has it blanked (`hidden_in_arguments`).
+//! it, it has no `Display` or `Serialize`, and what a download logs has it blanked (`hidden_in_arguments`). Before a
+//! person is asked for one, the ones Tsundoku knows are tried (`known`): Settings → Passwords' list, then the ones
+//! used before.
+
+pub mod known;
 
 use std::fmt;
+
+pub use self::known::{ArchivePasswords, KnownPasswords, read_trying};
 
 /// What stands in for a password in a log or a report.
 pub const PASSWORD_PLACEHOLDER: &str = "<password>";

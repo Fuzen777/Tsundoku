@@ -32,7 +32,7 @@ use crate::downloads::{DownloadError, DownloadQueue};
 use crate::history::History;
 use crate::listing::{self, ListingKind};
 use crate::metadata::{self, Fetched, PreviewError, VideoInfo};
-use crate::passwords::Password;
+use crate::passwords::{self, Password};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::preview::VideoPreview;
 use crate::rules::{self, RuleSubject};
@@ -57,8 +57,9 @@ pub enum PendingState {
     Ready,
     /// Couldn't be read: `error` says why.
     Failed,
-    /// Its link needs a password, which the person enters on its row (`PendingLinks::unlock`); `error` says whether one
-    /// was tried. It isn't failed: it never leaves by itself, and it starts once a password opens it if it was started.
+    /// Its link needs a password none of the ones Tsundoku knows opens (`passwords::known`), which the person enters
+    /// on its row (`PendingLinks::unlock`); `error` says whether one was tried. It isn't failed: it never leaves by
+    /// itself, and it starts once a password opens it if it was started.
     NeedsPassword,
     /// A channel, playlist or account: it lists several items, maybe thousands, so nothing starts it (Start, Start All,
     /// Download Right Away, a start before it was read). The person picks what to download from it in the preview
@@ -229,7 +230,8 @@ struct Entry {
     start_when_read: StartWhenRead,
     added_at: i64,
     origin: LinkOrigin,
-    /// The password that opens the link: typed on its row, or the history's for the link once it opened it.
+    /// The password that opens the link: typed on its row, or the one that opened it when it was read (the history's
+    /// for the link, or one Tsundoku knows and tried by itself).
     password: Option<Password>,
 }
 
@@ -896,17 +898,31 @@ impl PendingLinks {
     /// copied link also leaves when there's nothing to download or the history or the queue has it, and starts once
     /// read with Download Right Away on. A channel, playlist or account needs picking, whatever its origin, and
     /// never starts; a second link to one here already is dropped. A site that answers "too many requests" waits
-    /// (`DownloadQueue::slow_down`), and its links are read again once the wait ends.
+    /// (`DownloadQueue::slow_down`), and its links are read again once the wait ends. A link that needs a password is
+    /// tried with the ones Tsundoku knows before it asks (`passwords::read_trying`); one that opens it is kept for
+    /// its site's next links while Save Past Passwords is on.
     fn read(&self, turn: &Turn) {
-        let outcome = self
-            .reader
-            .read(
-                &turn.link,
-                turn.origin == LinkOrigin::Added,
-                turn.password.as_ref(),
-                &turn.cancel,
-            )
-            .map_err(|error| error.after_password(turn.typed));
+        let read = passwords::read_trying(
+            turn.password.clone(),
+            turn.typed,
+            || self.queue.passwords().for_link(&turn.link),
+            &turn.cancel,
+            |password| {
+                self.reader.read(
+                    &turn.link,
+                    turn.origin == LinkOrigin::Added,
+                    password,
+                    &turn.cancel,
+                )
+            },
+        );
+        let (outcome, opened) = match read {
+            Ok((fetched, opened)) => (Ok(fetched), opened),
+            Err(error) => (Err(error), None),
+        };
+        if let Some(password) = &opened {
+            self.queue.passwords().remember(&turn.link, password);
+        }
         match &outcome {
             Err(PreviewError::TooManyRequests { .. }) => {
                 self.queue.slow_down(&turn.link);
@@ -966,7 +982,7 @@ impl PendingLinks {
                     entry.fetched = Some(self.with_left_out_ticked(fetched));
                     entry.error = None;
                     // The password that opened it goes with it to the queue.
-                    entry.password.clone_from(&turn.password);
+                    entry.password.clone_from(&opened);
                     let starts = match entry.start_when_read {
                         StartWhenRead::Yes => true,
                         StartWhenRead::IfRightAway => self.downloads_right_away(entry, &video),
@@ -1216,9 +1232,9 @@ struct Turn {
     id: i64,
     link: String,
     origin: LinkOrigin,
-    /// The password to read it with: the one typed on its row, else the history's for the link.
+    /// The password to read it with first: the one typed on its row, else the history's for the link.
     password: Option<Password>,
-    /// `password` was typed on its row, so it's wrong if the link still needs one.
+    /// `password` was typed on its row, so it's wrong if the link still needs one, and no other is tried.
     typed: bool,
     cancel: CancelToken,
 }

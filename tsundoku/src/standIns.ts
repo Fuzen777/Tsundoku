@@ -620,6 +620,7 @@ export const standIns = {
     },
     hourlyFileLimit: null,
     unpack: { enabled: true, place: "smart", after: "recycleBin", passwords: [] },
+    savePastPasswords: false,
   } satisfies DownloadSettings,
   addingOptions: {
     watchClipboard: true,
@@ -776,7 +777,7 @@ export const standIns = {
       },
     }),
     queueStandIn(12, "waiting", "Behind a Password", {
-      hold: { kind: "needsPassword", wrong: false },
+      hold: { kind: "needsPassword", wrong: false, tried: 2 },
     }),
     queueStandIn(13, "waiting", "Wallpapers 2026", {
       video: withSharedFilesPicked(sharedFolderStandIn.video, [0, 3, 4, 5, 9, 22]),
@@ -891,7 +892,7 @@ export const standIns = {
     }),
     pendingStandIn(12, "https://mega.nz/#P!AgESNFZ4mrwAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eH9VsEHziCLjOu1HNUk6o", {
       state: "needsPassword",
-      error: { kind: "passwordNeeded", wrong: true },
+      error: { kind: "passwordNeeded", wrong: true, tried: 0 },
     }),
     pendingStandIn(16, "https://www.youtube.com/@NASA", { state: "needsPicking", caught: true, listing: "channel" }),
     pendingStandIn(17, "https://x.com/NASA", { state: "needsPicking", caught: true, listing: "account" }),
@@ -947,7 +948,7 @@ export const standIns = {
     return new Promise((resolve, reject) =>
       setTimeout(() => {
         if (link.includes("#P!") && password !== "secret") {
-          reject({ kind: "passwordNeeded", wrong: password !== null })
+          reject({ kind: "passwordNeeded", wrong: password !== null, tried: 0 })
         } else if (link.includes("fail")) {
           reject({ kind: "unavailable", detail: "[youtube] aaaaaaaaaaa: This video is unavailable" })
         } else if (link.includes("images")) {

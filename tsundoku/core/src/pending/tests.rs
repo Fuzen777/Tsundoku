@@ -103,9 +103,7 @@ impl LinkReader for FakeReader {
             match password {
                 Some(given) if given.reveal() == needed => {}
                 given => {
-                    return Err(PreviewError::PasswordNeeded {
-                        wrong: given.is_some(),
-                    });
+                    return Err(PreviewError::password_needed(given.is_some()));
                 }
             }
         }
@@ -352,7 +350,7 @@ impl Test {
                 == reads
                 && self.link(link).is_some_and(|pending| {
                     pending.state == PendingState::NeedsPassword
-                        && pending.error == Some(PreviewError::PasswordNeeded { wrong })
+                        && pending.error == Some(PreviewError::password_needed(wrong))
                 })
         });
     }
@@ -1807,6 +1805,89 @@ fn a_link_downloaded_with_a_password_opens_with_it_again() {
         "without asking"
     );
     assert_eq!(test.reader.passwords_given(FIRST), [Some("pw".to_owned())]);
+}
+
+#[test]
+fn a_link_that_needs_a_password_is_tried_with_the_known_ones_before_asking() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| {
+            settings.downloads.unpack.passwords = vec!["nope".to_owned(), "pw".to_owned()];
+        })
+        .unwrap();
+    test.reader.lock_with(FIRST, "pw");
+    test.reader.lock_with(SECOND, "another");
+    test.add(&[FIRST, SECOND]);
+    test.wait_until_read(FIRST);
+    assert_eq!(
+        test.state(FIRST),
+        Some(PendingState::Ready),
+        "without asking"
+    );
+    assert_eq!(
+        test.reader.passwords_given(FIRST),
+        [None, Some("nope".to_owned()), Some("pw".to_owned())],
+        "the list's, in order, until one opens it"
+    );
+    // None opens the second: it asks, saying how many were tried.
+    wait_until("the second asks", || {
+        test.link(SECOND).is_some_and(|pending| {
+            pending.state == PendingState::NeedsPassword
+                && pending.error
+                    == Some(PreviewError::PasswordNeeded {
+                        wrong: false,
+                        tried: 2,
+                    })
+        })
+    });
+    let id = test.link(FIRST).unwrap().id;
+    test.links.start(&[id], "best-video").unwrap();
+    wait_until("it's in the queue", || test.queued("first").is_some());
+    assert_eq!(
+        test.queued("first")
+            .unwrap()
+            .password
+            .as_ref()
+            .map(Password::reveal),
+        Some("pw"),
+        "the one that opened it goes with it"
+    );
+
+    // A typed one that's wrong says so, without the list being tried again.
+    test.unlock(SECOND, "typo").unwrap();
+    test.wait_until_locked(SECOND, 4, true);
+    assert_eq!(
+        test.queue.passwords().past_count().unwrap(),
+        0,
+        "nothing is kept unless Save Past Passwords is on"
+    );
+}
+
+#[test]
+fn a_typed_password_that_opens_a_link_is_tried_on_its_sites_next_ones() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| settings.downloads.save_past_passwords = true)
+        .unwrap();
+    test.reader.lock_with(FIRST, "pw");
+    test.reader.lock_with(SECOND, "pw");
+    test.add(&[FIRST]);
+    test.wait_until_locked(FIRST, 1, false);
+    test.unlock(FIRST, "pw").unwrap();
+    test.wait_until_read(FIRST);
+    assert_eq!(test.queue.passwords().past_count().unwrap(), 1);
+
+    test.add(&[SECOND]);
+    test.wait_until_read(SECOND);
+    assert_eq!(
+        test.state(SECOND),
+        Some(PendingState::Ready),
+        "without asking"
+    );
+    assert_eq!(
+        test.reader.passwords_given(SECOND),
+        [None, Some("pw".to_owned())]
+    );
 }
 
 const CHANNEL: &str = "https://www.youtube.com/@someone";

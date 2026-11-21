@@ -20,7 +20,7 @@ use crate::listing::saved::{self, SavedListings};
 use crate::listing::{self, Found, Listing, ListingMore, MoreItems, MoreRead};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
-use crate::passwords::Password;
+use crate::passwords::{self, Password};
 use crate::pending::LinkReader;
 use crate::settings::{CookiesBrowser, SettingsStore};
 use crate::short_links::{self, ShortLink};
@@ -108,8 +108,10 @@ impl PreviewService {
     /// queue whether it's in it. A site that answered "too many requests" isn't read until its wait ends
     /// (`DownloadQueue::site_wait`), and an answer of that kind starts one. A link that needs a password is read with
     /// `password`, the one the person typed, or else the one the history keeps for the link, so Download Again never
-    /// asks twice. A listing comes with what its picker loaded before (`with_saved`), or as that alone while its site
-    /// lists no more for now.
+    /// asks twice, then with the ones Tsundoku knows (`passwords::read_trying`) before the person is asked. The one
+    /// that opened it is kept for its download (`KnownPasswords::keep_for_download`), which the card can't give it,
+    /// and for its site's next links while Save Past Passwords is on. A listing comes with what its picker loaded
+    /// before (`with_saved`), or as that alone while its site lists no more for now.
     pub fn fetch(
         &self,
         tools: &ToolManager,
@@ -120,7 +122,7 @@ impl PreviewService {
     ) -> Result<LinkPreview, PreviewError> {
         let link = metadata::normalize_link(text).ok_or(PreviewError::InvalidLink)?;
         let typed = password.is_some();
-        let password = password.or_else(|| history.password_for_link(&link).ok().flatten());
+        let own = password.or_else(|| history.password_for_link(&link).ok().flatten());
         let cancel = CancelToken::new();
         if let Some(previous) = lock(&self.current).replace(cancel.clone()) {
             previous.cancel();
@@ -129,15 +131,32 @@ impl PreviewService {
         self.cancel_counting();
         let fetched = match queue.site_wait(&link) {
             Some(_) => Err(PreviewError::too_many_requests(String::new())),
-            None => read_for_preview(
-                tools,
-                queue.options().cookies_browser,
-                &link,
-                password.as_ref(),
-                None,
-                &cancel,
-            )
-            .map_err(|error| error.after_password(typed)),
+            None => {
+                let cookies_choice = queue.options().cookies_browser;
+                passwords::read_trying(
+                    own,
+                    typed,
+                    || queue.passwords().for_link(&link),
+                    &cancel,
+                    |password| {
+                        read_for_preview(tools, cookies_choice, &link, password, None, &cancel)
+                    },
+                )
+                .map(|(found, opened)| {
+                    if let Some(password) = opened {
+                        queue.passwords().remember(&link, &password);
+                        if let Found::One(fetched) = &found {
+                            let video = &fetched.video;
+                            queue.passwords().keep_for_download(
+                                &video.site,
+                                &video.video_id,
+                                password,
+                            );
+                        }
+                    }
+                    found
+                })
+            }
         };
         let fetched = match fetched {
             Ok(Found::Listing(listing)) => Ok(Found::Listing(self.with_saved(listing))),

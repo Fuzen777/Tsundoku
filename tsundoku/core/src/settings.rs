@@ -313,6 +313,10 @@ pub struct DownloadSettings {
     pub hourly_file_limit: Option<u32>,
     /// Unpacking the archives downloads bring (Settings → Archives).
     pub unpack: UnpackSettings,
+    /// Save Past Passwords (Settings → Passwords): a password that opens a link or an archive is kept, apart from the
+    /// list (`UnpackSettings::passwords`), and tried by itself after it (`passwords::known`). Off unless turned on, and
+    /// in settings saved before 0.2.6.
+    pub save_past_passwords: bool,
 }
 
 /// Unpacking the zip, 7z and rar archives downloads bring, beside them (`unpack`). Settings → Archives edits it.
@@ -325,7 +329,8 @@ pub struct UnpackSettings {
     pub place: UnpackPlace,
     /// What happens to an archive once unpacked.
     pub after: AfterUnpacking,
-    /// Tried in order on an archive with a password: no blank one, none twice.
+    /// Settings → Passwords' list, tried in order on an archive or a link that needs a password, before the ones used
+    /// before (`passwords::known`): no blank one, none twice. Kept here, where it was while it was only for archives.
     pub passwords: Vec<String>,
 }
 
@@ -393,6 +398,7 @@ impl Default for DownloadSettings {
             pacing: SitePacing::default(),
             hourly_file_limit: None,
             unpack: UnpackSettings::default(),
+            save_past_passwords: false,
         }
     }
 }

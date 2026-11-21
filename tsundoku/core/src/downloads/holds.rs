@@ -4,6 +4,7 @@
 //! (`hosts::check`), which waits for them. The queue works each waiting item's hold out whenever it schedules, and a
 //! thread schedules again once one ends.
 
+use std::collections::VecDeque;
 use std::sync::Weak;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -15,6 +16,7 @@ use super::window_offer::Offered;
 use super::{DownloadError, DownloadProgress, DownloadQueue, DownloadStage, QueueItem, QueueState};
 use crate::hosts::check::BrowserCheck;
 use crate::metadata::PreviewError;
+use crate::passwords::Password;
 use crate::settings::DownloadSettings;
 use crate::site_limits::{self, SiteWait, hourly_limit_end, now_ms};
 use crate::sites;
@@ -60,9 +62,67 @@ pub struct Recovery {
     pub(super) window_download: Option<String>,
     /// How far the window's download has got, for its speed: when it started and its last count.
     pub(super) window_meter: Option<WindowMeter>,
-    /// Its link needs a password it doesn't have (`false`), or the one it had didn't open it (`true`): it waits for the
-    /// person to enter one (`Hold::NeedsPassword`, `DownloadQueue::enter_password`).
-    pub(super) needs_password: Option<bool>,
+    /// Its link needs a password none of the ones Tsundoku knows opens: it waits for the person to enter one
+    /// (`Hold::NeedsPassword`, `DownloadQueue::enter_password`).
+    pub(super) needs_password: Option<PasswordAsked>,
+    /// The passwords Tsundoku knows, tried by themselves since its link was found to need one
+    /// (`DownloadQueue::try_next_password`). `None` until then, so a fresh start tries them again.
+    pub(super) password_tries: Option<PasswordTries>,
+}
+
+/// What a download that waits for its password says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct PasswordAsked {
+    /// The one it had, the person's own, didn't open it.
+    pub(super) wrong: bool,
+    /// How many of the passwords Tsundoku knows were tried by themselves, none of which opened it.
+    pub(super) tried: u32,
+}
+
+/// The passwords Tsundoku knows (`KnownPasswords::for_link`), tried one run each on a download whose link needs one,
+/// before the person is asked.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(super) struct PasswordTries {
+    /// Still to try, in order.
+    left: VecDeque<Password>,
+    /// The download's password is one of them, not the person's own.
+    trying: bool,
+    /// How many didn't open it since the person was last asked.
+    failed: u32,
+}
+
+impl PasswordTries {
+    pub(super) fn new(passwords: impl IntoIterator<Item = Password>) -> Self {
+        Self {
+            left: passwords.into_iter().collect(),
+            trying: false,
+            failed: 0,
+        }
+    }
+
+    /// After a run with `had` (whether the download had a password) found the link still needs one: the next
+    /// password to run with, or what to ask the person once none is left.
+    pub(super) fn after_failure(&mut self, had: bool) -> Result<Password, PasswordAsked> {
+        let own_failed = had && !self.trying;
+        if self.trying {
+            self.failed += 1;
+        }
+        match self.left.pop_front() {
+            Some(next) => {
+                self.trying = true;
+                Ok(next)
+            }
+            None => {
+                let asked = PasswordAsked {
+                    wrong: own_failed,
+                    tried: self.failed,
+                };
+                self.trying = false;
+                self.failed = 0;
+                Err(asked)
+            }
+        }
+    }
 }
 
 /// The window's download's progress over time, for its speed and time left.
@@ -189,8 +249,9 @@ pub enum Hold {
     /// whose download works only in the window's own session); the download then moves it into place.
     WindowDownload { site: String },
     /// Its link needs a password: it waits, without end, until the person enters one (`enter_password`). `wrong` when
-    /// the one it had didn't open it.
-    NeedsPassword { wrong: bool },
+    /// the one it had didn't open it; `tried` is how many of the passwords Tsundoku knows it ran with first, none of
+    /// which opened it.
+    NeedsPassword { wrong: bool, tried: u32 },
 }
 
 impl Hold {
@@ -431,8 +492,11 @@ impl DownloadQueue {
         if item.recovery.offer.is_some() {
             return None;
         }
-        if let Some(wrong) = item.recovery.needs_password {
-            return Some(Hold::NeedsPassword { wrong });
+        if let Some(asked) = item.recovery.needs_password {
+            return Some(Hold::NeedsPassword {
+                wrong: asked.wrong,
+                tried: asked.tried,
+            });
         }
         if let Some(check) = &item.recovery.check {
             return Some(Hold::BrowserCheck {

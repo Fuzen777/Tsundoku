@@ -228,6 +228,42 @@ pub fn enter_download_password(
     queue.enter_password(id, password)
 }
 
+/// A password for an archive a failed download brought, which none of the passwords Tsundoku knows opened: it's tried
+/// on its archives with them, and the download is retried, which only unpacks.
+#[tauri::command]
+pub fn enter_archive_password(
+    queue: Queue<'_>,
+    id: i64,
+    password: String,
+) -> Result<(), DownloadError> {
+    let password = Password::new(password).ok_or(DownloadError::WrongState)?;
+    queue.enter_archive_password(id, password)
+}
+
+/// How many passwords used before are kept, for Settings → Passwords: those that opened a link or an archive while
+/// Save Past Passwords was on. Never the passwords themselves.
+#[tauri::command]
+pub fn past_password_count(queue: Queue<'_>) -> Result<u32, DownloadError> {
+    queue
+        .passwords()
+        .past_count()
+        .map_err(|error| DownloadError::Storage {
+            detail: error.to_string(),
+        })
+}
+
+/// Forget Past Passwords: every password used before is forgotten. Settings' list stays, and so does each download's
+/// own password.
+#[tauri::command]
+pub fn forget_past_passwords(queue: Queue<'_>) -> Result<(), DownloadError> {
+    queue
+        .passwords()
+        .forget_past()
+        .map_err(|error| DownloadError::Storage {
+            detail: error.to_string(),
+        })
+}
+
 /// Saves a download that isn't running in a folder picked for it, or back in the rules' (`None`).
 #[tauri::command]
 pub fn set_queue_folder(

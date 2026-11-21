@@ -860,6 +860,7 @@ pub(super) fn item_in(state: QueueState) -> QueueItem {
         caught_links: Vec::new(),
         unpack_files: None,
         password: None,
+        archive_password: None,
     }
 }
 
@@ -1078,6 +1079,7 @@ fn checks_and_saves_the_options() {
                     .map(str::to_owned)
                     .to_vec(),
             },
+            save_past_passwords: true,
         })
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
@@ -1088,6 +1090,7 @@ fn checks_and_saves_the_options() {
         "blank ones and repeats dropped, spaces kept"
     );
     assert!(!saved.unpack.enabled);
+    assert!(saved.save_past_passwords);
     assert_eq!(saved.unpack.place, crate::settings::UnpackPlace::InPlace);
     assert_eq!(saved.post_file_name, "{site} {post} {number}", "trimmed");
     assert_eq!(saved.rate_limit.as_deref(), Some("4.2M"));
@@ -2885,7 +2888,7 @@ fn a_pasted_download_link_gets_a_waiting_download_past_its_check() {
 
 fn needs_a_password() -> JobOutcome {
     JobOutcome::Failed(DownloadError::YtDlp {
-        error: PreviewError::PasswordNeeded { wrong: true },
+        error: PreviewError::password_needed(true),
     })
 }
 
@@ -2897,7 +2900,11 @@ fn a_download_that_needs_a_password_waits_for_one_then_starts_with_it() {
     assert_eq!(test.runner.last_job(id).password, None);
     test.runner.complete(id, needs_a_password());
     wait_until("it waits for a password", || {
-        test.item(id).hold == Some(Hold::NeedsPassword { wrong: false })
+        test.item(id).hold
+            == Some(Hold::NeedsPassword {
+                wrong: false,
+                tried: 0,
+            })
     });
     let item = test.item(id);
     assert_eq!(
@@ -2931,7 +2938,11 @@ fn a_download_that_needs_a_password_waits_for_one_then_starts_with_it() {
     );
     test.runner.complete(id, needs_a_password());
     wait_until("it asks again, saying it was wrong", || {
-        test.item(id).hold == Some(Hold::NeedsPassword { wrong: true })
+        test.item(id).hold
+            == Some(Hold::NeedsPassword {
+                wrong: true,
+                tried: 0,
+            })
     });
     assert_eq!(test.item(id).password, None, "a wrong one isn't kept");
     let saved: Option<String> = test
@@ -3047,4 +3058,268 @@ fn a_downloads_password_is_saved_with_it_and_never_sent_to_the_ui() {
             .all(|job| job.password.as_ref().map(Password::reveal) == Some("hunter2"))
     );
     reopened.cancel(id).unwrap();
+}
+
+impl Test {
+    /// Settings → Passwords: its list, and Save Past Passwords.
+    fn know_passwords(&self, listed: &[&str], save_past: bool) {
+        self.settings
+            .update(|settings| {
+                settings.downloads.unpack.passwords =
+                    listed.iter().map(|text| (*text).to_owned()).collect();
+                settings.downloads.save_past_passwords = save_past;
+            })
+            .unwrap();
+    }
+
+    /// The password the download's latest run was given.
+    fn ran_with(&self, id: i64) -> Option<String> {
+        self.runner
+            .last_job(id)
+            .password
+            .as_ref()
+            .map(|password| password.reveal().to_owned())
+    }
+
+    /// The password saved with the download.
+    fn saved_password(&self, id: i64) -> Option<String> {
+        self.database
+            .lock()
+            .query_row(
+                "SELECT password FROM queue_items WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+}
+
+#[test]
+fn a_download_that_needs_a_password_runs_with_each_known_one_before_asking() {
+    let test = Test::new();
+    test.know_passwords(&["one", "two"], false);
+    let id = test.add("locked");
+    wait_until("it runs", || test.times_started(id) == 1);
+    assert_eq!(test.ran_with(id), None);
+    for (run, password) in [(2, "one"), (3, "two")] {
+        test.runner.complete(id, needs_a_password());
+        wait_until("it runs with the next one", || {
+            test.times_started(id) == run
+        });
+        assert_eq!(test.ran_with(id).as_deref(), Some(password));
+        assert_eq!(
+            test.saved_password(id),
+            None,
+            "one being tried isn't saved with it"
+        );
+    }
+    test.runner.complete(id, needs_a_password());
+    wait_until("it asks, saying how many it tried", || {
+        test.item(id).hold
+            == Some(Hold::NeedsPassword {
+                wrong: false,
+                tried: 2,
+            })
+    });
+    assert_eq!(test.item(id).password, None);
+
+    // A typed one that's wrong asks again, without the known ones being tried anew.
+    test.queue
+        .enter_password(id, Password::new("typo").unwrap())
+        .unwrap();
+    wait_until("it runs with it", || test.times_started(id) == 4);
+    test.runner.complete(id, needs_a_password());
+    wait_until("it asks again", || {
+        test.item(id).hold
+            == Some(Hold::NeedsPassword {
+                wrong: true,
+                tried: 0,
+            })
+    });
+    thread::sleep(Duration::from_millis(300));
+    assert_eq!(test.times_started(id), 4);
+    test.cancel_all();
+}
+
+#[test]
+fn a_known_password_that_opens_a_download_is_kept_with_it() {
+    let test = Test::new();
+    test.know_passwords(&["nope", "right"], true);
+    let id = test.add("locked");
+    wait_until("it runs", || test.times_started(id) == 1);
+    test.runner.complete(id, needs_a_password());
+    wait_until("it runs with the first", || test.times_started(id) == 2);
+    test.runner.complete(id, needs_a_password());
+    wait_until("it runs with the second", || test.times_started(id) == 3);
+    assert_eq!(test.ran_with(id).as_deref(), Some("right"));
+    test.runner.complete(id, test.finished_file("locked.mkv"));
+    wait_until("it finishes", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(test.saved_password(id).as_deref(), Some("right"));
+    assert_eq!(
+        test.history
+            .password_for("youtube", "locked")
+            .unwrap()
+            .as_ref()
+            .map(Password::reveal),
+        Some("right"),
+        "the history keeps it for Download Again"
+    );
+    assert_eq!(
+        test.queue.passwords().past_count().unwrap(),
+        0,
+        "the list's own isn't a past one"
+    );
+}
+
+#[test]
+fn a_typed_password_that_opens_a_download_is_tried_on_its_sites_next_ones() {
+    let test = Test::new();
+    test.know_passwords(&[], true);
+    let id = test.add("locked");
+    wait_until("it runs", || test.times_started(id) == 1);
+    test.runner.complete(id, needs_a_password());
+    wait_until("it asks", || {
+        test.item(id).hold
+            == Some(Hold::NeedsPassword {
+                wrong: false,
+                tried: 0,
+            })
+    });
+    test.queue
+        .enter_password(id, Password::new("typed").unwrap())
+        .unwrap();
+    wait_until("it runs with it", || test.times_started(id) == 2);
+    assert_eq!(
+        test.queue.passwords().past_count().unwrap(),
+        0,
+        "not before it opened the link"
+    );
+    test.runner.complete(id, test.finished_file("locked.mkv"));
+    wait_until("it finishes", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(test.queue.passwords().past_count().unwrap(), 1);
+
+    // Another video of the site that needs one: tried with it before asking.
+    let next = test.add("locked-too");
+    wait_until("it runs", || test.times_started(next) == 1);
+    assert_eq!(test.ran_with(next), None);
+    test.runner.complete(next, needs_a_password());
+    wait_until("it runs with the past one", || {
+        test.times_started(next) == 2
+    });
+    assert_eq!(test.ran_with(next).as_deref(), Some("typed"));
+    test.runner
+        .complete(next, test.finished_file("locked-too.mkv"));
+    wait_until("it finishes", || test.state(next) == Some(QueueState::Done));
+
+    // Save Past Passwords off again: kept, but no longer tried.
+    test.know_passwords(&[], false);
+    let last = test.add("locked-three");
+    wait_until("it runs", || test.times_started(last) == 1);
+    test.runner.complete(last, needs_a_password());
+    wait_until("it asks at once", || {
+        test.item(last).hold
+            == Some(Hold::NeedsPassword {
+                wrong: false,
+                tried: 0,
+            })
+    });
+    assert_eq!(test.times_started(last), 1);
+    test.cancel_all();
+}
+
+#[test]
+fn the_password_the_preview_card_opened_a_link_with_goes_to_its_download() {
+    let test = Test::new();
+    test.queue.passwords().keep_for_download(
+        "youtube",
+        "opened",
+        Password::new("found by itself").unwrap(),
+    );
+    let id = test.add("opened");
+    wait_until("it runs", || test.times_started(id) == 1);
+    assert_eq!(test.ran_with(id).as_deref(), Some("found by itself"));
+    assert_eq!(
+        test.saved_password(id).as_deref(),
+        Some("found by itself"),
+        "it opened the link when it was read"
+    );
+    let other = test.add("another");
+    wait_until("it runs", || test.times_started(other) == 1);
+    assert_eq!(test.ran_with(other), None);
+    test.cancel_all();
+}
+
+#[test]
+fn an_archives_password_is_tried_with_the_known_ones_and_kept_once_it_opens_one() {
+    let test = Test::new();
+    test.know_passwords(&["listed"], true);
+    let id = test.add("album");
+    wait_until("it runs", || test.times_started(id) == 1);
+    let first = test.runner.last_job(id).unpack.unwrap();
+    assert_eq!(
+        (first.passwords, first.listed),
+        (vec!["listed".to_owned()], 1)
+    );
+    assert_eq!(
+        test.queue
+            .enter_archive_password(id, Password::new("typed").unwrap()),
+        Err(DownloadError::WrongState),
+        "only for a download that failed"
+    );
+
+    let archive = test.folder.path().join("downloads").join("Album.rar");
+    fs::create_dir_all(archive.parent().unwrap()).unwrap();
+    fs::write(&archive, b"rar").unwrap();
+    let files = DownloadedFiles {
+        settled: Vec::new(),
+        archives: vec![archive],
+        shared: Vec::new(),
+    };
+    test.runner.complete(
+        id,
+        JobOutcome::NotUnpacked {
+            files: files.clone(),
+            error: Some(DownloadError::Unpack {
+                archive: "Album.rar".to_owned(),
+                problem: crate::unpack::UnpackProblem::WrongPassword { tried: 1 },
+            }),
+        },
+    );
+    wait_until("it fails", || test.state(id) == Some(QueueState::Failed));
+
+    test.queue
+        .enter_archive_password(id, Password::new("typed").unwrap())
+        .unwrap();
+    wait_until("it runs again", || test.times_started(id) == 2);
+    let job = test.runner.last_job(id);
+    assert_eq!(job.unpack_only, Some(files), "which only unpacks");
+    let unpack = job.unpack.unwrap();
+    assert_eq!(
+        (unpack.passwords.clone(), unpack.listed),
+        (vec!["listed".to_owned(), "typed".to_owned()], 1),
+        "the list's first, then the one typed for it"
+    );
+    assert_eq!(
+        test.settings.get().downloads.unpack.passwords,
+        ["listed"],
+        "which never joins the list"
+    );
+    assert_eq!(test.queue.passwords().past_count().unwrap(), 0);
+
+    // Unpacking tells which password opened the archive: it's kept for the next ones.
+    unpack.opened.unwrap().tell("typed");
+    assert_eq!(test.queue.passwords().past_count().unwrap(), 1);
+    test.runner
+        .complete(id, test.finished_file("Album/song.flac"));
+    wait_until("it finishes", || test.state(id) == Some(QueueState::Done));
+    assert_eq!(test.item(id).archive_password, None);
+
+    let next = test.add("another-album");
+    wait_until("it runs", || test.times_started(next) == 1);
+    assert_eq!(
+        test.runner.last_job(next).unpack.unwrap().passwords,
+        ["listed", "typed"],
+        "tried on the next download's archives by itself"
+    );
+    test.cancel_all();
 }
