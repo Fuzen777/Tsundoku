@@ -318,6 +318,11 @@ pub enum PreviewError {
         #[ts(type = "number | null")]
         until: Option<i64>,
     },
+    /// The site lets a listing be read only so far at a time, and that's used up for now: X's 50 requests per list
+    /// every 15 minutes (`listing::x_media`). Unlike `TooManyRequests`, nothing else on the site waits for it: its
+    /// downloads go on. A listing's Load More, Load New and Load All sit the wait out instead of failing with it.
+    #[error("{site} lists no more for now")]
+    ListingPaused { site: String },
     /// The tool couldn't read the site's page, which an update of the tool often fixes.
     #[error("site error: {detail}")]
     SiteError {

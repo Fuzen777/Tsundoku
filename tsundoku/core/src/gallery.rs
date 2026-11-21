@@ -90,13 +90,35 @@ pub(crate) fn run_logged(
     timeout: Duration,
     cancel: &CancelToken,
 ) -> Result<LoggedAnswer, PreviewError> {
+    run_watched(tools, link, extra, timeout, cancel, &mut |_| {})
+}
+
+/// As `run_logged`, handing each line gallery-dl logs to `on_log` as it writes it, for a read that may say it waits
+/// (`waits_until`) long before it answers.
+pub(crate) fn run_watched(
+    tools: &GalleryTools,
+    link: &str,
+    extra: &[&str],
+    timeout: Duration,
+    cancel: &CancelToken,
+    on_log: &mut dyn FnMut(&str),
+) -> Result<LoggedAnswer, PreviewError> {
     let Some(gallery_dl) = tools.gallery_dl else {
         return Err(PreviewError::ImagesNotSetUp);
     };
-    let output = process::run_collecting_with_cancel(
+    let mut json = String::new();
+    let mut log = Vec::new();
+    let status = process::run(
         &command(tools, gallery_dl, extra, link),
         cancel,
-        timeout,
+        Some(timeout),
+        |line| match line {
+            OutputLine::Stdout(text) => json.push_str(&text),
+            OutputLine::Stderr(text) => {
+                on_log(&text);
+                log.push(text);
+            }
+        },
     )
     .map_err(|error| match error {
         RunError::Start { source, .. } => PreviewError::Tool {
@@ -112,29 +134,40 @@ pub(crate) fn run_logged(
         },
     })?;
 
-    let stderr: Vec<&str> = output
-        .lines
-        .iter()
-        .filter_map(|line| match line {
-            OutputLine::Stderr(text) => Some(text.as_str()),
-            OutputLine::Stdout(_) => None,
-        })
-        .collect();
-    if !output.status.success() {
-        return Err(classify_exit(output.status.code(), &stderr));
+    if !status.success() {
+        let stderr: Vec<&str> = log.iter().map(String::as_str).collect();
+        return Err(classify_exit(status.code(), &stderr));
     }
-    Ok(LoggedAnswer {
-        json: output.stdout().collect(),
-        log: stderr.into_iter().map(str::to_owned).collect(),
-    })
+    Ok(LoggedAnswer { json, log })
+}
+
+/// gallery-dl's options that make a read of X stop once X's limit on the list's requests is used up, rather than wait
+/// for it to reset (its `ratelimit`, "wait" unless told): the answer then ends with the error `stopped_at_limit`
+/// knows, after the posts read before it. X allows 50 requests per list every 15 minutes, and gallery-dl stops with 1
+/// to 5 of them left.
+pub(crate) const STOP_AT_LIMIT: [&str; 2] = ["-o", "ratelimit=abort"];
+
+/// gallery-dl's line when it waits for a site's limit to reset before asking again ("Waiting for 14 minutes until
+/// 01:12:17 (rate limit)"), as X's own header says when that is: the local time of day it waits until, in seconds
+/// since midnight. `None` for any other line.
+pub(crate) fn waits_until(line: &str) -> Option<u32> {
+    let (_, rest) = line.split_once("] Waiting ")?;
+    let (_, time) = rest.strip_suffix(" (rate limit)")?.rsplit_once("until ")?;
+    let mut parts = time.splitn(3, ':').map(|part| {
+        (part.len() == 2)
+            .then(|| part.parse::<u32>().ok())
+            .flatten()
+    });
+    let (hours, minutes, seconds) = (parts.next()??, parts.next()??, parts.next()??);
+    (hours < 24 && minutes < 60 && seconds < 60).then_some(hours * 3600 + minutes * 60 + seconds)
 }
 
 /// The longest cursor taken from gallery-dl's log.
 const CURSOR_LENGTH: usize = 1024;
 
 /// Where gallery-dl was in an account's posts when it stopped, from the last "Cursor: …" line it logged with
-/// `--verbose`: Instagram logs it each time it moves on to the next page of 12 (X does too, but Tsundoku doesn't start
-/// X from it: `listing::X_PAGING` says why), so it's the page after the last one read whole. `-o cursor=<it>` starts a
+/// `--verbose`: Instagram logs it each time it moves on to the next page of 12, and X to the next page of either of an
+/// account's lists (`listing::x_media`), so it's the page after the last one read whole. `-o cursor=<it>` starts a
 /// later read on that page. `None` when it logged none, or one that doesn't look like a cursor (letters, digits and
 /// `-_=+/.:%`), which isn't passed on.
 pub(crate) fn last_cursor(log: &[String]) -> Option<String> {
@@ -267,8 +300,36 @@ pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewE
 /// Reads gallery-dl's answer for an account's posts (`--post-range` limits how many): every post with its files, in
 /// the answer's order, and the account they're from.
 pub(crate) fn parse_posts(json: &str, link: &str) -> Result<FoundPosts, PreviewError> {
-    let messages = read_messages(json)?;
-    let answer = sort_answer(&messages)?;
+    found_posts(&read_messages(json)?, link)
+}
+
+/// As `parse_posts`, for a read told to stop at the site's limit on its requests (`STOP_AT_LIMIT`): the posts read
+/// before it stopped there, and whether it did.
+pub(crate) fn parse_posts_before_limit(
+    json: &str,
+    link: &str,
+) -> Result<(FoundPosts, bool), PreviewError> {
+    let mut messages = read_messages(json)?;
+    let limited = messages.last().is_some_and(stopped_at_limit);
+    if limited {
+        messages.pop();
+    }
+    Ok((found_posts(&messages, link)?, limited))
+}
+
+/// Whether a message of gallery-dl's answer is its error for a site's limit used up, which `STOP_AT_LIMIT` makes it
+/// end a read of X with: `[-1, {"error": "AbortExtraction", "message": "Rate limit exceeded"}]`.
+fn stopped_at_limit(message: &Value) -> bool {
+    let Some([kind, error]) = message.as_array().map(Vec::as_slice) else {
+        return false;
+    };
+    kind.as_i64() == Some(-1)
+        && text(error, "error").as_deref() == Some("AbortExtraction")
+        && text(error, "message").is_some_and(|message| message.starts_with("Rate limit exceeded"))
+}
+
+fn found_posts(messages: &[Value], link: &str) -> Result<FoundPosts, PreviewError> {
+    let answer = sort_answer(messages)?;
     let account = answer
         .posts
         .first()
@@ -781,6 +842,67 @@ mod tests {
             None,
             "not a cursor"
         );
+    }
+
+    #[test]
+    fn reads_until_when_gallery_dl_waits() {
+        assert_eq!(
+            waits_until("[twitter][info] Waiting for 14 minutes until 01:12:17 (rate limit)"),
+            Some(3600 + 12 * 60 + 17)
+        );
+        assert_eq!(
+            waits_until("[twitter][info] Waiting for 37 seconds until 23:59:59 (rate limit)"),
+            Some(24 * 3600 - 1)
+        );
+        assert_eq!(
+            waits_until("[twitter][info] Waiting for 1h 2min until 00:00:00 (rate limit)"),
+            Some(0)
+        );
+        // Not a wait for a limit, or not a time of day.
+        for line in [
+            "[urllib3.connectionpool][debug] https://x.com:443 \"GET /i/api/graphql/a/UserPhotoTimeline HTTP/1.1\" 200 None",
+            "[twitter][debug] Sleeping 6.21 seconds (request)",
+            "[twitter][info] Waiting for 14 minutes until 01:12:17 (extractor)",
+            "[twitter][info] Waiting for 14 minutes until 25:12:17 (rate limit)",
+            "[twitter][info] Waiting for 14 minutes until 1:12 (rate limit)",
+            "Waiting for 14 minutes until 01:12:17 (rate limit)",
+        ] {
+            assert_eq!(waits_until(line), None, "{line}");
+        }
+    }
+
+    #[test]
+    fn keeps_the_posts_read_before_a_sites_limit() {
+        let link = "https://x.com/NASA/media?filter=photos";
+        let whole = fixture("twitter-images.json");
+        let (found, limited) = parse_posts_before_limit(&whole, link).unwrap();
+        assert_eq!((found.posts.len(), limited), (1, false));
+
+        // As a read told to stop at X's limit ends: its posts, then gallery-dl's error.
+        let mut messages: Vec<Value> = serde_json::from_str(&whole).unwrap();
+        messages.push(serde_json::json!([
+            -1,
+            {"error": "AbortExtraction", "message": "Rate limit exceeded"}
+        ]));
+        let cut_short = serde_json::to_string(&messages).unwrap();
+        let (found, limited) = parse_posts_before_limit(&cut_short, link).unwrap();
+        assert_eq!((found.posts.len(), limited), (1, true));
+        assert_eq!(found.posts[0].video_id, "2105698284354367897");
+        // Read as any other answer, the error fails it.
+        assert!(matches!(
+            parse_posts(&cut_short, link),
+            Err(PreviewError::TooManyRequests { .. })
+        ));
+
+        // The limit met at the first request: nothing read.
+        let at_once = r#"[[-1, {"error": "AbortExtraction", "message": "Rate limit exceeded"}]]"#;
+        let (found, limited) = parse_posts_before_limit(at_once, link).unwrap();
+        assert_eq!((found.posts.len(), found.answered, limited), (0, 0, true));
+
+        // Any other error still fails the read.
+        let refused =
+            r#"[[-1, {"error": "AbortExtraction", "message": "Dependency: Unspecified"}]]"#;
+        assert!(parse_posts_before_limit(refused, link).is_err());
     }
 
     #[test]

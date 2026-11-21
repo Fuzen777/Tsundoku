@@ -151,6 +151,24 @@ const MIGRATIONS: &[&str] = &[
     // 17: the channel, playlist or account a queue item was picked from (`downloads::QueueSource`), as JSON, so the
     // Queue keeps showing the downloads of one source together. NULL for a link added on its own.
     "ALTER TABLE queue_items ADD COLUMN source TEXT;",
+    // 18: what a listing's picker loaded past its first items (listing/saved.rs), by the listing's page: what the
+    // listing is and where its next items start, as JSON, and each item once, in the order they were listed. Kept so
+    // opening the listing again goes on from there; forgotten 30 days after its last load.
+    "CREATE TABLE saved_listings (
+        link TEXT PRIMARY KEY,
+        listing TEXT NOT NULL,
+        more TEXT,
+        total INTEGER,
+        saved_at INTEGER NOT NULL
+    );
+    CREATE TABLE saved_listing_items (
+        id INTEGER PRIMARY KEY,
+        link TEXT NOT NULL REFERENCES saved_listings (link) ON DELETE CASCADE,
+        site TEXT NOT NULL,
+        video_id TEXT NOT NULL,
+        item TEXT NOT NULL,
+        UNIQUE (link, site, video_id)
+    );",
 ];
 
 pub struct Database {

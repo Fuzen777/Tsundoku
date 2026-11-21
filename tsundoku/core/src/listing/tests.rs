@@ -836,6 +836,7 @@ fn a_check_of_an_account_reads_its_first_answer_then_the_newest_only_when_it_mus
         thumbnail_url: None,
         total: Some(count),
         media_total: None,
+        pace: None,
         newest_only: true,
         items: Vec::new(),
         more: more.then(|| ListingMore {
@@ -919,4 +920,102 @@ fn reads_whole_pages() {
     assert_eq!(whole_pages(12, 12), 12);
     assert_eq!(whole_pages(13, 12), 24);
     assert_eq!(whole_pages(0, 12), 12, "at least a page");
+}
+
+/// Reads an X account as its picker does, with the network and a signed-in browser's cookies: its newest 50, then
+/// Load More, printing what each read hands over and where the next one starts. With `X_LIVE_ALL=<posts>`, it then
+/// loads on as Load All does until that many are listed, saying when X's limit makes it wait, which a big account
+/// meets after about 1,000 posts (and then waits up to 15 minutes).
+///
+/// `X_LIVE=<handle> X_LIVE_GALLERY_DL=<gallery-dl.exe> X_LIVE_COOKIES=<--cookies-from-browser value>
+/// cargo test -p tsundoku-core --lib x_live -- --ignored --nocapture`
+#[test]
+#[ignore = "reads x.com with a signed-in browser's cookies"]
+fn x_live_lists_an_account() {
+    let variable = |name: &str| std::env::var(name).ok().filter(|value| !value.is_empty());
+    let Some(handle) = variable("X_LIVE") else {
+        println!("X_LIVE isn't set");
+        return;
+    };
+    let gallery_dl = variable("X_LIVE_GALLERY_DL").map(std::path::PathBuf::from);
+    let images = GalleryTools {
+        gallery_dl: gallery_dl.as_deref(),
+        cookies: variable("X_LIVE_COOKIES"),
+        caches: None,
+    };
+    let videos = FetchTools::default();
+    let cancel = CancelToken::new();
+    let listing = listing_link(&format!("https://x.com/{handle}")).expect("an X account");
+    let started = Instant::now();
+    let seconds = |started: Instant| started.elapsed().as_secs_f32();
+    let describe = |items: &[ListedItem]| {
+        let id = |item: Option<&ListedItem>| item.map(|item| item.video.video_id.clone());
+        format!(
+            "{} posts, {:?} to {:?}",
+            items.len(),
+            id(items.first()),
+            id(items.last())
+        )
+    };
+
+    let first = read(&videos, &images, &listing, &cancel).unwrap();
+    println!(
+        "{:.1} s: {} ({:?} photos & videos): {}
+  next: {:?}
+  set aside: {}",
+        seconds(started),
+        first.title,
+        first.media_total,
+        describe(&first.items),
+        first.more.as_ref().and_then(|more| more.media.as_ref()),
+        first.also_read.len(),
+    );
+    let Some(mut more) = first.more else {
+        return;
+    };
+    let mut listed: HashSet<String> = first
+        .items
+        .iter()
+        .map(|item| item.video.video_id.clone())
+        .collect();
+    let all = variable("X_LIVE_ALL").and_then(|count| count.parse::<usize>().ok());
+    for kind in [Some(MoreRead::Next), all.map(|_| MoreRead::All)]
+        .into_iter()
+        .flatten()
+    {
+        let mut next = None;
+        let result = read_more(
+            &videos,
+            &images,
+            &more,
+            kind,
+            &cancel,
+            &mut |batch| {
+                let new = batch
+                    .items
+                    .iter()
+                    .filter(|item| listed.insert(item.video.video_id.clone()))
+                    .count();
+                println!(
+                    "{:.1} s: {kind:?}: {}, {new} of them new, {} listed
+  next: {:?}",
+                    seconds(started),
+                    describe(&batch.items),
+                    listed.len(),
+                    batch.more.as_ref().and_then(|more| more.media.as_ref()),
+                );
+                next = batch.more;
+                if all.is_some_and(|all| listed.len() >= all) {
+                    cancel.cancel();
+                }
+                Ok(new as u32)
+            },
+            &|until| println!("{:.1} s: waits until {until:?}", seconds(started)),
+        );
+        println!("{:.1} s: {kind:?} ended: {result:?}", seconds(started));
+        match next {
+            Some(next) => more = next,
+            None => return,
+        }
+    }
 }

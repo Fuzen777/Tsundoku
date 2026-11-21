@@ -141,6 +141,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
         message: text.tooManyRequests(error.site, error.until === null ? null : formatClockTime(error.until)),
         detail: error.detail || undefined,
       }
+    case "listingPaused":
+      return { message: text.listingPaused(error.site) }
     case "siteError":
       return { message: text.siteError, detail: error.detail }
     case "failed":

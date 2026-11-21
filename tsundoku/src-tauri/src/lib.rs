@@ -192,7 +192,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         }),
     });
     let pending = PendingLinks::open(PendingServices {
-        database,
+        database: Arc::clone(&database),
         history: Arc::clone(&history),
         queue: Arc::clone(&queue),
         presets: Arc::clone(&presets),
@@ -219,7 +219,9 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(queue);
     app.manage(pending);
     app.manage(watched_sources);
-    app.manage(Arc::new(PreviewService::new()));
+    app.manage(Arc::new(PreviewService::keeping_listings(Arc::clone(
+        &database,
+    ))));
     background::start(app.handle(), &settings);
     // Click'n'Load buttons' links, while Settings → Adding Links takes them.
     app.manage(click_n_load::ClickNLoad::default());

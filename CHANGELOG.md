@@ -2,6 +2,19 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.4 · 2026-11-21
+
+### Added
+
+- **Load All on big X accounts**: X lists an account's posts only so far at a time, about 1,000 posts, then makes the next ones wait up to 15 minutes, so Load All on an account of thousands used to hang and give up. It now waits and goes on by itself: the card says "Paused by X, resuming at 4:46 AM" with the time left, taken from what X itself says, the posts listed so far stay there to tick and download meanwhile, and the listing continues where it stopped once X answers again, as often as it takes. Load More and Load 50 New wait the same way, and Stop works during a wait.
+- **How long it takes**: on an X account too big to list in one go, a line under Load All says how X paces it and how long the whole listing takes at most, by X's count of the account's photos and videos ("up to 7 hours"). It often ends sooner: X's lists don't always reach an old account's first posts.
+- **A listing remembers what it loaded**: what Load More, Load 50 New and Load All listed is kept for 30 days, for channels and accounts on every site. Opening the same channel or account again shows its newest items together with everything listed before, and the buttons go on from where they stopped, even after Tsundoku was closed. One listed whole opens whole.
+
+### Changed
+
+- **X accounts continue instead of starting over**: each read of an X account now starts on the page where the last one stopped, rather than reading the account from its newest post again, so Load More takes the same few seconds however far down the list is. Its first list and Load More show 50 posts or more, the next 50 of its photos or of its videos with the other kind's posts among them, rather than exactly 50.
+- **Another X account while X makes one wait**: reading an X account when X's allowance is used up now says so at once ("X lists only so many posts every 15 minutes…") instead of waiting 5 minutes and failing.
+
 ## 0.2.3 · 2026-11-21
 
 ### Added

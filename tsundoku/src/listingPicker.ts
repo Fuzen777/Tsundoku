@@ -1,6 +1,7 @@
 import type { ListedItem } from "./bindings/ListedItem"
 import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
+import type { ListingPace } from "./bindings/ListingPace"
 import type { QueuePick } from "./bindings/QueuePick"
 import type { QueueSource } from "./bindings/QueueSource"
 import type { VideoInfo } from "./bindings/VideoInfo"
@@ -250,6 +251,19 @@ export function mediaCount(
 ): MediaCount | null {
   if (listing.mediaTotal === null || postTotal !== null) return null
   return { total: listing.mediaTotal, listed: filesIn(items) }
+}
+
+/**
+ * How many minutes listing the rest of an account takes at most when its site lists only so far before making the read
+ * wait (X: `Listing.pace`), from the site's count of its photos and videos: a wait for each stretch the rest fills, the
+ * reading itself being seconds. At most, since the site counts files, of which a post may hold several, and counts
+ * every one the account ever posted, while its lists may end sooner (NASA's photos after 470 posts of some 28,000
+ * files). Null when the rest fits in a stretch, or the site gives no such count.
+ */
+export function restEstimate(pace: ListingPace | null, media: MediaCount | null): number | null {
+  if (pace === null || media === null || pace.items <= 0) return null
+  const waits = Math.floor(Math.max(media.total - media.listed, 0) / pace.items)
+  return waits === 0 ? null : Math.round((waits * pace.pauseSeconds) / 60)
 }
 
 /** What a listing's items are called: an account's posts, YouTube's videos, anything else's items. */

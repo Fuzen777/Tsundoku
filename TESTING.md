@@ -152,6 +152,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Remove that download, add the link again and close Tsundoku's window to the tray at once → when it reaches the check, a notification says "A Download Needs You".
 - Claude ran this in a dev build with that link: the download waited with the message, Open Check showed MediaFire's page (Cloudflare didn't challenge the window on this PC, so its check page itself wasn't seen), and a mouse click on Download sent through DevTools was caught; the window closed and Tsundoku downloaded and checked the file. A folder with several files behind the check, a pasted download link and the notification were only unit-tested.
 
+**76. Load All on a big X account** · 0.2.4
+- [ ] Open a big X account (thousands of photos and videos), press Load All and leave it → it lists about 1,000 posts, says "Paused by X, resuming at…" with the time left, and goes on by itself after each wait, to the end ("Account · 3,412 posts", no Load buttons left). Tick and download a few posts during a wait.
+- Claude tried it in a test copy with x.com/NASA: 1,210 posts in 25 seconds, the pause with X's own time, the listing going on by itself on the second at 4:46 AM up to 2,070 posts, Stop during a wait, and the account opening with everything listed before, during the wait and after a restart (a YouTube channel listed whole too). It wasn't left running to the end, to spare your X allowance: each stretch uses up X's list for 15 minutes, for X's own Media tab in your browser too.
+
 ## Pending and the Queue
 
 **72. Unpacking archives** · 0.1.130

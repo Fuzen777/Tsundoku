@@ -14,10 +14,10 @@ use tsundoku_core::history::{
     History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, HistorySize,
     PastDownload, folder_count,
 };
-use tsundoku_core::listing::{self, ListingKind, ListingMore, MoreItems, MoreRead};
+use tsundoku_core::listing::{self, ListingKind, ListingMore, MoreRead};
 use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::passwords::Password;
-use tsundoku_core::preview::{LinkPreview, PreviewService};
+use tsundoku_core::preview::{LinkPreview, MoreEvent, PreviewService};
 use tsundoku_core::relocate::MovedFiles;
 use tsundoku_core::thumbnails;
 use tsundoku_core::tools::ToolManager;
@@ -78,8 +78,8 @@ pub fn cancel_preview(previews: State<'_, Arc<PreviewService>>) {
 }
 
 /// The items after those a listing on the preview card has: the next ones (Load More), on until enough new ones (Load
-/// New) or all the rest (Load All), as `read` says, sent over `on_items` a batch at a time as they're read. Ends once
-/// they're read, or with why it stopped.
+/// New) or all the rest (Load All), as `read` says, sent over `on_event` a batch at a time as they're read, with when
+/// the site makes the read wait and when it goes on. Ends once they're read, or with why it stopped.
 #[tauri::command]
 pub async fn load_more_of_listing(
     tools: State<'_, Arc<ToolManager>>,
@@ -88,7 +88,7 @@ pub async fn load_more_of_listing(
     queue: State<'_, Arc<DownloadQueue>>,
     more: ListingMore,
     read: MoreRead,
-    on_items: Channel<MoreItems>,
+    on_event: Channel<MoreEvent>,
 ) -> Result<(), PreviewError> {
     let (tools, history, previews, queue) = (
         Arc::clone(&tools),
@@ -98,9 +98,9 @@ pub async fn load_more_of_listing(
     );
     // Reading takes seconds to hours: off the async runtime's threads, which must never block.
     tauri::async_runtime::spawn_blocking(move || {
-        previews.fetch_more(&tools, &history, &queue, &more, read, &mut |batch| {
+        previews.fetch_more(&tools, &history, &queue, &more, read, &|event| {
             // Only fails once the window is gone, which ends the app.
-            let _ = on_items.send(batch);
+            let _ = on_event.send(event);
         })
     })
     .await

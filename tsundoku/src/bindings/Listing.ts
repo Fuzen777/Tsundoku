@@ -2,6 +2,7 @@
 import type { ListedItem } from "./ListedItem";
 import type { ListingKind } from "./ListingKind";
 import type { ListingMore } from "./ListingMore";
+import type { ListingPace } from "./ListingPace";
 
 /**
  * What a listing holds, and what it is.
@@ -38,7 +39,13 @@ total: number | null,
  */
 mediaTotal: number | null, 
 /**
- * Only the newest `NEWEST_COUNT` were asked for (a channel or an account); a playlist is listed whole.
+ * How far the site lets it be listed before it pauses (an X account), for the picker to say how long listing it
+ * all takes.
+ */
+pace: ListingPace | null, 
+/**
+ * Only the newest `NEWEST_COUNT` were asked for (a channel or an account; an X account lists that many of each
+ * of its two lists, so up to twice as many); a playlist is listed whole.
  */
 newestOnly: boolean, items: Array<ListedItem>, 
 /**

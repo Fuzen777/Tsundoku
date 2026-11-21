@@ -1,20 +1,30 @@
 import { useEffect, useRef, useState } from "react"
 import { Film, Images, Play, X } from "lucide-react"
-import { addManyToQueue, cancelLoadingMore, confirmWithUser, countListing, loadMoreOfListing } from "../api"
+import {
+  addManyToQueue,
+  cancelLoadingMore,
+  confirmWithUser,
+  countListing,
+  loadMoreOfListing,
+  type ListingPause,
+} from "../api"
 import type { ListedItem } from "../bindings/ListedItem"
 import type { Listing } from "../bindings/Listing"
 import type { ListingMore } from "../bindings/ListingMore"
+import type { ListingPace } from "../bindings/ListingPace"
 import type { MoreRead } from "../bindings/MoreRead"
 import type { PickerLayout } from "../bindings/PickerLayout"
 import { describeDownloadError, describePreviewError, isCancelled, type ErrorDescription } from "../errors"
 import {
   formatCalendarDate,
+  formatClockTime,
   formatContents,
   formatDay,
   formatDuration,
   formatRoughAge,
   joinDetails,
 } from "../format"
+import { useTimeLeft } from "../holds"
 import {
   firstNewSince,
   isKnown,
@@ -25,6 +35,7 @@ import {
   nounOf,
   pickerItems,
   picksFor,
+  restEstimate,
   selectedItems,
   selectEvery,
   shownItems,
@@ -73,7 +84,8 @@ type Counted = "counting" | "failed" | null
  * those downloaded before or in the queue greyed, or hidden with Hide Downloaded), a type filter when they're of
  * several types (only the images of an account, say), Load More, Load New and Load All when only the newest were
  * listed, and Download Selected, which queues each ticked item shown as its own download. A video starts with the
- * preset a rule picks for it, else the one picked here.
+ * preset a rule picks for it, else the one picked here. What it loads is kept by the app, so the listing opens with it
+ * the next time; while a site makes a load wait (X), the items listed stay to pick from.
  */
 export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingPickerProps) {
   const [{ items, selection }, setPicker] = useState(() => pickerItems(listing.items))
@@ -83,6 +95,7 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
     listing.total === null && listing.more?.channelId ? "counting" : null,
   )
   const [loading, setLoading] = useState<Loading | null>(null)
+  const [pause, setPause] = useState<ListingPause | null>(null)
   const [stopping, setStopping] = useState(false)
   const [loadError, setLoadError] = useState<ErrorDescription | null>(null)
   const { data: presets } = usePresets()
@@ -168,17 +181,25 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
     const tickNew = selection.size > 0
     listedBeforeNew.current = read.kind === "new" ? new Set(items.map(itemKey)) : null
     try {
-      await loadMoreOfListing(more, read, (batch) => {
-        if (!open.current) return
-        setPicker((current) => withMoreItems(current, batch.items, listing.kind, tickNew))
-        setMore(batch.more)
-        if (batch.total !== null) setTotal(batch.total)
-      })
+      await loadMoreOfListing(
+        more,
+        read,
+        (batch) => {
+          if (!open.current) return
+          setPicker((current) => withMoreItems(current, batch.items, listing.kind, tickNew))
+          setMore(batch.more)
+          if (batch.total !== null) setTotal(batch.total)
+        },
+        (waits) => {
+          if (open.current) setPause(waits)
+        },
+      )
     } catch (caught) {
       if (open.current && !isCancelled(caught)) setLoadError(describePreviewError(caught))
     } finally {
       if (open.current) {
         setLoading(null)
+        setPause(null)
         setStopping(false)
       }
     }
@@ -215,15 +236,19 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
   }
 
   const noun = strings.picker.nouns[nounOf(listing)]
+  const media = mediaCount(listing, items, total)
   const loadRow = (more !== null || loading !== null || loadError !== null) && (
     <LoadRow
       loading={loading}
+      pause={loading === null ? null : pause}
       stopping={stopping}
       canLoad={more !== null}
       count={items.length}
       fresh={items.filter((item) => !isKnown(item)).length}
       total={total}
-      media={mediaCount(listing, items, total)}
+      media={media}
+      pace={more === null ? null : listing.pace}
+      restMinutes={more === null ? null : restEstimate(listing.pace, media)}
       counted={total === null ? counted : null}
       noun={noun}
       slowly={listing.kind === "account" && listing.siteName === "instagram.com"}
@@ -357,6 +382,8 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
 
 interface LoadRowProps {
   loading: Loading | null
+  /** The site makes the load wait (X's limit on how far an account is listed at a time): it goes on by itself. */
+  pause: ListingPause | null
   stopping: boolean
   /** There's more to list. */
   canLoad: boolean
@@ -368,6 +395,10 @@ interface LoadRowProps {
   /** Without a total, on an account whose site counts its photos and videos instead (X): that count, and how many of
    * them the posts listed so far hold. */
   media: MediaCount | null
+  /** On a site that lists only so far at a time (X): how far, and how many minutes listing the rest takes when it
+   * takes a wait or more. */
+  pace: ListingPace | null
+  restMinutes: number | null
   /** Without a total, whether another read is counting it, or couldn't. */
   counted: Counted
   noun: readonly [string, string]
@@ -382,16 +413,21 @@ interface LoadRowProps {
 /**
  * Under the items: Load More, Load New and Load All (with how many there are, when the site says or another read
  * counted them, or on X how many photos and videos the site counts), or while Load New or Load All lists them, how many
- * are listed so far and how many are new, and Stop. What went wrong shows over them, and they stay to try again.
+ * are listed so far and how many are new, and Stop. While the site makes a load wait (X), "Paused by X, resuming at…"
+ * with the time left takes the count's place, Load More's too. On an X account too big to list in one go, a line under
+ * them says how X paces it and how long the rest takes. What went wrong shows over them, and they stay to try again.
  */
 function LoadRow({
   loading,
+  pause,
   stopping,
   canLoad,
   count,
   fresh,
   total,
   media,
+  pace,
+  restMinutes,
   counted,
   noun,
   slowly,
@@ -401,53 +437,86 @@ function LoadRow({
   onStop,
 }: LoadRowProps) {
   const text = strings.picker
+  const rest = restMinutes === null ? null : text.roughTime(restMinutes)
+  const waitMinutes = pace === null ? 0 : Math.round(pace.pauseSeconds / 60)
+  const note = pause
+    ? text.pausedNote(noun, rest)
+    : pace !== null && rest !== null
+      ? loading === null
+        ? text.paceBefore(pace.items, waitMinutes, noun, rest)
+        : loading === "all"
+          ? text.paceWhile(pace.items, waitMinutes, noun, rest)
+          : null
+      : null
   return (
     <div className="flex flex-col items-center gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
-      {loading === "all" || loading === "new" ? (
+      {loading === "all" || loading === "new" || pause ? (
         <>
           <div className="flex items-center gap-3">
-            <p className="text-fg-secondary tabular-nums" role="status">
-              {text.loadingAll(count, total, noun, fresh, media)}
-            </p>
+            {pause ? (
+              <PausedStatus key={pause.until} pause={pause} />
+            ) : (
+              <p className="text-fg-secondary tabular-nums" role="status">
+                {text.loadingAll(count, total, noun, fresh, media)}
+              </p>
+            )}
             <Button size="sm" disabled={stopping} onClick={onStop}>
               {text.stopLoading}
             </Button>
           </div>
-          {slowly && <p className="text-center text-xs text-fg-secondary">{text.loadingSlowly}</p>}
+          {note ? (
+            <p className="max-w-xl text-center text-xs text-fg-secondary">{note}</p>
+          ) : (
+            slowly && <p className="text-center text-xs text-fg-secondary">{text.loadingSlowly}</p>
+          )}
         </>
       ) : (
         canLoad && (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              loading={loading === "next"}
-              disabled={disabled}
-              title={text.loadMoreHint(noun)}
-              onClick={() => onLoad({ kind: "next" })}
-            >
-              {text.loadMore}
-            </Button>
-            <Button
-              size="sm"
-              disabled={disabled || loading !== null}
-              title={text.loadNewHint(LOAD_NEW_COUNT, noun)}
-              onClick={() => onLoad({ kind: "new", count: LOAD_NEW_COUNT })}
-            >
-              {text.loadNew(LOAD_NEW_COUNT)}
-            </Button>
-            <Button
-              size="sm"
-              disabled={disabled || loading !== null}
-              title={text.loadAllHint(count, total, noun, counted, media)}
-              onClick={() => onLoad({ kind: "all" })}
-            >
-              {text.loadAll(total, media?.total ?? null)}
-            </Button>
-          </div>
+          <>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                loading={loading === "next"}
+                disabled={disabled}
+                title={text.loadMoreHint(noun)}
+                onClick={() => onLoad({ kind: "next" })}
+              >
+                {text.loadMore}
+              </Button>
+              <Button
+                size="sm"
+                disabled={disabled || loading !== null}
+                title={text.loadNewHint(LOAD_NEW_COUNT, noun)}
+                onClick={() => onLoad({ kind: "new", count: LOAD_NEW_COUNT })}
+              >
+                {text.loadNew(LOAD_NEW_COUNT)}
+              </Button>
+              <Button
+                size="sm"
+                disabled={disabled || loading !== null}
+                title={text.loadAllHint(count, total, noun, counted, media)}
+                onClick={() => onLoad({ kind: "all" })}
+              >
+                {text.loadAll(total, media?.total ?? null)}
+              </Button>
+            </div>
+            {note && <p className="max-w-xl text-center text-xs text-fg-secondary">{note}</p>}
+          </>
         )
       )}
     </div>
+  )
+}
+
+/** "Paused by X, resuming at 1:42 AM (12:31 left)", counting down. Shown only while the site makes a load wait, so
+ * its clock starts with the wait. */
+function PausedStatus({ pause }: { pause: ListingPause }) {
+  const timeLeft = useTimeLeft(pause.until)
+  return (
+    <p className="text-fg-secondary tabular-nums" role="status">
+      {strings.picker.pausedBySite(pause.site, formatClockTime(pause.until), timeLeft)}
+    </p>
   )
 }
 

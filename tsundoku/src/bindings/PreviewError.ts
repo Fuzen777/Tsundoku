@@ -18,7 +18,7 @@ wrong: boolean, } | { "kind": "linkIncomplete", site: string, } | { "kind": "bro
 /**
  * In milliseconds since 1970.
  */
-until: number | null, } | { "kind": "siteError", 
+until: number | null, } | { "kind": "listingPaused", site: string, } | { "kind": "siteError", 
 /**
  * yt-dlp or gallery-dl.
  */

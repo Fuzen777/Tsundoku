@@ -12,6 +12,7 @@ import {
   ofType,
   pickerItems,
   picksFor,
+  restEstimate,
   selectedItems,
   selectEvery,
   shownItems,
@@ -279,6 +280,62 @@ describe("an account that counts its photos and videos", () => {
     )
     expect(text.loadingAll(150, 8634, postNoun, 12)).toBe(`Listing… 150 of ${(8634).toLocaleString()} posts · 12 new`)
     expect(text.loadingAll(150, null, strings.picker.nouns.video, 12)).toBe("Listing… 150 videos · 12 new")
+  })
+})
+
+describe("a site that lists only so far at a time", () => {
+  const pace = { items: 1000, pauseSeconds: 900 }
+  const postNoun = strings.picker.nouns.post
+  const text = strings.picker
+
+  it("estimates the rest by the waits it takes", () => {
+    // 28,196 photos and videos left: 28 stretches of 1,000 filled, a quarter of an hour's wait each.
+    expect(restEstimate(pace, { total: 28_260, listed: 64 })).toBe(28 * 15)
+    expect(restEstimate(pace, { total: 2400, listed: 50 })).toBe(30)
+    expect(restEstimate(pace, { total: 1050, listed: 50 })).toBe(15)
+  })
+
+  it("estimates nothing when the rest fits in a stretch, or nothing says how much there is", () => {
+    expect(restEstimate(pace, { total: 372, listed: 51 })).toBeNull()
+    expect(restEstimate(pace, { total: 1049, listed: 50 })).toBeNull()
+    // The posts listed hold more than the site counts.
+    expect(restEstimate(pace, { total: 60, listed: 64 })).toBeNull()
+    expect(restEstimate(null, { total: 28_260, listed: 64 })).toBeNull()
+    expect(restEstimate(pace, null)).toBeNull()
+    expect(restEstimate({ items: 0, pauseSeconds: 900 }, { total: 28_260, listed: 64 })).toBeNull()
+  })
+
+  it("says a stretch of time to the quarter of an hour, and to the hour from 4 hours", () => {
+    expect(text.roughTime(15)).toBe("15 minutes")
+    expect(text.roughTime(45)).toBe("45 minutes")
+    expect(text.roughTime(60)).toBe("1 hour")
+    expect(text.roughTime(75)).toBe("1 hour 15 minutes")
+    expect(text.roughTime(150)).toBe("2 hours 30 minutes")
+    expect(text.roughTime(225)).toBe("3 hours 45 minutes")
+    expect(text.roughTime(240)).toBe("4 hours")
+    expect(text.roughTime(420)).toBe("7 hours")
+    expect(text.roughTime(435)).toBe("7 hours")
+    expect(text.roughTime(450)).toBe("8 hours")
+    // Never no time at all.
+    expect(text.roughTime(3)).toBe("15 minutes")
+  })
+
+  it("says who paused the listing, until when and how long is left", () => {
+    expect(text.pausedBySite("X", "1:42 AM", "12:31 left")).toBe("Paused by X, resuming at 1:42 AM (12:31 left)")
+    expect(text.pausedBySite("X", "1:42 AM", null)).toBe("Paused by X, resuming at 1:42 AM")
+    expect(text.pausedNote(postNoun, "5 hours")).toBe(
+      "It goes on by itself, and the posts listed can be picked meanwhile. By X's count, the rest takes up to 5 hours.",
+    )
+    expect(text.pausedNote(postNoun, null)).toBe("It goes on by itself, and the posts listed can be picked meanwhile.")
+  })
+
+  it("says how the site paces a big account, before and while listing it", () => {
+    expect(text.paceBefore(1000, 15, postNoun, "7 hours")).toBe(
+      `X lists about ${(1000).toLocaleString()} posts, then makes the next ones wait up to 15 minutes. By its count, Load All takes up to 7 hours here, going on by itself after each wait; it ends sooner when X lists fewer posts than it counts. What's listed is kept, so it can be stopped and picked up again later.`,
+    )
+    expect(text.paceWhile(1000, 15, postNoun, "30 minutes")).toBe(
+      `X lists about ${(1000).toLocaleString()} posts, then makes the next ones wait up to 15 minutes: up to 30 minutes left by its count.`,
+    )
   })
 })
 

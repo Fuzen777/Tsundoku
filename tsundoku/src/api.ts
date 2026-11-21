@@ -31,6 +31,7 @@ import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PickerLayouts } from "./bindings/PickerLayouts"
 import type { ListingKind } from "./bindings/ListingKind"
 import type { ListingMore } from "./bindings/ListingMore"
+import type { MoreEvent } from "./bindings/MoreEvent"
 import type { MoreItems } from "./bindings/MoreItems"
 import type { MoreRead } from "./bindings/MoreRead"
 import type { MovedFiles } from "./bindings/MovedFiles"
@@ -306,21 +307,33 @@ export async function cancelPreview(): Promise<void> {
   await invoke("cancel_preview")
 }
 
+/** A listing's site making its read wait (X's limit on how far an account is listed at a time): which site, and until
+ * when, in milliseconds since 1970. The read goes on by itself then. */
+export interface ListingPause {
+  site: string
+  until: number
+}
+
 /**
  * Reads the items after those a listing on the preview card has, as `read` says: the next ones (Load More), on until
- * enough new ones (Load New) or all the rest (Load All), calling `onItems` with each batch as it's read. Resolves once
- * they're read; rejects with a PreviewError, `cancelled` after `cancelLoadingMore` or once another preview starts. A
- * batch may still arrive just after.
+ * enough new ones (Load New) or all the rest (Load All), calling `onItems` with each batch as it's read, and `onPause`
+ * when the site makes the read wait, then with null once it reads on. Resolves once they're read; rejects with a
+ * PreviewError, `cancelled` after `cancelLoadingMore` or once another preview starts. A batch may still arrive just
+ * after.
  */
 export async function loadMoreOfListing(
   more: ListingMore,
   read: MoreRead,
   onItems: (batch: MoreItems) => void,
+  onPause: (pause: ListingPause | null) => void = () => {},
 ): Promise<void> {
-  if (!isTauri()) return standIns.loadMoreOfListing(more, read, onItems)
-  const channel = new Channel<MoreItems>()
-  channel.onmessage = onItems
-  await invoke("load_more_of_listing", { more, read, onItems: channel })
+  if (!isTauri()) return standIns.loadMoreOfListing(more, read, onItems, onPause)
+  const channel = new Channel<MoreEvent>()
+  channel.onmessage = (event) => {
+    if (event.kind === "items") onItems(event.batch)
+    else onPause(event.kind === "paused" ? { site: event.site, until: event.until } : null)
+  }
+  await invoke("load_more_of_listing", { more, read, onEvent: channel })
 }
 
 /**

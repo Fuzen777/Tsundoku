@@ -656,6 +656,33 @@ export const strings = {
     },
     /** Under Load All's count on Instagram, which asks to slow down when read quickly. */
     loadingSlowly: "Instagram is read a page of 12 at a time, about 10 seconds apart, so it doesn't ask to slow down.",
+    /** In place of the count while the site makes the read wait (X's limit): "Paused by X, resuming at 1:42 AM (12:31
+     * left)". */
+    pausedBySite: (site: string, time: string, left: string | null) =>
+      `Paused by ${site}, resuming at ${time}${left ? ` (${left})` : ""}`,
+    /** Under it: nothing to do, and how long the rest takes at most (`rest`, from `roughTime`) when the site's count
+     * says. "At most", since X's lists may end long before its count: an old account's lists don't reach its oldest
+     * posts. */
+    pausedNote: (noun: readonly [string, string], rest: string | null) =>
+      `It goes on by itself, and the ${noun[1]} listed can be picked meanwhile.${rest ? ` By X's count, the rest takes up to ${rest}.` : ""}`,
+    /** Under Load All on an X account too big to list in one go: how X paces it, and how long it all takes at most. */
+    paceBefore: (items: number, minutes: number, noun: readonly [string, string], time: string) =>
+      `X lists about ${items.toLocaleString()} ${noun[1]}, then makes the next ones wait up to ${minutes} minutes. By its count, Load All takes up to ${time} here, going on by itself after each wait; it ends sooner when X lists fewer ${noun[1]} than it counts. What's listed is kept, so it can be stopped and picked up again later.`,
+    /** Under the count while Load All lists such an account. */
+    paceWhile: (items: number, minutes: number, noun: readonly [string, string], time: string) =>
+      `X lists about ${items.toLocaleString()} ${noun[1]}, then makes the next ones wait up to ${minutes} minutes: up to ${time} left by its count.`,
+    /** A stretch of time to the quarter of an hour, or to the hour from 4 hours: "45 minutes", "1 hour 15 minutes",
+     * "7 hours". */
+    roughTime: (minutes: number) => {
+      const quarters = Math.max(Math.round(minutes / 15), 1)
+      const hours = quarters >= 16 ? Math.round(quarters / 4) : Math.floor(quarters / 4)
+      const rest = quarters >= 16 ? 0 : (quarters % 4) * 15
+      const parts = [
+        hours > 0 ? `${hours.toLocaleString()} ${hours === 1 ? "hour" : "hours"}` : "",
+        rest > 0 ? `${rest} minutes` : "",
+      ]
+      return parts.filter(Boolean).join(" ")
+    },
     stopLoading: "Stop",
     downloaded: "Downloaded",
     inQueue: "In Queue",
@@ -884,6 +911,8 @@ export const strings = {
       network: "Couldn't reach the site. Check your connection, then try again.",
       tooManyRequests: (site: string | null, time: string | null) =>
         `${site ?? "The site"} asked to slow down. ${time ? `Try again after ${time}.` : "Try again in a few minutes."}`,
+      listingPaused: (site: string) =>
+        `${site} lists only so many posts every 15 minutes, and that's used up for now. Try again in a few minutes.`,
       siteError: "Couldn't read this site's page. An update often fixes this.",
       failed: "Couldn't read this link.",
     },

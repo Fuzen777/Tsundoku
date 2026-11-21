@@ -149,7 +149,8 @@ pub fn restore(data: &BackupData, backup: &Path) -> Result<PathBuf, BackupError>
 }
 
 /// A consistent copy of the database, made with SQLite's `VACUUM INTO` while it's open, keeping only the history:
-/// the queue and the pending links are about this PC's downloads in progress. Returns its tables' version.
+/// the queue, the pending links and what pickers loaded are about this PC's work in progress. Returns its tables'
+/// version.
 fn copy_history(database: &Database, copy: &Path) -> Result<i64, BackupError> {
     let copy_name = path_text(copy).map_err(write_error)?;
     let schema_version = {
@@ -167,8 +168,12 @@ fn copy_history(database: &Database, copy: &Path) -> Result<i64, BackupError> {
         row.get::<_, String>(0)
     })
     .map_err(write_error)?;
-    copy.execute_batch("DELETE FROM queue_items; DELETE FROM pending_links; VACUUM;")
-        .map_err(write_error)?;
+    // What listings' pickers loaded (`listing::saved`) is this PC's too, and can be listed again.
+    copy.execute_batch(
+        "DELETE FROM queue_items; DELETE FROM pending_links;
+         DELETE FROM saved_listing_items; DELETE FROM saved_listings; VACUUM;",
+    )
+    .map_err(write_error)?;
     Ok(schema_version)
 }
 

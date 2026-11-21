@@ -4,16 +4,19 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use ts_rs::TS;
 
 use crate::browsers;
 use crate::cancel::CancelToken;
+use crate::database::Database;
 use crate::downloads::DownloadQueue;
 use crate::gallery::{self, GalleryTools};
 use crate::history::{History, PastDownload};
 use crate::hosts::{self, Host};
+use crate::listing::saved::{self, SavedListings};
 use crate::listing::{self, Found, Listing, ListingMore, MoreItems, MoreRead};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
@@ -51,8 +54,29 @@ pub struct VideoPreview {
     pub missing_js_runtime: bool,
 }
 
+/// What reading a listing's next items tells the preview card as it goes (`PreviewService::fetch_more`).
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum MoreEvent {
+    /// The next items read, marked as a listing's are.
+    Items { batch: MoreItems },
+    /// The site lists no more for now (X's limit on an account's lists): the read waits until the site answers again,
+    /// then goes on by itself. What was listed stays.
+    Paused {
+        /// The site's name ("X").
+        site: String,
+        /// In milliseconds since 1970.
+        #[ts(type = "number")]
+        until: i64,
+    },
+    /// The wait is over: it reads on.
+    Resumed,
+}
+
 /// Fetches previews one at a time: starting one cancels the one before, so only the latest link is ever shown. A
-/// listing's next items (`fetch_more`) are read one read at a time too, and a new preview cancels them.
+/// listing's next items (`fetch_more`) are read one read at a time too, and a new preview cancels them. What a
+/// listing's picker loads is kept (`listing::saved`), so the listing opens with it the next time.
 #[derive(Debug, Default)]
 pub struct PreviewService {
     current: Mutex<Option<CancelToken>>,
@@ -60,18 +84,32 @@ pub struct PreviewService {
     more: Mutex<Option<CancelToken>>,
     /// How many items the listing holds being read, if any (`count_more`).
     counting: Mutex<Option<CancelToken>>,
+    /// What listings' pickers loaded, or `None` to keep nothing.
+    saved: Option<SavedListings>,
+    /// The listing the preview card shows, until its picker loads more of it: it's kept then, with what it loads.
+    shown: Mutex<Option<Listing>>,
 }
 
 impl PreviewService {
+    /// A service that keeps nothing of what listings' pickers load.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A service that keeps what listings' pickers load in the database.
+    pub fn keeping_listings(database: Arc<Database>) -> Self {
+        Self {
+            saved: Some(SavedListings::new(database, now_seconds())),
+            ..Self::default()
+        }
     }
 
     /// Reads what `text` links to (see `read_with_tools`), asks the history whether it was downloaded before, and the
     /// queue whether it's in it. A site that answered "too many requests" isn't read until its wait ends
     /// (`DownloadQueue::site_wait`), and an answer of that kind starts one. A link that needs a password is read with
     /// `password`, the one the person typed, or else the one the history keeps for the link, so Download Again never
-    /// asks twice.
+    /// asks twice. A listing comes with what its picker loaded before (`with_saved`), or as that alone while its site
+    /// lists no more for now.
     pub fn fetch(
         &self,
         tools: &ToolManager,
@@ -101,10 +139,23 @@ impl PreviewService {
             )
             .map_err(|error| error.after_password(typed)),
         };
+        let fetched = match fetched {
+            Ok(Found::Listing(listing)) => Ok(Found::Listing(self.with_saved(listing))),
+            Err(PreviewError::ListingPaused { site }) => self
+                .saved_alone(&link)
+                .map(Found::Listing)
+                .ok_or(PreviewError::ListingPaused { site }),
+            other => other,
+        };
         {
             let mut current = lock(&self.current);
             if current.as_ref().is_some_and(|token| token.is_same(&cancel)) {
                 *current = None;
+                // The card shows this one: kept once its picker loads more of it.
+                *lock(&self.shown) = match &fetched {
+                    Ok(Found::Listing(listing)) if listing.more.is_some() => Some(listing.clone()),
+                    _ => None,
+                };
             }
         }
         let fetched = fetched.map_err(|error| with_site_wait(error, queue, &link))?;
@@ -113,10 +164,11 @@ impl PreviewService {
     }
 
     /// Reads the items after those a listing on the preview card has (`more`): the next ones for Load More, on until
-    /// enough new ones for Load New, or all the rest for Load All (`read`), handing each batch to `on_batch` with its
-    /// items marked as `fetch` marks a listing's.
+    /// enough new ones for Load New, or all the rest for Load All (`read`), handing each batch to `on_event` with its
+    /// items marked as `fetch` marks a listing's, and keeping it for the next time the listing is opened.
     /// Starting it stops the read before; a site that asked to slow down isn't read until its wait ends, and Load All
-    /// stops once a download from the site starts such a wait (`listing::read_more`).
+    /// stops once a download from the site starts such a wait (`listing::read_more`). A site that lists only so far
+    /// at a time (X) is waited for instead: `on_event` is told until when, and when it reads on.
     pub fn fetch_more(
         &self,
         tools: &ToolManager,
@@ -124,13 +176,15 @@ impl PreviewService {
         queue: &DownloadQueue,
         more: &ListingMore,
         read: MoreRead,
-        on_batch: &mut dyn FnMut(MoreItems),
+        on_event: &(dyn Fn(MoreEvent) + Sync),
     ) -> Result<(), PreviewError> {
         let link = more.link.as_str();
         let cancel = CancelToken::new();
         if let Some(previous) = lock(&self.more).replace(cancel.clone()) {
             previous.cancel();
         }
+        self.keep_shown(link);
+        let site = listing::shown_site(link);
         let cookies_choice = queue.options().cookies_browser;
         let answer = match queue.site_wait(link) {
             Some(_) => Err(PreviewError::too_many_requests(String::new())),
@@ -157,13 +211,26 @@ impl PreviewService {
                             .iter()
                             .filter(|item| item.last_download.is_none() && !item.in_queue)
                             .count();
-                        on_batch(batch);
+                        if let Some(saved) = &self.saved {
+                            // Not kept if it fails: the picker has the batch all the same.
+                            let _ = saved.add(link, &batch, now_seconds());
+                        }
+                        on_event(MoreEvent::Items { batch });
                         match queue.site_wait(link) {
                             Some(_) if more_to_come => {
                                 Err(PreviewError::too_many_requests(String::new()))
                             }
                             _ => Ok(u32::try_from(new).unwrap_or(u32::MAX)),
                         }
+                    },
+                    &|until| {
+                        on_event(match until {
+                            Some(until) => MoreEvent::Paused {
+                                site: site.clone(),
+                                until,
+                            },
+                            None => MoreEvent::Resumed,
+                        });
                     },
                 )
                 .map_err(|error| with_sign_in_state(error, cookies_choice, link))
@@ -235,6 +302,64 @@ impl PreviewService {
             counting.cancel();
         }
     }
+
+    /// A listing just read with what its picker loaded before (`saved::with_saved`), which is forgotten when the two
+    /// don't meet anymore.
+    fn with_saved(&self, listing: Listing) -> Listing {
+        let (Some(saved), Some(link)) = (
+            &self.saved,
+            listing.more.as_ref().map(|more| more.link.clone()),
+        ) else {
+            return listing;
+        };
+        match saved.load(&link, now_seconds()) {
+            Ok(Some(kept)) if saved::meets(&listing, &kept) => saved::with_saved(listing, kept),
+            Ok(Some(_)) => {
+                let _ = saved.forget(&link);
+                listing
+            }
+            _ => listing,
+        }
+    }
+
+    /// A listing as its picker last had it, for a link whose site lists no more for now: without the items new since,
+    /// which the next read adds.
+    fn saved_alone(&self, link: &str) -> Option<Listing> {
+        let page = listing::listing_link(link)?.link;
+        self.saved
+            .as_ref()?
+            .load(&page, now_seconds())
+            .ok()
+            .flatten()
+    }
+
+    /// Keeps the listing the card shows, when it's the one whose page is `link`, now that its picker loads more of it.
+    fn keep_shown(&self, link: &str) {
+        let Some(saved) = &self.saved else {
+            return;
+        };
+        let shown = {
+            let mut shown = lock(&self.shown);
+            let is_shown = shown
+                .as_ref()
+                .and_then(|listing| listing.more.as_ref())
+                .is_some_and(|more| more.link == link);
+            if is_shown { shown.take() } else { None }
+        };
+        if let Some(listing) = shown {
+            // Not kept if it fails: the next time the listing opens, it starts from its newest again.
+            let _ = saved.start(link, &listing, now_seconds());
+        }
+    }
+}
+
+/// Seconds since 1970.
+fn now_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|since| i64::try_from(since.as_secs()).ok())
+        .unwrap_or(0)
 }
 
 /// A site's "too many requests" with when its wait ends, starting one when none is running (`DownloadQueue::slow_down`),
