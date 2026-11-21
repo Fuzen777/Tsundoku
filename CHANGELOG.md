@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.8 · 2026-11-21
+
+### Changed
+
+- **MEGA's own reset time**: when MEGA's transfer quota is used up, a download now waits exactly as long as MEGA says, until the quota frees up, then goes on by itself from where it stopped. Before, it guessed: 30 minutes, then an hour, two and four, so it could sit idle for hours after the quota was back, or try again too soon. The row says "MEGA's download limit is used up. Continuing at …" with MEGA's time.
+- **A dropped connection that got somewhere doesn't count against the download**: a download whose connection drops is still tried again by itself after 30 seconds, 2 minutes and 8 minutes, but once more of it has arrived, the three tries start over. A big file on a shaky connection keeps going instead of failing after the third drop. The same goes for a host's download limit: once more has downloaded, the next wait starts at 30 minutes again.
+
 ## 0.2.7 · 2026-11-21
 
 ### Added

@@ -1,6 +1,8 @@
 //! MEGA: links to a file or a shared folder, read through MEGA's JSON API (`g.api.mega.co.nz/cs`). Files and their
 //! names are encrypted. The key is the part of the link after "#", which never leaves the PC: names are decrypted
 //! here, and a file's content as it's saved (AES-128 in counter mode), then checked against the MAC in its key.
+//! Once this connection's transfer quota is used up, MEGA says how long until it frees up (`quota_wait`, and `tl` in
+//! a file's address), and the download waits until then.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -16,7 +18,9 @@ use aes::cipher::{
 use base64::Engine;
 use base64::alphabet;
 use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
+use reqwest::StatusCode;
 use reqwest::blocking::Client;
+use reqwest::header::HeaderMap;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -305,20 +309,33 @@ pub(super) fn address(
         Some(_) => json!({"a": "g", "g": 1, "ssl": 2, "n": file.handle}),
     };
     let answer: AddressAnswer = api(client, file.folder.as_deref(), command, cancel)?;
-    if let Some(code) = answer.error {
-        return Err(error_for(code));
+    answer.address(&file.key)
+}
+
+/// What MEGA's download server answers once this connection's transfer quota is used up: 509, with the seconds until
+/// it frees up in `X-MEGA-Time-Left`, as MEGA's own SDK reads it. The download then waits until then
+/// (`PreviewError::WaitBetweenDownloads`). `None` for any other answer, or one without a time, which waits as any
+/// used-up limit does.
+pub fn quota_wait(status: StatusCode, headers: &HeaderMap) -> Option<PreviewError> {
+    if status.as_u16() != 509 {
+        return None;
     }
-    match answer.url {
-        Some(url) if !url.is_empty() => Ok(Address {
-            url,
-            check: FileCheck::Mega(file.key.clone()),
-        }),
-        // MEGA leaves the address out while this connection's transfer quota is used up.
-        _ => Err(PreviewError::LimitReached {
-            site: Host::Mega.name().to_owned(),
-            detail: "MEGA gave no download address".to_owned(),
-        }),
-    }
+    let seconds = headers
+        .get("x-mega-time-left")?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    quota_used_up(seconds)
+}
+
+/// The transfer quota used up for `seconds` more, as MEGA says: `None` when it doesn't say (0).
+fn quota_used_up(seconds: u64) -> Option<PreviewError> {
+    (seconds > 0).then(|| PreviewError::WaitBetweenDownloads {
+        site: FACTS.name.to_owned(),
+        seconds,
+    })
 }
 
 #[derive(Deserialize)]
@@ -335,6 +352,39 @@ struct AddressAnswer {
     url: Option<String>,
     #[serde(rename = "e")]
     error: Option<i64>,
+    /// The seconds until this connection's transfer quota frees up, when it's used up.
+    #[serde(rename = "tl")]
+    time_left: Option<i64>,
+}
+
+impl AddressAnswer {
+    /// Where the file downloads from now, or why it can't.
+    fn address(&self, key: &FileKey) -> Result<Address, PreviewError> {
+        // MEGA leaves the address out while this connection's transfer quota is used up, and may say for how long.
+        let used_up = || {
+            self.time_left
+                .and_then(|seconds| u64::try_from(seconds).ok())
+                .and_then(quota_used_up)
+        };
+        if let Some(code) = self.error {
+            return Err(match error_for(code) {
+                PreviewError::LimitReached { site, detail } => {
+                    used_up().unwrap_or(PreviewError::LimitReached { site, detail })
+                }
+                other => other,
+            });
+        }
+        match &self.url {
+            Some(url) if !url.is_empty() => Ok(Address {
+                url: url.clone(),
+                check: FileCheck::Mega(key.clone()),
+            }),
+            _ => Err(used_up().unwrap_or_else(|| PreviewError::LimitReached {
+                site: Host::Mega.name().to_owned(),
+                detail: "MEGA gave no download address".to_owned(),
+            })),
+        }
+    }
 }
 
 #[derive(Deserialize)]

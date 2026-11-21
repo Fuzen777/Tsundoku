@@ -40,14 +40,16 @@ pub const FIRST_LIMIT_WAIT: Duration = Duration::from_secs(30 * 60);
 pub const LONGEST_LIMIT_WAIT: Duration = Duration::from_secs(4 * 60 * 60);
 /// Seconds added to a wait a host names, since it counts in whole minutes.
 const WAIT_MARGIN: u64 = 60;
+/// The longest wait a host can name: a longer one is taken as this, so a garbled answer can't hold a download for good.
+const LONGEST_NAMED_WAIT: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// What a download's automatic retries have done so far, in memory only: put back to its start by a run that
-/// finishes, and by Resume and Retry.
+/// finishes or downloaded something, and by Resume and Retry.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Recovery {
-    /// Runs in a row that lost the connection.
+    /// Runs in a row that lost the connection without downloading anything.
     connection_losses: u32,
-    /// Runs in a row that found the site's download limit used up.
+    /// Runs in a row that found the site's download limit used up without downloading anything.
     limits_reached: u32,
     /// Its own wait before the next run, after either: a `Hold::Retry` or `Hold::LimitReached`.
     wait: Option<Hold>,
@@ -143,12 +145,22 @@ const WINDOW_PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 impl Recovery {
     /// Whether a run that failed with `error` at `now` is tried again by itself, and when: a lost connection after
     /// `CONNECTION_RETRY_WAITS`, a used-up download limit after a wait that doubles from `FIRST_LIMIT_WAIT` up to
-    /// `LONGEST_LIMIT_WAIT`, a host's wait between free downloads once it's over, with a minute to spare. `None`
-    /// means it fails.
-    pub(super) fn after_failure(&mut self, error: &DownloadError, now: i64) -> Option<Hold> {
+    /// `LONGEST_LIMIT_WAIT`, a wait the host names (1fichier's between free downloads, MEGA's until its transfer
+    /// quota frees up) once it's over, with a minute to spare. `None` means it fails. A run that `downloaded`
+    /// something first starts both counts over: what it fetched is kept, so the download is getting somewhere.
+    pub(super) fn after_failure(
+        &mut self,
+        error: &DownloadError,
+        now: i64,
+        downloaded: bool,
+    ) -> Option<Hold> {
         let DownloadError::YtDlp { error } = error else {
             return None;
         };
+        if downloaded {
+            self.connection_losses = 0;
+            self.limits_reached = 0;
+        }
         let hold = match error {
             PreviewError::Network { .. } => {
                 let wait = CONNECTION_RETRY_WAITS.get(self.connection_losses as usize)?;
@@ -169,7 +181,11 @@ impl Recovery {
             // The host said how long: no doubling, and it never fails for it.
             PreviewError::WaitBetweenDownloads { site, seconds } => Hold::LimitReached {
                 site: site.clone(),
-                until: now + millis(Duration::from_secs(seconds.saturating_add(WAIT_MARGIN))),
+                until: now
+                    + millis(
+                        Duration::from_secs(seconds.saturating_add(WAIT_MARGIN))
+                            .min(LONGEST_NAMED_WAIT),
+                    ),
             },
             _ => return None,
         };
@@ -626,12 +642,12 @@ mod tests {
         let signed_out = download_failure(
             "[instagram][error] KeyError: 'xdt_api__v1__feed__user_timeline_graphql_connection'",
         );
-        assert_eq!(recovery.after_failure(&signed_out, 0), None);
+        assert_eq!(recovery.after_failure(&signed_out, 0, false), None);
         let dropped = download_failure(
             "[instagram][error] HttpError: Connection aborted. ('Connection reset by peer')",
         );
         assert!(matches!(
-            recovery.after_failure(&dropped, 0),
+            recovery.after_failure(&dropped, 0, false),
             Some(Hold::Retry { attempt: 1, .. })
         ));
     }
@@ -653,12 +669,12 @@ mod tests {
             failure(PreviewError::sign_in("login required".to_owned())),
             failure(PreviewError::too_many_requests("HTTP Error 429".to_owned())),
         ] {
-            assert_eq!(recovery.after_failure(&error, 0), None, "{error:?}");
+            assert_eq!(recovery.after_failure(&error, 0, false), None, "{error:?}");
         }
         assert_eq!(recovery, Recovery::default());
 
         let waits: Vec<Option<Hold>> = (0..4)
-            .map(|_| recovery.after_failure(&lost_connection(), 0))
+            .map(|_| recovery.after_failure(&lost_connection(), 0, false))
             .collect();
         assert_eq!(
             waits,
@@ -688,7 +704,7 @@ mod tests {
             detail: "Too many users have viewed or downloaded this file recently".to_owned(),
         });
         assert_eq!(
-            recovery.after_failure(&limit, 1_000),
+            recovery.after_failure(&limit, 1_000, false),
             Some(Hold::LimitReached {
                 site: "Google Drive".to_owned(),
                 until: 1_000 + 30 * 60 * 1000
@@ -706,7 +722,7 @@ mod tests {
         });
         for _ in 0..2 {
             assert_eq!(
-                recovery.after_failure(&wait, 1_000),
+                recovery.after_failure(&wait, 1_000, false),
                 Some(Hold::LimitReached {
                     site: "1fichier".to_owned(),
                     until: 1_000 + 241 * 60 * 1000
@@ -715,5 +731,53 @@ mod tests {
             );
         }
         assert_eq!(recovery.limits_reached, 0);
+    }
+
+    #[test]
+    fn a_run_that_downloaded_something_starts_the_retries_over() {
+        let mut recovery = Recovery::default();
+        for _ in 0..3 {
+            recovery.after_failure(&lost_connection(), 0, false);
+        }
+        assert_eq!(
+            recovery.after_failure(&lost_connection(), 0, true),
+            Some(Hold::Retry {
+                attempt: 1,
+                attempts: 3,
+                until: 30_000
+            }),
+            "it got further, so it isn't the fourth drop in a row"
+        );
+
+        let limit = failure(PreviewError::LimitReached {
+            site: "Google Drive".to_owned(),
+            detail: "Too many users have viewed or downloaded this file recently".to_owned(),
+        });
+        for _ in 0..3 {
+            recovery.after_failure(&limit, 0, false);
+        }
+        assert_eq!(
+            recovery.after_failure(&limit, 0, true),
+            Some(Hold::LimitReached {
+                site: "Google Drive".to_owned(),
+                until: 30 * 60 * 1000
+            }),
+            "the limit had freed up meanwhile, so the waits start short again"
+        );
+    }
+
+    #[test]
+    fn a_named_wait_is_at_most_a_day() {
+        let wait = failure(PreviewError::WaitBetweenDownloads {
+            site: "MEGA".to_owned(),
+            seconds: u64::MAX,
+        });
+        assert_eq!(
+            Recovery::default().after_failure(&wait, 1_000, false),
+            Some(Hold::LimitReached {
+                site: "MEGA".to_owned(),
+                until: 1_000 + 24 * 60 * 60 * 1000
+            })
+        );
     }
 }

@@ -17,11 +17,19 @@ struct FakeRunner {
     started: Mutex<Vec<i64>>,
     jobs: Mutex<Vec<JobSpec>>,
     outcomes: Mutex<HashMap<i64, JobOutcome>>,
+    /// Runs that report bytes arriving before they end with their outcome.
+    downloading: Mutex<Vec<i64>>,
 }
 
 impl FakeRunner {
     fn complete(&self, id: i64, outcome: JobOutcome) {
         lock(&self.outcomes).insert(id, outcome);
+    }
+
+    /// Ends the run with `outcome` once it has reported bytes arriving.
+    fn complete_after_downloading(&self, id: i64, outcome: JobOutcome) {
+        lock(&self.downloading).push(id);
+        self.complete(id, outcome);
     }
 
     fn started(&self) -> Vec<i64> {
@@ -53,6 +61,14 @@ impl JobRunner for FakeRunner {
                 return JobOutcome::Cancelled;
             }
             if let Some(outcome) = lock(&self.outcomes).remove(&job.id) {
+                let mut downloading = lock(&self.downloading);
+                if let Some(place) = downloading.iter().position(|id| *id == job.id) {
+                    downloading.remove(place);
+                    on_progress(DownloadProgress {
+                        speed: Some(1_000_000.0),
+                        ..DownloadProgress::at(DownloadStage::DownloadingVideo)
+                    });
+                }
                 return outcome;
             }
             thread::sleep(Duration::from_millis(5));
@@ -1624,6 +1640,30 @@ fn a_lost_connection_is_tried_again_three_times_then_fails() {
     assert!(
         matches!(test.held(id), Hold::Retry { attempt: 1, .. }),
         "Retry starts the automatic retries over"
+    );
+    test.cancel_all();
+}
+
+#[test]
+fn a_download_that_keeps_getting_further_keeps_being_tried_again() {
+    let test = Test::new();
+    let id = test.add("a");
+    for run in 1..=5 {
+        wait_until("it runs", || test.times_started(id) == run);
+        test.runner
+            .complete_after_downloading(id, lost_connection());
+        let hold = test.held(id);
+        assert!(
+            matches!(hold, Hold::Retry { attempt: 1, .. }),
+            "run {run} got further before it dropped: {hold:?}"
+        );
+        test.queue.try_now(id).unwrap();
+    }
+    wait_until("it runs again", || test.times_started(id) == 6);
+    test.runner.complete(id, lost_connection());
+    assert!(
+        matches!(test.held(id), Hold::Retry { attempt: 2, .. }),
+        "a drop with nothing downloaded counts"
     );
     test.cancel_all();
 }

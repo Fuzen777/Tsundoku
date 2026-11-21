@@ -23,7 +23,7 @@ use super::{DownloadError, DownloadProgress, DownloadStage};
 use crate::cancel::CancelToken;
 use crate::hosts::check::{BrowserCheck, CheckPage};
 use crate::hosts::windowed::Caught;
-use crate::hosts::{self, Address, FileCheck, FileSource, Host, Page, RemoteFile};
+use crate::hosts::{self, Address, FileCheck, FileSource, Host, Page, RemoteFile, mega};
 use crate::metadata::PreviewError;
 
 /// How much is read from the network or the disk at a time.
@@ -578,7 +578,11 @@ fn fetch(
         None => {
             let response = send(client, host, &address.url, offset, cancel)?;
             if let Some(error) = hosts::status_error(host, &response) {
-                return Err(error.into());
+                // MEGA says when its transfer quota frees up.
+                let quota = matches!(host, Host::Mega)
+                    .then(|| mega::quota_wait(response.status(), response.headers()))
+                    .flatten();
+                return Err(quota.unwrap_or(error).into());
             }
             // A page about an error, such as Google Drive's download limit, mustn't be saved as part of the file.
             if host.sends_attachments() && !hosts::is_attachment(response.headers()) {
@@ -1146,6 +1150,83 @@ mod tests {
                 Ok(None)
             ),
             "a refused connection"
+        );
+    }
+
+    #[test]
+    fn continues_a_part_file_and_waits_as_long_as_mega_says() {
+        use hosts::mediafire::MediaFireFile;
+        use hosts::test_server::{Reply, TestServer};
+        let server = TestServer::start(|request| match request.path.as_str() {
+            "/file" if request.header("range") == Some("bytes=2-") => {
+                Reply::new(206, "345").with("Content-Range", "bytes 2-4/5")
+            }
+            "/file" => Reply::new(200, "12345"),
+            "/quota" => Reply::new(509, "").with("X-MEGA-Time-Left", "5400"),
+            "/quota-untimed" => Reply::new(509, ""),
+            _ => Reply::new(404, "Not found"),
+        });
+        let client = hosts::tsundoku_client().unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        let part = folder.path().join("0.part");
+        let file = RemoteFile {
+            path: PathBuf::from("a.zip"),
+            size: 5,
+            source: FileSource::MediaFire(MediaFireFile {
+                quick_key: "abc123".to_owned(),
+                sha256: None,
+                direct: None,
+            }),
+        };
+        let fetch_from = |host: Host, path: &str| {
+            let address = Address {
+                url: server.url(path),
+                check: FileCheck::None,
+            };
+            fetch(
+                &client,
+                host,
+                &address,
+                &file,
+                &part,
+                None,
+                &CancelToken::new(),
+                &mut Meter::new(5, None),
+                &mut None,
+                &mut |_| {},
+            )
+        };
+
+        fs::write(&part, "12").unwrap();
+        assert!(fetch_from(Host::MediaFire, "/file").is_ok());
+        assert_eq!(
+            fs::read_to_string(&part).unwrap(),
+            "12345",
+            "it went on from what an earlier run left"
+        );
+
+        fs::remove_file(&part).unwrap();
+        let error = |host: Host, path: &str| match fetch_from(host, path) {
+            Err(Stop::Failed(DownloadError::YtDlp { error })) => error,
+            _ => panic!("{path} fails"),
+        };
+        assert_eq!(
+            error(Host::Mega, "/quota"),
+            PreviewError::WaitBetweenDownloads {
+                site: "MEGA".to_owned(),
+                seconds: 5400
+            }
+        );
+        assert!(matches!(
+            error(Host::Mega, "/quota-untimed"),
+            PreviewError::LimitReached { .. }
+        ));
+        assert!(
+            matches!(
+                error(Host::MediaFire, "/quota"),
+                PreviewError::LimitReached { .. }
+            ),
+            "only MEGA's own answer says how long"
         );
     }
 

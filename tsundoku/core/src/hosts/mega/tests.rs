@@ -361,6 +361,57 @@ fn sorts_megas_errors() {
 }
 
 #[test]
+fn waits_as_long_as_mega_says_its_transfer_quota_is_used_up() {
+    let key = file_key(FILE_KEY);
+    let answer = |json: Value| {
+        serde_json::from_value::<AddressAnswer>(json)
+            .unwrap()
+            .address(&key)
+    };
+    let quota = |seconds| {
+        Err(PreviewError::WaitBetweenDownloads {
+            site: "MEGA".to_owned(),
+            seconds,
+        })
+    };
+    assert_eq!(answer(json!({"e": -17, "tl": 4200})), quota(4200));
+    assert_eq!(answer(json!({"s": 5, "tl": 600})), quota(600), "no address");
+    for untimed in [
+        json!({"e": -17}),
+        json!({"e": -17, "tl": 0}),
+        json!({"s": 5}),
+    ] {
+        assert!(
+            matches!(
+                answer(untimed.clone()),
+                Err(PreviewError::LimitReached { .. })
+            ),
+            "{untimed}"
+        );
+    }
+    assert!(
+        matches!(
+            answer(json!({"e": -9, "tl": 600})),
+            Err(PreviewError::Unavailable { .. })
+        ),
+        "a time only counts for the quota"
+    );
+    assert!(answer(json!({"g": "https://gfs.userstorage.mega.co.nz/dl/x", "s": 5})).is_ok());
+
+    let headers = |value: &str| {
+        let mut headers = HeaderMap::new();
+        headers.insert("X-MEGA-Time-Left", value.parse().unwrap());
+        headers
+    };
+    let bandwidth = StatusCode::from_u16(509).unwrap();
+    assert_eq!(quota_wait(bandwidth, &headers(" 3600 ")), quota(3600).err());
+    assert_eq!(quota_wait(bandwidth, &headers("0")), None);
+    assert_eq!(quota_wait(bandwidth, &headers("soon")), None);
+    assert_eq!(quota_wait(bandwidth, &HeaderMap::new()), None);
+    assert_eq!(quota_wait(StatusCode::FORBIDDEN, &headers("3600")), None);
+}
+
+#[test]
 fn never_prints_a_key() {
     assert_eq!(format!("{:?}", file_key(FILE_KEY)), "FileKey(…)");
 }

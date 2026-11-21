@@ -89,8 +89,8 @@ The downloads started since the queue was last idle make up its run (`downloads:
 
 ## When a Download Fails
 
-- A run that fails because the connection dropped (`PreviewError::Network`) goes back to Waiting with its partial files and is tried again after 30 seconds, 2 minutes and 8 minutes (`CONNECTION_RETRY_WAITS`); the fourth failure in a row leaves it Failed.
-- A run that finds a file host's download limit used up (`PreviewError::LimitReached`: MEGA's transfer quota, a Google Drive or Dropbox file's) waits 30 minutes, doubled each time it's still used up, up to 4 hours, and never fails for it.
+- A run that fails because the connection dropped (`PreviewError::Network`) goes back to Waiting with its partial files and is tried again after 30 seconds, 2 minutes and 8 minutes (`CONNECTION_RETRY_WAITS`); the fourth failure in a row leaves it Failed. A run that downloaded something before it dropped (its progress gave a speed) starts that count over, since its partial files are kept.
+- A run that finds a file host's download limit used up (`PreviewError::LimitReached`: MEGA's transfer quota, a Google Drive or Dropbox file's) waits 30 minutes, doubled each time it's still used up, up to 4 hours, and never fails for it; a run that downloaded something first starts the doubling over. When the host says how long (`PreviewError::WaitBetweenDownloads`: 1fichier's wait between free downloads, MEGA's time left on its transfer quota), it waits that long plus a minute, at most a day.
 - Its `Hold` (`retry` or `limitReached`) says when; Try Now ends the wait. A finished run, Resume and Retry start the count over. Like the site waits, these live in memory: after a restart, a waiting download tries again at once.
 
 ## Room on the Drive

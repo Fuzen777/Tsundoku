@@ -239,8 +239,13 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **27. Downloads recover by themselves** · 0.1.52
 - [ ] Start Big Buck Bunny, then turn the network off until its row changes (yt-dlp retries on its own first, which can take a minute) → "The connection dropped. Trying again at … (1 of 3)." with the time left. Try Now starts it at once; with the network back, it continues from what it had.
 - [ ] Pause All stops a waiting row; Resume starts its retries over.
-- [ ] Watch for a MEGA, Google Drive or Dropbox download limit → it waits 30 minutes, then an hour, two and four, and never fails for it.
+- [ ] Watch for a Google Drive or Dropbox download limit → it waits 30 minutes, then an hour, two and four, and never fails for it. (MEGA's waits as long as MEGA says since 0.2.8: see 78.)
 - Not tried against a real dropped connection or host limit.
+
+**78. MEGA's own reset time, and retries that count progress** · 0.2.8 · *watch for it*
+- [ ] When a MEGA download uses up MEGA's transfer quota (a few GB within hours, without an account), its row says "MEGA's download limit is used up. Continuing at …" with MEGA's own time (often hours away, not 30 minutes), counts down, and at that time the download goes on by itself from where it stopped, not from the start.
+- [ ] A download whose connection drops again and again while more of it keeps arriving says "(1 of 3)" each time and doesn't fail; one that drops before anything more arrived counts on to "(2 of 3)".
+- Claude checked with tests: MEGA's answers that give a time (its API's `tl`, and `X-MEGA-Time-Left` on its download server's 509), a part file continued with a Range request (MEGA's servers answered one live with 206), and the retries starting over in the queue. Not tried against MEGA's real quota, which can't be reached on purpose without using up the connection's.
 
 ## Presets
 

@@ -380,6 +380,9 @@ enum EndRequest {
 struct Running {
     cancel: CancelToken,
     end_request: Option<EndRequest>,
+    /// Bytes arrived during this run (its progress gave a speed), so if it fails, its retries start over
+    /// (`Recovery::after_failure`).
+    downloaded: bool,
 }
 
 #[derive(Default)]
@@ -1338,6 +1341,7 @@ impl DownloadQueue {
                     Running {
                         cancel: cancel.clone(),
                         end_request: None,
+                        downloaded: false,
                     },
                 );
                 started.push((job, cancel));
@@ -1479,12 +1483,16 @@ impl DownloadQueue {
     }
 
     fn report_progress(&self, id: i64, progress: DownloadProgress) {
-        if let Some(item) = lock(&self.state)
-            .items
-            .iter_mut()
-            .find(|item| item.id == id)
         {
-            item.progress = Some(progress.clone());
+            let mut state = lock(&self.state);
+            if let Some(item) = state.items.iter_mut().find(|item| item.id == id) {
+                item.progress = Some(progress.clone());
+            }
+            if progress.speed.is_some_and(|speed| speed > 0.0)
+                && let Some(running) = state.running.get_mut(&id)
+            {
+                running.downloaded = true;
+            }
         }
         self.listener.progress(id, &progress);
     }
@@ -1492,10 +1500,9 @@ impl DownloadQueue {
     /// Settles a run: done (and recorded in the history), failed, stopped, or removed if it was cancelled.
     fn finish(&self, job: &JobSpec, outcome: JobOutcome) {
         let mut state = lock(&self.state);
-        let end_request = state
-            .running
-            .remove(&job.id)
-            .and_then(|running| running.end_request);
+        let running = state.running.remove(&job.id);
+        let downloaded = running.as_ref().is_some_and(|running| running.downloaded);
+        let end_request = running.and_then(|running| running.end_request);
         let stopped = end_request.is_some() || outcome == JobOutcome::Cancelled;
         if end_request == Some(EndRequest::Cancel) {
             // The files go first, so once the item is gone, they are too.
@@ -1507,7 +1514,9 @@ impl DownloadQueue {
             item.progress = None;
             // A lost connection or a used-up download limit is tried again by itself, unless the user ended the run.
             let retry = match (&end_request, &outcome) {
-                (None, JobOutcome::Failed(error)) => item.recovery.after_failure(error, now_ms()),
+                (None, JobOutcome::Failed(error)) => {
+                    item.recovery.after_failure(error, now_ms(), downloaded)
+                }
                 _ => None,
             };
             match (end_request, outcome) {
