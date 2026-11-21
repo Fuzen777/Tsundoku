@@ -42,9 +42,9 @@ describe("describePreviewError", () => {
 })
 
 describe("pages of several items", () => {
-  it("points a listing in Pending to the add bar, and names a site that can't be listed, without naming a tool", () => {
+  it("says to paste a listing in Pending on its own, and names a site that can't be listed, without naming a tool", () => {
     const listing = describePreviewError({ kind: "playlist" }).message
-    expect(listing).toContain("add bar")
+    expect(listing).toContain("on its own")
     const refused = describePreviewError({ kind: "notListable", site: "X" }).message
     expect(refused).toBe(
       "This X page holds several items, which Tsundoku can't list yet. Paste a link to a single one instead.",

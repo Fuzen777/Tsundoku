@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.5 · 2026-11-21
+
+### Changed
+
+- **Paste Link instead of the add bar's field**: the field across the top, where a link was pasted and then added, is now one button. Paste Link adds what you copied in one click: one link opens its preview, several go to Pending. With no link on the clipboard, it says so beside the button and adds nothing. Ctrl+V anywhere in the window still does the same, and so does Paste on the empty Queue and Pending.
+- **Type a Link**: the small button beside it, or Ctrl+L, brings a field back to type a link, or to edit the last one shown, until it's added or closed with Esc.
+- **A copied sentence isn't taken for links**: Paste Link, Ctrl+V and the Clipboard Shortcut add what the clipboard holds without anyone reading it first, so among several words they now take only links written with `http://` or `https://`. Before, a copied sentence could send words such as "notes.txt" to Pending as links. A single copied link still works without `https://` ("youtu.be/…"), and a link inside a copied sentence is now found, where it used to fail as "That isn't a link".
+
 ## 0.2.4 · 2026-11-21
 
 ### Added

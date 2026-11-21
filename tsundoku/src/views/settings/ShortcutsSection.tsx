@@ -16,7 +16,7 @@ export function ShortcutsSection() {
 
   const rows: [string, string][] = [
     [keys.paste, actions.paste],
-    [keys.focusAddBar, actions.focusAddBar],
+    [keys.typeLink, actions.typeLink],
     [keys.views(SHORTCUT_VIEWS.length), actions.views(viewNames)],
     [keys.delete, actions.delete],
   ]

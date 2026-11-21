@@ -545,7 +545,7 @@ fn add_copied_links(app: &AppHandle) {
     let text = tsundoku_core::clipboard::copied_text().unwrap_or_default();
     #[cfg(not(windows))]
     let text = String::new();
-    add_sent(app, &pending::links_in(&text), false);
+    add_sent(app, &pending::links_in_copy(&text), false);
 }
 
 /// Adds links sent from outside the window, the clipboard shortcut's or a browser's, and says what came of it.

@@ -428,6 +428,7 @@ pub fn run() {
             watched::skip_watched_items,
             watched::skip_new_watched_items,
             pending::links_in_text,
+            pending::links_in_copy,
             pending::check_link_file,
             pending::links_in_link_file,
             pending::links_in_file_at,

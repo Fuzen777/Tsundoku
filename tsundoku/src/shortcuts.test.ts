@@ -20,9 +20,9 @@ describe("the window's shortcuts", () => {
     expect(shortcutFor(press("é", "Digit2", { ctrlKey: true }))).toEqual({ kind: "view", view: "pending" })
   })
 
-  it("goes to the add bar with Ctrl+L, by the letter typed", () => {
-    expect(shortcutFor(press("l", "KeyL", { ctrlKey: true }))).toEqual({ kind: "focusAddBar" })
-    expect(shortcutFor(press("L", "KeyL", { ctrlKey: true }))).toEqual({ kind: "focusAddBar" })
+  it("opens the field to type a link with Ctrl+L, by the letter typed", () => {
+    expect(shortcutFor(press("l", "KeyL", { ctrlKey: true }))).toEqual({ kind: "typeLink" })
+    expect(shortcutFor(press("L", "KeyL", { ctrlKey: true }))).toEqual({ kind: "typeLink" })
     expect(shortcutFor(press("l", "KeyL"))).toBeNull()
   })
 

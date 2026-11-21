@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { Bookmark, Check, ClipboardCheck, ClipboardPaste, FileInput, Keyboard, MousePointerClick } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { clipboardText } from "../api"
 import { chooseLinkFiles } from "../linkFiles"
 import { SETTINGS_PLACES, useAppActions } from "../navigation"
 import { useSaveAddingOptions } from "../queries"
@@ -22,12 +21,13 @@ interface WayRow {
 const text = strings.waysToAdd
 
 /**
- * The ways to add links, in the order given, each with where it stands and one button: Paste and Choose File… add
- * at once, Turn On turns the clipboard watcher on, and Set Up or Change opens Settings → Adding Links at its place.
+ * The ways to add links, in the order given, each with where it stands and one button: Paste (the add bar's Paste
+ * Link) and Choose File… add at once, Turn On turns the clipboard watcher on, and Set Up or Change opens Settings →
+ * Adding Links at its place.
  * The empty Queue and Pending show it.
  */
 export function WaysToAdd({ ways }: { ways: readonly WayToAdd[] }) {
-  const { navigate, addText, addFileLinks } = useAppActions()
+  const { navigate, pasteFromClipboard, addFileLinks } = useAppActions()
   const { options, save } = useSaveAddingOptions()
   const [busy, setBusy] = useState<WayToAdd | null>(null)
   const watching = options?.watchClipboard ?? false
@@ -38,13 +38,7 @@ export function WaysToAdd({ ways }: { ways: readonly WayToAdd[] }) {
       icon: ClipboardPaste,
       label: text.paste,
       state: text.pasteState,
-      action: {
-        label: text.pasteAction,
-        run: async () => {
-          const copied = await clipboardText()
-          if (copied?.trim()) addText(copied)
-        },
-      },
+      action: { label: text.pasteAction, run: pasteFromClipboard },
     },
     drop: {
       icon: FileInput,

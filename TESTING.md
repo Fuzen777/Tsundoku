@@ -41,7 +41,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 **42. No browser menu on right-click** · 0.1.64
 - [ ] Right-click a row, a button or an empty spot in any view → nothing opens (no Back, Reload, Save As, Print or Inspect).
-- [ ] Right-click in the add bar or a search field → the usual Cut, Copy, Paste menu. Select a title's text and right-click it → Copy.
+- [ ] Right-click in a search field, or the add bar's field (Type a Link) → the usual Cut, Copy, Paste menu. Select a title's text and right-click it → Copy.
 
 **4. What's New** · 0.1.51
 - [ ] The first start after rebuilding the portable copy shows a What's New card under the add bar with the changes since the version that copy last ran (only 0.1.63's if it last ran before 0.1.51, which didn't record it). Its × closes it, and it doesn't come back at the next start.
@@ -49,8 +49,12 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Adding Links
 
+**77. Paste Link** · 0.2.5 · *one open decision*
+- [ ] Copy a link in your browser and click Paste Link → its preview opens, with nothing else to click. Claude tried the button, its notes, Type a Link, Ctrl+L and Esc in a test copy, but with a stand-in for the clipboard, so that what you had copied wasn't overwritten: only a real copy is left to try.
+- [ ] If you use a Clipboard Shortcut: copy a sentence without a link and press it → "Nothing to Add". Copy two links with words around them → both are in Pending, and none of the words.
+
 **5. Pending tab** · 0.1.14
-- [ ] Paste three or more links at once in the add bar (one per line) → they go to Pending instead of the preview card. Each row fills in one at a time (thumbnail, title, site); one downloaded before is marked, with Download Again. The sidebar count matches.
+- [ ] Copy three or more links at once (one per line) and click Paste Link → they go to Pending instead of the preview card. Each row fills in one at a time (thumbnail, title, site); one downloaded before is marked, with Download Again. The sidebar count matches.
 - [ ] Quit and start again → the links are still there.
 - [ ] Pick a preset in Videos Start As, then Start All → every link not downloaded before goes to the queue with it; a row's own preset picker wins. Ticking links gives Start Selected and Remove Selected.
 - [ ] With Downloads at Once at 2, start two Instagram posts → the second waits until the first is done, while a YouTube video goes ahead.
@@ -73,7 +77,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 **9. Keyboard shortcuts** · 0.1.38
 - [ ] Copy a link, click an empty spot in the window (not a text field) and press Ctrl+V → its preview opens. With several links copied → they go to Pending.
-- [ ] Ctrl+L → the add bar, its text selected. Ctrl+1 to Ctrl+6 → Queue, Pending, History, Presets, Rules, Settings.
+- [ ] Ctrl+L → the add bar's field opens, its text selected. Ctrl+1 to Ctrl+6 → Queue, Pending, History, Presets, Rules, Settings.
 - [ ] In Pending, tick links and press Delete → they're removed (with Undo). In a text field, Delete only edits the text.
 - [ ] Hovering a sidebar item says its key ("Queue (Ctrl+1)"), and Settings → Keyboard Shortcuts lists them all.
 
@@ -113,7 +117,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] A playlist is listed whole, in its own order. A `watch?v=…&list=…` link is still that one video.
 - [ ] An Instagram account (`https://www.instagram.com/natgeo/`) lists its newest 50 posts and reels; it can take a minute.
 - [ ] The box at the top ticks all or none and counts them. Download Selected queues each ticked item as its own download, with a rule's preset or the one in Videos Start As.
-- [ ] A channel link pasted with others waits in Pending, saying to paste it in the add bar. (X accounts are listed since 0.1.134, which Claude tried in the real app.)
+- [ ] A channel link pasted with others waits in Pending, under Needs Attention with Pick What to Download. (X accounts are listed since 0.1.134, which Claude tried in the real app.)
 
 **15. Pick which files of a post to download** · 0.1.55
 - [ ] Paste the Instagram carousel → a strip of 6 small pictures with their numbers and a play mark on videos, all ticked. Untick 2 to 5 and Download → the queue row says "2 of 6 files", and only files 1 and 6 arrive.
@@ -275,7 +279,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **61. Drag rules into place** · 0.1.87
 - [ ] Rules → hover a rule's grip (left of its number): the cursor is a hand and "Drag to Move" shows. Drag it up or down: the whole row follows the pointer and a line shows where it will go. Dropping saves the new order at once, numbers follow, and the rule that decides changes accordingly.
 - [ ] Dragging above Everything Else puts the rule just under it; Everything Else has no grip. Dropping a rule where it already is changes nothing. While a rule is being edited, the grips are dimmed and don't drag.
-- [ ] Dragging a link from a browser onto the Rules view still opens it in the add bar, as anywhere else.
+- [ ] Dragging a link from a browser onto the Rules view still opens its preview, as anywhere else.
 - Seen in the browser preview with simulated drag events (the line shows, a drop saves); not dragged by hand.
 
 **60. The last matching rule wins** · 0.1.86

@@ -53,10 +53,17 @@ pub fn pending_links(pending: Pending<'_>) -> Vec<PendingLink> {
     pending.list()
 }
 
-/// The links in pasted or dropped text, so the add bar can tell one link from several.
+/// The links in typed or dropped text, so the app can tell one link from several.
 #[tauri::command]
 pub fn links_in_text(text: String) -> Vec<String> {
     pending::links_in(&text)
+}
+
+/// The links in text that came off the clipboard without being read first: Paste Link's, and Ctrl+V's outside a
+/// text field.
+#[tauri::command]
+pub fn links_in_copy(text: String) -> Vec<String> {
+    pending::links_in_copy(&text)
 }
 
 /// The header that names a dropped file for `links_in_link_file`: the name as a JSON string with every character
@@ -108,7 +115,7 @@ pub async fn links_in_file_at(path: String) -> Result<Vec<String>, LinkFileError
         })
 }
 
-/// The text on the clipboard, for the empty views' Paste, which adds it as if pasted in the add bar.
+/// The text on the clipboard, for Paste Link and the empty views' Paste, which add the links in it.
 #[tauri::command]
 pub fn clipboard_text() -> Option<String> {
     tsundoku_core::clipboard::copied_text()

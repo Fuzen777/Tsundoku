@@ -577,6 +577,32 @@ fn finds_the_links_in_pasted_text() {
 }
 
 #[test]
+fn takes_only_links_written_out_from_a_copy_of_several_words() {
+    // A copy of one word is a link with or without "https://".
+    assert_eq!(links_in_copy(" youtu.be/b\r\n"), ["https://youtu.be/b"]);
+    assert_eq!(
+        links_in_copy("<https://youtu.be/b>"),
+        ["https://youtu.be/b"]
+    );
+    // Among several words, only those written with it: nobody read the text before it was added.
+    let text = "Saved as notes.txt. See (https://youtu.be/b), youtu.be/c and e.g.\n\
+        HTTPS://x.com/someone/status/1 twice https://youtu.be/b";
+    assert_eq!(
+        links_in_copy(text),
+        ["https://youtu.be/b", "HTTPS://x.com/someone/status/1"]
+    );
+    assert_eq!(
+        links_in_copy("https://youtu.be/b\nhttps://youtu.be/c"),
+        ["https://youtu.be/b", "https://youtu.be/c"]
+    );
+    let none = Vec::<String>::new();
+    assert_eq!(links_in_copy("A sentence. Nothing else."), none);
+    assert_eq!(links_in_copy("hello"), none);
+    assert_eq!(links_in_copy("C:\\Videos\\clip.mp4"), none);
+    assert_eq!(links_in_copy("  "), none);
+}
+
+#[test]
 fn finds_the_page_a_browser_sends() {
     let video = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
     let sent = "tsundoku://add?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DjNQXAC9IVRw";

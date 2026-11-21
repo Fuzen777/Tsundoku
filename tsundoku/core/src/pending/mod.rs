@@ -120,12 +120,28 @@ pub struct AddedLinks {
 /// "https://" ("youtu.be/…"), with brackets, quotes and a sentence's trailing punctuation around them left out. Other
 /// words are skipped, so a pasted paragraph gives only its links.
 pub fn links_in(text: &str) -> Vec<String> {
+    links_among(text, |_| true)
+}
+
+/// The links in text taken off the clipboard without anyone reading it first (Paste Link, Ctrl+V outside a text
+/// field, the clipboard shortcut): the words written with "http://" or "https://", as `links_in` finds them. A word
+/// without them counts only when it's all there is ("youtu.be/…"): in a copied sentence, "notes.txt" or a word
+/// before a full stop would be taken for a link, and nobody saw the text to tell.
+pub fn links_in_copy(text: &str) -> Vec<String> {
+    let lone_word = text.split_whitespace().nth(1).is_none();
+    links_among(text, |word| lone_word || watcher::has_web_scheme(word))
+}
+
+/// The words of `text` that are links, among those `counts` takes, in order and each once, without the brackets,
+/// quotes and trailing punctuation around them.
+fn links_among(text: &str, counts: impl Fn(&str) -> bool) -> Vec<String> {
     let mut links: Vec<String> = Vec::new();
     for word in text.split_whitespace() {
         let word = word
             .trim_start_matches(['<', '(', '[', '{', '"', '\''])
             .trim_end_matches(['>', ')', ']', '}', '"', '\'', ',', ';', '!', '?']);
-        if let Some(link) = metadata::normalize_link(word)
+        if counts(word)
+            && let Some(link) = metadata::normalize_link(word)
             && !links.contains(&link)
         {
             links.push(link);

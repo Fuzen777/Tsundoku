@@ -69,13 +69,14 @@ export interface SettingsTarget {
 export interface AppActions {
   /** Opens a view; Settings at a place in it (a section or a control), when one is given. */
   navigate: (view: ViewId, place?: SettingsPlace) => void
-  /** Puts a link in the add bar and fetches its preview, as a dropped link is. */
+  /** Fetches a link's preview, as a dropped link's is, and keeps it as the add bar's field's text. */
   showLink: (link: string) => void
   /** Shows a pending link that lists several items in the preview card, to pick from: once what's picked joins the
    * queue, or it's watched, the pending link leaves Pending. */
   pickFromPending: (id: number, link: string) => void
-  /** Adds text as if pasted in the add bar and submitted: one link's preview, or several links to Pending. */
-  addText: (text: string) => void
+  /** Adds what the clipboard holds, as the add bar's Paste Link does: one link's preview, or several links to
+   * Pending. With no link there, the add bar says so. */
+  pasteFromClipboard: () => Promise<void>
   /** Adds links read from files to Pending, as a dropped file's are (asking first for many), or says why there were
    * none. */
   addFileLinks: (read: LinkFilesRead) => void
@@ -96,7 +97,7 @@ export const AppActionsContext = createContext<AppActions>({
   navigate: () => {},
   showLink: () => {},
   pickFromPending: () => {},
-  addText: () => {},
+  pasteFromClipboard: () => Promise.resolve(),
   addFileLinks: () => {},
   showWatchedDownloads: () => {},
   showWhatsNew: () => {},

@@ -678,10 +678,19 @@ export function getPendingLinks(): Promise<PendingLink[]> {
   return invoke<PendingLink[]>("pending_links")
 }
 
-/** The links in pasted or dropped text, each once, so one link can be told from several. */
+/** The links in typed or dropped text, each once, so one link can be told from several. */
 export function linksInText(text: string): Promise<string[]> {
   if (!isTauri()) return Promise.resolve(standIns.linksInText(text))
   return invoke<string[]>("links_in_text", { text })
+}
+
+/**
+ * The links in text that came off the clipboard without being read first (Paste Link, Ctrl+V outside a text field),
+ * each once: those written with http:// or https://, or the text's one word when it looks like a link without them.
+ */
+export function linksInCopy(text: string): Promise<string[]> {
+  if (!isTauri()) return Promise.resolve(standIns.linksInCopy(text))
+  return invoke<string[]>("links_in_copy", { text })
 }
 
 /** Whether a dropped file can be read for links, from its name and size, before it's read. Rejects with a

@@ -103,7 +103,8 @@ export const strings = {
     withKeys: (label: string, keys: string) => `${label} (${keys})`,
     paste: "Ctrl+V",
     pasteAnywhere: "Ctrl+V Anywhere",
-    focusAddBar: "Ctrl+L",
+    typeLink: "Ctrl+L",
+    closeField: "Esc",
     view: (number: number) => `Ctrl+${number}`,
     views: (last: number) => `Ctrl+1 to Ctrl+${last}`,
     delete: "Delete",
@@ -111,7 +112,7 @@ export const strings = {
   /** The ways to add links, as the empty Queue and Pending list them (WaysToAdd). */
   waysToAdd: {
     paste: "Paste a Link",
-    pasteState: "Ctrl+V anywhere, or the add bar above.",
+    pasteState: "Ctrl+V anywhere, or Paste Link above.",
     pasteAction: "Paste",
     drop: "Drop Links or Files",
     dropState: "From a browser, or a text file, bookmarks export or shortcut.",
@@ -133,8 +134,16 @@ export const strings = {
     change: "Change",
   },
   addBar: {
-    placeholder: "Paste One Link or Several",
+    /** The button across the top, which adds the links the clipboard holds. */
+    paste: "Paste Link",
+    pasteHint: "Paste One Link or Several",
+    /** Beside Paste Link when the clipboard holds no link, or nothing that's text. */
+    noLinkCopied: "There's no link on the clipboard.",
+    /** Beside Paste Link: opens the field to type or edit a link. */
+    typeLink: "Type a Link",
+    placeholder: "Type or Paste a Link",
     add: "Add",
+    close: "Close",
     errors: {
       dismiss: "Dismiss",
     },
@@ -867,7 +876,7 @@ export const strings = {
     setUpDeno: "Set Up Deno",
     errors: {
       invalidLink: "That isn't a link. Paste a link that starts with https://.",
-      playlist: "This link lists several items. Paste it in the add bar to pick which to download.",
+      playlist: "This link lists several items. Paste it on its own to pick which to download.",
       notListable: (site: string) =>
         `This ${site || "site's"} page holds several items, which Tsundoku can't list yet. Paste a link to a single one instead.`,
       liveStream: "This is a live stream, which can't be downloaded yet.",
@@ -1429,8 +1438,9 @@ export const strings = {
     },
     keyboardShortcuts: "Keyboard Shortcuts",
     shortcutActions: {
-      paste: "Adds the links you copied, from anywhere but a text field: one shows its preview, several go to Pending.",
-      focusAddBar: "Goes to the add bar, with its text selected.",
+      paste:
+        "Adds the links you copied, as Paste Link does, from anywhere but a text field: one shows its preview, several go to Pending.",
+      typeLink: "Opens the field to type or edit a link, with its text selected.",
       views: (names: string[]) => `Open ${names.slice(0, -1).join(", ")} or ${names.at(-1)}, in the sidebar's order.`,
       delete: "Removes the ticked links in Pending.",
       clipboardShortcut: "Adds the links you copied to Pending from any app (Adding Links).",

@@ -3,8 +3,9 @@ import { mainNavItems, settingsNavItem, type ViewId } from "./navigation"
 import { strings } from "./strings"
 
 /**
- * The window's keyboard shortcuts: Ctrl+V anywhere outside a text field adds what was copied, Ctrl+L goes to the add
- * bar, Ctrl+1 to Ctrl+7 open the sidebar's views in its order, and Delete removes the links ticked in Pending. Each
+ * The window's keyboard shortcuts: Ctrl+V anywhere outside a text field adds what was copied, Ctrl+L opens the add
+ * bar's field to type a link, Ctrl+1 to Ctrl+7 open the sidebar's views in its order, and Delete removes the links
+ * ticked in Pending. Each
  * needs Ctrl alone or no modifier, so none is one of the clipboard shortcuts Settings offers (Ctrl+Alt+V and the
  * like), which Windows takes before the window sees them anyway.
  */
@@ -17,7 +18,7 @@ export function viewKeys(view: ViewId): string {
   return strings.shortcuts.view(SHORTCUT_VIEWS.indexOf(view) + 1)
 }
 
-export type Shortcut = { kind: "focusAddBar" } | { kind: "view"; view: ViewId }
+export type Shortcut = { kind: "typeLink" } | { kind: "view"; view: ViewId }
 
 /** What a key press holds, as a KeyboardEvent has it. */
 export interface KeyPress {
@@ -35,7 +36,7 @@ export interface KeyPress {
  */
 export function shortcutFor(press: KeyPress): Shortcut | null {
   if (!press.ctrlKey || press.altKey || press.shiftKey || press.metaKey) return null
-  if (press.key.toLowerCase() === "l") return { kind: "focusAddBar" }
+  if (press.key.toLowerCase() === "l") return { kind: "typeLink" }
   const digit = /^(?:Digit|Numpad)([1-9])$/.exec(press.code)
   const view = digit ? SHORTCUT_VIEWS[Number(digit[1]) - 1] : undefined
   return view ? { kind: "view", view } : null
@@ -69,9 +70,9 @@ export function isTextEntry(focused: unknown): boolean {
 }
 
 /**
- * Calls `onPaste` with the text pasted outside a text field (Ctrl+V, or Shift+Insert), for the add bar to take as if
- * it were pasted there and submitted. Chromium fires `paste` at the focused element, or the page, even when nothing
- * there is editable, and the event carries the text without asking for clipboard access.
+ * Calls `onPaste` with the text pasted outside a text field (Ctrl+V, or Shift+Insert), to add as the add bar's Paste
+ * Link adds what was copied. Chromium fires `paste` at the focused element, or the page, even when nothing there is
+ * editable, and the event carries the text without asking for clipboard access.
  */
 export function useWindowPaste(onPaste: (text: string) => void, enabled: boolean) {
   const pasted = useEffectEvent((event: ClipboardEvent) => {
@@ -89,7 +90,7 @@ export function useWindowPaste(onPaste: (text: string) => void, enabled: boolean
 }
 
 interface ShortcutActions {
-  focusAddBar: () => void
+  typeLink: () => void
   navigate: (view: ViewId) => void
 }
 
@@ -100,7 +101,7 @@ export function useAppShortcuts(actions: ShortcutActions, enabled: boolean) {
     const shortcut = shortcutFor(event)
     if (!shortcut) return
     event.preventDefault()
-    if (shortcut.kind === "focusAddBar") actions.focusAddBar()
+    if (shortcut.kind === "typeLink") actions.typeLink()
     else actions.navigate(shortcut.view)
   })
   useEffect(() => {

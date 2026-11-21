@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   addPendingLinks,
   addPendingLinksFromFiles,
+  clipboardText,
   confirmWithUser,
+  linksInCopy,
   linksInText,
   pendingLinkPicked,
   showMainWindow,
 } from "./api"
-import { AddBar } from "./components/AddBar"
+import { AddBar, type AddBarHandle } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
 import { Button } from "./components/Button"
 import { Card } from "./components/Card"
@@ -41,6 +43,9 @@ import { SettingsView } from "./views/SettingsView"
 import { SetupView } from "./views/SetupView"
 import { WatchedView } from "./views/WatchedView"
 
+/** How long Paste Link's note stays beside it. */
+const PASTE_NOTE_MS = 6000
+
 export function App() {
   const [view, setShownView] = useState<ViewId>("queue")
   // What the history shows when a watched source's Show Downloads in History opens it, until another view is opened.
@@ -49,8 +54,17 @@ export function App() {
     setHistoryTarget(null)
     setShownView(to)
   }, [])
+  // The text of the add bar's field, shown once Type a Link opens it: the link shown last, or what was typed.
   const [link, setLink] = useState("")
   const [addError, setAddError] = useState<ErrorDescription | null>(null)
+  // Why Paste Link added nothing, beside it for a few seconds: a new object each time, so saying it again starts the
+  // wait again.
+  const [pasteNote, setPasteNote] = useState<{ text: string } | null>(null)
+  useEffect(() => {
+    if (!pasteNote) return
+    const timer = setTimeout(() => setPasteNote(null), PASTE_NOTE_MS)
+    return () => clearTimeout(timer)
+  }, [pasteNote])
   /** Why dropped files gave no links: a type Tsundoku doesn't read, or none in it. */
   const [fileProblems, setFileProblems] = useState<ErrorDescription[]>([])
   const { data: needsSetup } = useToolsNeedSetup()
@@ -76,7 +90,8 @@ export function App() {
   // The pending link whose items the preview card shows, opened from its row in Pending's Needs Attention: it leaves
   // Pending once items picked from it join the queue or it's watched. Any other link shown forgets it.
   const pickingFor = useRef<number | null>(null)
-  // A dropped link, or Download Again in the history, goes in the add bar and is fetched right away.
+  // A copied or dropped link, or Download Again in the history, is fetched right away, and kept as the add bar's
+  // field's text, to edit there.
   const showLink = useCallback(
     (shown: string) => {
       pickingFor.current = null
@@ -97,16 +112,9 @@ export function App() {
     pickingFor.current = null
     if (id !== null) pendingLinkPicked(id).catch((error: unknown) => setAddError(describeDownloadError(error)))
   }, [])
-  // Text pasted or dropped with one link in it is previewed as before. Several links wait in Pending instead, where
-  // they're read one at a time.
-  const addText = useCallback(
-    async (text: string) => {
-      setAddError(null)
-      const links = await linksInText(text)
-      if (links.length < 2) {
-        showLink(text.trim())
-        return
-      }
+  // Several links wait in Pending, where they're read one at a time.
+  const addToPending = useCallback(
+    async (links: string[]) => {
       try {
         await addPendingLinks(links)
         setLink("")
@@ -116,9 +124,39 @@ export function App() {
         setAddError(describeDownloadError(error))
       }
     },
-    [showLink, closePreview],
+    [closePreview],
   )
-  const takeText = useCallback((text: string) => void addText(text), [addText])
+  // Text typed in the add bar's field, or dropped, with one link in it is previewed, and so is text with none, for
+  // the card to say why. Several links go to Pending.
+  const addText = useCallback(
+    async (text: string) => {
+      setAddError(null)
+      setPasteNote(null)
+      const links = await linksInText(text)
+      if (links.length < 2) showLink(links[0] ?? text.trim())
+      else await addToPending(links)
+    },
+    [showLink, addToPending],
+  )
+  // What was copied, added without being seen first (Paste Link, Ctrl+V outside a text field): one link is
+  // previewed and several go to Pending, as above, but only links written out count among several words, and a copy
+  // without any is said beside Paste Link rather than previewed.
+  const addCopied = useCallback(
+    async (text: string | null) => {
+      setAddError(null)
+      const links = text ? await linksInCopy(text) : []
+      if (links.length === 0) {
+        setPasteNote({ text: strings.addBar.noLinkCopied })
+        return
+      }
+      setPasteNote(null)
+      if (links.length === 1) showLink(links[0])
+      else await addToPending(links)
+    },
+    [showLink, addToPending],
+  )
+  const takeCopied = useCallback((text: string) => void addCopied(text), [addCopied])
+  const pasteFromClipboard = useCallback(async () => addCopied(await clipboardText()), [addCopied])
 
   // A dropped file of links (a text file, a bookmarks export, an Internet shortcut) sends its links to Pending, where
   // they're checked as copied links are: those with nothing to download leave once read. Over 300 links, it asks
@@ -167,16 +205,13 @@ export function App() {
   const takeDrop = useCallback((drop: Drop) => void addDrop(drop), [addDrop])
   useLinkDrop(takeDrop)
 
-  // Ctrl+V outside a text field adds what was copied as if pasted in the add bar and submitted; Ctrl+L goes to the
-  // add bar, and Ctrl+1 to Ctrl+7 to the sidebar's views. Not during the first-run setup.
-  const addBarInput = useRef<HTMLInputElement>(null)
+  // Ctrl+V outside a text field adds what was copied, as Paste Link does; Ctrl+L opens the add bar's field to type a
+  // link, and Ctrl+1 to Ctrl+7 the sidebar's views. Not during the first-run setup.
+  const addBar = useRef<AddBarHandle>(null)
   const shortcutsOn = needsSetup === false
-  useWindowPaste(takeText, shortcutsOn)
-  const focusAddBar = useCallback(() => {
-    addBarInput.current?.focus()
-    addBarInput.current?.select()
-  }, [])
-  useAppShortcuts({ focusAddBar, navigate: setView }, shortcutsOn)
+  useWindowPaste(takeCopied, shortcutsOn)
+  const typeLink = useCallback(() => addBar.current?.typeLink(), [])
+  useAppShortcuts({ typeLink, navigate: setView }, shortcutsOn)
 
   // Where Settings opens, when another view sends the user to a place in it. A new object each time, so going to the
   // same place again scrolls there again.
@@ -202,12 +237,12 @@ export function App() {
       navigate,
       showLink,
       pickFromPending,
-      addText: takeText,
+      pasteFromClipboard,
       addFileLinks: (read: LinkFilesRead) => void addFileLinks(read),
       showWatchedDownloads,
       showWhatsNew,
     }),
-    [navigate, showLink, pickFromPending, takeText, addFileLinks, showWatchedDownloads, showWhatsNew],
+    [navigate, showLink, pickFromPending, pasteFromClipboard, addFileLinks, showWatchedDownloads, showWhatsNew],
   )
 
   if (needsSetup) return <SetupView />
@@ -217,7 +252,15 @@ export function App() {
       <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)]">
         <AppTitle />
         <div className="flex items-center py-3 pr-4">
-          <AddBar link={link} onLinkChange={setLink} onSubmit={() => void addText(link)} inputRef={addBarInput} />
+          <AddBar
+            ref={addBar}
+            onPaste={() => void pasteFromClipboard()}
+            note={pasteNote?.text ?? null}
+            onTypeLink={() => setPasteNote(null)}
+            link={link}
+            onLinkChange={setLink}
+            onSubmit={() => void addText(link)}
+          />
         </div>
         <Sidebar
           className="col-start-1 row-span-2 row-start-2"

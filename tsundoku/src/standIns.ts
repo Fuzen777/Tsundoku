@@ -916,6 +916,13 @@ export const standIns = {
     const links = text.split(/\s+/).filter((word) => /^https?:\/\//i.test(word))
     return [...new Set(links)]
   },
+  /** The same words, or the text's one word when it has a dot in it, as the core takes "youtu.be/…". */
+  linksInCopy(text: string): string[] {
+    const words = text.split(/\s+/).filter(Boolean)
+    const [only] = words
+    if (words.length === 1 && only.includes(".") && !only.includes("://")) return [`https://${only}`]
+    return standIns.linksInText(text)
+  },
   /** As the core checks a dropped file: by its extension, and at most 10 MB. */
   checkLinkFile(name: string, size: number): void {
     if (!/\.(txt|html?|url)$/i.test(name)) throw { kind: "unsupportedType", name } satisfies LinkFileError

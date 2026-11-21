@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react"
+import type { ButtonHTMLAttributes, Ref } from "react"
 import { Loader2 } from "lucide-react"
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger"
@@ -9,6 +9,8 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize
   /** An action in flight: disables the button and lays a spinner over its hidden label, so its width never changes. */
   loading?: boolean
+  /** The button itself, for a caller that focuses it. */
+  ref?: Ref<HTMLButtonElement>
 }
 
 const BASE_CLASSES = [
