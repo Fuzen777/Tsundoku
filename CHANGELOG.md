@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.23 · 2026-11-22
+
+### Added
+
+- **Downloads at Once up to 10, or Unlimited**, in Settings → Downloads, and **Downloads per Site** beside it: how many downloads from one site run at the same time (Unlimited to start with), while other sites' downloads go ahead. Instagram, X, Pixiv and Tumblr keep their own number from Settings → Pacing, which now goes up to 10 too.
+
+### Fixed
+
+- **Pixiv downloads that never ended**: a work picked from an artist's page, your following feed or a tag was queued with the list's link instead of its own, so its download read the whole list, saving other works under its name, and the downloads waiting behind it never started. Each work now downloads from its own page, and the works already waiting in Downloads, Pending, Watched or a kept list get their page back at the next start.
+
 ## 0.2.22 · 2026-11-22
 
 ### Changed

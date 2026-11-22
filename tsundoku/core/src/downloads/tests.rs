@@ -1074,7 +1074,8 @@ fn checks_and_saves_the_options() {
         .queue
         .set_options(DownloadSettings {
             folder: Some(" ".to_owned()),
-            at_once: 9,
+            at_once: 12,
+            site_at_once: 11,
             rate_limit: Some(" 4.2m ".to_owned()),
             cookies_browser: Some(crate::settings::CookiesBrowser::Firefox),
             post_file_name: "  {site} {post} {number} ".to_owned(),
@@ -1084,7 +1085,7 @@ fn checks_and_saves_the_options() {
                     pause: PauseRange { min: 30, max: 5 },
                 },
                 x: SitePace {
-                    at_once: 9,
+                    at_once: 12,
                     pause: PauseRange { min: 2, max: 900 },
                 },
                 ..SitePacing::default()
@@ -1102,6 +1103,7 @@ fn checks_and_saves_the_options() {
         })
         .unwrap();
     assert_eq!(saved.at_once, MAX_AT_ONCE, "capped");
+    assert_eq!(saved.site_at_once, MAX_AT_ONCE, "capped");
     assert_eq!(saved.hourly_file_limit, None, "0 is no limit");
     assert_eq!(
         saved.unpack.passwords,
@@ -1200,6 +1202,123 @@ fn raising_downloads_at_once_starts_more_right_away() {
     wait_until("the second runs", || {
         test.runner.started() == [first, second]
     });
+}
+
+#[test]
+fn unlimited_downloads_at_once_starts_every_waiting_download() {
+    let test = Test::new();
+    let unlimited = DownloadSettings {
+        at_once: NO_LIMIT,
+        site_at_once: 0,
+        ..test.queue.options()
+    };
+    assert_eq!(
+        test.queue.set_options(unlimited).unwrap().at_once,
+        NO_LIMIT,
+        "kept as no limit"
+    );
+    let ids: Vec<i64> = (0..12)
+        .map(|number| test.add(&format!("v{number}")))
+        .collect();
+    wait_until("all twelve run", || {
+        test.runner.started().len() == ids.len()
+    });
+}
+
+/// A video on another site than YouTube's.
+fn vimeo_video(video_id: &str) -> VideoInfo {
+    VideoInfo {
+        site: "vimeo".to_owned(),
+        site_name: "vimeo.com".to_owned(),
+        url: format!("https://player.vimeo.com/video/{video_id}"),
+        ..video(video_id)
+    }
+}
+
+#[test]
+fn runs_as_many_downloads_from_one_site_as_downloads_per_site_lets_it() {
+    let test = Test::new();
+    test.settings
+        .update(|settings| {
+            settings.downloads.at_once = NO_LIMIT;
+            settings.downloads.site_at_once = 2;
+            settings.downloads.pacing.x.at_once = 3;
+        })
+        .unwrap();
+    let youtube: Vec<i64> = ["a", "b", "c"].iter().map(|id| test.add(id)).collect();
+    let vimeo: Vec<i64> = ["1", "2", "3"]
+        .iter()
+        .map(|id| {
+            test.queue
+                .add(vimeo_video(id), "best-video", false)
+                .unwrap()
+                .id
+        })
+        .collect();
+    let x: Vec<i64> = ["7", "8", "9"]
+        .iter()
+        .map(|id| test.queue.add_post(x_post(id)).unwrap().id)
+        .collect();
+    wait_until("two of each site run, and X's three", || {
+        test.runner.started().len() == 7
+    });
+    let started = test.runner.started();
+    assert!(started.contains(&youtube[0]) && started.contains(&youtube[1]));
+    assert!(
+        started.contains(&vimeo[0]) && started.contains(&vimeo[1]),
+        "player.vimeo.com is vimeo.com"
+    );
+    assert!(
+        x.iter().all(|id| started.contains(id)),
+        "X keeps the number Pacing gives it"
+    );
+    assert_eq!(test.state(youtube[2]), Some(QueueState::Waiting));
+    assert_eq!(test.state(vimeo[2]), Some(QueueState::Waiting));
+
+    test.runner
+        .complete(youtube[0], JobOutcome::Failed(DownloadError::NoFile));
+    wait_until("YouTube's next starts", || {
+        test.runner.started().contains(&youtube[2])
+    });
+    assert_eq!(
+        test.state(vimeo[2]),
+        Some(QueueState::Waiting),
+        "Vimeo's still waits"
+    );
+}
+
+#[test]
+fn a_sites_waiting_downloads_start_as_its_running_ones_end() {
+    // Pixiv at 5 at once, with 5 at once in all: each download that ends lets the next one start.
+    let test = Test::new();
+    test.settings
+        .update(|settings| {
+            settings.downloads.at_once = 5;
+            settings.downloads.pacing.pixiv.at_once = 5;
+        })
+        .unwrap();
+    let pixiv_work = |id: &str| VideoInfo {
+        site: "pixiv".to_owned(),
+        site_name: "pixiv.net".to_owned(),
+        url: format!("https://www.pixiv.net/artworks/{id}"),
+        ..post(id)
+    };
+    let ids: Vec<i64> = (1..=8)
+        .map(|number| {
+            test.queue
+                .add_post(pixiv_work(&number.to_string()))
+                .unwrap()
+                .id
+        })
+        .collect();
+    wait_until("five run", || test.runner.started().len() == 5);
+    for (ended, next) in ids.iter().zip(&ids[5..]) {
+        test.runner
+            .complete(*ended, JobOutcome::Failed(DownloadError::NoFile));
+        wait_until("the next one starts", || {
+            test.runner.started().contains(next)
+        });
+    }
 }
 
 #[test]

@@ -21,8 +21,12 @@ const text = strings.settings
 /** The longest pause between a post's files, in seconds (`PauseRange::LONGEST` in the core). */
 const LONGEST_PAUSE = 600
 
-/** The most downloads that can run at once (`MAX_AT_ONCE` in the core). */
-const AT_ONCE_CHOICES = [1, 2, 3, 4, 5] as const
+/** How many downloads can run at once, all together, from one site or from a paced one, up to `MAX_AT_ONCE` in the
+ * core. */
+const AT_ONCE_CHOICES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const
+
+/** Downloads at Once and Downloads per Site without a limit (`NO_LIMIT` in the core). */
+const NO_LIMIT = 0
 
 const BROWSERS: readonly CookiesBrowser[] = [
   "automatic",
@@ -111,20 +115,22 @@ export function DownloadsSection() {
         {openFolder.error !== null && (
           <StatusMessage tone="danger" message={text.downloadFolderOpenFailed} detail={openFolder.error} />
         )}
-        <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,1fr)] gap-4">
+        <div className="grid grid-cols-[minmax(0,12rem)_minmax(0,12rem)_minmax(0,1fr)] gap-4">
           <Field label={text.atOnce} hint={text.atOnceHint} htmlFor="settings-at-once">
-            <SelectInput
+            <AtOnceSelect
               id="settings-at-once"
               value={options?.atOnce ?? 2}
               disabled={!options}
-              onChange={(event) => void save({ atOnce: Number(event.target.value) })}
-            >
-              {AT_ONCE_CHOICES.map((count) => (
-                <option key={count} value={count}>
-                  {count}
-                </option>
-              ))}
-            </SelectInput>
+              onChange={(atOnce) => void save({ atOnce })}
+            />
+          </Field>
+          <Field label={text.perSite} hint={text.perSiteHint} htmlFor="settings-site-at-once">
+            <AtOnceSelect
+              id="settings-site-at-once"
+              value={options?.siteAtOnce ?? NO_LIMIT}
+              disabled={!options}
+              onChange={(siteAtOnce) => void save({ siteAtOnce })}
+            />
           </Field>
           <Field label={text.defaultPreset} hint={text.defaultPresetHint} htmlFor="settings-default-preset">
             <SelectInput
@@ -165,6 +171,30 @@ export function DownloadsSection() {
         {presetError && <StatusMessage tone="danger" {...presetError} />}
       </Card>
     </Section>
+  )
+}
+
+/** How many downloads may run at once: 1 to 10, or Unlimited. */
+function AtOnceSelect({
+  id,
+  value,
+  disabled,
+  onChange,
+}: {
+  id: string
+  value: number
+  disabled: boolean
+  onChange: (atOnce: number) => void
+}) {
+  return (
+    <SelectInput id={id} value={value} disabled={disabled} onChange={(event) => onChange(Number(event.target.value))}>
+      {AT_ONCE_CHOICES.map((count) => (
+        <option key={count} value={count}>
+          {count}
+        </option>
+      ))}
+      <option value={NO_LIMIT}>{text.unlimited}</option>
+    </SelectInput>
   )
 }
 

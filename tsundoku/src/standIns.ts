@@ -666,6 +666,7 @@ export const standIns = {
   downloadOptions: {
     folder: null,
     atOnce: 2,
+    siteAtOnce: 0,
     rateLimit: null,
     cookiesBrowser: "automatic",
     postFileName: "{account} {date} {post} {number}",

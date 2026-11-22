@@ -188,6 +188,32 @@ const MIGRATIONS: &[&str] = &[
     // 22: a watched source's New Items Start (`watched::NewItemsStart`: "ticked" or "unticked"); NULL for Settings →
     // Watched's choice, as every source watched before has it.
     "ALTER TABLE watched_sources ADD COLUMN new_items_start TEXT;",
+    // 23: Pixiv works picked from an artist's works, the following feed or a tag search (0.2.19 to 0.2.22) were kept
+    // with the listing's page as their own (`gallery::post_page`), so downloading one read the whole listing: each gets
+    // its work's page back, wherever it's kept.
+    "UPDATE queue_items
+        SET video = json_set(video, '$.url', 'https://www.pixiv.net/artworks/' || json_extract(video, '$.videoId'))
+        WHERE json_extract(video, '$.site') = 'pixiv' AND (json_extract(video, '$.url') LIKE 'https://www.pixiv.net/users/%'
+            OR json_extract(video, '$.url') LIKE 'https://www.pixiv.net/bookmark_new_illust.php%'
+            OR json_extract(video, '$.url') LIKE 'https://www.pixiv.net/tags/%');
+    UPDATE pending_links
+        SET video = json_set(video, '$.url', 'https://www.pixiv.net/artworks/' || json_extract(video, '$.videoId'))
+        WHERE json_extract(video, '$.site') = 'pixiv' AND (json_extract(video, '$.url') LIKE 'https://www.pixiv.net/users/%'
+            OR json_extract(video, '$.url') LIKE 'https://www.pixiv.net/bookmark_new_illust.php%'
+            OR json_extract(video, '$.url') LIKE 'https://www.pixiv.net/tags/%');
+    UPDATE watched_items
+        SET video = json_set(video, '$.url', 'https://www.pixiv.net/artworks/' || item_id)
+        WHERE site = 'pixiv' AND (json_extract(video, '$.url') LIKE 'https://www.pixiv.net/users/%'
+            OR json_extract(video, '$.url') LIKE 'https://www.pixiv.net/bookmark_new_illust.php%'
+            OR json_extract(video, '$.url') LIKE 'https://www.pixiv.net/tags/%');
+    UPDATE saved_listing_items
+        SET item = json_set(item, '$.video.url', 'https://www.pixiv.net/artworks/' || video_id)
+        WHERE site = 'pixiv' AND (json_extract(item, '$.video.url') LIKE 'https://www.pixiv.net/users/%'
+            OR json_extract(item, '$.video.url') LIKE 'https://www.pixiv.net/bookmark_new_illust.php%'
+            OR json_extract(item, '$.video.url') LIKE 'https://www.pixiv.net/tags/%');
+    UPDATE videos SET url = 'https://www.pixiv.net/artworks/' || video_id
+        WHERE site = 'pixiv' AND (url LIKE 'https://www.pixiv.net/users/%'
+            OR url LIKE 'https://www.pixiv.net/bookmark_new_illust.php%' OR url LIKE 'https://www.pixiv.net/tags/%');",
 ];
 
 pub struct Database {
@@ -371,6 +397,117 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM download_files", [], |row| row.get(0))
             .unwrap();
         assert_eq!(files, 2, "with its files");
+    }
+
+    #[test]
+    fn gives_pixiv_works_listed_before_their_own_page() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("tsundoku.db");
+        let pages_migration = MIGRATIONS
+            .iter()
+            .position(|migration| migration.contains("https://www.pixiv.net/artworks/"))
+            .unwrap();
+        let feed = "https://www.pixiv.net/bookmark_new_illust.php";
+        let video = |id: &str, url: &str| {
+            format!(r#"{{"site": "pixiv", "videoId": "{id}", "url": "{url}", "title": "Work"}}"#)
+        };
+        {
+            let connection = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..pages_migration] {
+                connection.execute_batch(migration).unwrap();
+            }
+            connection
+                .pragma_update(None, "user_version", pages_migration as i64)
+                .unwrap();
+            let insert_item = |id: &str, url: &str| {
+                connection
+                    .execute(
+                        "INSERT INTO queue_items (video, preset, folder, state, overwrite, added_at)
+                        VALUES (?1, 'null', 'D:\\', 'waiting', 0, 1)",
+                        [video(id, url)],
+                    )
+                    .unwrap();
+            };
+            insert_item("1", feed);
+            insert_item("2", "https://www.pixiv.net/users/11/artworks");
+            insert_item(
+                "3",
+                "https://www.pixiv.net/tags/%E5%8E%9F%E7%A5%9E/artworks?s_mode=s_tag",
+            );
+            insert_item("4", "https://www.pixiv.net/en/artworks/4");
+            connection
+                .execute(
+                    "INSERT INTO pending_links (link, state, video, added_at) VALUES (?1, 'read', ?2, 1)",
+                    [feed.to_owned(), video("5", feed)],
+                )
+                .unwrap();
+            connection
+                .execute_batch(
+                    "INSERT INTO watched_sources (id, url, kind, name, site_name, added_at)
+                    VALUES (1, 'https://www.pixiv.net/bookmark_new_illust.php', 'account', 'Following', 'pixiv.net', 1);
+                    INSERT INTO saved_listings (link, listing, saved_at)
+                    VALUES ('https://www.pixiv.net/bookmark_new_illust.php', '{}', 1);
+                    INSERT INTO videos (site, site_name, video_id, url, title, first_downloaded_at)
+                    VALUES ('pixiv', 'pixiv.net', '8', 'https://www.pixiv.net/bookmark_new_illust.php', 'Work', 1),
+                        ('youtube', 'youtube.com', '9', 'https://www.pixiv.net/users/9', 'Not Pixiv', 1);",
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO watched_items (source, site, item_id, video, state, first_seen_at, position)
+                    VALUES (1, 'pixiv', '6', ?1, 'new', 1, 0)",
+                    [video("6", feed)],
+                )
+                .unwrap();
+            connection
+                .execute(
+                    "INSERT INTO saved_listing_items (link, site, video_id, item) VALUES (?1, 'pixiv', '7', ?2)",
+                    [
+                        feed.to_owned(),
+                        format!(r#"{{"video": {}, "approximateDate": null}}"#, video("7", feed)),
+                    ],
+                )
+                .unwrap();
+        }
+        let database = Database::open(&path).unwrap();
+        let connection = database.lock();
+        let urls = |sql: &str| -> Vec<String> {
+            connection
+                .prepare(sql)
+                .unwrap()
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(
+            urls("SELECT json_extract(video, '$.url') FROM queue_items ORDER BY id"),
+            [
+                "https://www.pixiv.net/artworks/1",
+                "https://www.pixiv.net/artworks/2",
+                "https://www.pixiv.net/artworks/3",
+                "https://www.pixiv.net/en/artworks/4"
+            ]
+        );
+        assert_eq!(
+            urls("SELECT json_extract(video, '$.url') FROM pending_links"),
+            ["https://www.pixiv.net/artworks/5"]
+        );
+        assert_eq!(
+            urls("SELECT json_extract(video, '$.url') FROM watched_items"),
+            ["https://www.pixiv.net/artworks/6"]
+        );
+        assert_eq!(
+            urls("SELECT json_extract(item, '$.video.url') FROM saved_listing_items"),
+            ["https://www.pixiv.net/artworks/7"]
+        );
+        assert_eq!(
+            urls("SELECT url FROM videos ORDER BY id"),
+            [
+                "https://www.pixiv.net/artworks/8",
+                "https://www.pixiv.net/users/9"
+            ]
+        );
     }
 
     #[test]

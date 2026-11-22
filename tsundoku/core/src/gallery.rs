@@ -354,7 +354,19 @@ fn found_posts(messages: &[Value], link: &str) -> Result<FoundPosts, PreviewErro
     let posts = answer
         .posts
         .iter()
-        .map(|post| video_of(post, link))
+        .map(|post| {
+            let video = video_of(post, link)?;
+            // A post without a page of its own would download the whole listing (`post_page`).
+            if video.url == link {
+                return Err(PreviewError::Failed {
+                    detail: format!(
+                        "gallery-dl's answer gives no page of its own for {} post {}",
+                        video.site, video.video_id
+                    ),
+                });
+            }
+            Ok(video)
+        })
         .collect::<Result<_, _>>()?;
     Ok(FoundPosts {
         posts,
@@ -705,16 +717,26 @@ fn post_id(site: &str, post: &Value) -> Option<String> {
     fields.iter().find_map(|field| text(post, field))
 }
 
-/// The post's own page: gallery-dl's `post_url` (Instagram's), or on X, whose answer has none, the address made from
-/// its author's handle and its ID, so a post listed from an account downloads from its own page. `None` keeps the link
-/// that was read.
+/// The post's own page: gallery-dl's `post_url` (Instagram's), or on X and Pixiv, whose answers have none, the address
+/// made from its ID (and on X its author's handle), so a post listed from an account, a feed or a search downloads
+/// from its own page rather than the listing's. `None` keeps the link that was read.
 fn post_page(site: &str, post: &Value, post_id: &str) -> Option<String> {
-    text(post, "post_url").or_else(|| {
-        (site == "twitter").then(|| {
+    text(post, "post_url").or_else(|| match site {
+        "twitter" => {
             // X opens a post at /i/status/<ID> whoever posted it.
             let author = account(site, post).unwrap_or_else(|| "i".to_owned());
-            format!("https://x.com/{author}/status/{post_id}")
-        })
+            Some(format!("https://x.com/{author}/status/{post_id}"))
+        }
+        // A work: an illustration, a manga or an animation (Pixiv Sketch's posts have no such type).
+        "pixiv"
+            if matches!(
+                text(post, "type").as_deref(),
+                Some("illust" | "manga" | "ugoira")
+            ) =>
+        {
+            Some(format!("https://www.pixiv.net/artworks/{post_id}"))
+        }
+        _ => None,
     })
 }
 
@@ -1299,6 +1321,44 @@ mod tests {
         )
         .unwrap();
         assert_eq!(other.url, "https://example.com/post/1");
+    }
+
+    #[test]
+    fn a_pixiv_work_listed_from_a_feed_is_at_its_own_page() {
+        // 0.2.19 to 0.2.22 kept the feed's link for each work, so each download read the whole feed.
+        let feed = "https://www.pixiv.net/bookmark_new_illust.php";
+        let found = parse_posts(
+            r#"[[2, {"category": "pixiv", "id": 152350516, "type": "illust", "user": {"account": "a"}}],
+                [3, "https://i.pximg.net/img-original/img/1_p0.png", {"category": "pixiv", "num": 0, "extension": "png"}],
+                [2, {"category": "pixiv", "id": 152350202, "type": "ugoira", "user": {"account": "b"}}],
+                [3, "https://i.pximg.net/img-zip-ugoira/img/2_ugoira1920x1080.zip", {"category": "pixiv", "num": 0, "extension": "zip"}]]"#,
+            feed,
+        )
+        .unwrap();
+        let pages: Vec<&str> = found.posts.iter().map(|post| post.url.as_str()).collect();
+        assert_eq!(
+            pages,
+            [
+                "https://www.pixiv.net/artworks/152350516",
+                "https://www.pixiv.net/artworks/152350202"
+            ]
+        );
+
+        // A work read on its own is at the same page, whichever form of its link was read.
+        let work = parse_answer(
+            r#"[[2, {"category": "pixiv", "id": 7, "type": "manga"}],
+                [3, "https://i.pximg.net/img-original/img/7_p0.png", {"category": "pixiv", "num": 0, "extension": "png"}]]"#,
+            "https://www.pixiv.net/en/artworks/7",
+        )
+        .unwrap();
+        assert_eq!(work.url, "https://www.pixiv.net/artworks/7");
+
+        // A listing never hands over a post at the listing's own link: that download would read the whole listing.
+        let without_page = parse_posts(
+            r#"[[2, {"category": "pixiv", "id": 8}], [3, "https://i.pximg.net/8.png", {"category": "pixiv", "extension": "png"}]]"#,
+            feed,
+        );
+        assert!(matches!(without_page, Err(PreviewError::Failed { .. })));
     }
 
     #[test]

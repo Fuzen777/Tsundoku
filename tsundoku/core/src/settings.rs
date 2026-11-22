@@ -335,8 +335,12 @@ pub struct DownloadSettings {
     /// Where downloads go when no rule matches and their preset has no folder of its own, or `None` for a Tsundoku
     /// folder in Downloads (`default_download_folder`). A rule's folder that isn't a full path is inside it.
     pub folder: Option<String>,
-    /// How many downloads run at the same time.
+    /// How many downloads run at the same time: 1 to `downloads::MAX_AT_ONCE`, or `NO_LIMIT` for as many as are
+    /// waiting (Unlimited), which a version before 0.2.23 runs one at a time.
     pub at_once: u32,
+    /// How many downloads from one site (`sites::site_of`) run at the same time: 1 to `downloads::MAX_AT_ONCE`, or
+    /// `NO_LIMIT`, as in settings saved before 0.2.23. A site Settings → Pacing paces keeps its own (`SitePace::at_once`).
+    pub site_at_once: u32,
     /// yt-dlp's `--limit-rate`, such as "2M", or `None` for no limit.
     pub rate_limit: Option<String>,
     /// Where yt-dlp and gallery-dl read cookies from, for links that need a signed-in account: `Automatic` finds
@@ -434,6 +438,7 @@ impl Default for DownloadSettings {
         Self {
             folder: None,
             at_once: 2,
+            site_at_once: NO_LIMIT,
             rate_limit: None,
             cookies_browser: Some(CookiesBrowser::Automatic),
             post_file_name: post_names::DEFAULT_POST_FILE_NAME.to_owned(),
@@ -456,6 +461,25 @@ impl DownloadSettings {
             .map(|limit| limit.min(Self::HIGHEST_HOURLY_LIMIT))
     }
 
+    /// The most downloads that run at once: `at_once`, or as many as there are for `NO_LIMIT`.
+    pub fn most_at_once(&self) -> usize {
+        match self.at_once {
+            NO_LIMIT => usize::MAX,
+            at_once => at_once as usize,
+        }
+    }
+
+    /// The site of a download from `link` (`sites::site_of`'s key) and the most of that site's downloads that run at
+    /// once: a paced site's own (`pacing`), else `site_at_once`. `None` when its site has no limit.
+    pub fn site_limit(&self, link: &str) -> Option<(String, usize)> {
+        let most = match sites::paced_site(link) {
+            Some(paced) => self.pacing.of(paced).at_once.max(1),
+            None if self.site_at_once == NO_LIMIT => return None,
+            None => self.site_at_once,
+        };
+        Some((sites::site_of(link)?.key, most as usize))
+    }
+
     /// The pause before each file of a post at `link`, and between its site's links in Pending: its site's
     /// (`pacing`), none elsewhere or when the site's is 0 seconds.
     pub fn pause_for(&self, link: &str) -> Option<PauseRange> {
@@ -469,6 +493,9 @@ impl DownloadSettings {
         resolve_download_folder(self.folder.as_deref(), data_folder::portable_folder())
     }
 }
+
+/// Downloads at once without a limit: Unlimited, for `DownloadSettings::at_once` and `site_at_once`.
+pub const NO_LIMIT: u32 = 0;
 
 /// The download folder a portable copy keeps beside itself, chosen at the first-run setup. Saved without the copy's
 /// own folder, so it follows the copy to another drive.

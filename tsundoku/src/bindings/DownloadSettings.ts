@@ -13,9 +13,15 @@ export type DownloadSettings = {
  */
 folder: string | null, 
 /**
- * How many downloads run at the same time.
+ * How many downloads run at the same time: 1 to `downloads::MAX_AT_ONCE`, or `NO_LIMIT` for as many as are
+ * waiting (Unlimited), which a version before 0.2.23 runs one at a time.
  */
 atOnce: number, 
+/**
+ * How many downloads from one site (`sites::site_of`) run at the same time: 1 to `downloads::MAX_AT_ONCE`, or
+ * `NO_LIMIT`, as in settings saved before 0.2.23. A site Settings → Pacing paces keeps its own (`SitePace::at_once`).
+ */
+siteAtOnce: number, 
 /**
  * yt-dlp's `--limit-rate`, such as "2M", or `None` for no limit.
  */

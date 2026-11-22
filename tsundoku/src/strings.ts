@@ -1608,6 +1608,10 @@ export const strings = {
     folderTitle: "Choose Where Downloads Go",
     atOnce: "Downloads at Once",
     atOnceHint: "How many downloads run at the same time.",
+    perSite: "Downloads per Site",
+    perSiteHint: "How many from one site run at the same time. The sites in Pacing have their own.",
+    /** Downloads at Once and Downloads per Site without a limit. */
+    unlimited: "Unlimited",
     rateLimit: "Speed Limit",
     rateLimitPlaceholder: "No Limit",
     rateLimitHint: "For each download, in bytes per second, such as 500K or 2M. Leave it empty for no limit.",
@@ -1752,7 +1756,7 @@ export const strings = {
       atOnce: "At Once",
       atOnceParagraphs: [
         "How many of the site's downloads run at the same time: one to start with, three for Pixiv. The site's other downloads wait their turn while downloads from other sites go ahead.",
-        "Each download running pauses on its own, so two at once read about twice as fast as one. Downloads at Once, in Downloads, still limits every download together.",
+        "Each download running pauses on its own, so two at once read about twice as fast as one. This number takes the place of Downloads per Site, in Downloads, while Downloads at Once still limits every download together.",
       ],
       hourlyLimitParagraphs: [
         "Leave it empty for no limit. Once the past hour holds this many Instagram files, the next Instagram download waits, then continues by itself.",

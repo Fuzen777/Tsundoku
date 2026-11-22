@@ -44,17 +44,18 @@ use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
 use crate::rules::{self, Destination, DestinationSource, RuleSubject};
-use crate::settings::{DownloadSettings, SettingsStore, UnpackSettings};
+use crate::settings::{DownloadSettings, NO_LIMIT, SettingsStore, UnpackSettings};
 use crate::site_limits::{SiteLimits, now_ms};
-use crate::sites::{self, PacedSite};
+use crate::sites;
 use crate::sync::lock;
 use crate::tools::{ToolId, ToolManager};
 use crate::unpack::UnpackProblem;
 
 /// Logs older than this are deleted at startup.
 const LOG_LIFETIME: Duration = Duration::from_secs(30 * 24 * 60 * 60);
-/// The most downloads that can run at once.
-pub const MAX_AT_ONCE: u32 = 5;
+/// The most downloads that can run at once, all together or from one site, short of no limit (`settings::NO_LIMIT`,
+/// which only Downloads at Once and Downloads per Site offer, not a paced site's own).
+pub const MAX_AT_ONCE: u32 = 10;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -1291,7 +1292,8 @@ impl DownloadQueue {
                 .folder
                 .map(|folder| folder.trim().to_owned())
                 .filter(|folder| !folder.is_empty()),
-            at_once: options.at_once.clamp(1, MAX_AT_ONCE),
+            at_once: at_once_within(options.at_once),
+            site_at_once: at_once_within(options.site_at_once),
             rate_limit: normalize_rate_limit(options.rate_limit.as_deref())?,
             cookies_browser: options.cookies_browser,
             post_file_name: post_names::check(&options.post_file_name)
@@ -1326,14 +1328,15 @@ impl DownloadQueue {
     }
 
     /// Starts waiting items while there's room, in the queue's order: the order they were added, apart from those
-    /// Download Next moved to the front. A download from a site that limits how fast it's read (Instagram, X, Pixiv,
-    /// Tumblr) waits while as many of that site's downloads run as Settings → Pacing lets it have at once (one to
-    /// start with), since each of them pauses between its files on its own; downloads from other sites go ahead of it
-    /// meanwhile. One that's held (`Hold`: its site asked to slow down, or the hourly limit is reached) waits too,
-    /// until a thread schedules again once its hold ends (`watch_holds`).
+    /// Download Next moved to the front. Downloads at Once bounds them all (unless it's Unlimited), and a site's
+    /// downloads wait while as many of them run as it may have at once (`DownloadSettings::site_limit`): a site that
+    /// limits how fast it's read (Instagram, X, Pixiv, Tumblr) as Settings → Pacing lets it, since each of them pauses
+    /// between its files on its own, any other as Downloads per Site does. Downloads from other sites go ahead of it
+    /// meanwhile. One that's held (`Hold`: its site asked to slow down, or the hourly limit is reached) waits too, until
+    /// a thread schedules again once its hold ends (`watch_holds`).
     fn schedule(&self) {
         let options = self.settings.get().downloads;
-        let at_once = options.at_once.max(1) as usize;
+        let most_at_once = options.most_at_once();
         let mut started = Vec::new();
         {
             let mut state = lock(&self.state);
@@ -1342,30 +1345,40 @@ impl DownloadQueue {
             self.settle_holds(&mut contents.items, now_ms());
             // What the downloads already running need on their drives, and those started below once each starts.
             let mut reserved = Reserved::of_running(&contents.items);
-            while contents.running.len() < at_once {
-                let mut running_on: HashMap<PacedSite, usize> = HashMap::new();
-                for item in &contents.items {
-                    if item.state == QueueState::Running
-                        && let Some(site) = sites::paced_site(&item.video.url)
-                    {
-                        *running_on.entry(site).or_default() += 1;
+            // Each item's site and how many of its downloads may run at once, worked out once for the whole pass.
+            let limits: Vec<Option<(String, usize)>> = contents
+                .items
+                .iter()
+                .map(|item| match item.state {
+                    QueueState::Waiting | QueueState::Running => {
+                        options.site_limit(&item.video.url)
                     }
+                    _ => None,
+                })
+                .collect();
+            let mut running_on: HashMap<&str, usize> = HashMap::new();
+            for (item, limit) in contents.items.iter().zip(&limits) {
+                if item.state == QueueState::Running
+                    && let Some((site, _)) = limit
+                {
+                    *running_on.entry(site).or_default() += 1;
                 }
-                let site_has_room = |item: &QueueItem| {
-                    sites::paced_site(&item.video.url).is_none_or(|site| {
-                        running_on.get(&site).copied().unwrap_or(0)
-                            < options.pacing.of(site).at_once as usize
-                    })
-                };
-                let may_start = |item: &QueueItem| {
-                    item.state == QueueState::Waiting && item.hold.is_none() && site_has_room(item)
+            }
+            while contents.running.len() < most_at_once {
+                let may_start = |index: usize| {
+                    let item = &contents.items[index];
+                    item.state == QueueState::Waiting
+                        && item.hold.is_none()
+                        && limits[index].as_ref().is_none_or(|(site, most)| {
+                            running_on.get(site.as_str()).copied().unwrap_or(0) < *most
+                        })
                 };
                 // A download the person just started in the check window goes first: the window holds it meanwhile.
-                let Some(index) = contents
-                    .items
-                    .iter()
-                    .position(|item| item.recovery.offer.is_some() && may_start(item))
-                    .or_else(|| contents.items.iter().position(may_start))
+                let Some(index) = (0..contents.items.len())
+                    .find(|&index| {
+                        contents.items[index].recovery.offer.is_some() && may_start(index)
+                    })
+                    .or_else(|| (0..contents.items.len()).find(|&index| may_start(index)))
                 else {
                     break;
                 };
@@ -1381,6 +1394,9 @@ impl DownloadQueue {
                     item.state = QueueState::Failed;
                     item.error = Some(error);
                     continue;
+                }
+                if let Some((site, _)) = &limits[index] {
+                    *running_on.entry(site).or_default() += 1;
                 }
                 let mut job = self.job_for(item);
                 job.window_offer = item
@@ -1749,6 +1765,14 @@ impl DownloadQueue {
 
 /// A speed limit as yt-dlp's `--limit-rate` takes it: bytes per second, with an optional K, M or G ("500K", "4.2M").
 /// Blank means no limit.
+/// Downloads at once as they're kept: `NO_LIMIT` (Unlimited), or 1 to `MAX_AT_ONCE`.
+fn at_once_within(at_once: u32) -> u32 {
+    match at_once {
+        NO_LIMIT => NO_LIMIT,
+        at_once => at_once.min(MAX_AT_ONCE),
+    }
+}
+
 fn normalize_rate_limit(text: Option<&str>) -> Result<Option<String>, DownloadError> {
     let text = text.unwrap_or_default().trim();
     if text.is_empty() {
