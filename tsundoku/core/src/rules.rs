@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::hosts::Host;
-use crate::metadata::VideoInfo;
+use crate::metadata::{PixivWorkType, TagLanguage, VideoInfo, tag_list};
 use crate::name_parts::{NamePart, join_leaving_out};
 use crate::post_names::{self, PostNameError};
 use crate::presets::Preset;
@@ -1183,6 +1183,8 @@ fn placeholder_value(
     let video = subject.video;
     let uploaded = video.upload_date.as_deref();
     let kind = subject.kind().folder_name();
+    let pixiv = video.pixiv.as_ref();
+    let pages = file_count(video).map(|count| count.to_string());
     let (value, stand_in): (Option<&str>, &str) = match name.to_ascii_lowercase().as_str() {
         SITE_PLACEHOLDER => return Some(NamePart::Value(Some(site_name(video)))),
         "uploader" => (video.uploader.as_deref(), "Unknown"),
@@ -1202,14 +1204,32 @@ fn placeholder_value(
         "month" => (uploaded.and_then(|date| date.get(5..7)), "Unknown"),
         "date" => (uploaded, "Unknown"),
         "added" => (Some(fill_in.today), "Unknown"),
-        "tags" => {
-            let names: Vec<&str> = video.tags.iter().map(|tag| tag.name.as_str()).collect();
+        "tags" | "tagsja" | "tagsen" | "tagsboth" => {
+            let language = match name.to_ascii_lowercase().as_str() {
+                "tagsen" => TagLanguage::English,
+                "tagsboth" => TagLanguage::Both,
+                _ => TagLanguage::AsWritten,
+            };
             return Some(stand_in_or_left_out(
-                folder_part(&names.join(", ")),
+                folder_part(&tag_list(&video.tags, language)),
                 "No Tags",
                 fill_in.missing,
             ));
         }
+        // Only a work made by AI has a value: anything else leaves it out, with its separator.
+        "ai" => {
+            let ai = video.pixiv.as_ref().is_some_and(|pixiv| pixiv.ai);
+            return Some(NamePart::Value(ai.then(|| "AI".to_owned())));
+        }
+        "rating" => (pixiv.and_then(|pixiv| pixiv.rating.as_deref()), "Unknown"),
+        "worktype" => (
+            pixiv
+                .and_then(|pixiv| pixiv.work_type)
+                .map(PixivWorkType::name),
+            "Unknown",
+        ),
+        "series" => (pixiv.and_then(|pixiv| pixiv.series.as_deref()), "No Series"),
+        "pages" => (pages.as_deref(), "Unknown"),
         "tag" => (fill_in.tag.as_ref()?.as_deref(), "Unknown"),
         other => {
             let [digit @ b'1'..=b'9'] = other.as_bytes() else {
@@ -1225,6 +1245,13 @@ fn placeholder_value(
         stand_in,
         fill_in.missing,
     ))
+}
+
+/// How many files a post or a file host's link holds, for `{pages}`: those its download takes. `None` for a video.
+pub(crate) fn file_count(video: &VideoInfo) -> Option<u32> {
+    video
+        .post_file_count()
+        .or_else(|| video.picked_contents().map(|files| files.count))
 }
 
 /// A placeholder's value (made safe already, empty when it has none), else its stand-in word or nothing, as the rule
@@ -1387,6 +1414,7 @@ mod tests {
             shared_files: Vec::new(),
             playlist: None,
             tags: Vec::new(),
+            pixiv: None,
         }
     }
 
@@ -3177,6 +3205,46 @@ mod tests {
             folder_on(&[left_out], &video(), None),
             r"D:\x",
             "no tag found and no tags, left out"
+        );
+    }
+
+    #[test]
+    fn fills_in_a_pixiv_works_own_placeholders() {
+        let mut work = tweet();
+        work.tags = tagged().tags;
+        work.pixiv = Some(crate::metadata::PixivDetails {
+            rating: Some("R-18".to_owned()),
+            work_type: Some(PixivWorkType::Manga),
+            ai: true,
+            series: Some("Season 2".to_owned()),
+        });
+        let rules = [rule(
+            Vec::new(),
+            r"D:\{rating}\{workType} {ai}\{series}\{pages}\{tagsEn}\{tagsJa}\{tagsBoth}",
+        )];
+        assert_eq!(
+            folder_on(&rules, &work, None),
+            r"D:\R-18\Manga AI\Season 2\1\zoo, Genshin Impact, Elephants\zoo, 原神, Elephants\zoo, 原神 (Genshin Impact), Elephants"
+        );
+        work.pixiv = Some(crate::metadata::PixivDetails {
+            rating: None,
+            work_type: None,
+            ai: false,
+            series: None,
+        });
+        assert_eq!(
+            folder_on(
+                &[rule(Vec::new(), r"D:\{rating}\{workType} {ai}\{series}")],
+                &work,
+                None
+            ),
+            r"D:\Unknown\Unknown\No Series",
+            "{{ai}} left out with its space even when others write Unknown"
+        );
+        assert_eq!(
+            folder_on(&[rule(Vec::new(), r"D:\{pages}")], &video(), None),
+            r"D:\Unknown",
+            "a video has no pages"
         );
     }
 

@@ -15,6 +15,7 @@ import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
 import { IconButton } from "../../components/IconButton"
 import { PlaceholderButtons } from "../../components/PlaceholderButtons"
+import { SITE_PLACEHOLDERS } from "../../placeholders"
 import { DEFAULT_POST_FILE_NAME, PostNameInput } from "../../components/PostNameInput"
 import { StatusMessage } from "../../components/StatusMessage"
 import { SegmentedControl } from "../../components/SegmentedControl"
@@ -175,6 +176,7 @@ export function RuleEditor({
             value={draft.folder}
             placeholders={placeholders}
             hints={placeholderHints}
+            sites={SITE_PLACEHOLDERS}
             onChange={(folder) => update({ folder })}
           />
         </div>

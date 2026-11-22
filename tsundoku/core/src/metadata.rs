@@ -70,6 +70,48 @@ pub struct VideoInfo {
     /// hashtags. Empty when the site gives none, and for a link read before Tsundoku kept them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<VideoTag>,
+    /// A Pixiv work's own details, for its placeholders in rules (`{rating}`, `{workType}`, `{ai}`, `{series}`). `None`
+    /// anywhere else, and for a work read before Tsundoku kept them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub pixiv: Option<PixivDetails>,
+}
+
+/// What a Pixiv work is, besides what every post has.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PixivDetails {
+    /// Who it's for, as Pixiv says: "General", "R-18" or "R-18G".
+    pub rating: Option<String>,
+    pub work_type: Option<PixivWorkType>,
+    /// Its artist marked it made by AI.
+    #[serde(default)]
+    pub ai: bool,
+    /// The series it's part of, by its title.
+    pub series: Option<String>,
+}
+
+/// A Pixiv work's kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PixivWorkType {
+    Illustration,
+    Manga,
+    /// An animation (ugoira).
+    Animation,
+}
+
+impl PixivWorkType {
+    /// As `{workType}` writes it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Illustration => "Illustration",
+            Self::Manga => "Manga",
+            Self::Animation => "Animation",
+        }
+    }
 }
 
 /// One of a video's or a post's tags.
@@ -93,6 +135,30 @@ impl VideoTag {
             english: None,
         }
     }
+}
+
+/// Which name of each tag `tag_list` writes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagLanguage {
+    /// As the site writes it (`{tags}`, `{tagsJa}`: Japanese on Pixiv).
+    AsWritten,
+    /// Its English name where the site gives one, else as written (`{tagsEn}`).
+    English,
+    /// As written, with its English name after it in brackets where the site gives one (`{tagsBoth}`).
+    Both,
+}
+
+/// A download's tags in one language, separated by commas, as the placeholders put them; empty without tags.
+pub fn tag_list(tags: &[VideoTag], language: TagLanguage) -> String {
+    let names: Vec<String> = tags
+        .iter()
+        .map(|tag| match (language, tag.english.as_deref()) {
+            (TagLanguage::English, Some(english)) => english.to_owned(),
+            (TagLanguage::Both, Some(english)) => format!("{} ({english})", tag.name),
+            _ => tag.name.clone(),
+        })
+        .collect();
+    names.join(", ")
 }
 
 /// Tags as they come from a tool: trimmed, without a leading "#", each once (ignoring case), in their order. Blank
@@ -821,6 +887,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         post_files: Vec::new(),
         shared_files: Vec::new(),
         playlist: None,
+        pixiv: None,
         tags: tags_from(
             info.tags
                 .unwrap_or_default()

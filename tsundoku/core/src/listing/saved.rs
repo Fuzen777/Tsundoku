@@ -292,6 +292,7 @@ mod tests {
                 shared_files: Vec::new(),
                 playlist: Some("someone".to_owned()),
                 tags: Vec::new(),
+                pixiv: None,
             },
             approximate_date: None,
             last_download: None,

@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::metadata::VideoInfo;
+use crate::metadata::{TagLanguage, VideoInfo, tag_list};
 use crate::name_parts::{NamePart, join_leaving_out};
 use crate::rules::{self, MissingValues};
 
@@ -51,10 +51,26 @@ pub enum PostNamePlaceholder {
     Site,
     /// The post's tags, as the site writes them, separated by commas; nothing when it has none.
     Tags,
+    /// A Pixiv work's tags as Pixiv writes them, in Japanese.
+    TagsJa,
+    /// A Pixiv work's tags by their English names where Pixiv gives them.
+    TagsEn,
+    /// A Pixiv work's tags in Japanese, each with its English name after it in brackets.
+    TagsBoth,
+    /// A Pixiv work's rating: General, R-18 or R-18G.
+    Rating,
+    /// A Pixiv work's kind: Illustration, Manga or Animation.
+    WorkType,
+    /// "AI" for a Pixiv work its artist marked made by AI; nothing otherwise.
+    Ai,
+    /// A Pixiv work's series.
+    Series,
+    /// How many files the post holds (those its download takes).
+    Pages,
 }
 
 impl PostNamePlaceholder {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 15] = [
         Self::Account,
         Self::Date,
         Self::Post,
@@ -62,6 +78,14 @@ impl PostNamePlaceholder {
         Self::NumberIfMany,
         Self::Site,
         Self::Tags,
+        Self::TagsJa,
+        Self::TagsEn,
+        Self::TagsBoth,
+        Self::Rating,
+        Self::WorkType,
+        Self::Ai,
+        Self::Series,
+        Self::Pages,
     ];
 
     /// Its name between braces.
@@ -74,7 +98,47 @@ impl PostNamePlaceholder {
             Self::NumberIfMany => "numberIfMany",
             Self::Site => "site",
             Self::Tags => "tags",
+            Self::TagsJa => "tagsJa",
+            Self::TagsEn => "tagsEn",
+            Self::TagsBoth => "tagsBoth",
+            Self::Rating => "rating",
+            Self::WorkType => "workType",
+            Self::Ai => "ai",
+            Self::Series => "series",
+            Self::Pages => "pages",
         }
+    }
+
+    /// The download's own value for it, as text, when it's one the preview knows whole (none of gallery-dl's fields):
+    /// its tags and Pixiv's details. `None` for the others, and when the download has no value.
+    fn known_value(self, video: &VideoInfo) -> Option<String> {
+        let pixiv = video.pixiv.as_ref();
+        let value = match self {
+            Self::Tags | Self::TagsJa => tag_list(&video.tags, TagLanguage::AsWritten),
+            Self::TagsEn => tag_list(&video.tags, TagLanguage::English),
+            Self::TagsBoth => tag_list(&video.tags, TagLanguage::Both),
+            Self::Rating => pixiv?.rating.clone()?,
+            Self::WorkType => pixiv?.work_type?.name().to_owned(),
+            Self::Ai => pixiv.filter(|pixiv| pixiv.ai).map(|_| "AI".to_owned())?,
+            Self::Series => pixiv?.series.clone()?,
+            Self::Pages => rules::file_count(video)?.to_string(),
+            _ => return None,
+        };
+        let value = rules::placeholder_text(&value.replace(['{', '}'], ""));
+        (!value.is_empty()).then_some(value)
+    }
+
+    /// Whether it's one `known_value` gives.
+    fn is_known_value(self) -> bool {
+        !matches!(
+            self,
+            Self::Account
+                | Self::Date
+                | Self::Post
+                | Self::Number
+                | Self::NumberIfMany
+                | Self::Site
+        )
     }
 
     fn named(name: &str) -> Option<Self> {
@@ -246,7 +310,7 @@ pub fn fill_rule_name(
             Part::Placeholder(placeholder) => {
                 let known = match placeholder {
                     PostNamePlaceholder::Date => video.upload_date.is_some(),
-                    PostNamePlaceholder::Tags => !video.tags.is_empty(),
+                    known if known.is_known_value() => known.known_value(video).is_some(),
                     PostNamePlaceholder::Account => {
                         missing == MissingValues::StandIn || has_account(video)
                     }
@@ -290,7 +354,7 @@ pub fn shared_file_name(template: &str, video: &VideoInfo) -> String {
                 PostNamePlaceholder::Number => Some("1".to_owned()),
                 PostNamePlaceholder::NumberIfMany => None,
                 PostNamePlaceholder::Site => Some(site.clone()),
-                PostNamePlaceholder::Tags => tag_list(video),
+                known => known.known_value(video),
             }),
         })
         .collect();
@@ -328,7 +392,15 @@ fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
         PostNamePlaceholder::Post => Some(literal(&post.video_id)),
         PostNamePlaceholder::Date => post.upload_date.as_deref().map(literal),
         PostNamePlaceholder::Site => Some(literal(&rules::site_name(post))),
-        PostNamePlaceholder::Tags => tag_list(post).as_deref().map(literal),
+        known @ (PostNamePlaceholder::Tags
+        | PostNamePlaceholder::TagsJa
+        | PostNamePlaceholder::TagsEn
+        | PostNamePlaceholder::TagsBoth
+        | PostNamePlaceholder::Rating
+        | PostNamePlaceholder::WorkType
+        | PostNamePlaceholder::Ai
+        | PostNamePlaceholder::Series
+        | PostNamePlaceholder::Pages) => known.known_value(post).as_deref().map(literal),
         // A post's file without a number of its own (on a site that gives none) keeps the name it has on the site,
         // so no two files of the post share a name.
         PostNamePlaceholder::Number => Some(number_field(post).to_owned()),
@@ -360,14 +432,6 @@ fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
             Some(format!("{{{}|'{fallback}'}}", fields.join("|")))
         }
     }
-}
-
-/// A download's tags as `{tags}` puts them in a file's name: as the site writes them, separated by commas, made safe
-/// for a file name and cut as a rule's folder cuts a placeholder (`rules::placeholder_text`). `None` without tags.
-fn tag_list(video: &VideoInfo) -> Option<String> {
-    let names: Vec<&str> = video.tags.iter().map(|tag| tag.name.as_str()).collect();
-    let text = rules::placeholder_text(&names.join(", ").replace(['{', '}'], ""));
-    (!text.is_empty()).then_some(text)
 }
 
 /// Text that stays as it is in a gallery-dl format: its braces doubled.
@@ -412,6 +476,7 @@ mod tests {
             shared_files: Vec::new(),
             playlist: None,
             tags: Vec::new(),
+            pixiv: None,
         }
     }
 
@@ -584,6 +649,33 @@ mod tests {
         assert_eq!(
             gallery_format("{post} {number} {title}", &instagram()),
             gallery_format(DEFAULT_POST_FILE_NAME, &instagram())
+        );
+    }
+
+    #[test]
+    fn puts_a_pixiv_works_details_in_its_files_names() {
+        let mut work = post("pixiv", "https://www.pixiv.net/artworks/1");
+        work.tags = vec![crate::metadata::VideoTag {
+            name: "原神".to_owned(),
+            english: Some("Genshin Impact".to_owned()),
+        }];
+        work.pixiv = Some(crate::metadata::PixivDetails {
+            rating: Some("General".to_owned()),
+            work_type: Some(crate::metadata::PixivWorkType::Illustration),
+            ai: false,
+            series: None,
+        });
+        assert_eq!(
+            check("{rating} {ai} {workType} {post} {number}").map(|_| ()),
+            Ok(())
+        );
+        assert_eq!(
+            gallery_format(
+                "{rating} {ai} {workType} {series} {tagsEn} {tagsBoth} {pages} {post} {number}",
+                &work
+            ),
+            "General Illustration Genshin Impact 原神 (Genshin Impact) 3 DfPQchkG1tg {num:A+1/}.{extension}",
+            "{{ai}} and {{series}} left out without a value"
         );
     }
 

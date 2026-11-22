@@ -31,6 +31,7 @@ export const FOLDER_PLACEHOLDERS = [
   "date",
   "added",
   "tags",
+  "pages",
 ] as const
 
 /** The most groups a rule's folder can take from its pattern, as `{1}` to `{9}`. */

@@ -413,6 +413,7 @@ fn video_at(link: &str) -> VideoInfo {
         shared_files: Vec::new(),
         playlist: None,
         tags: Vec::new(),
+        pixiv: None,
     }
 }
 

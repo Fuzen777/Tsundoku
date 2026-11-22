@@ -792,6 +792,7 @@ mod tests {
             shared_files: Vec::new(),
             playlist: None,
             tags: Vec::new(),
+            pixiv: None,
         }
     }
 

@@ -339,6 +339,7 @@ impl Share {
             },
             playlist: None,
             tags: Vec::new(),
+            pixiv: None,
         }
     }
 }

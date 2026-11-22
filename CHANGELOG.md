@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.20 · 2026-11-22
+
+### Added
+
+- **Pixiv's placeholders**: rules' folders and file names, and Settings' name for posts' files, can hold a Pixiv work's tags in Japanese (`{tagsJa}`), by their English names (`{tagsEn}`) or both (`{tagsBoth}`), its rating (`{rating}`: General, R-18 or R-18G), its kind (`{workType}`: Illustration, Manga or Animation), `{ai}` (AI for a work its artist marked made by AI, nothing otherwise) and its series (`{series}`). `{pages}` gives any post's number of files. The placeholder buttons start with a site filter: General shows the placeholders every site fills, Pixiv adds its own.
+
 ## 0.2.19 · 2026-11-22
 
 ### Added

@@ -9,7 +9,8 @@ use serde_json::Value;
 
 use crate::cancel::CancelToken;
 use crate::metadata::{
-    PostContents, PreviewError, TOO_MANY_REQUESTS_PHRASES, VideoInfo, VideoTag, tags_from,
+    PixivDetails, PixivWorkType, PostContents, PreviewError, TOO_MANY_REQUESTS_PHRASES, VideoInfo,
+    VideoTag, tags_from,
 };
 use crate::pixiv_account::{self, GalleryDlConfig};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
@@ -550,6 +551,30 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         shared_files: Vec::new(),
         playlist: None,
         tags: post_tags(post),
+        pixiv: pixiv_details(post),
+    })
+}
+
+/// A Pixiv work's rating, kind, AI flag and series, from gallery-dl's `rating` (its words for Pixiv's `x_restrict`),
+/// `type`, `illust_ai_type` (2 for made by AI) and `series`. `None` on any other site.
+fn pixiv_details(post: &Value) -> Option<PixivDetails> {
+    if text(post, "category").as_deref() != Some("pixiv") {
+        return None;
+    }
+    let work_type = match text(post, "type").as_deref() {
+        Some("illust") => Some(PixivWorkType::Illustration),
+        Some("manga") => Some(PixivWorkType::Manga),
+        Some("ugoira") => Some(PixivWorkType::Animation),
+        _ => None,
+    };
+    Some(PixivDetails {
+        rating: text(post, "rating"),
+        work_type,
+        ai: post.get("illust_ai_type").and_then(Value::as_i64) == Some(2),
+        series: post
+            .get("series")
+            .filter(|series| series.is_object())
+            .and_then(|series| text(series, "title")),
     })
 }
 
@@ -1497,6 +1522,41 @@ mod tests {
             "X's hashtags"
         );
         assert!(tags_of(r#"{"category": "twitter", "tweet_id": 1}"#).is_empty());
+    }
+
+    #[test]
+    fn reads_a_pixiv_works_details() {
+        let json = r#"[
+            [2, {"category": "pixiv", "id": 7, "title": "Work", "type": "manga", "rating": "R-18",
+                 "illust_ai_type": 2, "series": {"id": 1, "title": "Series"},
+                 "user": {"id": 3, "name": "Artist", "account": "artist"}}],
+            [3, "https://i.pximg.net/img-original/img/2026/01/01/00/00/00/7_p0.png", {"category": "pixiv", "num": 0, "extension": "png"}]
+        ]"#;
+        let work = parse_answer(json, "https://www.pixiv.net/artworks/7").unwrap();
+        assert_eq!(work.title, "Work");
+        assert_eq!(work.uploader.as_deref(), Some("Artist"));
+        assert_eq!(work.account.as_deref(), Some("artist"));
+        assert_eq!(
+            work.pixiv,
+            Some(PixivDetails {
+                rating: Some("R-18".to_owned()),
+                work_type: Some(PixivWorkType::Manga),
+                ai: true,
+                series: Some("Series".to_owned()),
+            })
+        );
+        assert_eq!(
+            work.thumbnail_url.as_deref(),
+            Some(
+                "https://i.pximg.net/c/540x540_70/img-master/img/2026/01/01/00/00/00/7_p0_master1200.jpg"
+            )
+        );
+        let tweet = parse_answer(
+            r#"[[2, {"category": "twitter", "tweet_id": 1}], [3, "https://pbs.example/a.jpg", {"category": "twitter", "extension": "jpg"}]]"#,
+            "https://x.com/a/status/1",
+        )
+        .unwrap();
+        assert_eq!(tweet.pixiv, None);
     }
 
     #[test]

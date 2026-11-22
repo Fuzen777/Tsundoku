@@ -19,6 +19,12 @@ describe("fillPlaceholders", () => {
     expect(fillPlaceholders("{account} {Post} {NUMBER}", values)).toBe("natgeo DfPQchkG1tg 1")
   })
 
+  it("fills a placeholder whose name has capitals, as Settings' samples name them", () => {
+    expect(fillPlaceholders("{numberIfMany} {tagsEn}", { numberIfMany: "1", tagsEn: "Genshin Impact" })).toBe(
+      "1 Genshin Impact",
+    )
+  })
+
   it("leaves other braces as they are", () => {
     expect(fillPlaceholders("{post} {title} {x {}", { post: "a" })).toBe("a {title} {x {}")
   })

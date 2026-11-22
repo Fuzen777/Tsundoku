@@ -36,6 +36,9 @@ export const strings = {
   /** The buttons that put a placeholder in a field (PlaceholderButtons.tsx). */
   placeholders: {
     insert: "Insert",
+    /** The site filter's first choice: the placeholders every site fills. */
+    general: "General",
+    siteFilter: "Show a Site's Placeholders Too",
   },
   /** A post's files, picked in a strip (PostFilesStrip.tsx) on the preview card and in Pending, or in a list
    * (PostFilesPicker.tsx) for a post of files that aren't all pictures. */
@@ -1212,6 +1215,14 @@ export const strings = {
       added: "The day you added it, as 2026-11-06.",
       tags: "The download's tags as its site writes them, separated by commas, cut to 80 characters, or No Tags.",
       tag: "The tag your Tags condition found: the first of its list the download has, as you wrote it, else the download's own tag it found, or Unknown.",
+      pages: "How many files a post or a shared folder holds (those it downloads), or Unknown for a video.",
+      tagsJa: "A Pixiv work's tags as Pixiv writes them, in Japanese, separated by commas, or No Tags.",
+      tagsEn: "A Pixiv work's tags by their English names where Pixiv gives them, in Japanese otherwise, or No Tags.",
+      tagsBoth: "A Pixiv work's tags in Japanese, each with its English name in brackets where Pixiv gives one: 原神 (Genshin Impact).",
+      rating: "A Pixiv work's rating: General, R-18 or R-18G.",
+      workType: "A Pixiv work's kind: Illustration, Manga or Animation.",
+      ai: "AI when the artist marked the Pixiv work made by AI; nothing otherwise, with the space or dash before it.",
+      series: "The Pixiv series the work is part of, or No Series.",
     },
     capturedHint: (group: string) =>
       `The text the pattern captured in its parentheses number ${group}, counting from the left, or Unknown.`,
@@ -1586,6 +1597,14 @@ export const strings = {
         "The file's place in the post, only when several of its files are downloaded: a post of one file, or one file picked from it, gets none.",
       site: "The site, such as Instagram or X.",
       tags: "The post's tags as its site writes them, separated by commas, or nothing when it has none.",
+      pages: "How many files the post holds (those it downloads).",
+      tagsJa: "A Pixiv work's tags as Pixiv writes them, in Japanese.",
+      tagsEn: "A Pixiv work's tags by their English names where Pixiv gives them.",
+      tagsBoth: "A Pixiv work's tags in Japanese, each with its English name in brackets.",
+      rating: "A Pixiv work's rating: General, R-18 or R-18G.",
+      workType: "A Pixiv work's kind: Illustration, Manga or Animation.",
+      ai: "AI when the artist marked the Pixiv work made by AI; nothing otherwise.",
+      series: "The Pixiv series the work is part of; nothing otherwise.",
     },
     /** What the example under the field fills the placeholders with, and the extension it adds. */
     postNameSamples: {
@@ -1596,6 +1615,14 @@ export const strings = {
       numberIfMany: "1",
       site: "Instagram",
       tags: "space, mars",
+      pages: "3",
+      tagsJa: "原神",
+      tagsEn: "Genshin Impact",
+      tagsBoth: "原神 (Genshin Impact)",
+      rating: "General",
+      workType: "Illustration",
+      ai: "AI",
+      series: "Season 1",
     },
     postNameSampleExtension: "jpg",
     postNameErrors: {

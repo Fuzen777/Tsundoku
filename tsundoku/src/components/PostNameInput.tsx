@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react"
 import type { PostNamePlaceholder } from "../bindings/PostNamePlaceholder"
-import { fillPlaceholders } from "../placeholders"
+import { fillPlaceholders, SITE_PLACEHOLDERS } from "../placeholders"
 import { strings } from "../strings"
 import { TextInput } from "./Field"
 import { PlaceholderButtons } from "./PlaceholderButtons"
@@ -19,6 +19,7 @@ const POST_NAME_PLACEHOLDERS: readonly PostNamePlaceholder[] = [
   "numberIfMany",
   "site",
   "tags",
+  "pages",
 ]
 
 interface PostNameInputProps {
@@ -82,6 +83,7 @@ export function PostNameInput({
         value={value}
         placeholders={[...POST_NAME_PLACEHOLDERS, ...extraPlaceholders]}
         hints={{ ...text.postNamePlaceholderHints, ...extraHints }}
+        sites={SITE_PLACEHOLDERS}
         onChange={onChange}
       />
       <div className="flex items-center gap-3">
