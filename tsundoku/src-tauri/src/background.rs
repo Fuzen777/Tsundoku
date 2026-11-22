@@ -88,6 +88,9 @@ mod text {
     }
 
     pub const DOWNLOADING: &str = "Downloading";
+    pub const PIXIV_WARNED: &str = "Pixiv Warned Your Account";
+    pub const PIXIV_WARNED_BODY: &str = "Pixiv sent your account a warning about downloading too much. Tsundoku stopped its Pixiv \
+        downloads until you go on.";
     pub const ADDED_TO_PENDING: &str = "Added to Pending";
 
     /// A copied link that lists several items, which waits in Pending's Needs Attention to be picked from.
@@ -610,6 +613,14 @@ pub fn copied_link_to_pick(app: &AppHandle, link: &str, listing: Option<ListingK
         text::ADDED_TO_PENDING,
         &text::to_pick_from(listing, link),
     );
+}
+
+/// Pixiv warned the account and its downloads stopped: told as a failure is (Settings → Adding Links' failures), while
+/// the window isn't in front, where its notice shows it.
+pub fn pixiv_warned(app: &AppHandle) {
+    if app.state::<Arc<PendingLinks>>().options().notify_failures {
+        tell(app, text::PIXIV_WARNED, text::PIXIV_WARNED_BODY);
+    }
 }
 
 /// A Windows notification about links added, when Settings → Adding Links has them on and the window isn't in front.

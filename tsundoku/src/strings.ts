@@ -281,6 +281,8 @@ export const strings = {
           : `${site} wants to check you're a person before this download. It waits here until you open the check and start the download on ${site}'s page.`,
       windowDownload: (site: string) =>
         `Downloading in ${site}'s check window, which saves the file itself. Stopping this download stops it.`,
+      pixivWarning:
+        "Pixiv warned your account about downloading too much. This download waits until you go on, from the notice at the top.",
       needsPassword: (wrong: boolean, tried: number) =>
         wrong
           ? "The password didn't open this download. It waits here until you enter the right one."
@@ -503,6 +505,15 @@ export const strings = {
     },
     ascending: "Ascending",
     descending: "Descending",
+  },
+  pixivWarning: {
+    title: "Pixiv Warned Your Account",
+    body: (sent: string) =>
+      `Pixiv sent your account a warning about downloading too much (${sent}). Pixiv may lock or delete an account it has to warn again, so Tsundoku stopped every Pixiv download and check, and asks Pixiv nothing until you go on. Read the warning first, and consider slowing Pixiv down.`,
+    openMessages: "Open Pixiv's Messages",
+    pacing: "Pacing Settings",
+    goOn: "Go On",
+    goOnFailed: "Couldn't go on.",
   },
   appUpdate: {
     available: (version: string) => `Tsundoku ${version} is available.`,
@@ -996,6 +1007,8 @@ export const strings = {
       signInNeeded: (site: string) => `${site} needs you signed in. Sign in to ${site} in your browser, then try again.`,
       pixivSignIn: "Pixiv needs Tsundoku signed in to it: Settings → Sign-Ins.",
       pixivSignInRefused: "Pixiv didn't accept Tsundoku's sign-in, as after a password change. Sign in again in Settings → Sign-Ins.",
+      pixivWarned:
+        "Pixiv warned your account about downloading too much, so Tsundoku asks Pixiv nothing until you go on, from the notice at the top.",
       signInRefused: (site: string) =>
         `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
       limitReached: (site: string) =>
@@ -1772,6 +1785,17 @@ export const strings = {
       pixivHint:
         "Pixiv needs Tsundoku signed in to it, rather than your browser's cookies. Sign In opens Pixiv's own login page in a window of Tsundoku's: sign in there once with your pixiv account. Tsundoku never sees your password, and keeps the sign-in encrypted for your Windows account, out of backups.",
       waiting: "Finish signing in in Pixiv's window.",
+      checkHint:
+        "Tsundoku reads your Pixiv messages for a warning about downloading too much when it starts using Pixiv, then every hour and every 100 files while it goes on, and stops Pixiv's downloads when it finds one.",
+      checked: (ago: string) => `Messages checked ${ago}: no warning.`,
+      notChecked: "Messages not checked yet.",
+      checking: "Reading your Pixiv messages…",
+      checkNow: "Check Now",
+      warned: "Pixiv warned your account: see the notice at the top.",
+      notSignedIn:
+        "Tsundoku can't read your Pixiv messages: Pixiv's website no longer counts its window as signed in. Sign in again to keep checking them.",
+      signInAgain: "Sign In Again…",
+      checkFailed: "Tsundoku couldn't read your Pixiv messages.",
       errors: {
         network: "Pixiv couldn't be reached. Check your connection, then sign in again.",
         refused: "Pixiv didn't accept the sign-in, which happens when it takes more than 30 seconds to finish. Sign in again.",

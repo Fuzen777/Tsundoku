@@ -13,6 +13,7 @@ use crate::metadata::{
     VideoTag, tags_from,
 };
 use crate::pixiv_account::{self, GalleryDlConfig};
+use crate::pixiv_warning;
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::site_pictures;
 use crate::tools::{ToolCacheFolder, ToolId, start_error};
@@ -111,6 +112,9 @@ pub(crate) fn run_watched(
     let Some(gallery_dl) = tools.gallery_dl else {
         return Err(PreviewError::ImagesNotSetUp);
     };
+    if let Some(refused) = pixiv_warning::refusal(link) {
+        return Err(refused);
+    }
     let mut json = String::new();
     let mut log = Vec::new();
     // Kept until the run ends, which deletes it.
@@ -141,11 +145,23 @@ pub(crate) fn run_watched(
         },
     })?;
 
+    pixiv_warning::note_read(link, config.as_ref().map_or(0, |_| posts_in(&json)));
     if !status.success() {
         let stderr: Vec<&str> = log.iter().map(String::as_str).collect();
         return Err(classify_exit(status.code(), &stderr));
     }
     Ok(LoggedAnswer { json, log })
+}
+
+/// How many posts gallery-dl's answer holds (its `[2, post]` messages), for counting Pixiv's requests.
+fn posts_in(json: &str) -> u32 {
+    serde_json::from_str::<Vec<Value>>(json).map_or(0, |messages| {
+        let posts = messages
+            .iter()
+            .filter(|message| message.get(0).and_then(Value::as_i64) == Some(2))
+            .count();
+        u32::try_from(posts).unwrap_or(u32::MAX)
+    })
 }
 
 /// gallery-dl's options that make a read of X stop once X's limit on the list's requests is used up, rather than wait

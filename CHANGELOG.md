@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.24 · 2026-11-22
+
+### Added
+
+- **Pixiv's warnings**: Tsundoku reads your Pixiv messages for a warning about downloading too much, when it starts using Pixiv, then every hour and every 100 files while it goes on. When Pixiv has sent one, every Pixiv download, check and read stops, a notice at the top of the window says so (with Pixiv's messages and the pacing settings a click away), and a notification too while the window isn't in front. Go On lets them continue. Settings → Sign-Ins shows when the messages were last checked, with Check Now.
+
 ## 0.2.23 · 2026-11-22
 
 ### Added

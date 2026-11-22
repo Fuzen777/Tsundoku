@@ -1,7 +1,7 @@
 //! Why a waiting download doesn't start yet: it lost its connection or found its site's download limit used up, and
 //! tries again by itself later (`Recovery`), its site answered "too many requests" (`site_limits`), the hourly limit
 //! on a paced site's files is reached, or a file host put files behind a check only a person can pass
-//! (`hosts::check`), which waits for them. The queue works each waiting item's hold out whenever it schedules, and a
+//! (`hosts::check`), which waits for them, or Pixiv warned the account (`pixiv_warning`). The queue works each waiting item's hold out whenever it schedules, and a
 //! thread schedules again once one ends.
 
 use std::collections::VecDeque;
@@ -17,6 +17,7 @@ use super::{DownloadError, DownloadProgress, DownloadQueue, DownloadStage, Queue
 use crate::hosts::check::BrowserCheck;
 use crate::metadata::PreviewError;
 use crate::passwords::Password;
+use crate::pixiv_warning;
 use crate::settings::DownloadSettings;
 use crate::site_limits::{self, SiteWait, hourly_limit_end, now_ms};
 use crate::sites;
@@ -268,6 +269,9 @@ pub enum Hold {
     /// the one it had didn't open it; `tried` is how many of the passwords Tsundoku knows it ran with first, none of
     /// which opened it.
     NeedsPassword { wrong: bool, tried: u32 },
+    /// Pixiv sent the account a warning about too many requests (`pixiv_warning`): none of Pixiv's downloads start
+    /// until the person goes on past it.
+    PixivWarning,
 }
 
 impl Hold {
@@ -281,7 +285,8 @@ impl Hold {
             Self::NotEnoughRoom { until, .. } => *until,
             Self::BrowserCheck { .. }
             | Self::WindowDownload { .. }
-            | Self::NeedsPassword { .. } => i64::MAX,
+            | Self::NeedsPassword { .. }
+            | Self::PixivWarning => i64::MAX,
         }
     }
 }
@@ -508,6 +513,9 @@ impl DownloadQueue {
         if item.recovery.offer.is_some() {
             return None;
         }
+        if pixiv_warning::holds(&item.video.url) {
+            return Some(Hold::PixivWarning);
+        }
         if let Some(asked) = item.recovery.needs_password {
             return Some(Hold::NeedsPassword {
                 wrong: asked.wrong,
@@ -559,12 +567,16 @@ impl DownloadQueue {
         self.schedule();
     }
 
-    /// Whether a waiting item's hold has ended, so it may start.
+    /// Whether a waiting item's hold has ended, so it may start: its time came, or the person went on past Pixiv's
+    /// warning.
     fn hold_ended(&self) -> bool {
         let now = now_ms();
         lock(&self.state).items.iter().any(|item| {
             item.state == QueueState::Waiting
-                && item.hold.as_ref().is_some_and(|hold| hold.until() <= now)
+                && item.hold.as_ref().is_some_and(|hold| match hold {
+                    Hold::PixivWarning => !pixiv_warning::holds(&item.video.url),
+                    other => other.until() <= now,
+                })
         })
     }
 }

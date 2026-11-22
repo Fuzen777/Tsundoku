@@ -112,6 +112,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: describeSignIn(error.site, error.cookies), detail: error.detail }
     case "pixivSignInNeeded":
       return { message: error.refused ? text.pixivSignInRefused : text.pixivSignIn }
+    case "pixivWarned":
+      return { message: text.pixivWarned }
     case "limitReached":
       return { message: text.limitReached(error.site), detail: error.detail }
     case "waitBetweenDownloads":

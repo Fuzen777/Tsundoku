@@ -18,6 +18,7 @@ import { PreviewCard } from "./components/PreviewCard"
 import { Sidebar } from "./components/Sidebar"
 import { StatusMessage } from "./components/StatusMessage"
 import { UndoToastProvider } from "./components/UndoToast"
+import { PixivWarningNotice } from "./components/PixivWarningNotice"
 import { UpdateBanner } from "./components/UpdateBanner"
 import { WhatsNewCard } from "./components/WhatsNewCard"
 import { describeDownloadError, type ErrorDescription } from "./errors"
@@ -296,6 +297,7 @@ export function App() {
         <div className="flex min-h-0 flex-col pt-3">
           {/* Hidden while it has nothing to show, so it takes no room. */}
           <div className="flex flex-col gap-3 pr-4 pb-3 empty:hidden">
+            <PixivWarningNotice />
             <UpdateBanner />
             <WhatsNewCard browsing={browsingWhatsNew} onStopBrowsing={() => setBrowsingWhatsNew(false)} />
             {addError && (

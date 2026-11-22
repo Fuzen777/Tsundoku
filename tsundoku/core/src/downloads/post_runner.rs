@@ -13,6 +13,7 @@ use crate::cancel::CancelToken;
 use crate::gallery::classify_download_failure;
 use crate::metadata::PreviewError;
 use crate::pixiv_account::{self, GalleryDlConfig};
+use crate::pixiv_warning;
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::tools::{ToolId, start_error};
 
@@ -32,6 +33,9 @@ pub(super) fn run(
     };
     if let Err(error) = make_folders(job) {
         return JobOutcome::Failed(error);
+    }
+    if let Some(error) = pixiv_warning::refusal(&job.url) {
+        return JobOutcome::Failed(DownloadError::YtDlp { error });
     }
     // Pixiv's sign-in, kept until the run ends, which deletes it.
     let config = pixiv_account::gallery_dl_config(&job.url, job.ffmpeg.as_deref());
@@ -70,6 +74,7 @@ pub(super) fn run(
         }
     });
 
+    pixiv_warning::note_download(&job.url, u32::try_from(files.len()).unwrap_or(u32::MAX));
     match result {
         Err(RunError::Cancelled) => JobOutcome::Cancelled,
         Err(RunError::Start { source, .. }) => JobOutcome::Failed(DownloadError::YtDlp {

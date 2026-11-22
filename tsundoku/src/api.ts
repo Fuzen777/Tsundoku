@@ -14,6 +14,7 @@ import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { ClickNLoadStatus } from "./bindings/ClickNLoadStatus"
 import type { AccountError } from "./bindings/AccountError"
 import type { PixivAccount } from "./bindings/PixivAccount"
+import type { PixivWarningStatus } from "./bindings/PixivWarningStatus"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadLog } from "./bindings/DownloadLog"
@@ -105,6 +106,7 @@ export const queryKeys = {
   addingOptions: ["adding-options"],
   clickNLoad: ["click-n-load"],
   pixivAccount: ["pixiv-account"],
+  pixivWarning: ["pixiv-warning"],
   backgroundOptions: ["background-options"],
   watchedOptions: ["watched-options"],
   appearanceOptions: ["appearance-options"],
@@ -132,6 +134,7 @@ const ADDING_OPTIONS_CHANGED_EVENT = "adding-options-changed"
 const CLICK_N_LOAD_CHANGED_EVENT = "click-n-load-changed"
 const PIXIV_ACCOUNT_CHANGED_EVENT = "pixiv-account-changed"
 const PIXIV_SIGN_IN_FAILED_EVENT = "pixiv-sign-in-failed"
+const PIXIV_WARNING_CHANGED_EVENT = "pixiv-warning-changed"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -914,6 +917,35 @@ export function onPixivAccountChanged(handler: (account: PixivAccount | null) =>
 export function onPixivSignInFailed(handler: (error: AccountError) => void): Promise<UnlistenFn> {
   if (!isTauri()) return Promise.resolve(() => {})
   return listen<AccountError>(PIXIV_SIGN_IN_FAILED_EVENT, (event) => handler(event.payload))
+}
+
+/** Where the person reads their Pixiv messages. */
+export const PIXIV_MESSAGES_PAGE = "https://www.pixiv.net/messages.php"
+
+/** The check of Pixiv's messages for a warning (Settings → Sign-Ins, and the notice over the views). In a browser,
+ * `?pixivWarning` shows a warning. */
+export function getPixivWarningStatus(): Promise<PixivWarningStatus> {
+  if (!isTauri()) {
+    return Promise.resolve(addressHas("pixivWarning") ? standIns.pixivWarned : standIns.pixivWarningChecked)
+  }
+  return invoke<PixivWarningStatus>("pixiv_warning_status")
+}
+
+/** Reads Pixiv's messages now, and gives the check's status after. */
+export function checkPixivMessages(): Promise<PixivWarningStatus> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<PixivWarningStatus>("check_pixiv_messages")
+}
+
+/** Goes on past Pixiv's warning: its downloads and reads go on. */
+export function dismissPixivWarning(): Promise<PixivWarningStatus> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<PixivWarningStatus>("dismiss_pixiv_warning")
+}
+
+export function onPixivWarningChanged(handler: (status: PixivWarningStatus) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<PixivWarningStatus>(PIXIV_WARNING_CHANGED_EVENT, (event) => handler(event.payload))
 }
 
 /** Puts text on the clipboard, such as the browser bookmark's address. Tsundoku's own copies never reach the

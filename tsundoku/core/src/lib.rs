@@ -29,6 +29,7 @@ pub mod name_parts;
 pub mod passwords;
 pub mod pending;
 pub mod pixiv_account;
+pub mod pixiv_warning;
 pub mod post_names;
 pub mod presets;
 pub mod preview;

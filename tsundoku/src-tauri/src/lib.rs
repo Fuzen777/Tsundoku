@@ -9,6 +9,7 @@ mod click_n_load;
 mod downloads;
 mod history;
 mod pending;
+mod pixiv_messages;
 mod queue_status;
 mod report;
 mod shell;
@@ -135,6 +136,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(DataFolder { path: root });
     // Pixiv's sign-in (Settings → Sign-Ins), which gallery-dl's runs read.
     accounts::open(&paths);
+    let (accounts_folder, accounts_profile) =
+        (paths.accounts_folder(), paths.accounts_browser_folder());
 
     let settings = Arc::new(SettingsStore::open(paths.settings_file())?);
     let database = Arc::new(Database::open(&paths.database_file())?);
@@ -223,6 +226,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(presets);
     app.manage(rules);
     app.manage(queue);
+    // Pixiv's warnings, which stop the queue's Pixiv downloads.
+    pixiv_messages::start(app.handle(), accounts_folder, accounts_profile);
     app.manage(pending);
     app.manage(watched_sources);
     app.manage(Arc::new(PreviewService::keeping_listings(Arc::clone(
@@ -331,6 +336,9 @@ pub fn run() {
             accounts::pixiv_account,
             accounts::sign_in_to_pixiv,
             accounts::sign_out_of_pixiv,
+            pixiv_messages::pixiv_warning_status,
+            pixiv_messages::check_pixiv_messages,
+            pixiv_messages::dismiss_pixiv_warning,
             app_info,
             open_data_folder,
             open_download_folder,

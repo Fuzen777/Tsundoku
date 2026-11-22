@@ -1,4 +1,5 @@
 import type { PixivAccount } from "./bindings/PixivAccount"
+import type { PixivWarningStatus } from "./bindings/PixivWarningStatus"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
@@ -691,6 +692,18 @@ export const standIns = {
   } satisfies AddingSettings,
   clickNLoadStatus: { state: { kind: "off" }, port: 9666, senders: ["FileCrypt"] } satisfies ClickNLoadStatus,
   pixivAccount: { name: "Some One", account: "someone" } satisfies PixivAccount,
+  pixivWarningChecked: {
+    warning: null,
+    checkedAt: Date.now() - 12 * 60_000,
+    problem: null,
+    checking: false,
+  } satisfies PixivWarningStatus,
+  pixivWarned: {
+    warning: { sentAt: Date.now() - 3 * 3_600_000 },
+    checkedAt: Date.now() - 60_000,
+    problem: null,
+    checking: false,
+  } satisfies PixivWarningStatus,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
   watchedOptions: { newItemsStart: "unticked" } satisfies WatchedSettings,
   appearanceOptions: { theme: "auto", accent: "indigo", customAccent: "#165e83" } satisfies AppearanceSettings,

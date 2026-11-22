@@ -32,18 +32,21 @@ export function describeHold(hold: Hold): string {
       return strings.queue.holds.windowDownload(hold.site)
     case "needsPassword":
       return strings.queue.holds.needsPassword(hold.wrong, hold.tried)
+    case "pixivWarning":
+      return strings.queue.holds.pixivWarning
   }
 }
 
 /** Whether a waiting download's hold can be cut short with Try Now: not the hourly limit, a check, the check window's
- * download or a password, which wait for something else. */
+ * download, a password or Pixiv's warning, which wait for something else. */
 export function canTryNow(hold: Hold | null): boolean {
   return (
     hold !== null &&
     hold.kind !== "hourlyLimit" &&
     hold.kind !== "browserCheck" &&
     hold.kind !== "windowDownload" &&
-    hold.kind !== "needsPassword"
+    hold.kind !== "needsPassword" &&
+    hold.kind !== "pixivWarning"
   )
 }
 
@@ -55,6 +58,7 @@ export function holdEnd(hold: Hold): number | null {
     case "browserCheck":
     case "windowDownload":
     case "needsPassword":
+    case "pixivWarning":
       return null
     default:
       return hold.until

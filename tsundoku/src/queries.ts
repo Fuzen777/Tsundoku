@@ -15,6 +15,7 @@ import {
   getAddingOptions,
   getClickNLoadStatus,
   getPixivAccount,
+  getPixivWarningStatus,
   getAppInfo,
   getAppearanceOptions,
   getBackgroundOptions,
@@ -578,6 +579,11 @@ export function useAddingOptions() {
 /** The pixiv account Tsundoku is signed in to; the app's event keeps it current (main.tsx). */
 export function usePixivAccount() {
   return useQuery({ queryKey: queryKeys.pixivAccount, queryFn: getPixivAccount, staleTime: Infinity })
+}
+
+/** The check of Pixiv's messages for a warning; the app's event keeps it current (main.tsx). */
+export function usePixivWarning() {
+  return useQuery({ queryKey: queryKeys.pixivWarning, queryFn: getPixivWarningStatus, staleTime: Infinity })
 }
 
 /** Whether Click'n'Load buttons can send links here; the app's event keeps it current (main.tsx). */

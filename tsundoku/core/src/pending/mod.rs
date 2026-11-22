@@ -1115,9 +1115,10 @@ impl PendingLinks {
         }
     }
 
-    /// Whether the link's site waits after answering "too many requests".
+    /// Whether the link's site waits after answering "too many requests", or is Pixiv while a warning from it stops
+    /// Tsundoku's requests (`pixiv_warning`).
     fn site_waits(&self, link: &str) -> bool {
-        self.queue.site_wait(link).is_some()
+        self.queue.site_wait(link).is_some() || crate::pixiv_warning::holds(link)
     }
 
     /// Tells the listener the links changed: at once when the last notice went out a while ago (`change_gap`), else

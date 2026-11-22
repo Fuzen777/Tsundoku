@@ -364,6 +364,10 @@ pub enum PreviewError {
     /// cookies: none yet, or Pixiv refused the one kept (`refused`), as after a password change.
     #[error("Pixiv needs Tsundoku signed in to it")]
     PixivSignInNeeded { refused: bool },
+    /// Pixiv sent the account a warning about too many requests (`pixiv_warning`): Tsundoku asks Pixiv nothing until
+    /// the person goes on past it.
+    #[error("Pixiv warned the account about too many requests")]
+    PixivWarned,
     /// A file host's free downloads for this connection are used up for now, such as MEGA's transfer quota.
     #[error("{site}'s download limit is reached: {detail}")]
     LimitReached { site: String, detail: String },

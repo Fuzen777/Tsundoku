@@ -10,6 +10,7 @@ import {
   onAddingOptionsChanged,
   onClickNLoadChanged,
   onPixivAccountChanged,
+  onPixivWarningChanged,
   onToolsChanged,
   queryKeys,
 } from "./api"
@@ -44,6 +45,7 @@ void onToolsChanged(() => void queryClient.invalidateQueries({ queryKey: queryKe
 void onAddingOptionsChanged((options) => queryClient.setQueryData(queryKeys.addingOptions, options))
 void onClickNLoadChanged((status) => queryClient.setQueryData(queryKeys.clickNLoad, status))
 void onPixivAccountChanged((account) => queryClient.setQueryData(queryKeys.pixivAccount, account))
+void onPixivWarningChanged((status) => queryClient.setQueryData(queryKeys.pixivWarning, status))
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
