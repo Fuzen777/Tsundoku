@@ -19,11 +19,13 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 
 use super::{
-    Address, Answer, FileCheck, FileSource, Host, HostFacts, RemoteFile, Share, probe, safe_name,
+    Address, Answer, FileCheck, FileSource, Host, HostFacts, RemoteFile, SendChecked, Share,
+    check_cancel, probe, safe_name,
 };
 use crate::cancel::CancelToken;
 use crate::fanbox_account;
 use crate::metadata::{FanboxDetails, FileContents, PreviewError, VideoInfo, VideoTag, tags_from};
+use crate::sites;
 
 pub(super) const FACTS: HostFacts = HostFacts {
     name: "Fanbox",
@@ -55,6 +57,38 @@ pub struct ApiAnswer {
 pub trait FanboxApi: Send + Sync {
     /// Each address's answer in turn, or why Fanbox couldn't be asked.
     fn get(&self, addresses: &[String]) -> Result<Vec<Result<ApiAnswer, String>>, String>;
+
+    /// The session's `SESSION_COOKIE`, which Fanbox's file server asks for a supported post's files, or `None` when
+    /// the window isn't signed in.
+    fn session(&self) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+}
+
+/// The cookie Fanbox keeps its session in, which its file server (`downloads.fanbox.cc`) asks for the files of a post
+/// for supporters: without it, they answer 403.
+pub const SESSION_COOKIE: &str = "FANBOXSESSID";
+/// How long the session's cookie is kept in memory before the window is asked for it again.
+const SESSION_KEPT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
+static SESSION: std::sync::Mutex<Option<(String, std::time::Instant)>> =
+    std::sync::Mutex::new(None);
+
+/// The `Cookie` header that gives Fanbox's file server the signed-in session, for the Fanbox host's client
+/// (`hosts::client_for`), which only ever asks Fanbox's own servers. `None` when the window isn't signed in. The value
+/// is only ever sent there, and never written anywhere.
+pub(crate) fn session_header() -> Option<String> {
+    let mut kept = SESSION
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    if let Some((value, at)) = kept.as_ref()
+        && at.elapsed() < SESSION_KEPT
+    {
+        return Some(format!("{SESSION_COOKIE}={value}"));
+    }
+    let value = API.get()?.session().ok().flatten()?;
+    *kept = Some((value.clone(), std::time::Instant::now()));
+    Some(format!("{SESSION_COOKIE}={value}"))
 }
 
 static API: OnceLock<Box<dyn FanboxApi>> = OnceLock::new();
@@ -583,6 +617,37 @@ fn post_files(id: &str, content: &Value) -> Vec<ListedFile> {
     files
 }
 
+/// An image's size, as its file server answers a HEAD request for it, else as `probe` asks it. Some of a supported
+/// post's images say no size at all, answering with the whole image, sent in pieces: their size is 0, unknown until
+/// they download (`FileSource::size_may_be_unknown`).
+fn size_of(client: &Client, url: &str, cancel: &CancelToken) -> Result<Answer, PreviewError> {
+    check_cancel(cancel)?;
+    let head = client.head(url).send_checked(FACTS.name)?;
+    let length = head
+        .headers()
+        .get(reqwest::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u64>().ok());
+    let unknown = || {
+        Answer::File(super::Found {
+            name: None,
+            size: 0,
+            modified: None,
+        })
+    };
+    match length {
+        Some(size) if head.status().is_success() && size > 0 => Ok(Answer::File(super::Found {
+            name: None,
+            size,
+            modified: None,
+        })),
+        _ => match probe(client, Host::Fanbox, url, cancel)? {
+            Answer::Page(page) if page.status.is_success() => Ok(unknown()),
+            answer => Ok(answer),
+        },
+    }
+}
+
 /// Each file's size: Fanbox's own for a file, asked of its file server for an image, several at once.
 fn sizes(
     client: &Client,
@@ -603,9 +668,19 @@ fn sizes(
                         let Some(&index) = unknown.get(next.fetch_add(1, Ordering::Relaxed)) else {
                             break;
                         };
-                        let answer = match probe(client, Host::Fanbox, &files[index].url, cancel) {
+                        let answer = match size_of(client, &files[index].url, cancel) {
                             Ok(Answer::File(found)) => Ok(found.size),
-                            Ok(Answer::Page(page)) => Err(Host::Fanbox.page_error(&page)),
+                            Ok(Answer::Page(page)) => Err(match Host::Fanbox.page_error(&page) {
+                                PreviewError::Failed { .. } => PreviewError::Failed {
+                                    detail: format!(
+                                        "{}: Fanbox's file server answered {} ({})",
+                                        files[index].name,
+                                        page.status,
+                                        sites::host(&page.url).unwrap_or_default()
+                                    ),
+                                },
+                                other => other,
+                            }),
                             Err(error) => Err(error),
                         };
                         if answer.is_err() {

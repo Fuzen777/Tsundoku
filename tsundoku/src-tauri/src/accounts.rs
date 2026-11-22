@@ -57,6 +57,8 @@ const FANBOX_PAGE: &str = "https://www.fanbox.cc/robots.txt";
 const FANBOX_SIGNED_IN_CHECK: &str = "https://api.fanbox.cc/post.listSupporting?limit=1";
 const FANBOX_CHECK_LABEL: &str = "fanbox-sign-in-check";
 const FANBOX_READER_LABEL: &str = "fanbox-reader";
+/// Fanbox's file server, whose session cookie its supported posts' files need.
+const FANBOX_FILES: &str = "https://downloads.fanbox.cc/";
 /// The pause between two of Fanbox's requests, at random within it: Fanbox, like Pixiv, flags requests made with no
 /// pause between them.
 const FANBOX_PAUSE_MS: (u64, u64) = (1000, 2000);
@@ -275,9 +277,48 @@ impl tsundoku_core::hosts::fanbox::FanboxApi for SharedReader {
     ) -> Result<Vec<Result<tsundoku_core::hosts::fanbox::ApiAnswer, String>>, String> {
         self.0.get(addresses)
     }
+
+    fn session(&self) -> Result<Option<String>, String> {
+        self.0.session()
+    }
 }
 
 impl FanboxReader {
+    /// The reading window, open on Fanbox's page: the one kept from the last read, or a new one.
+    fn window(&self, state: &mut ReaderState) -> Result<tauri::WebviewWindow, String> {
+        let open = state
+            .window
+            .take()
+            .filter(|window| self.app.get_webview_window(window.label()).is_some());
+        match open {
+            Some(window) => Ok(window),
+            None => PageReader {
+                app: self.app.clone(),
+                profile: self.profile.clone(),
+                label: FANBOX_READER_LABEL,
+                page: FANBOX_PAGE,
+            }
+            .open(),
+        }
+    }
+
+    /// The session's cookie for Fanbox's file server.
+    fn session(&self) -> Result<Option<String>, String> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let window = self.window(&mut state)?;
+        let value = crate::web_reader::cookie(
+            &window,
+            FANBOX_FILES,
+            tsundoku_core::hosts::fanbox::SESSION_COOKIE,
+        );
+        state.window = Some(window);
+        state.last = Some(std::time::Instant::now());
+        value
+    }
+
     fn get(
         &self,
         addresses: &[String],
@@ -287,20 +328,7 @@ impl FanboxReader {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         // A window closed meanwhile (the app's windows all closing) is opened again.
-        let open = state
-            .window
-            .take()
-            .filter(|window| self.app.get_webview_window(window.label()).is_some());
-        let window = match open {
-            Some(window) => window,
-            None => PageReader {
-                app: self.app.clone(),
-                profile: self.profile.clone(),
-                label: FANBOX_READER_LABEL,
-                page: FANBOX_PAGE,
-            }
-            .open()?,
-        };
+        let window = self.window(&mut state)?;
         let mut answers = Vec::with_capacity(addresses.len());
         for address in addresses {
             let pause = fanbox_pause();

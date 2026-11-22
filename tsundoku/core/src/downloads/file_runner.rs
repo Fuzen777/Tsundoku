@@ -162,7 +162,7 @@ fn download(
         let last = Some(index) == last_index;
         let mut file = listed.clone();
         // A file read through the window has its size and name once its download answers.
-        let size_known = file.size > 0 || !matches!(file.source, FileSource::Windowed(_));
+        let size_known = file.size > 0 || !file.source.size_may_be_unknown();
         let page = CheckPage::for_file(&share, listed);
         let offer = job.window_offer.as_ref().filter(|offer| {
             page.as_ref()
@@ -199,6 +199,21 @@ fn download(
                 on_progress(DownloadProgress::at(DownloadStage::Finishing));
             }
             saved.push((place(window_file, &destination)?, share_path()));
+            continue;
+        }
+        // A Fanbox image whose server says no size is named after its post and its place in it: a file of its name is
+        // it, downloaded by a run before this one.
+        if !size_known
+            && matches!(file.source, FileSource::Fanbox(_))
+            && let Some((there, length)) = already_named(job, &file, single_name)
+        {
+            write_log(
+                log,
+                &format!("{}: already in the folder", file.path.display()),
+            );
+            meter.grow(length);
+            meter.skip(length);
+            saved.push((there, share_path()));
             continue;
         }
         if size_known && let Some(there) = already_there(job, &file, single_name) {
@@ -431,6 +446,20 @@ fn already_there(job: &JobSpec, file: &RemoteFile, single_name: Option<&str>) ->
         .then_some(destination)
 }
 
+/// Where a file of `file`'s name already is in the download's folder, with its length, when it isn't empty.
+fn already_named(
+    job: &JobSpec,
+    file: &RemoteFile,
+    single_name: Option<&str>,
+) -> Option<(PathBuf, u64)> {
+    let destination = destination_of(&job.folder, &file.path, single_name);
+    let length = fs::metadata(&destination)
+        .ok()
+        .filter(|metadata| metadata.is_file() && metadata.len() > 0)?
+        .len();
+    Some((destination, length))
+}
+
 /// The last part of an address's path, as a file's name.
 fn last_segment(address: &str) -> Option<String> {
     reqwest::Url::parse(address)
@@ -586,10 +615,12 @@ fn fetch(
     on_progress: &mut dyn FnMut(DownloadProgress),
 ) -> Result<(), Stop> {
     let mut offset = fs::metadata(part).map_or(0, |metadata| metadata.len());
-    if offset > file.size {
+    // A file whose size the host didn't say (0) is taken as long as what arrives, and as its answer says when it does.
+    let known = file.size > 0;
+    if known && offset > file.size {
         offset = 0;
     }
-    if offset == file.size && offset > 0 {
+    if known && offset == file.size && offset > 0 {
         meter.skip(offset);
         return Ok(());
     }
@@ -620,6 +651,15 @@ fn fetch(
             offset = 0;
         }
     }
+    let expected = if known {
+        Some(file.size)
+    } else {
+        let whole = response.content_length().map(|length| offset + length);
+        if let Some(whole) = whole {
+            meter.grow(whole);
+        }
+        whole
+    };
     meter.skip(offset);
     meter.start_transfer();
 
@@ -663,13 +703,14 @@ fn fetch(
         meter.add(count as u64, cancel, on_progress)?;
     }
     output.flush().map_err(|error| file_error(part, &error))?;
-    if offset != file.size {
+    if let Some(expected) = expected
+        && offset != expected
+    {
         // What arrived is kept, so Retry continues from there.
         return Err(PreviewError::Network {
             detail: format!(
-                "{} stopped sending after {offset} of {} bytes",
-                host.name(),
-                file.size
+                "{} stopped sending after {offset} of {expected} bytes",
+                host.name()
             ),
         }
         .into());

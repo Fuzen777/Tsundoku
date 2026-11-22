@@ -451,6 +451,12 @@ impl FileSource {
         }
     }
 
+    /// Whether its size may be unknown (0) until it downloads: a file the check window gives, or a Fanbox image whose
+    /// server says no size.
+    pub fn size_may_be_unknown(&self) -> bool {
+        matches!(self, Self::Windowed(_) | Self::Fanbox(_))
+    }
+
     /// How to check the file once it arrives, as far as the host said when it was read: for an address the check
     /// window gave, which `address` isn't asked for.
     pub fn known_check(&self) -> FileCheck {
@@ -489,7 +495,16 @@ pub fn client() -> Result<Client, PreviewError> {
 
 /// The client a host's requests go through: saying it's Tsundoku, unless the host expects a browser.
 pub fn client_for(host: Host) -> Result<Client, PreviewError> {
-    built(Client::builder(), host.user_agent())
+    let mut builder = Client::builder();
+    // Fanbox's file server gives a supported post's files only to the signed-in session.
+    if host == Host::Fanbox
+        && let Some(cookie) = fanbox::session_header()
+        && let Ok(mut value) = HeaderValue::from_str(&cookie)
+    {
+        value.set_sensitive(true);
+        builder = builder.default_headers(HeaderMap::from_iter([(reqwest::header::COOKIE, value)]));
+    }
+    built(builder, host.user_agent())
 }
 
 /// A client saying it's Tsundoku, for a site that isn't one of the hosts (a mirror page).

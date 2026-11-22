@@ -134,6 +134,74 @@ pub fn ask(window: &WebviewWindow, address: &str) -> Result<PageAnswer, String> 
     answer_in(&result)
 }
 
+/// The value of the cookie `name` the window's session sends to `address`, if it has one. Read for the site's own
+/// servers only (Fanbox's file server, which asks for the session's cookie).
+pub fn cookie(window: &WebviewWindow, address: &str, name: &str) -> Result<Option<String>, String> {
+    let (answered, answer) = mpsc::channel::<Result<Option<String>, String>>();
+    let (address, name) = (address.to_owned(), name.to_owned());
+    window
+        .with_webview(move |webview| {
+            // SAFETY: WebView2's calls, made on the window's thread as `with_webview` runs it.
+            if let Err(error) =
+                unsafe { cookie_of(&webview.controller(), &address, name, answered.clone()) }
+            {
+                let _ = answered.send(Err(error.to_string()));
+            }
+        })
+        .map_err(|error| error.to_string())?;
+    answer
+        .recv_timeout(ANSWER_WAIT)
+        .map_err(|_| "the window didn't answer".to_owned())?
+}
+
+unsafe fn cookie_of(
+    controller: &webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller,
+    address: &str,
+    name: String,
+    answered: Sender<Result<Option<String>, String>>,
+) -> windows::core::Result<()> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2_2, ICoreWebView2CookieList};
+    use webview2_com::{GetCookiesCompletedHandler, take_pwstr};
+    use windows::core::{HSTRING, Interface, PWSTR};
+    let find =
+        move |list: Option<ICoreWebView2CookieList>| -> windows::core::Result<Option<String>> {
+            let Some(list) = list else {
+                return Ok(None);
+            };
+            // SAFETY: WebView2's calls, on the window's thread, where the completed handler runs.
+            unsafe {
+                let mut count = 0;
+                list.Count(&mut count)?;
+                for index in 0..count {
+                    let cookie = list.GetValueAtIndex(index)?;
+                    let mut cookie_name = PWSTR::null();
+                    cookie.Name(&mut cookie_name)?;
+                    if take_pwstr(cookie_name) == name {
+                        let mut value = PWSTR::null();
+                        cookie.Value(&mut value)?;
+                        return Ok(Some(take_pwstr(value)));
+                    }
+                }
+            }
+            Ok(None)
+        };
+    // SAFETY: the caller is on the window's thread.
+    unsafe {
+        let webview: ICoreWebView2_2 = controller.CoreWebView2()?.cast()?;
+        webview.CookieManager()?.GetCookies(
+            &HSTRING::from(address),
+            &GetCookiesCompletedHandler::create(Box::new(move |result, list| {
+                let _ = answered.send(
+                    result
+                        .and_then(|()| find(list))
+                        .map_err(|error| error.to_string()),
+                );
+                Ok(())
+            })),
+        )
+    }
+}
+
 /// The script that asks for `address` with the page's cookies: the site's status and body, as JSON.
 fn script(address: &str) -> String {
     let address = serde_json::to_string(address).unwrap_or_default();

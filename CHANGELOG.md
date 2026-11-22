@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.28 · 2026-11-22
+
+### Fixed
+
+- **Fanbox posts for supporters** download: their files are only given to your signed-in session, which Tsundoku now uses for them, and their images that don't say their size download too, without being saved twice when a download goes on after a stop.
+
 ## 0.2.27 · 2026-11-22
 
 ### Added
