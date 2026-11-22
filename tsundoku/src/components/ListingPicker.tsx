@@ -331,7 +331,12 @@ export function ListingPicker({ listing, onClose, onAdded, onWatched }: ListingP
           </div>
           {loadRow}
           {watching ? (
-            <WatchForm listing={{ ...listing, items: [...items] }} onCancel={() => setWatching(false)} onWatched={onWatched} />
+            <WatchForm
+              listing={{ ...listing, items: [...items] }}
+              selected={picked}
+              onCancel={() => setWatching(false)}
+              onWatched={onWatched}
+            />
           ) : (
             <div className="flex flex-col items-end gap-2">
               {error && <StatusMessage tone="danger" {...error} />}

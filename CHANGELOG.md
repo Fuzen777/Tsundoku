@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.14 · 2026-11-22
+
+### Changed
+
+- **Watch can download what you ticked**: Watch on a channel's, playlist's or account's list now asks what Tsundoku downloads of it now: New Content Only, Latest 50 Posts (or another number), Selected Posts with how many are ticked in the list above, or Everything Listed with how many it holds. What you pick is queued with the source's Save In and Videos Start As as it starts being watched, so downloading some of it and watching it no longer takes pasting the link twice. Latest and Everything Listed leave out what was downloaded before or is in Downloads; a ticked item downloaded before is downloaded again, asking first when that replaces its file. Everything listed then counts as known, so Check Now lists only what's posted later; before, Watch's choice put items on the source's card as new, to pick from there.
+
 ## 0.2.13 · 2026-11-22
 
 ### Added

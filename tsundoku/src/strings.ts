@@ -735,12 +735,21 @@ export const strings = {
   watched: {
     watch: "Watch",
     watchTitle: "Watch This Source",
-    watchHint: "Keeps it in Watched, where Check Now lists what's new on it.",
-    firstItems: "What Counts as New Now",
-    fromNow: "Nothing yet: only what's added from now on",
-    latest: "Its latest",
+    watchHint: "Keeps it in Watched, where Check Now lists what's new on it, and can download some of it now.",
+    firstItems: "Tsundoku will download…",
+    /** What a source lists, in the choices of what to download now. */
+    firstNouns: { post: "Posts", video: "Videos", item: "Items" },
+    fromNow: "New Content Only",
+    latest: "Latest",
+    /** After the number: "Latest [50] Posts". */
     latestItems: (noun: string) => noun,
-    all: (count: number, noun: string) => `Everything listed here (${count} ${noun})`,
+    /** Under Latest, when its number is more than the picker lists. */
+    latestPastListed: (listed: number, noun: string) =>
+      `Only ${listed.toLocaleString()} ${noun} are listed, so it takes those. Load More lists more.`,
+    picked: (count: number, noun: string) => `Selected ${noun} (${count.toLocaleString()})`,
+    all: (count: number) => `Everything Listed (${count.toLocaleString()})`,
+    firstItemsHint:
+      "Latest and Everything Listed leave out what was downloaded before or is in Downloads. What's listed now never shows as new: Check Now lists only what's posted later.",
     saveIn: "Save In",
     saveInHint: "Beats every rule. {site}, {uploader} and the other placeholders work. Empty lets the rules decide.",
     rulesDecide: "The Rules Decide",

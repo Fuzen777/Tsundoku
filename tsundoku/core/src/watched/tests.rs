@@ -227,6 +227,30 @@ impl Test {
             .unwrap()
     }
 
+    /// Adds the channel with these items newest first, all of them new, as checks would have found them.
+    fn add_new(&self, ids: &[&str]) -> i64 {
+        self.add_new_at(CHANNEL, ids)
+    }
+
+    /// Adds the listing at `url` with these items newest first, all of them new, as checks would have found them.
+    fn add_new_at(&self, url: &str, ids: &[&str]) -> i64 {
+        let id = self.add_at(url, ids, FirstItems::FromNow);
+        let keys: Vec<ItemKey> = ids.iter().map(|id| key(id)).collect();
+        self.sources
+            .store
+            .set_state(id, &keys, ItemState::New)
+            .unwrap();
+        id
+    }
+
+    fn queued_ids(&self) -> Vec<String> {
+        self.queue
+            .items()
+            .into_iter()
+            .map(|item| item.video.video_id)
+            .collect()
+    }
+
     fn source(&self, id: i64) -> WatchedSource {
         self.sources
             .list()
@@ -320,23 +344,48 @@ fn wait_until(what: &str, condition: impl Fn() -> bool) {
 }
 
 #[test]
-fn the_first_items_are_what_was_asked_when_adding() {
+fn adding_downloads_what_was_asked_and_knows_the_rest() {
+    // Nothing now: a check lists only what came after.
+    let test = Test::new();
+    let id = test.add(&["a", "b", "c"], FirstItems::FromNow);
+    assert!(test.queued_ids().is_empty());
+    assert!(test.new_ids(id).is_empty());
+    test.reader.lists(&["n", "a", "b", "c"]);
+    test.check(id);
+    assert_eq!(test.new_ids(id), ["n"]);
+
+    // The latest two listed, but the downloaded one.
     let test = Test::new();
     test.downloaded("b");
-    let latest = test.add(&["a", "b", "c", "d", "e"], FirstItems::Latest { count: 2 });
+    let id = test.add(&["a", "b", "c", "d", "e"], FirstItems::Latest { count: 2 });
     assert_eq!(
-        test.new_ids(latest),
-        ["a", "c"],
-        "the downloaded one isn't new"
+        test.queued_ids(),
+        ["a"],
+        "the downloaded one isn't downloaded again"
     );
-    test.sources.remove(latest).unwrap();
+    assert!(test.new_ids(id).is_empty());
+    test.reader.lists(&["a", "b", "c", "d", "e"]);
+    test.check(id);
+    assert!(
+        test.new_ids(id).is_empty(),
+        "what it didn't download is known"
+    );
 
-    let all = test.add(&["a", "b", "c"], FirstItems::All);
-    assert_eq!(test.new_ids(all), ["a", "c"]);
-    test.sources.remove(all).unwrap();
-
-    let from_now = test.add(&["a", "b", "c"], FirstItems::FromNow);
-    assert!(test.new_ids(from_now).is_empty());
+    // Everything listed, but what the history has, each once.
+    let test = Test::new();
+    test.downloaded("b");
+    let id = test.add(&["a", "b", "c", "a"], FirstItems::All);
+    assert_eq!(test.queued_ids(), ["a", "c"]);
+    let source = test.source(id);
+    assert!(source.new_items.is_empty() && source.skipped_items.is_empty());
+    assert_eq!(
+        test.queue.items()[0]
+            .source
+            .as_ref()
+            .map(|source| source.url.as_str()),
+        Some(CHANNEL),
+        "the Downloads view shows them under their source"
+    );
     assert!(matches!(
         test.sources.add(NewWatchedSource {
             url: CHANNEL.to_owned(),
@@ -351,6 +400,79 @@ fn the_first_items_are_what_was_asked_when_adding() {
         }),
         Err(WatchedError::AlreadyWatched)
     ));
+    assert_eq!(
+        test.queued_ids().len(),
+        2,
+        "nothing queued for a refused one"
+    );
+}
+
+#[test]
+fn adding_downloads_the_items_ticked_with_the_sources_choices() {
+    let test = Test::new();
+    test.downloaded("b");
+    test.queue
+        .add_many(
+            vec![QueuePick {
+                video: video("d"),
+                preset_id: Some(crate::presets::DEFAULT_PRESET_ID.to_owned()),
+                overwrite: false,
+                folder: None,
+            }],
+            None,
+        )
+        .unwrap();
+    let id = test
+        .sources
+        .add(NewWatchedSource {
+            url: CHANNEL.to_owned(),
+            kind: ListingKind::Channel,
+            name: "Someone".to_owned(),
+            site_name: "youtube.com".to_owned(),
+            thumbnail_url: None,
+            items: ["a", "b", "c", "d"]
+                .iter()
+                .map(|id| ListedVideo {
+                    video: video(id),
+                    approximate_date: None,
+                })
+                .collect(),
+            // "x" isn't listed, and "d" is in the queue already.
+            first: FirstItems::Picked {
+                items: vec![key("b"), key("c"), key("d"), key("x")],
+            },
+            folder: Some("Channels\\{uploader}".to_owned()),
+            preset_id: None,
+        })
+        .unwrap();
+    let queued: Vec<(String, bool, bool)> = test
+        .queue
+        .items()
+        .into_iter()
+        .map(|item| (item.video.video_id, item.overwrite, item.folder_chosen))
+        .collect();
+    assert_eq!(
+        queued,
+        [
+            ("d".to_owned(), false, false),
+            ("b".to_owned(), true, true),
+            ("c".to_owned(), false, true),
+        ],
+        "the downloaded one again with the preset it had, replacing its file, both in the source's folder"
+    );
+    assert!(
+        test.queue.items()[1]
+            .folder
+            .ends_with(&format!("Channels{}Someone", std::path::MAIN_SEPARATOR))
+    );
+    let source = test.source(id);
+    assert!(source.new_items.is_empty() && source.skipped_items.is_empty());
+    test.reader.lists(&["a", "b", "c", "d"]);
+    test.check(id);
+    assert!(
+        test.new_ids(id).is_empty(),
+        "the one left unticked is known"
+    );
 }
 
 #[test]
@@ -380,7 +502,7 @@ fn a_check_keeps_only_what_it_doesnt_know() {
 fn a_check_gives_the_items_it_has_the_pictures_it_reads_for_them() {
     let test = Test::new();
     // Listed without pictures, as an X account's videos were before their covers were read.
-    let id = test.add(&["b", "c", "d"], FirstItems::All);
+    let id = test.add_new(&["b", "c", "d"]);
     let pictures = |test: &Test| -> Vec<(String, Option<String>)> {
         test.source(id)
             .new_items
@@ -424,7 +546,7 @@ fn a_check_gives_the_items_it_has_the_pictures_it_reads_for_them() {
 #[test]
 fn a_check_takes_pictures_from_what_it_read_past_its_items_too() {
     let test = Test::new();
-    let id = test.add(&["b", "c", "old"], FirstItems::All);
+    let id = test.add_new(&["b", "c", "old"]);
     // As an X account's check reads: "old" came with the videos, past where the photos stopped, so it isn't listed.
     test.reader.pictures.store(true, Ordering::SeqCst);
     test.reader.lists(&["a", "b", "c"]);
@@ -464,7 +586,7 @@ fn a_check_tells_the_reader_once_it_reaches_what_it_knows() {
 #[test]
 fn downloading_queues_the_picked_and_skips_the_rest() {
     let test = Test::new();
-    let id = test.add(&["a", "b", "c"], FirstItems::All);
+    let id = test.add_new(&["a", "b", "c"]);
     test.sources
         .edit(id, Some(" Channels\\{uploader} ".to_owned()), None)
         .unwrap();
@@ -532,7 +654,7 @@ fn a_failed_check_keeps_its_error_until_one_works() {
 #[test]
 fn removing_forgets_the_source() {
     let test = Test::new();
-    let id = test.add(&["a"], FirstItems::All);
+    let id = test.add_new(&["a"]);
     test.sources.remove(id).unwrap();
     assert!(test.sources.list().unwrap().is_empty());
     assert!(matches!(
@@ -682,11 +804,10 @@ fn checks_on_one_site_run_one_after_the_other() {
 #[test]
 fn downloading_from_every_source_queues_each_with_its_own_choices() {
     let test = Test::new();
-    let first = test.add(&["a", "shared", "b"], FirstItems::All);
-    let second = test.add_at(
+    let first = test.add_new(&["a", "shared", "b"]);
+    let second = test.add_new_at(
         "https://www.youtube.com/@other/videos",
         &["shared", "c", "d"],
-        FirstItems::All,
     );
     test.sources
         .edit(second, Some("Other".to_owned()), None)
@@ -742,7 +863,7 @@ fn downloading_from_every_source_queues_each_with_its_own_choices() {
 #[test]
 fn downloading_from_every_source_can_leave_the_rest_new() {
     let test = Test::new();
-    let id = test.add(&["a", "b"], FirstItems::All);
+    let id = test.add_new(&["a", "b"]);
     test.sources.download_new(&[key("b")], &[]).unwrap();
     assert_eq!(test.new_ids(id), ["a"]);
     assert!(test.source(id).skipped_items.is_empty());
@@ -751,11 +872,10 @@ fn downloading_from_every_source_can_leave_the_rest_new() {
 #[test]
 fn skip_all_of_every_source_skips_what_it_shows() {
     let test = Test::new();
-    let first = test.add(&["a", "shared", "b"], FirstItems::All);
-    let second = test.add_at(
+    let first = test.add_new(&["a", "shared", "b"]);
+    let second = test.add_new_at(
         "https://www.youtube.com/@other/videos",
         &["shared", "c", "d"],
-        FirstItems::All,
     );
     test.sources
         .skip_new(&[key("a"), key("shared"), key("c")])
@@ -769,7 +889,7 @@ fn skip_all_of_every_source_skips_what_it_shows() {
 #[test]
 fn downloading_skips_only_the_items_the_picker_showed() {
     let test = Test::new();
-    let id = test.add(&["a", "b", "c", "d"], FirstItems::All);
+    let id = test.add_new(&["a", "b", "c", "d"]);
     // The picker showed a, b and c (d is another type): a is picked, the rest shown is skipped, d stays new.
     test.sources
         .download(id, &[key("a")], &[key("a"), key("b"), key("c")])
@@ -793,12 +913,8 @@ fn downloading_skips_only_the_items_the_picker_showed() {
 #[test]
 fn downloading_from_every_source_skips_only_what_it_showed() {
     let test = Test::new();
-    let first = test.add(&["a", "b"], FirstItems::All);
-    let second = test.add_at(
-        "https://www.youtube.com/@other/videos",
-        &["c", "d"],
-        FirstItems::All,
-    );
+    let first = test.add_new(&["a", "b"]);
+    let second = test.add_new_at("https://www.youtube.com/@other/videos", &["c", "d"]);
     test.sources.download_new(&[key("a")], &[key("c")]).unwrap();
     assert_eq!(test.new_ids(first), ["b"]);
     assert_eq!(ids(&test.source(second).skipped_items), ["c"]);

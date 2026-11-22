@@ -155,16 +155,21 @@ impl ItemKey {
     }
 }
 
-/// What counts as new when a source is added: asked each time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// What's downloaded of the listing when a source is added: asked each time. Every item listed is known from then on,
+/// so a check lists only what comes after.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(export)]
 pub enum FirstItems {
-    /// Nothing yet: only what's posted after it's added.
+    /// Nothing: only what's posted after it's added, which a check lists as new.
     FromNow,
-    /// Its first `count` items as listed (the newest, for a channel or an account).
+    /// Its first `count` items as listed (the newest, for a channel or an account), but those the history or the
+    /// queue has.
     Latest { count: u32 },
-    /// Everything the listing showed.
+    /// The items ticked in the picker, but those the queue has. One the history has is downloaded again, replacing its
+    /// file when the preset it starts with is the one it was downloaded with, as the picker's Download Selected does.
+    Picked { items: Vec<ItemKey> },
+    /// Everything listed, but what the history or the queue has.
     All,
 }
 
@@ -241,55 +246,81 @@ impl WatchedSources {
             .collect()
     }
 
-    /// Pins a listing read by the preview card. Items the history or the queue has are known from the start; of the
-    /// rest, `first` says which are new.
+    /// Pins a listing read by the preview card, and queues what `first` says with the source's choices, as Download
+    /// Selected on its card would. Every item listed is known from then on: those queued as queued, the rest as seen.
+    /// The items are queued before the source is kept, so one that can't be queued leaves nothing watched.
     pub fn add(&self, new: NewWatchedSource) -> Result<i64, WatchedError> {
         if self.store.find_by_url(&new.url)?.is_some() {
             return Err(WatchedError::AlreadyWatched);
         }
         let now = now_seconds();
-        let mut new_count = match new.first {
-            FirstItems::FromNow => 0,
-            FirstItems::Latest { count } => count as usize,
-            FirstItems::All => usize::MAX,
+        let picked: HashSet<&ItemKey> = match &new.first {
+            FirstItems::Picked { items } => items.iter().collect(),
+            _ => HashSet::new(),
         };
         let mut seen = HashSet::new();
         let mut items = Vec::new();
         for (position, listed) in new.items.into_iter().enumerate() {
-            if !seen.insert(ItemKey::of(&listed.video)) {
+            let key = ItemKey::of(&listed.video);
+            if !seen.insert(key.clone()) {
                 continue;
             }
-            let known = self.downloaded_or_queued(&listed.video);
-            let state = if !known && new_count > 0 {
-                new_count -= 1;
-                ItemState::New
-            } else {
-                ItemState::Seen
+            let queued = match &new.first {
+                FirstItems::FromNow => false,
+                FirstItems::Latest { count } => {
+                    seen.len() <= *count as usize && !self.downloaded_or_queued(&listed.video)
+                }
+                FirstItems::Picked { .. } => {
+                    picked.contains(&key)
+                        && !self
+                            .queue
+                            .contains(&listed.video.site, &listed.video.video_id)
+                }
+                FirstItems::All => !self.downloaded_or_queued(&listed.video),
             };
             items.push(StoredItem {
                 video: listed.video,
                 approximate_date: listed.approximate_date,
-                state,
+                state: if queued {
+                    ItemState::Queued
+                } else {
+                    ItemState::Seen
+                },
                 first_seen_at: now,
                 position: i64::try_from(position).unwrap_or(i64::MAX),
             });
         }
-        let id = self.store.insert_source(
-            &StoredSource {
-                id: 0,
-                url: new.url,
-                kind: new.kind,
-                name: new.name,
-                site_name: new.site_name,
-                thumbnail_url: new.thumbnail_url,
-                folder: blank_to_none(new.folder),
-                preset_id: blank_to_none(new.preset_id),
-                added_at: now,
-                last_checked_at: Some(now),
-                last_error: None,
-            },
-            &items,
-        )?;
+        let source = StoredSource {
+            id: 0,
+            url: new.url,
+            kind: new.kind,
+            name: new.name,
+            site_name: new.site_name,
+            thumbnail_url: new.thumbnail_url,
+            folder: blank_to_none(new.folder),
+            preset_id: blank_to_none(new.preset_id),
+            added_at: now,
+            last_checked_at: Some(now),
+            last_error: None,
+        };
+        let download_folder = self.settings.get().downloads.resolved_folder();
+        let picks: Vec<QueuePick> = items
+            .iter()
+            .filter(|item| item.state == ItemState::Queued)
+            .map(|item| {
+                let pick = self.pick_for(&source, &item.video, &download_folder);
+                QueuePick {
+                    overwrite: self.replaces_its_download(&pick),
+                    ..pick
+                }
+            })
+            .collect();
+        if !picks.is_empty() {
+            self.queue
+                .add_many(picks, Some(queue_source(&source)))
+                .map_err(|error| WatchedError::Queue { error })?;
+        }
+        let id = self.store.insert_source(&source, &items)?;
         self.notify();
         Ok(id)
     }
@@ -501,6 +532,23 @@ impl WatchedSources {
             overwrite: false,
             folder,
         }
+    }
+
+    /// Whether the pick downloads its video again with the preset of its latest download, so its file replaces the one
+    /// made then.
+    fn replaces_its_download(&self, pick: &QueuePick) -> bool {
+        let Some(preset) = pick
+            .preset_id
+            .as_deref()
+            .and_then(|id| self.presets.get(id))
+        else {
+            return false;
+        };
+        self.history
+            .last_download(&pick.video.site, &pick.video.video_id)
+            .ok()
+            .flatten()
+            .is_some_and(|last| last.preset == preset.name)
     }
 
     /// Reads a source and keeps what's new. Runs on its site's checks' thread.
