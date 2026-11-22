@@ -550,7 +550,7 @@ pub fn read_preview(
     let host = Host::of(link).ok_or(PreviewError::UnsupportedSite)?;
     let client = client_for(host)?;
     if host == Host::Fanbox {
-        return fanbox::read_post(&client, link, cancel).map(|post| post.video_info());
+        return fanbox::read_for_preview(&client, link, cancel).map(|post| post.video_info());
     }
     host.read(&client, link, password, cancel)
         .map(|share| share.video_info())

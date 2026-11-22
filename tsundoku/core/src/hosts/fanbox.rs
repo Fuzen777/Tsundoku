@@ -87,6 +87,25 @@ pub struct PostDetails {
 pub struct Post {
     pub share: Share,
     pub details: PostDetails,
+    /// The links inside it (`post_links`), which go to Pending when it's downloaded (Fuzen's choice).
+    pub links: Vec<String>,
+}
+
+/// Where the links inside a post go: Pending, read as links a page sent (the app crate's `PendingLinks::add_from_page`).
+type LinkSink = Box<dyn Fn(Vec<String>) + Send + Sync>;
+
+static POST_LINKS: OnceLock<LinkSink> = OnceLock::new();
+
+/// Gives where the links inside a downloaded post go, once, at startup.
+pub fn on_post_links(sink: LinkSink) {
+    let _ = POST_LINKS.set(sink);
+}
+
+/// Sends a post's links to Pending, if it has any.
+fn send_links(post: &Post) {
+    if let (false, Some(sink)) = (post.links.is_empty(), POST_LINKS.get()) {
+        sink(post.links.clone());
+    }
 }
 
 impl Post {
@@ -211,13 +230,45 @@ pub fn post_id(link: &str) -> Option<String> {
     (!id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit())).then(|| id.to_owned())
 }
 
-/// Reads a Fanbox post's files.
+/// Reads a Fanbox post's files, for its download, which sends the links inside it to Pending.
 pub(super) fn read(
     client: &Client,
     link: &str,
     cancel: &CancelToken,
 ) -> Result<Share, PreviewError> {
-    read_post(client, link, cancel).map(|post| post.share)
+    let post = read_post(client, link, cancel)?;
+    send_links(&post);
+    with_files(post).map(|post| post.share)
+}
+
+/// Reads a Fanbox post for the preview card. A post with nothing of its own to download but links sends them to
+/// Pending at once, since there's nothing to download it with.
+pub fn read_for_preview(
+    client: &Client,
+    link: &str,
+    cancel: &CancelToken,
+) -> Result<Post, PreviewError> {
+    let post = read_post(client, link, cancel)?;
+    if post.share.files.is_empty() {
+        send_links(&post);
+    }
+    with_files(post)
+}
+
+/// The post, or `NoVideo` when it has no images or files, saying where its links went.
+fn with_files(post: Post) -> Result<Post, PreviewError> {
+    if !post.share.files.is_empty() {
+        return Ok(post);
+    }
+    let detail = match post.links.len() {
+        0 => "this Fanbox post has no images or files".to_owned(),
+        1 => "this Fanbox post has no images or files of its own; its link went to Pending"
+            .to_owned(),
+        count => format!(
+            "this Fanbox post has no images or files of its own; its {count} links went to Pending"
+        ),
+    };
+    Err(PreviewError::NoVideo { detail })
 }
 
 /// Reads a Fanbox post: its files, with each image's size asked of Fanbox's file server, and what it is.
@@ -225,11 +276,6 @@ pub fn read_post(client: &Client, link: &str, cancel: &CancelToken) -> Result<Po
     let id = post_id(link).ok_or_else(|| Host::Fanbox.link_not_recognized())?;
     let answer = ask(&format!("{POST_INFO}{id}"))?;
     let listed = listed_post(&answer)?;
-    if listed.files.is_empty() {
-        return Err(PreviewError::NoVideo {
-            detail: "this Fanbox post has no images or files".to_owned(),
-        });
-    }
     let sizes = sizes(client, &listed.files, cancel)?;
     let files = listed
         .files
@@ -251,6 +297,7 @@ pub fn read_post(client: &Client, link: &str, cancel: &CancelToken) -> Result<Po
             files,
         },
         details: listed.details,
+        links: listed.links,
     })
 }
 
@@ -317,6 +364,7 @@ struct Listed {
     date: Option<String>,
     files: Vec<ListedFile>,
     details: PostDetails,
+    links: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -373,6 +421,7 @@ fn listed_post(body: &Value) -> Result<Listed, PreviewError> {
     Ok(Listed {
         title: text(post, "title").unwrap_or_else(|| format!("Fanbox post {id}")),
         files: post_files(&id, content),
+        links: post_links(&id, content),
         details: PostDetails {
             name: post.get("user").and_then(|user| text(user, "name")),
             cover: text(post, "coverImageUrl"),
@@ -383,6 +432,88 @@ fn listed_post(body: &Value) -> Result<Listed, PreviewError> {
         id,
         date,
     })
+}
+
+/// The links inside a post, in its order and each once, that something may download: an article's links, the pages it
+/// embeds (a YouTube video, a tweet, another Fanbox post) and the links written in its text. Links to a channel's,
+/// an account's or a creator's page are left out (a creator's own profiles, which every post may repeat), and so is
+/// the post itself.
+fn post_links(id: &str, content: &Value) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut written = String::new();
+    for block in content
+        .get("blocks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        if let Some(line) = block.get("text").and_then(Value::as_str) {
+            written.push_str(line);
+            written.push('\n');
+        }
+        for link in block
+            .get("links")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            found.extend(link.get("url").and_then(Value::as_str).map(str::to_owned));
+        }
+    }
+    if let Some(body_text) = content.get("text").and_then(Value::as_str) {
+        written.push_str(body_text);
+    }
+    // A link ending a sentence leaves its full stop or colon out.
+    found.extend(
+        crate::pending::links_in_copy(&written)
+            .into_iter()
+            .map(|link| link.trim_end_matches(['.', ':']).to_owned()),
+    );
+    let embeds = content
+        .get("embedMap")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|map| map.values())
+        .chain(content.get("video"));
+    found.extend(embeds.filter_map(embed_link));
+    for embed in content
+        .get("urlEmbedMap")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|map| map.values())
+    {
+        let link = match text(embed, "type").as_deref() {
+            Some("fanbox.post") => embed
+                .get("postInfo")
+                .and_then(|post| Some(post_page(&text(post, "creatorId")?, &text(post, "id")?))),
+            _ => text(embed, "url"),
+        };
+        found.extend(link);
+    }
+    let mut links: Vec<String> = Vec::new();
+    for link in found {
+        let Some(link) = crate::metadata::normalize_link(&link) else {
+            continue;
+        };
+        let is_this_post = post_id(&link).as_deref() == Some(id);
+        if !is_this_post && crate::listing::listing_link(&link).is_none() && !links.contains(&link)
+        {
+            links.push(link);
+        }
+    }
+    links
+}
+
+/// The page an embed shows (`serviceProvider` and its ID), when Tsundoku can read it.
+fn embed_link(embed: &Value) -> Option<String> {
+    let id = text(embed, "videoId").or_else(|| text(embed, "contentId"))?;
+    match text(embed, "serviceProvider")?.as_str() {
+        "youtube" => Some(format!("https://www.youtube.com/watch?v={id}")),
+        "vimeo" => Some(format!("https://vimeo.com/{id}")),
+        "soundcloud" => Some(format!("https://soundcloud.com/{id}")),
+        "twitter" => Some(format!("https://x.com/i/status/{id}")),
+        _ => None,
+    }
 }
 
 /// A post's images, in the post's order, named by their place in it, then its files under their own names.
@@ -616,6 +747,37 @@ mod tests {
             .map(|file| file.name)
             .collect();
         assert_eq!(names, ["5 01.jpeg", "5 02.gif"]);
+    }
+
+    #[test]
+    fn finds_the_links_inside_a_post() {
+        let content = serde_json::json!({
+            "blocks": [
+                {"type": "p", "text": "Files: https://mega.nz/file/abc#key and https://example.com/page."},
+                {"type": "p", "text": "My pixiv", "links": [
+                    {"offset": 0, "length": 8, "url": "https://www.pixiv.net/users/123"},
+                    {"offset": 0, "length": 8, "url": "https://drive.google.com/file/d/xyz/view"}
+                ]},
+                {"type": "p", "text": "Again: https://mega.nz/file/abc#key"}
+            ],
+            "embedMap": {"e1": {"id": "e1", "serviceProvider": "youtube", "contentId": "jNQXAC9IVRw"}},
+            "urlEmbedMap": {
+                "u1": {"id": "u1", "type": "default", "url": "https://someone.fanbox.cc/"},
+                "u2": {"id": "u2", "type": "fanbox.post", "postInfo": {"id": "99", "creatorId": "someone"}},
+                "u3": {"id": "u3", "type": "fanbox.post", "postInfo": {"id": "7", "creatorId": "someone"}}
+            }
+        });
+        assert_eq!(
+            post_links("7", &content),
+            [
+                "https://drive.google.com/file/d/xyz/view",
+                "https://mega.nz/file/abc#key",
+                "https://example.com/page",
+                "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+                "https://www.fanbox.cc/@someone/posts/99",
+            ],
+            "a profile and the post itself are left out, and the MEGA link is there once"
+        );
     }
 
     #[test]

@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.27 · 2026-11-22
+
+### Added
+
+- **Links inside Fanbox posts**: downloading a Fanbox post sends the links inside it (a MEGA or Google Drive folder, a YouTube video it embeds, another Fanbox post) to Pending, where they're read like a dropped file's links: kept when there's something to download. A creator's profiles and other lists are left out. A post with no images or files of its own sends them as soon as it's opened, and says so.
+
 ## 0.2.26 · 2026-11-22
 
 ### Added

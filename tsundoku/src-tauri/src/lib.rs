@@ -215,6 +215,13 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
             app: app.handle().clone(),
         }),
     })?;
+    // The links inside a downloaded Fanbox post go to Pending, read as links a page sent.
+    let pending_for_posts = Arc::downgrade(&pending);
+    tsundoku_core::hosts::fanbox::on_post_links(Box::new(move |links| {
+        if let Some(pending) = pending_for_posts.upgrade() {
+            let _ = pending.add_from_page(&links);
+        }
+    }));
     // Links copied in other apps, while Settings → Adding Links has the watcher on.
     #[cfg(windows)]
     tsundoku_core::pending::watcher::watch_clipboard(
