@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.29 · 2026-11-22
+
+### Added
+
+- **Pixiv novels as EPUB books**: a Pixiv novel's link (`pixiv.net/novel/show.php?id=…`) previews with its cover, author and tags, and downloads as an EPUB book: its cover, a page for each of its pages, its chapters in the table of contents, and its ruby and links kept. Pictures inside a novel aren't in the book yet.
+
 ## 0.2.28 · 2026-11-22
 
 ### Fixed

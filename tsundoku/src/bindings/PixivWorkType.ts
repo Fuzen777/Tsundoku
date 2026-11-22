@@ -3,4 +3,4 @@
 /**
  * A Pixiv work's kind.
  */
-export type PixivWorkType = "illustration" | "manga" | "animation";
+export type PixivWorkType = "illustration" | "manga" | "animation" | "novel";

@@ -4,6 +4,7 @@
 
 mod file_runner;
 mod holds;
+mod novel_runner;
 mod post_runner;
 mod progress;
 mod room_check;

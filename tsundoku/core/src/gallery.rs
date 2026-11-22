@@ -318,6 +318,10 @@ struct SortedAnswer<'a> {
 /// of several posts (an account, a search) or of links to others is refused as `NotListable`: an Instagram account is
 /// listed by `listing` instead, before it gets here.
 pub(crate) fn parse_answer(json: &str, link: &str) -> Result<VideoInfo, PreviewError> {
+    // A Pixiv novel is its text, saved as a book: a post of one file.
+    if crate::pixiv_novel::novel_id(link).is_some() {
+        return crate::pixiv_novel::parse(json).map(|novel| novel.video_info());
+    }
     let messages = read_messages(json)?;
     let answer = sort_answer(&messages)?;
     match answer.posts.as_slice() {
@@ -636,7 +640,7 @@ fn post_tags(post: &Value) -> Vec<VideoTag> {
 }
 
 /// Turns an error gallery-dl met while reading the site into the reason the link can't be downloaded.
-fn classify_error(error: &Value) -> PreviewError {
+pub(crate) fn classify_error(error: &Value) -> PreviewError {
     classify_message(
         &text(error, "error").unwrap_or_default(),
         &text(error, "message").unwrap_or_default(),

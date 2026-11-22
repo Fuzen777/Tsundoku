@@ -116,6 +116,8 @@ pub enum PixivWorkType {
     Manga,
     /// An animation (ugoira).
     Animation,
+    /// A novel, saved as an EPUB book (`pixiv_novel`).
+    Novel,
 }
 
 impl PixivWorkType {
@@ -125,6 +127,7 @@ impl PixivWorkType {
             Self::Illustration => "Illustration",
             Self::Manga => "Manga",
             Self::Animation => "Animation",
+            Self::Novel => "Novel",
         }
     }
 }

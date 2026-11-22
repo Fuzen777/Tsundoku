@@ -37,6 +37,10 @@ pub(super) fn run(
     if let Some(error) = pixiv_warning::refusal(&job.url) {
         return JobOutcome::Failed(DownloadError::YtDlp { error });
     }
+    // A Pixiv novel is written as a book, from its text.
+    if crate::pixiv_novel::novel_id(&job.url).is_some() {
+        return super::novel_runner::run(job, post, cancel, on_progress);
+    }
     // Pixiv's sign-in, kept until the run ends, which deletes it.
     let config = pixiv_account::gallery_dl_config(&job.url, job.ffmpeg.as_deref());
     let args = arguments(job, post, config.as_ref());
