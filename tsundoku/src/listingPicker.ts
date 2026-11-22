@@ -108,15 +108,65 @@ export function firstNewSince(items: readonly ListedItem[], before: ReadonlySet<
   return items.find((item) => !isKnown(item) && !before.has(itemKey(item)))
 }
 
-/** A picker's items and which of them are ticked, kept together so items loaded later can be ticked as they arrive. */
+/** A picker's items and which of them are ticked, kept together so items loaded later can be ticked as they arrive,
+ * with the tick changes made by hand, the latest last, for Undo. */
 export interface PickerItems {
   items: readonly ListedItem[]
   selection: ReadonlySet<string>
+  undo: readonly TickChange[]
+}
+
+/** One change of ticks made by hand (a box, the box at the top), by the items' keys. */
+export interface TickChange {
+  ticked: readonly string[]
+  unticked: readonly string[]
 }
 
 /** The items to start with, the new ones ticked. */
 export function pickerItems(items: readonly ListedItem[]): PickerItems {
-  return { items, selection: initialSelection(items) }
+  return { items, selection: initialSelection(items), undo: [] }
+}
+
+/** The picker with the ticks changed by hand to `selection`, the change kept for Undo; the same picker when nothing
+ * changed. */
+export function withTicks(current: PickerItems, selection: ReadonlySet<string>): PickerItems {
+  const ticked = [...selection].filter((key) => !current.selection.has(key))
+  const unticked = [...current.selection].filter((key) => !selection.has(key))
+  if (ticked.length === 0 && unticked.length === 0) return current
+  return { ...current, selection, undo: [...current.undo, { ticked, unticked }] }
+}
+
+/** The picker with its latest change of ticks undone, or the same picker when there's none. */
+export function undone(current: PickerItems): PickerItems {
+  const last = current.undo.at(-1)
+  if (!last) return current
+  const selection = new Set(current.selection)
+  for (const key of last.ticked) selection.delete(key)
+  for (const key of last.unticked) selection.add(key)
+  return { ...current, selection, undo: current.undo.slice(0, -1) }
+}
+
+/** What a picker had ticked, and its changes for Undo, kept to open again with: the keys it listed, and those of them
+ * ticked. */
+export interface KeptTicks {
+  listed: ReadonlySet<string>
+  selection: ReadonlySet<string>
+  undo: readonly TickChange[]
+}
+
+export function keptTicks({ items, selection, undo }: PickerItems): KeptTicks {
+  return { listed: new Set(items.map(itemKey)), selection, undo }
+}
+
+/** A picker opened again with the ticks it had: an item it listed is ticked as it was, one listed since as a new
+ * picker's would be, and its changes can still be undone. */
+export function withKeptTicks(current: PickerItems, kept: KeptTicks): PickerItems {
+  const selection = new Set<string>()
+  for (const item of current.items) {
+    const key = itemKey(item)
+    if (kept.listed.has(key) ? kept.selection.has(key) : current.selection.has(key)) selection.add(key)
+  }
+  return { ...current, selection, undo: kept.undo }
 }
 
 /**
@@ -138,6 +188,7 @@ export function withMoreItems(current: PickerItems, more: readonly ListedItem[],
   const merged = [...current.items, ...added]
   const ticked = added.filter((item) => !isKnown(item)).map(itemKey)
   return {
+    ...current,
     items: kind === "account" ? newestFirst(merged) : merged,
     selection: ticked.length > 0 ? new Set([...current.selection, ...ticked]) : current.selection,
   }
@@ -149,26 +200,25 @@ export function withQueued(current: PickerItems, keys: ReadonlySet<string>): Pic
   const selection = new Set(current.selection)
   for (const key of keys) selection.delete(key)
   return {
+    ...current,
     items: current.items.map((item) => (keys.has(itemKey(item)) ? { ...item, inQueue: true } : item)),
     selection,
   }
 }
 
 /**
- * The items the picker lists, in their order, split in two: what will download (ticked, and those unticked a moment
- * ago, `leaving`, which fade before they move), and what won't (unticked, downloaded before or in Downloads), which the
- * Not Downloading heading under the list folds away.
+ * The items the picker lists, in their order, split in two: what will download (ticked), and what won't (unticked,
+ * downloaded before or in Downloads), which the Not Downloading heading under the list folds away. An item moves the
+ * moment its box changes.
  */
 export function splitByTicks<Item extends ListedItem>(
   items: readonly Item[],
   selection: ReadonlySet<string>,
-  leaving: ReadonlySet<string>,
 ): { ticked: Item[]; leftOut: Item[] } {
   const ticked: Item[] = []
   const leftOut: Item[] = []
   for (const item of items) {
-    const key = itemKey(item)
-    if ((selection.has(key) && !isQueued(item)) || leaving.has(key)) ticked.push(item)
+    if (selection.has(itemKey(item)) && !isQueued(item)) ticked.push(item)
     else leftOut.push(item)
   }
   return { ticked, leftOut }

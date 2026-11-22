@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react"
-import { ChevronDown, ChevronRight, Film, Images, Play, X } from "lucide-react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
+import { ChevronDown, ChevronRight, Film, Images, Maximize2, Minimize2, Play, Undo2, X } from "lucide-react"
 import {
   addManyToQueue,
   cancelLoadingMore,
@@ -30,6 +31,7 @@ import {
   isKnown,
   isQueued,
   itemKey,
+  keptTicks,
   LOAD_NEW_COUNT,
   mediaCount,
   nounOf,
@@ -43,10 +45,14 @@ import {
   sourceOf,
   splitByTicks,
   takesPreset,
+  undone,
   withItem,
+  withKeptTicks,
   withMoreItems,
   withQueued,
+  withTicks,
   type MediaCount,
+  type TickChange,
   type PickedPreset,
 } from "../listingPicker"
 import { usePickerLayout, usePresets, useRulePresets } from "../queries"
@@ -61,13 +67,17 @@ import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
 import { PickerViewControls } from "./PickerViewControls"
 import { ToggleButton } from "./SegmentedControl"
 import { StatusMessage } from "./StatusMessage"
-import { classes, LEAVING_CLASSES } from "./styles"
+import { classes } from "./styles"
 import { Thumbnail } from "./Thumbnail"
 import { WatchForm } from "./WatchForm"
+import { keepPicker, keptPicker } from "../keptPickers"
 import { sitePictureUrl } from "../api"
 
 interface ListingPickerProps {
   listing: Listing
+  /** The pending link it was opened from (Pick What to Download): its ticks and their changes are kept for it while it
+   * waits in Pending, and the picker opens with them again. */
+  pendingId: number | null
   onClose: () => void
   /** The picked items joined the queue. */
   onAdded: () => void
@@ -76,10 +86,6 @@ interface ListingPickerProps {
   /** It's watched now: the card closes, and the Watched view opens. */
   onWatched: () => void
 }
-
-/** How long an item unticked in the list fades before it moves under Not Downloading: ticking it again meanwhile keeps
- * it. */
-const LEAVING_MS = 2000
 
 /** What the picker is loading: the next items (Load More), on until enough new ones (Load New) or all the rest (Load
  * All). */
@@ -94,13 +100,19 @@ type Counted = "counting" | "failed" | null
  * type filter when they're of several types (only the images of an account, say), Load More, Load New and Load All
  * when only the newest were listed, and Download, which queues each ticked item shown as its own download, with
  * Download and Load More beside it to go on page by page. The list shows only what will download: an item unticked
- * there fades for a moment (ticking it again keeps it), then moves under Not Downloading, folded under the list with
- * what's downloaded before or in the queue (greyed, or hidden with Hide Downloaded), where ticking one moves it back up.
- * A video starts with the preset a rule picks for it, else the one picked here. What it loads is kept by the app, so the
- * listing opens with it the next time; while a site makes a load wait (X), the items listed stay to pick from.
+ * there moves at once under Not Downloading, folded under the list with what's downloaded before or in the queue
+ * (greyed, or hidden with Hide Downloaded), where ticking one moves it back up. Undo, after the count, puts back the
+ * ticks' changes one at a time. View in Full Page lays it over the whole window. A video starts with the preset a rule
+ * picks for it, else the one picked here. What it loads is kept by the app, so the listing opens with it the next time;
+ * while a site makes a load wait (X), the items listed stay to pick from.
  */
-export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatched }: ListingPickerProps) {
-  const [{ items, selection }, setPicker] = useState(() => pickerItems(listing.items))
+export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdded, onWatched }: ListingPickerProps) {
+  const [picker, setPicker] = useState(() => {
+    const kept = pendingId === null ? undefined : keptPicker(pendingId)
+    const fresh = pickerItems(listing.items)
+    return kept ? withKeptTicks(fresh, kept) : fresh
+  })
+  const { items, selection, undo } = picker
   const [more, setMore] = useState<ListingMore | null>(listing.more)
   const [total, setTotal] = useState(listing.total)
   const [counted, setCounted] = useState<Counted>(() =>
@@ -118,10 +130,8 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
   const isAdding = adding !== null
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [watching, setWatching] = useState(false)
-  // The items unticked in the list a moment ago, fading before they move under Not Downloading, with their timers.
-  const [leaving, setLeaving] = useState<ReadonlySet<string>>(() => new Set())
-  const leavingTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const [leftOutOpen, setLeftOutOpen] = useState(false)
+  const [fullPage, setFullPage] = useState(false)
   const { layout, change: changeLayout } = usePickerLayout("items")
   const presetId = chosenId ?? presets?.defaultId ?? null
   // Batches that arrive after the card closed are dropped; closing it stops the load.
@@ -131,14 +141,26 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
   const list = useRef<HTMLDivElement>(null)
   useEffect(() => {
     open.current = true
-    const timers = leavingTimers.current
     return () => {
       open.current = false
       void cancelLoadingMore()
-      for (const timer of timers.values()) clearTimeout(timer)
-      timers.clear()
     }
   }, [])
+
+  // While the link waits in Pending, what's ticked is kept for it as it changes, so picking from it again carries on.
+  useEffect(() => {
+    if (pendingId !== null) keepPicker(pendingId, keptTicks(picker))
+  }, [pendingId, picker])
+
+  // Escape leaves the full page.
+  useEffect(() => {
+    if (!fullPage) return
+    const leave = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) setFullPage(false)
+    }
+    window.addEventListener("keydown", leave)
+    return () => window.removeEventListener("keydown", leave)
+  }, [fullPage])
 
   // A YouTube channel's Videos tab doesn't say how many videos it holds: another read counts them, for Load All to say.
   // Closing the card stops it.
@@ -162,8 +184,9 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
     }
   }, [listing])
 
+  /** Changes the ticks by hand, the change kept for Undo. */
   const setSelection = (update: (selection: ReadonlySet<string>) => ReadonlySet<string>) =>
-    setPicker((current) => ({ ...current, selection: update(current.selection) }))
+    setPicker((current) => withTicks(current, update(current.selection)))
   const types = useTypeFilter(shownItems(items, layout.hideDownloaded))
   const shown = types.shown
   const hidden = items.length - shown.length
@@ -181,28 +204,11 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
   }
   const picks = presets ? picksFor(shown, selection, presetFor) : null
   const nothingPicked = !picks || picks.length === 0
-  const { ticked: toDownload, leftOut } = splitByTicks(shown, selection, leaving)
+  const { ticked: toDownload, leftOut } = splitByTicks(shown, selection)
+  const titleOf = new Map(items.map((item) => [itemKey(item), item.video.title]))
 
-  /** Ticks or unticks an item. Unticked in the list, it fades for a moment before it moves under Not Downloading, and
-   * ticking it again meanwhile keeps it where it is. */
+  /** Ticks or unticks an item: it moves into the list, or under Not Downloading, at once. */
   function select(item: ListedItem, ticked: boolean) {
-    const key = itemKey(item)
-    const timer = leavingTimers.current.get(key)
-    if (timer !== undefined) clearTimeout(timer)
-    leavingTimers.current.delete(key)
-    const inList = toDownload.includes(item)
-    if (!ticked && inList) {
-      leavingTimers.current.set(
-        key,
-        setTimeout(() => {
-          leavingTimers.current.delete(key)
-          setLeaving((current) => withoutKey(current, key))
-        }, LEAVING_MS),
-      )
-      setLeaving((current) => new Set(current).add(key))
-    } else {
-      setLeaving((current) => withoutKey(current, key))
-    }
     setSelection((current) => withItem(current, item, ticked))
   }
 
@@ -314,7 +320,8 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
       onStop={stop}
     />
   )
-  return (
+  const lastChange = undo.at(-1)
+  const content = (
     <>
       <div className="flex gap-4">
         <ListingPicture listing={listing} />
@@ -337,29 +344,32 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
       ) : (
         <>
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-            <label className="flex items-center gap-2 text-fg-secondary">
-              <input
-                type="checkbox"
-                className="size-4 accent-accent"
-                aria-label={strings.picker.selectAll}
-                title={strings.picker.selectAll}
-                checked={allSelected}
-                ref={(box) => {
-                  if (box) box.indeterminate = picked.length > 0 && !allSelected
-                }}
-                disabled={isAdding || selectable === 0}
-                onChange={(event) => {
-                  const ticked = event.target.checked
-                  setSelection((current) => selectEvery(current, shown, ticked))
-                }}
-              />
-              <span className="whitespace-nowrap tabular-nums">
-                {joinDetails([
-                  strings.picker.selected(picked.length, shown.length),
-                  hidden > 0 && strings.picker.hidden(hidden),
-                ])}
-              </span>
-            </label>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-fg-secondary">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-accent"
+                  aria-label={strings.picker.selectAll}
+                  title={strings.picker.selectAll}
+                  checked={allSelected}
+                  ref={(box) => {
+                    if (box) box.indeterminate = picked.length > 0 && !allSelected
+                  }}
+                  disabled={isAdding || selectable === 0}
+                  onChange={(event) => {
+                    const ticked = event.target.checked
+                    setSelection((current) => selectEvery(current, shown, ticked))
+                  }}
+                />
+                <span className="whitespace-nowrap tabular-nums">
+                  {joinDetails([
+                    strings.picker.selected(picked.length, shown.length),
+                    hidden > 0 && strings.picker.hidden(hidden),
+                  ])}
+                </span>
+              </label>
+              <UndoButton change={lastChange} titleOf={titleOf} disabled={isAdding} onUndo={() => setPicker(undone)} />
+            </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <ItemTypeFilter counts={types.counts} value={types.type} onChange={types.choose} disabled={isAdding} />
               <ToggleButton
@@ -369,9 +379,17 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
                 onChange={(hideDownloaded) => changeLayout((latest) => ({ ...latest, hideDownloaded }))}
               />
               <PickerViewControls layout={layout} onChange={changeLayout} />
+              <IconButton
+                label={fullPage ? strings.picker.exitFullPage : strings.picker.fullPage}
+                icon={fullPage ? Minimize2 : Maximize2}
+                onClick={() => setFullPage((wasFull) => !wasFull)}
+              />
             </div>
           </div>
-          <div ref={list} className="flex flex-col gap-3">
+          <div
+            ref={list}
+            className={classes("flex flex-col gap-3", fullPage && "-mx-2 min-h-0 flex-1 overflow-y-auto px-2")}
+          >
             {shown.length === 0 ? (
               <p className="text-fg-secondary">{strings.picker.allHidden}</p>
             ) : (
@@ -384,9 +402,9 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
                     layout={layout}
                     showUploader={showsUploaders(listing)}
                     isSelected={(item) => selection.has(itemKey(item))}
-                    isLeaving={(item) => leaving.has(itemKey(item)) && !selection.has(itemKey(item))}
                     disabled={isAdding}
                     onSelect={select}
+                    fill={fullPage}
                   />
                 )}
                 {leftOut.length > 0 && (
@@ -396,6 +414,7 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
                     showUploader={showsUploaders(listing)}
                     open={leftOutOpen}
                     disabled={isAdding}
+                    fill={fullPage}
                     onFold={() => setLeftOutOpen((wasOpen) => !wasOpen)}
                     onSelect={select}
                   />
@@ -466,6 +485,41 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
         </>
       )}
     </>
+  )
+  if (!fullPage) return content
+  // Over the whole window, the list taking what the rest leaves it; the card it came from stays where it was.
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={listing.title}
+      className="fixed inset-0 z-40 flex flex-col gap-4 bg-bg p-6"
+    >
+      {content}
+    </div>,
+    document.body,
+  )
+}
+
+interface UndoButtonProps {
+  /** The latest change of ticks, none before the first. */
+  change: TickChange | undefined
+  titleOf: ReadonlyMap<string, string>
+  disabled: boolean
+  onUndo: () => void
+}
+
+/** Undo, after the count of what's ticked: puts back the latest change of ticks, its hint naming it. */
+function UndoButton({ change, titleOf, disabled, onUndo }: UndoButtonProps): ReactNode {
+  const named = (keys: readonly string[]) => (keys.length === 1 ? (titleOf.get(keys[0]) ?? keys.length) : keys.length)
+  const hint = change
+    ? strings.picker.undoHint(named(change.ticked), named(change.unticked))
+    : strings.picker.nothingToUndo
+  return (
+    <Button size="sm" variant="ghost" title={hint} aria-label={hint} disabled={disabled || !change} onClick={onUndo}>
+      <Undo2 size={14} aria-hidden />
+      {strings.picker.undo}
+    </Button>
   )
 }
 
@@ -636,26 +690,21 @@ export function ListingPicture({
   )
 }
 
-function withoutKey(keys: ReadonlySet<string>, key: string): ReadonlySet<string> {
-  if (!keys.has(key)) return keys
-  const next = new Set(keys)
-  next.delete(key)
-  return next
-}
-
 interface LeftOutItemsProps {
   items: readonly ListedItem[]
   layout: PickerLayout
   showUploader: boolean
   open: boolean
   disabled: boolean
+  /** In full page, the items aren't held to a height of their own: the page scrolls. */
+  fill: boolean
   onFold: () => void
   onSelect: (item: ListedItem, ticked: boolean) => void
 }
 
 /** Under the list, folded to start with: what won't download (unticked, downloaded before or in Downloads), with how
  * many. Ticking one moves it back up into the list. */
-function LeftOutItems({ items, layout, showUploader, open, disabled, onFold, onSelect }: LeftOutItemsProps) {
+function LeftOutItems({ items, layout, showUploader, open, disabled, fill, onFold, onSelect }: LeftOutItemsProps) {
   const Chevron = open ? ChevronDown : ChevronRight
   return (
     <section className="flex flex-col gap-2">
@@ -678,6 +727,7 @@ function LeftOutItems({ items, layout, showUploader, open, disabled, onFold, onS
           isSelected={() => false}
           disabled={disabled}
           onSelect={onSelect}
+          fill={fill}
         />
       )}
     </section>
@@ -691,8 +741,6 @@ interface ListedRowProps {
   /** The watched source that found it, in All New Items, first in its details. */
   source?: string | null
   selected: boolean
-  /** Unticked a moment ago: it fades slowly before it moves under Not Downloading. */
-  leaving?: boolean
   disabled: boolean
   onSelect: (ticked: boolean) => void
 }
@@ -702,26 +750,12 @@ interface ListedRowProps {
  * or the queue has it, with Downloaded or In Queue. Rows off screen aren't laid out (`content-visibility`), so a
  * playlist of hundreds scrolls smoothly.
  */
-export function ListedRow({
-  item,
-  showUploader,
-  source = null,
-  selected,
-  leaving = false,
-  disabled,
-  onSelect,
-}: ListedRowProps) {
+export function ListedRow({ item, showUploader, source = null, selected, disabled, onSelect }: ListedRowProps) {
   const { video, lastDownload } = item
   const known = isKnown(item)
   const queued = isQueued(item)
   return (
-    <li
-      data-item={itemKey(item)}
-      className={classes(
-        "transition-opacity [contain-intrinsic-size:auto_4.25rem] [content-visibility:auto]",
-        leaving && LEAVING_CLASSES,
-      )}
-    >
+    <li data-item={itemKey(item)} className="[contain-intrinsic-size:auto_4.25rem] [content-visibility:auto]">
       <label
         className={classes(
           "flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors",
@@ -788,8 +822,6 @@ interface ListedItemsProps<Item extends ListedItem> {
   /** In All New Items, the watched source that found each item: named under its picture and first in its details. */
   sourceOf?: (item: Item) => string
   isSelected: (item: Item) => boolean
-  /** The items unticked a moment ago, fading before they move elsewhere (the listing picker's Not Downloading). */
-  isLeaving?: (item: Item) => boolean
   disabled: boolean
   onSelect: (item: Item, ticked: boolean) => void
   /** In All New Items: the items take what the view's height leaves them (in a column that shrinks to the view), rather
@@ -807,7 +839,6 @@ export function ListedItems<Item extends ListedItem>({
   showUploader,
   sourceOf,
   isSelected,
-  isLeaving,
   disabled,
   onSelect,
   fill = false,
@@ -823,7 +854,6 @@ export function ListedItems<Item extends ListedItem>({
             showUploader={showUploader}
             source={sourceOf?.(item) ?? null}
             selected={isSelected(item)}
-            leaving={isLeaving?.(item) ?? false}
             disabled={disabled}
             onSelect={(ticked) => onSelect(item, ticked)}
           />
@@ -834,10 +864,9 @@ export function ListedItems<Item extends ListedItem>({
   const posts = items.some((item) => item.video.post !== null)
   return (
     <MediaTiles
-      tiles={items.map((item) => ({
-        ...listedTile(item, showUploader, sourceOf?.(item) ?? null, isSelected(item), (ticked) => onSelect(item, ticked)),
-        leaving: isLeaving?.(item) ?? false,
-      }))}
+      tiles={items.map((item) =>
+        listedTile(item, showUploader, sourceOf?.(item) ?? null, isSelected(item), (ticked) => onSelect(item, ticked)),
+      )}
       view={layout.view}
       size={layout.size}
       galleryRatio={posts ? 1 : 16 / 9}

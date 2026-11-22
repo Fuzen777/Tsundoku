@@ -19,10 +19,15 @@ import {
   typeCounts,
   typeInEffect,
   withItem,
+  keptTicks,
   splitByTicks,
+  undone,
+  withKeptTicks,
   withMoreItems,
   withQueued,
+  withTicks,
   type PickedPreset,
+  type PickerItems,
 } from "./listingPicker"
 import { strings } from "./strings"
 
@@ -146,10 +151,10 @@ describe("withMoreItems", () => {
 
   it("keeps the ticks made, and ticks the new arrivals even when nothing was ticked", () => {
     const start = withItem(pickerItems([item("a"), item("b")]).selection, item("a"), false)
-    const next = withMoreItems({ items: [item("a"), item("b")], selection: start }, [item("c")], "channel")
+    const next = withMoreItems({ items: [item("a"), item("b")], selection: start, undo: [] }, [item("c")], "channel")
     expect(next.selection.has(itemKey(item("a")))).toBe(false)
     expect(next.selection.has(itemKey(item("c")))).toBe(true)
-    const none = withMoreItems({ items: [item("a")], selection: new Set() }, [item("c")], "channel")
+    const none = withMoreItems({ items: [item("a")], selection: new Set(), undo: [] }, [item("c")], "channel")
     expect([...none.selection]).toEqual([itemKey(item("c"))])
   })
 
@@ -185,16 +190,54 @@ describe("splitByTicks", () => {
   const items = [
     item("ticked"),
     item("unticked"),
-    item("leaving"),
     item("downloaded", { lastDownload: downloadedWith("Best Video") }),
     item("queued", { inQueue: true }),
   ]
 
-  it("lists what's ticked or fading on top, in order, and folds the rest away", () => {
-    const selection = new Set([itemKey(items[0]), itemKey(items[3]), itemKey(items[4])])
-    const { ticked, leftOut } = splitByTicks(items, selection, new Set([itemKey(items[2])]))
-    expect(ids(ticked)).toEqual(["ticked", "leaving", "downloaded"])
+  it("lists what's ticked on top, in order, and folds the rest away", () => {
+    const selection = new Set([itemKey(items[0]), itemKey(items[2]), itemKey(items[3])])
+    const { ticked, leftOut } = splitByTicks(items, selection)
+    expect(ids(ticked)).toEqual(["ticked", "downloaded"])
     expect(ids(leftOut)).toEqual(["unticked", "queued"])
+  })
+})
+
+describe("undo", () => {
+  const keys = (picker: PickerItems) => [...picker.selection].sort()
+  const [a, b, c] = [item("a"), item("b"), item("c")].map(itemKey)
+
+  it("keeps each change of ticks made by hand, and undoes the latest first", () => {
+    const start = pickerItems([item("a"), item("b"), item("c")])
+    const unticked = withTicks(start, new Set([a, c]))
+    const none = withTicks(unticked, new Set())
+    expect(none.undo).toEqual([
+      { ticked: [], unticked: [b] },
+      { ticked: [], unticked: [a, c] },
+    ])
+    const back = undone(none)
+    expect(keys(back)).toEqual([a, c])
+    expect(keys(undone(back))).toEqual([a, b, c].sort())
+    expect(undone(start)).toBe(start)
+    expect(withTicks(start, new Set(start.selection))).toBe(start)
+  })
+
+  it("keeps the log through loads and downloads, which aren't changes by hand", () => {
+    const start = withTicks(pickerItems([item("a"), item("b")]), new Set([a]))
+    const loaded = withMoreItems(start, [item("c")], "channel")
+    expect(loaded.undo).toBe(start.undo)
+    expect(withQueued(loaded, new Set([a])).undo).toBe(start.undo)
+  })
+})
+
+describe("withKeptTicks", () => {
+  it("opens again with the ticks made, ticks what's listed since as new, and can still undo", () => {
+    const first = withTicks(pickerItems([item("a"), item("b")]), new Set([itemKey(item("b"))]))
+    const kept = keptTicks(first)
+    const again = withKeptTicks(pickerItems([item("new"), item("a"), item("b")]), kept)
+    expect([...again.selection].sort()).toEqual([itemKey(item("b")), itemKey(item("new"))].sort())
+    expect([...undone(again).selection].sort()).toEqual(
+      [itemKey(item("a")), itemKey(item("b")), itemKey(item("new"))].sort(),
+    )
   })
 })
 

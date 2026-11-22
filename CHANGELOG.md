@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.21 · 2026-11-22
+
+### Changed
+
+- **Unticking moves an item at once**: in a channel's or account's list, an unticked item now goes straight under Not Downloading, without the two-second fade, which made the list jump under the pointer.
+
+### Added
+
+- **Undo in the picker**: after "42 of 50 selected", Undo puts back the latest change of ticks, one at a time. For a link opened from Pending, the ticks and what Undo can put back are kept while the link waits there, so picking from it again carries on where you left off; they're cleared once it leaves Pending.
+- **View in Full Page**: a button at the end of the row above the items lays the list over the whole window; the same button or Escape puts it back.
+
 ## 0.2.20 · 2026-11-22
 
 ### Added

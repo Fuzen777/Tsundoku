@@ -13,6 +13,7 @@ import type { DownloadProgress } from "./bindings/DownloadProgress"
 import type { ListArrangements } from "./bindings/ListArrangements"
 import type { QueueItem } from "./bindings/QueueItem"
 import type { WatchedSource } from "./bindings/WatchedSource"
+import { forgetPickersBut } from "./keptPickers"
 import { createLiveStore } from "./liveStore"
 import { changeListArrangements } from "./queries"
 import { combinedFraction } from "./queueSources"
@@ -57,7 +58,11 @@ export function trackQueue(queryClient: QueryClient): void {
       }
     }
   })
-  void onPendingChanged((links) => queryClient.setQueryData(queryKeys.pending, links))
+  void onPendingChanged((links) => {
+    queryClient.setQueryData(queryKeys.pending, links)
+    // A link that left Pending takes what its picker had ticked with it.
+    forgetPickersBut(links.map((link) => link.id))
+  })
   void onWatchedChanged((sources) => queryClient.setQueryData(queryKeys.watched, sources))
   showAllNewWhenFound(queryClient)
   void onDownloadProgress(({ id, progress: value }) => progress.set(id, value))

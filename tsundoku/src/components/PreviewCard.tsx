@@ -33,6 +33,8 @@ import { Thumbnail } from "./Thumbnail"
 
 interface PreviewCardProps {
   state: Exclude<PreviewState, { stage: "idle" }>
+  /** The pending link the card shows, when it was opened from Pending's Pick What to Download. */
+  pendingId: number | null
   /** Cancel, Dismiss or Close. */
   onClose: () => void
   /** The video, or the items picked from a listing, joined the queue. */
@@ -49,7 +51,16 @@ interface PreviewCardProps {
 
 /** Above the view: what a link is, whether it was downloaded before, and Download; or, for a channel, playlist or
  * account, its items to pick from (`ListingPicker`); or, for a link that needs a password, a field for it. */
-export function PreviewCard({ state, onClose, onAdded, onSomeAdded, onWatched, onRetry, onUnlock }: PreviewCardProps) {
+export function PreviewCard({
+  state,
+  pendingId,
+  onClose,
+  onAdded,
+  onSomeAdded,
+  onWatched,
+  onRetry,
+  onUnlock,
+}: PreviewCardProps) {
   return (
     <Card className="flex flex-col gap-3 p-4">
       {state.stage === "loading" && (
@@ -93,6 +104,7 @@ export function PreviewCard({ state, onClose, onAdded, onSomeAdded, onWatched, o
         (state.preview.kind === "listing" ? (
           <ListingPicker
             listing={state.preview.listing}
+            pendingId={pendingId}
             onClose={onClose}
             onAdded={onAdded}
             onSomeAdded={onSomeAdded}

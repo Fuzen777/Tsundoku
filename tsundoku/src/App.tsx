@@ -102,11 +102,14 @@ export function App() {
   // The pending link whose items the preview card shows, opened from its row in Pending's Needs Attention: it leaves
   // Pending once items picked from it join the queue or it's watched. Any other link shown forgets it.
   const pickingFor = useRef<number | null>(null)
+  // The same, for the picker, which keeps its ticks for the link while it waits in Pending.
+  const [pickingId, setPickingId] = useState<number | null>(null)
   // A copied or dropped link, or Download Again in the history, is fetched right away, and kept as the add bar's
   // field's text, to edit there.
   const showLink = useCallback(
     (shown: string) => {
       pickingFor.current = null
+      setPickingId(null)
       setLink(shown)
       void showPreview(shown)
     },
@@ -116,12 +119,14 @@ export function App() {
     (id: number, shown: string) => {
       showLink(shown)
       pickingFor.current = id
+      setPickingId(id)
     },
     [showLink],
   )
   const donePicking = useCallback(() => {
     const id = pickingFor.current
     pickingFor.current = null
+    setPickingId(null)
     if (id !== null) pendingLinkPicked(id).catch((error: unknown) => setAddError(describeDownloadError(error)))
   }, [])
   // Several links wait in Pending, where they're read one at a time.
@@ -318,6 +323,7 @@ export function App() {
             {preview.state.stage !== "idle" && (
               <PreviewCard
                 state={preview.state}
+                pendingId={pickingId}
                 onClose={preview.close}
                 onRetry={(retryLink, password) => void preview.show(retryLink, password)}
                 onUnlock={(password) => void preview.unlock(password)}

@@ -735,6 +735,18 @@ export const strings = {
     leftOut: "Not Downloading",
     leftOutHint: "What's unticked, downloaded before or in Downloads. Tick one to download it after all.",
     nothingTicked: "Nothing is ticked. Everything listed is under Not Downloading.",
+    /** After the count of what's ticked: puts the latest change of ticks back. */
+    undo: "Undo",
+    /** Undo's hint, naming the change it puts back: one item by its title, else how many. */
+    undoHint: (ticked: string | number, unticked: string | number) => {
+      const named = (what: string | number, verb: string) =>
+        typeof what === "string" ? `${verb} “${what}”` : `${verb} ${what.toLocaleString()} items`
+      const parts = [ticked !== 0 && named(ticked, "ticking"), unticked !== 0 && named(unticked, "unticking")]
+      return `Undo ${parts.filter(Boolean).join(" and ")}`
+    },
+    nothingToUndo: "Nothing to undo yet.",
+    fullPage: "View in Full Page",
+    exitFullPage: "Exit Full Page (Esc)",
   },
   /** How a picker lays out what it offers: a listing's items, a post's files (PickerViewControls.tsx). */
   pickerView: {
