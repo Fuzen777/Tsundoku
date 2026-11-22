@@ -40,12 +40,30 @@ pub struct PageReader {
 
 impl PageReader {
     /// Asks for each address in turn from the reader's page, waiting `pause` between them, and gives each answer, or
-    /// why the page couldn't be opened. One that can't be asked gives its reason in its place.
+    /// why the page couldn't be opened. One that can't be asked gives its reason in its place. The window is closed
+    /// once they're answered.
     pub fn read(
         &self,
         addresses: &[String],
         pause: Duration,
     ) -> Result<Vec<Result<PageAnswer, String>>, String> {
+        let window = self.open()?;
+        let answers = addresses
+            .iter()
+            .enumerate()
+            .map(|(index, address)| {
+                if index > 0 {
+                    std::thread::sleep(pause);
+                }
+                ask(&window, address)
+            })
+            .collect();
+        let _ = window.destroy();
+        Ok(answers)
+    }
+
+    /// Opens the reader's window on its page, replacing one left open, and waits for the page to load.
+    pub fn open(&self) -> Result<WebviewWindow, String> {
         if let Some(window) = self.app.get_webview_window(self.label) {
             let _ = window.destroy();
         }
@@ -75,32 +93,29 @@ impl PageReader {
             })
             .build()
             .map_err(|error| error.to_string())?;
-        let answers = on_load
+        let loaded = on_load
             .recv_timeout(LOAD_WAIT)
             .map_err(|_| "the site's page didn't load".to_owned())
             .and_then(|url| {
                 let expected = Url::parse(self.page).map_err(|error| error.to_string())?;
-                if url.host_str() != expected.host_str() {
-                    return Err(format!("the site's page went to {url}"));
+                if url.host_str() == expected.host_str() {
+                    Ok(())
+                } else {
+                    Err(format!("the site's page went to {url}"))
                 }
-                Ok(addresses
-                    .iter()
-                    .enumerate()
-                    .map(|(index, address)| {
-                        if index > 0 {
-                            std::thread::sleep(pause);
-                        }
-                        ask(&window, address)
-                    })
-                    .collect())
             });
-        let _ = window.destroy();
-        answers
+        match loaded {
+            Ok(()) => Ok(window),
+            Err(error) => {
+                let _ = window.destroy();
+                Err(error)
+            }
+        }
     }
 }
 
-/// Asks the page for one address and gives the site's answer.
-fn ask(window: &WebviewWindow, address: &str) -> Result<PageAnswer, String> {
+/// Asks the page of a reader's window (`PageReader::open`) for one address and gives the site's answer.
+pub fn ask(window: &WebviewWindow, address: &str) -> Result<PageAnswer, String> {
     let (answered, answer) = mpsc::channel::<Result<String, String>>();
     let expression = script(address);
     window

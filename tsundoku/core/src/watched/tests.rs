@@ -319,6 +319,7 @@ fn video(id: &str) -> VideoInfo {
         playlist: None,
         tags: Vec::new(),
         pixiv: None,
+        fanbox: None,
     }
 }
 

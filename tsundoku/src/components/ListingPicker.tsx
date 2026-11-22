@@ -28,7 +28,9 @@ import {
 import { useTimeLeft } from "../holds"
 import {
   firstNewSince,
+  cannotTick,
   isKnown,
+  isLocked,
   isQueued,
   itemKey,
   keptTicks,
@@ -191,7 +193,7 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
   const shown = types.shown
   const hidden = items.length - shown.length
   const picked = selectedItems(shown, selection)
-  const selectable = shown.filter((item) => !isQueued(item)).length
+  const selectable = shown.filter((item) => !cannotTick(item)).length
   const allSelected = selectable > 0 && picked.length === selectable
   const hasVideos = shown.some(takesPreset)
   const placeOf = new Map(items.map((item, index) => [itemKey(item), index]))
@@ -752,22 +754,24 @@ interface ListedRowProps {
  */
 export function ListedRow({ item, showUploader, source = null, selected, disabled, onSelect }: ListedRowProps) {
   const { video, lastDownload } = item
-  const known = isKnown(item)
+  const locked = isLocked(item)
+  const known = isKnown(item) || locked
   const queued = isQueued(item)
+  const untickable = cannotTick(item)
   return (
     <li data-item={itemKey(item)} className="[contain-intrinsic-size:auto_4.25rem] [content-visibility:auto]">
       <label
         className={classes(
           "flex items-center gap-3 rounded-md px-2 py-1.5 transition-colors",
-          queued ? "cursor-default" : "cursor-pointer hover:bg-input",
+          untickable ? "cursor-default" : "cursor-pointer hover:bg-input",
         )}
       >
         <input
           type="checkbox"
           className="size-4 shrink-0 accent-accent"
           aria-label={strings.picker.select}
-          checked={selected && !queued}
-          disabled={disabled || queued}
+          checked={selected && !untickable}
+          disabled={disabled || untickable}
           onChange={(event) => onSelect(event.target.checked)}
         />
         <Thumbnail key={video.thumbnailUrl} url={video.thumbnailUrl} className={classes("w-24", known && "opacity-50")} />
@@ -777,7 +781,14 @@ export function ListedRow({ item, showUploader, source = null, selected, disable
           </p>
           <p className="truncate text-xs text-fg-secondary tabular-nums">{listedDetails(item, showUploader, source)}</p>
         </div>
-        {queued ? (
+        {locked ? (
+          <span
+            className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
+            title={strings.picker.lockedHint(video.fanbox?.fee ?? 0)}
+          >
+            {strings.picker.locked(video.fanbox?.fee ?? 0)}
+          </span>
+        ) : queued ? (
           <span
             className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
             title={strings.picker.inQueueHint}
@@ -887,12 +898,16 @@ function listedTile(
 ): MediaTile {
   const { video, lastDownload } = item
   const queued = isQueued(item)
+  const locked = isLocked(item)
+  const fee = video.fanbox?.fee ?? 0
   const post = video.post
   const fileCount = post ? post.images + post.videos + post.others : 0
   const onlyVideo = post !== null && fileCount === 1 && post.videos === 1
-  const known = queued
-    ? strings.picker.inQueueHint
-    : lastDownload && strings.preview.alreadyDownloaded(formatDay(lastDownload.downloadedAt), lastDownload.preset)
+  const known = locked
+    ? strings.picker.lockedHint(fee)
+    : queued
+      ? strings.picker.inQueueHint
+      : lastDownload && strings.preview.alreadyDownloaded(formatDay(lastDownload.downloadedAt), lastDownload.preset)
   return {
     key: itemKey(item),
     thumbnailUrl: video.thumbnailUrl,
@@ -900,7 +915,7 @@ function listedTile(
     label: video.title,
     hint: [video.title, listedDetails(item, showUploader, source), known].filter(Boolean).join("\n"),
     picked: selected,
-    locked: queued,
+    locked: queued || locked,
     ratio: post ? 4 / 5 : 16 / 9,
     corner:
       video.durationSeconds !== null ? (
@@ -917,8 +932,10 @@ function listedTile(
           <Play size={10} fill="currentColor" />
         </span>
       ) : null,
-    mark: queued
-      ? { text: joinDetails([strings.picker.inQueue, source]), tone: "plain" }
+    mark: locked
+      ? { text: joinDetails([strings.picker.locked(fee), source]), tone: "plain" }
+      : queued
+        ? { text: joinDetails([strings.picker.inQueue, source]), tone: "plain" }
       : lastDownload
         ? { text: joinDetails([strings.picker.downloaded, source]), tone: "done" }
         : source

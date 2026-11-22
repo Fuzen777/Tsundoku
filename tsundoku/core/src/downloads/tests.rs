@@ -238,6 +238,7 @@ fn video(video_id: &str) -> VideoInfo {
         playlist: None,
         tags: Vec::new(),
         pixiv: None,
+        fanbox: None,
     }
 }
 
@@ -1360,6 +1361,7 @@ fn post(post_id: &str) -> VideoInfo {
         playlist: None,
         tags: Vec::new(),
         pixiv: None,
+        fanbox: None,
     }
 }
 

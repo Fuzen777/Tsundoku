@@ -17,9 +17,19 @@ export function itemKey({ video }: ListedItem): string {
   return `${video.site} ${video.videoId}`
 }
 
-/** Whether the item is in the queue already: it can't be ticked, since it's on its way. */
+/** Whether the item is in the queue already: it's on its way. */
 export function isQueued(item: ListedItem): boolean {
   return item.inQueue
+}
+
+/** Whether the item is a Fanbox post for a plan the account doesn't support: nothing of it can be downloaded. */
+export function isLocked(item: ListedItem): boolean {
+  return item.video.fanbox?.locked === true
+}
+
+/** Whether the item can't be ticked: it's in the queue already, or locked behind a plan. */
+export function cannotTick(item: ListedItem): boolean {
+  return isQueued(item) || isLocked(item)
 }
 
 /** Whether the history or the queue has the item: it's greyed and starts unticked. */
@@ -41,7 +51,7 @@ export function selectEvery(
 ): Set<string> {
   const next = new Set(selection)
   for (const item of items) {
-    if (ticked && !isQueued(item)) next.add(itemKey(item))
+    if (ticked && !cannotTick(item)) next.add(itemKey(item))
     else next.delete(itemKey(item))
   }
   return next
@@ -50,14 +60,14 @@ export function selectEvery(
 /** The selection with one item ticked or unticked. */
 export function withItem(selection: ReadonlySet<string>, item: ListedItem, ticked: boolean): Set<string> {
   const next = new Set(selection)
-  if (ticked && !isQueued(item)) next.add(itemKey(item))
+  if (ticked && !cannotTick(item)) next.add(itemKey(item))
   else next.delete(itemKey(item))
   return next
 }
 
 /** The ticked items, in the listing's order. One in the queue since it was ticked is left out. */
 export function selectedItems(items: readonly ListedItem[], selection: ReadonlySet<string>): ListedItem[] {
-  return items.filter((item) => !isQueued(item) && selection.has(itemKey(item)))
+  return items.filter((item) => !cannotTick(item) && selection.has(itemKey(item)))
 }
 
 /** Whether the item downloads with a preset: a video, rather than a post or a file host's files. */
@@ -218,7 +228,7 @@ export function splitByTicks<Item extends ListedItem>(
   const ticked: Item[] = []
   const leftOut: Item[] = []
   for (const item of items) {
-    if (selection.has(itemKey(item)) && !isQueued(item)) ticked.push(item)
+    if (selection.has(itemKey(item)) && !cannotTick(item)) ticked.push(item)
     else leftOut.push(item)
   }
   return { ticked, leftOut }

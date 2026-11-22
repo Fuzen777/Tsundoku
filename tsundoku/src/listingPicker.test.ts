@@ -77,6 +77,23 @@ const items = [
   item("post", {}, true),
 ]
 
+describe("a Fanbox post locked behind a plan", () => {
+  const locked: ListedItem = {
+    ...item("locked"),
+    video: { ...item("locked").video, site: "fanbox", fanbox: { fee: 500, locked: true } },
+  }
+  const open = item("open")
+  const listed = [open, locked]
+
+  it("can't be ticked, by hand or with Select All, and stays out of what downloads", () => {
+    expect(selectEvery(new Set(), listed, true)).toEqual(new Set([itemKey(open)]))
+    expect(withItem(new Set(), locked, true)).toEqual(new Set())
+    const ticked = new Set(listed.map(itemKey))
+    expect(selectedItems(listed, ticked)).toEqual([open])
+    expect(splitByTicks(listed, ticked)).toEqual({ ticked: [open], leftOut: [locked] })
+  })
+})
+
 describe("the picker's selection", () => {
   it("ticks new items to start with", () => {
     expect([...initialSelection(items)]).toEqual(["youtube new", "instagram post"])

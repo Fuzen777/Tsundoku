@@ -388,6 +388,10 @@ pub fn listing_link(link: &str) -> Option<ListingLink> {
     let (path, query) = path_and_query(link);
     let segments: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
 
+    if sites::on_domain(&host, "fanbox.cc") {
+        return fanbox::listing_link(&host, &segments);
+    }
+
     if sites::on_domain(&host, "youtube.com") && !host.starts_with("music.") {
         if segments.first() == Some(&"playlist") {
             let list = query_value(query, "list").filter(|list| is_youtube_id(list))?;
@@ -582,6 +586,9 @@ pub fn read(
     listing: &ListingLink,
     cancel: &CancelToken,
 ) -> Result<Listing, PreviewError> {
+    if fanbox::is_fanbox(&listing.link) {
+        return fanbox::read(&listing.link, NEWEST_COUNT, cancel);
+    }
     if listing.reads_images() {
         return read_account(images, listing, NEWEST_COUNT, cancel);
     }
@@ -685,6 +692,9 @@ pub fn read_for_check(
     cancel: &CancelToken,
     reached: &dyn Fn(&Listing) -> bool,
 ) -> Result<Listing, PreviewError> {
+    if fanbox::is_fanbox(&listing.link) {
+        return fanbox::read_for_check(&listing.link, cancel, reached);
+    }
     if !listing.reads_images() {
         return read(videos, images, listing, cancel);
     }
@@ -766,6 +776,9 @@ pub fn read_more(
     let listing = listing_link(&more.link)
         .filter(|listing| listing.link == more.link && listing.kind != ListingKind::Playlist)
         .ok_or_else(|| not_listable(&more.link))?;
+    if fanbox::is_fanbox(&more.link) {
+        return fanbox::read_more(more, read, cancel, on_batch);
+    }
     let wanted = match read {
         MoreRead::New { count } => Some(count.clamp(1, NEW_COUNT_AT_MOST)),
         MoreRead::Next | MoreRead::All => None,
@@ -1413,6 +1426,7 @@ fn item_from_entry(entry: &Value, rough_dates: bool) -> Option<ListedItem> {
             playlist: None,
             tags: Vec::new(),
             pixiv: None,
+            fanbox: None,
         },
         approximate_date,
         last_download: None,
@@ -1697,6 +1711,7 @@ fn text(value: &Value, field: &str) -> Option<String> {
     }
 }
 
+mod fanbox;
 pub mod saved;
 mod x_media;
 

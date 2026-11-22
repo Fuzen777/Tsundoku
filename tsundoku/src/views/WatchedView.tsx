@@ -50,7 +50,7 @@ import {
 } from "../errors"
 import { useFoldedGroups } from "../foldedGroups"
 import { formatDay, formatRoughAge, formatTimeAgo, joinDetails } from "../format"
-import { isQueued, itemKey } from "../listingPicker"
+import { cannotTick, itemKey } from "../listingPicker"
 import { useAppActions } from "../navigation"
 import { pictureDraftOf, savePictureDraft } from "../pictureDraft"
 import {
@@ -683,10 +683,10 @@ function ItemPicker<Item extends WatchedItem>({
   const { layout, change: changeLayout } = usePickerLayout("items")
   const types = useTypeFilter(items)
   const shown = types.shown
-  const isTicked = (item: Item) => !isQueued(item) && (chosen.get(itemKey(item)) ?? startsTicked(item))
+  const isTicked = (item: Item) => !cannotTick(item) && (chosen.get(itemKey(item)) ?? startsTicked(item))
   const picked = shown.filter(isTicked)
   const unpicked = shown.filter((item) => !isTicked(item))
-  const selectable = shown.filter((item) => !isQueued(item))
+  const selectable = shown.filter((item) => !cannotTick(item))
   const allTicked = selectable.length > 0 && picked.length === selectable.length
   const hidden = items.length - shown.length
 

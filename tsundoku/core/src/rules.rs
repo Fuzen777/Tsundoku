@@ -1415,6 +1415,7 @@ mod tests {
             playlist: None,
             tags: Vec::new(),
             pixiv: None,
+            fanbox: None,
         }
     }
 

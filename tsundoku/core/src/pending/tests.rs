@@ -415,6 +415,7 @@ fn video_at(link: &str) -> VideoInfo {
         playlist: None,
         tags: Vec::new(),
         pixiv: None,
+        fanbox: None,
     }
 }
 

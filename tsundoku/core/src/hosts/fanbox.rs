@@ -23,7 +23,7 @@ use super::{
 };
 use crate::cancel::CancelToken;
 use crate::fanbox_account;
-use crate::metadata::{PreviewError, VideoInfo, VideoTag, tags_from};
+use crate::metadata::{FanboxDetails, FileContents, PreviewError, VideoInfo, VideoTag, tags_from};
 
 pub(super) const FACTS: HostFacts = HostFacts {
     name: "Fanbox",
@@ -78,6 +78,8 @@ pub struct PostDetails {
     pub name: Option<String>,
     pub cover: Option<String>,
     pub tags: Vec<VideoTag>,
+    /// The least plan that opens it, a month, in yen.
+    pub fee: u32,
 }
 
 /// A post read: its files as a share, and the rest.
@@ -95,7 +97,94 @@ impl Post {
         video.account = Some(self.details.creator.clone()).filter(|creator| !creator.is_empty());
         video.thumbnail_url = self.details.cover.clone();
         video.tags = self.details.tags.clone();
+        video.fanbox = Some(FanboxDetails {
+            fee: self.details.fee,
+            locked: false,
+        });
         video
+    }
+}
+
+/// A post's own page, as Fanbox writes it.
+pub fn post_page(creator: &str, id: &str) -> String {
+    format!("https://www.fanbox.cc/@{creator}/posts/{id}")
+}
+
+/// A post as a list of Fanbox's gives it (a creator's posts, the home and supporting feeds): what a download of it
+/// starts with. Its files are read when its download starts, so how many there are is unknown until then (0). A post
+/// the account can't open is `locked`, with its plan's fee.
+pub(crate) fn listed_video(item: &Value) -> Option<VideoInfo> {
+    let id = text(item, "id")?;
+    let creator = text(item, "creatorId").unwrap_or_default();
+    let tags: Vec<String> = item
+        .get("tags")
+        .and_then(Value::as_array)
+        .map(|tags| {
+            tags.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    let fee = item
+        .get("feeRequired")
+        .and_then(Value::as_u64)
+        .and_then(|fee| u32::try_from(fee).ok())
+        .unwrap_or(0);
+    let title = text(item, "title").unwrap_or_else(|| format!("Fanbox post {id}"));
+    Some(VideoInfo {
+        site: FACTS.site.to_owned(),
+        site_name: FACTS.domains[0].to_owned(),
+        url: post_page(&creator, &id),
+        title,
+        uploader: item.get("user").and_then(|user| text(user, "name")),
+        account: Some(creator).filter(|creator| !creator.is_empty()),
+        duration_seconds: None,
+        upload_date: text(item, "publishedDatetime").and_then(|date| day_of(&date)),
+        thumbnail_url: item
+            .get("cover")
+            .and_then(|cover| text(cover, "url"))
+            .or_else(|| text(item, "coverImageUrl")),
+        best_height: None,
+        post: None,
+        files: Some(FileContents { count: 0, bytes: 0 }),
+        post_files: Vec::new(),
+        shared_files: Vec::new(),
+        playlist: None,
+        tags: tags_from(tags.iter().map(|tag| VideoTag::named(tag))),
+        pixiv: None,
+        fanbox: Some(FanboxDetails {
+            fee,
+            locked: item.get("isRestricted").and_then(Value::as_bool) == Some(true),
+        }),
+        video_id: id,
+    })
+}
+
+/// A date Fanbox gives ("2026-11-20T17:30:00+09:00") as YYYYMMDD, the day where it was posted.
+fn day_of(date: &str) -> Option<String> {
+    let day: String = date.chars().take(10).filter(char::is_ascii_digit).collect();
+    (day.len() == 8).then_some(day)
+}
+
+/// Asks Fanbox's API for each address in turn, 1 to 2 seconds apart, and gives each answer's `body`, or the first
+/// failure.
+pub(crate) fn ask_all(addresses: &[String]) -> Result<Vec<Value>, PreviewError> {
+    let api = API.get().ok_or_else(no_window)?;
+    api.get(addresses)
+        .map_err(|detail| PreviewError::Network { detail })?
+        .into_iter()
+        .map(|answer| {
+            answer
+                .map_err(|detail| PreviewError::Network { detail })
+                .and_then(|answer| answer_body(&answer))
+        })
+        .collect()
+}
+
+fn no_window() -> PreviewError {
+    PreviewError::Failed {
+        detail: "Fanbox can't be read without Tsundoku's window".to_owned(),
     }
 }
 
@@ -156,10 +245,7 @@ pub fn read_post(client: &Client, link: &str, cancel: &CancelToken) -> Result<Po
         share: Share {
             host: Host::Fanbox,
             id: listed.id.clone(),
-            url: format!(
-                "https://www.fanbox.cc/@{}/posts/{}",
-                listed.details.creator, listed.id
-            ),
+            url: post_page(&listed.details.creator, &listed.id),
             title: listed.title,
             upload_date: listed.date,
             files,
@@ -178,18 +264,11 @@ pub(super) fn address(file: &FanboxFile) -> Address {
 
 /// Asks Fanbox's API for one address, and gives its answer's `body`.
 fn ask(address: &str) -> Result<Value, PreviewError> {
-    let api = API.get().ok_or_else(|| PreviewError::Failed {
-        detail: "Fanbox can't be read without Tsundoku's window".to_owned(),
-    })?;
-    let answer = api
-        .get(&[address.to_owned()])
-        .map_err(|detail| PreviewError::Network { detail })?
+    ask_all(&[address.to_owned()])?
         .pop()
         .ok_or_else(|| PreviewError::Network {
             detail: "Fanbox didn't answer".to_owned(),
-        })?
-        .map_err(|detail| PreviewError::Network { detail })?;
-    answer_body(&answer)
+        })
 }
 
 /// The `body` of an answer of Fanbox's API, or what its status says went wrong.
@@ -275,10 +354,12 @@ fn listed_post(body: &Value) -> Result<Listed, PreviewError> {
         });
     }
     let content = content.unwrap_or(&Value::Null);
-    let date = text(post, "publishedDatetime").and_then(|date| {
-        let day: String = date.chars().take(10).filter(char::is_ascii_digit).collect();
-        (day.len() == 8).then_some(day)
-    });
+    let date = text(post, "publishedDatetime").and_then(|date| day_of(&date));
+    let fee = post
+        .get("feeRequired")
+        .and_then(Value::as_u64)
+        .and_then(|fee| u32::try_from(fee).ok())
+        .unwrap_or(0);
     let tags: Vec<String> = post
         .get("tags")
         .and_then(Value::as_array)
@@ -297,6 +378,7 @@ fn listed_post(body: &Value) -> Result<Listed, PreviewError> {
             cover: text(post, "coverImageUrl"),
             tags: tags_from(tags.iter().map(|tag| VideoTag::named(tag))),
             creator,
+            fee,
         },
         id,
         date,

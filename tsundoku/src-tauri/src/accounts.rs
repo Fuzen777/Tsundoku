@@ -212,51 +212,115 @@ fn finish_fanbox(app: AppHandle, profile: std::path::PathBuf) {
 
 /// Gives the core the reader Fanbox's API is asked through: the sign-in window's session, in a hidden window.
 pub fn start_fanbox(app: &AppHandle, profile: std::path::PathBuf) {
-    tsundoku_core::hosts::fanbox::start(Box::new(FanboxReader {
+    let reader = Arc::new(FanboxReader {
         app: app.clone(),
         profile,
-        last: std::sync::Mutex::new(None),
-    }));
+        state: std::sync::Mutex::new(ReaderState::default()),
+    });
+    let closer = Arc::downgrade(&reader);
+    // Its window closes once it's been idle a while.
+    thread::spawn(move || {
+        loop {
+            thread::sleep(FANBOX_IDLE_CHECK);
+            let Some(reader) = closer.upgrade() else {
+                return;
+            };
+            reader.close_if_idle();
+        }
+    });
+    tsundoku_core::hosts::fanbox::start(Box::new(SharedReader(reader)));
 }
 
-/// Fanbox's API, asked one read at a time, with a pause since the last request.
+/// How long Fanbox's reading window stays open after its last read, so a listing's pages and a check's reads share
+/// it, and how often that's looked at.
+const FANBOX_IDLE: std::time::Duration = std::time::Duration::from_secs(60);
+const FANBOX_IDLE_CHECK: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Fanbox's API, asked one read at a time, with a pause since the last request, from a window kept open between
+/// reads.
 struct FanboxReader {
     app: AppHandle,
     profile: std::path::PathBuf,
-    /// When the last read ended; held while one runs, so reads take turns.
-    last: std::sync::Mutex<Option<std::time::Instant>>,
+    /// Held while a read runs, so reads take turns.
+    state: std::sync::Mutex<ReaderState>,
 }
 
-impl tsundoku_core::hosts::fanbox::FanboxApi for FanboxReader {
+#[derive(Default)]
+struct ReaderState {
+    window: Option<tauri::WebviewWindow>,
+    /// When the last read ended.
+    last: Option<std::time::Instant>,
+}
+
+impl FanboxReader {
+    fn close_if_idle(&self) {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.last.is_some_and(|last| last.elapsed() >= FANBOX_IDLE)
+            && let Some(window) = state.window.take()
+        {
+            let _ = window.destroy();
+        }
+    }
+}
+
+struct SharedReader(Arc<FanboxReader>);
+
+impl tsundoku_core::hosts::fanbox::FanboxApi for SharedReader {
     fn get(
         &self,
         addresses: &[String],
     ) -> Result<Vec<Result<tsundoku_core::hosts::fanbox::ApiAnswer, String>>, String> {
-        let mut last = self
-            .last
+        self.0.get(addresses)
+    }
+}
+
+impl FanboxReader {
+    fn get(
+        &self,
+        addresses: &[String],
+    ) -> Result<Vec<Result<tsundoku_core::hosts::fanbox::ApiAnswer, String>>, String> {
+        let mut state = self
+            .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let pause = fanbox_pause();
-        if let Some(waited) = last.map(|at| at.elapsed()).filter(|waited| *waited < pause) {
-            thread::sleep(pause - waited);
-        }
-        let reader = PageReader {
-            app: self.app.clone(),
-            profile: self.profile.clone(),
-            label: FANBOX_READER_LABEL,
-            page: FANBOX_PAGE,
+        // A window closed meanwhile (the app's windows all closing) is opened again.
+        let open = state
+            .window
+            .take()
+            .filter(|window| self.app.get_webview_window(window.label()).is_some());
+        let window = match open {
+            Some(window) => window,
+            None => PageReader {
+                app: self.app.clone(),
+                profile: self.profile.clone(),
+                label: FANBOX_READER_LABEL,
+                page: FANBOX_PAGE,
+            }
+            .open()?,
         };
-        let answers = reader.read(addresses, fanbox_pause());
-        *last = Some(std::time::Instant::now());
-        Ok(answers?
-            .into_iter()
-            .map(|answer| {
-                answer.map(|answer| tsundoku_core::hosts::fanbox::ApiAnswer {
+        let mut answers = Vec::with_capacity(addresses.len());
+        for address in addresses {
+            let pause = fanbox_pause();
+            if let Some(waited) = state
+                .last
+                .map(|at| at.elapsed())
+                .filter(|waited| *waited < pause)
+            {
+                thread::sleep(pause - waited);
+            }
+            answers.push(crate::web_reader::ask(&window, address).map(|answer| {
+                tsundoku_core::hosts::fanbox::ApiAnswer {
                     status: answer.status,
                     body: answer.body,
-                })
-            })
-            .collect())
+                }
+            }));
+            state.last = Some(std::time::Instant::now());
+        }
+        state.window = Some(window);
+        Ok(answers)
     }
 }
 

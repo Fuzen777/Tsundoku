@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.26 · 2026-11-22
+
+### Added
+
+- **Fanbox's lists**: a Fanbox creator's page (`<creator>.fanbox.cc` or `www.fanbox.cc/@<creator>`) lists their newest 50 posts to pick from, with Load More, Load New and Load All, and so do your Fanbox Home and Supporting feeds once signed in (`www.fanbox.cc/home`, `/home/supporting`). Each can be watched. A post for a plan your account doesn't support shows its plan ("¥500 Plan") and can't be ticked.
+
 ## 0.2.25 · 2026-11-22
 
 ### Added

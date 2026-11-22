@@ -735,6 +735,11 @@ export const strings = {
     downloaded: "Downloaded",
     inQueue: "In Downloads",
     inQueueHint: "Already in Downloads.",
+    locked: (fee: number) => (fee > 0 ? `¥${fee.toLocaleString()} Plan` : "Locked"),
+    lockedHint: (fee: number) =>
+      fee > 0
+        ? `For supporters of a plan of ¥${fee.toLocaleString()} a month or more, which your account doesn't support.`
+        : "For supporters of a plan your account doesn't support.",
     videosStartAs: "Videos Start As",
     videosStartAsHint: "For videos no rule picks a preset for.",
     /** The buttons side by side under the list: what's ticked into Downloads, then the next ones listed, or alone. */

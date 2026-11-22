@@ -75,6 +75,21 @@ pub struct VideoInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub pixiv: Option<PixivDetails>,
+    /// A Fanbox post's plan: what it costs a month, and whether the account can't open it. `None` anywhere else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub fanbox: Option<FanboxDetails>,
+}
+
+/// A Fanbox post's plan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FanboxDetails {
+    /// The least a supporter's plan costs a month to open it, in yen: 0 for a post anyone can open.
+    pub fee: u32,
+    /// The account doesn't support a plan that opens it: it has nothing to download.
+    pub locked: bool,
 }
 
 /// What a Pixiv work is, besides what every post has.
@@ -900,6 +915,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         shared_files: Vec::new(),
         playlist: None,
         pixiv: None,
+        fanbox: None,
         tags: tags_from(
             info.tags
                 .unwrap_or_default()
