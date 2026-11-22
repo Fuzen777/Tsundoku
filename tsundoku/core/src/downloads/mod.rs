@@ -44,7 +44,7 @@ use crate::pixiv_account;
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
-use crate::rules::{self, Destination, DestinationSource, RuleSubject};
+use crate::rules::{self, Destination, DestinationSource, RuleSubject, RuleUnpacking};
 use crate::settings::{DownloadSettings, NO_LIMIT, SettingsStore, UnpackSettings};
 use crate::site_limits::{SiteLimits, now_ms};
 use crate::sites;
@@ -369,6 +369,14 @@ pub trait QueueListener: Send + Sync {
     fn progress(&self, id: i64, progress: &DownloadProgress);
 }
 
+/// What the source a download was picked from says of it, over the rules, asked when the download runs: a watched
+/// source's own choices (`watched::WatchedChoices`), found by the source's page.
+pub trait SourceChoices: Send + Sync {
+    /// Whether the archives a download picked from `source` brings are unpacked, and where, over every rule and Settings
+    /// → Archives, or `None` to leave it to them.
+    fn unpacking(&self, source: &QueueSource) -> Option<RuleUnpacking>;
+}
+
 /// What the tray's one item for the whole queue does: Pause All while anything runs or waits, else Resume All while
 /// something is stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -433,6 +441,9 @@ pub struct QueueServices {
     pub logs_folder: PathBuf,
     pub runner: Arc<dyn JobRunner>,
     pub listener: Arc<dyn QueueListener>,
+    /// The watched sources' own choices (`watched::WatchedChoices`), which read only the database, so the downloads
+    /// started as the queue opens follow them too.
+    pub source_choices: Arc<dyn SourceChoices>,
 }
 
 pub struct DownloadQueue {
@@ -452,6 +463,8 @@ pub struct DownloadQueue {
     /// Settings → Passwords' list and the passwords used before, tried by themselves on a link or an archive that
     /// needs one. The preview card and the pending links use the same.
     passwords: Arc<KnownPasswords>,
+    /// What a download's source says of it over the rules: a watched source's own choices.
+    source_choices: Arc<dyn SourceChoices>,
     /// The queue's own `Arc`, for the threads it starts.
     myself: Weak<DownloadQueue>,
 }
@@ -491,6 +504,7 @@ impl DownloadQueue {
             listener: services.listener,
             limits: SiteLimits::new(),
             passwords,
+            source_choices: services.source_choices,
             myself: myself.clone(),
         });
         queue.schedule();
@@ -1492,22 +1506,30 @@ impl DownloadQueue {
         Ok(())
     }
 
-    /// Whether a run of `item` unpacks its archives, and where: as the rules say when it runs (the one picked for it
-    /// first, `rules::unpacking_rule`), else as Settings → Archives (`settings`) says. What becomes of an archive is
-    /// always Settings'. An archive with a password is tried with Settings → Passwords' list, then the one typed for
-    /// this download's archives and the one that opened its link, then the ones used before
+    /// Whether a run of `item` unpacks its archives, and where, as decided when it runs: as the watched source it was
+    /// picked from says (`SourceChoices`, by its page), else as the rules say (the one picked for it first,
+    /// `rules::unpacking_rule`), else as Settings → Archives (`settings`) says. What becomes of an archive is always
+    /// Settings'. An archive with a password is tried with Settings → Passwords' list, then the one typed for this
+    /// download's archives and the one that opened its link, then the ones used before
     /// (`KnownPasswords::for_archive`); one that isn't the list's and opens an archive is told back, to be kept.
     fn unpack_job(&self, item: &QueueItem, settings: &UnpackSettings) -> Option<UnpackJob> {
-        let decided = rules::unpacking_rule(
-            &self.settings.get().rules.list,
-            &RuleSubject {
-                video: &item.video,
-                preset: item.preset.as_ref(),
-            },
-            item.rule_id.as_deref(),
-        );
+        let decided = item
+            .source
+            .as_ref()
+            .and_then(|source| self.source_choices.unpacking(source))
+            .or_else(|| {
+                rules::unpacking_rule(
+                    &self.settings.get().rules.list,
+                    &RuleSubject {
+                        video: &item.video,
+                        preset: item.preset.as_ref(),
+                    },
+                    item.rule_id.as_deref(),
+                )
+                .map(|decided| decided.unpacking)
+            });
         let place = match decided {
-            Some(decided) => decided.unpacking.place(),
+            Some(unpacking) => unpacking.place(),
             None => settings.enabled.then_some(settings.place),
         }?;
         let own: Vec<&Password> = [&item.archive_password, &item.password]

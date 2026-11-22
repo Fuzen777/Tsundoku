@@ -14,6 +14,7 @@ import {
   skipNewWatchedItems,
   skipWatchedItems,
 } from "../api"
+import { describeUnpacking, UNPACKING_CHOICES, type UnpackingChoice } from "../archives"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { ItemKey } from "../bindings/ItemKey"
 import type { NewItemsStart } from "../bindings/NewItemsStart"
@@ -305,6 +306,7 @@ function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
                   source.folder ? text.savesIn(source.folder) : text.savesByRules,
                   presetName && text.startsAs(presetName),
                   source.newItemsStart && text.newItemsStartLine[source.newItemsStart],
+                  source.unpack && describeUnpacking(source.unpack),
                 ])}
               </span>
             )}
@@ -437,7 +439,7 @@ function SourceSummary({ source }: { source: WatchedSource }) {
 /** Edit's New Items Start: the source's own choice, or Default for Settings → Watched's. */
 type NewItemsChoice = NewItemsStart | "default"
 
-/** Edit: the picture, Save In, Videos Start As and New Items Start, saved together. */
+/** Edit: the picture, Save In, Videos Start As, New Items Start and Unpack Archives, saved together. */
 function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () => void }) {
   const { data: presets } = usePresets()
   const { data: watchedOptions } = useWatchedOptions()
@@ -445,6 +447,7 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
   const [folder, setFolder] = useState(source.folder ?? "")
   const [presetId, setPresetId] = useState(source.presetId ?? "")
   const [newItemsStart, setNewItemsStart] = useState<NewItemsChoice>(source.newItemsStart ?? "default")
+  const [unpack, setUnpack] = useState<UnpackingChoice>(source.unpack ?? "default")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
 
@@ -464,6 +467,7 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
         folder.trim() || null,
         presetId || null,
         newItemsStart === "default" ? null : newItemsStart,
+        unpack === "default" ? null : unpack,
       )
       onDone()
     } catch (caught) {
@@ -520,6 +524,15 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
           value={newItemsStart}
           disabled={saving}
           onChange={setNewItemsStart}
+        />
+      </Field>
+      <Field label={text.unpackArchives} hint={text.unpackArchivesHint}>
+        <SegmentedControl<UnpackingChoice>
+          label={text.unpackArchives}
+          options={UNPACKING_CHOICES}
+          value={unpack}
+          disabled={saving}
+          onChange={setUnpack}
         />
       </Field>
       {error && <StatusMessage tone="danger" {...error} />}

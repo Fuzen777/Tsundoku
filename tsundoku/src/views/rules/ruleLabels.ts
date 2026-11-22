@@ -1,3 +1,4 @@
+import { describeUnpacking } from "../../archives"
 import type { DownloadKind } from "../../bindings/DownloadKind"
 import type { FolderRule } from "../../bindings/FolderRule"
 import type { Preset } from "../../bindings/Preset"
@@ -191,13 +192,7 @@ export function describeActions(rule: FolderRule, presets: readonly Preset[]): s
     phrases.push(preset ? actions.startsAs(preset.name) : actions.presetDeleted)
   }
   if (rule.downloadRightAway !== null) phrases.push(rule.downloadRightAway ? actions.rightAway : actions.notRightAway)
-  if (rule.unpack !== null) {
-    phrases.push(
-      rule.unpack === "off"
-        ? actions.leavesArchivesPacked
-        : actions.unpacksArchives(strings.settings.unpackPlaces[rule.unpack]),
-    )
-  }
+  if (rule.unpack !== null) phrases.push(describeUnpacking(rule.unpack))
   return phrases
 }
 

@@ -12,6 +12,7 @@ use super::{ItemKey, NewItemsStart, WatchedError};
 use crate::database::Database;
 use crate::listing::ListingKind;
 use crate::metadata::{PreviewError, VideoInfo};
+use crate::rules::RuleUnpacking;
 
 /// Where an item of a source stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +61,7 @@ pub(super) struct StoredSource {
     pub folder: Option<String>,
     pub preset_id: Option<String>,
     pub new_items_start: Option<NewItemsStart>,
+    pub unpack: Option<RuleUnpacking>,
     pub added_at: i64,
     pub last_checked_at: Option<i64>,
     pub last_error: Option<PreviewError>,
@@ -80,7 +82,7 @@ pub(super) struct WatchedStore {
     database: Arc<Database>,
 }
 
-const SOURCE_COLUMNS: &str = "id, url, kind, name, site_name, thumbnail_url, folder, preset, added_at, last_checked_at, last_error, picture, new_items_start";
+const SOURCE_COLUMNS: &str = "id, url, kind, name, site_name, thumbnail_url, folder, preset, added_at, last_checked_at, last_error, picture, new_items_start, unpack";
 
 impl WatchedStore {
     pub fn new(database: Arc<Database>) -> Self {
@@ -123,6 +125,21 @@ impl WatchedStore {
             )
             .optional()
             .map_err(storage_error)
+    }
+
+    /// The Unpack Archives of the source whose listing's page is `url`, or `None` when it has none or no source has
+    /// that page.
+    pub fn unpacking_of(&self, url: &str) -> Result<Option<RuleUnpacking>, WatchedError> {
+        let connection = self.database.lock();
+        let name: Option<Option<String>> = connection
+            .query_row(
+                "SELECT unpack FROM watched_sources WHERE url = ?1",
+                [url],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage_error)?;
+        Ok(name.flatten().as_deref().and_then(unpacking_from_name))
     }
 
     /// A source's items, latest found first, each find in the listing's order.
@@ -193,8 +210,8 @@ impl WatchedStore {
         transaction
             .execute(
                 "INSERT INTO watched_sources (url, kind, name, site_name, thumbnail_url, folder, preset, added_at,
-                    last_checked_at, last_error, new_items_start)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10)",
+                    last_checked_at, last_error, new_items_start, unpack)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?11)",
                 params![
                     source.url,
                     kind_name(source.kind),
@@ -206,6 +223,7 @@ impl WatchedStore {
                     source.added_at,
                     source.last_checked_at,
                     source.new_items_start.map(NewItemsStart::name),
+                    source.unpack.map(unpacking_name),
                 ],
             )
             .map_err(storage_error)?;
@@ -288,16 +306,18 @@ impl WatchedStore {
         folder: Option<String>,
         preset_id: Option<String>,
         new_items_start: Option<NewItemsStart>,
+        unpack: Option<RuleUnpacking>,
     ) -> Result<(), WatchedError> {
         let connection = self.database.lock();
         let changed = connection
             .execute(
-                "UPDATE watched_sources SET folder = ?2, preset = ?3, new_items_start = ?4 WHERE id = ?1",
+                "UPDATE watched_sources SET folder = ?2, preset = ?3, new_items_start = ?4, unpack = ?5 WHERE id = ?1",
                 params![
                     source,
                     folder,
                     preset_id,
-                    new_items_start.map(NewItemsStart::name)
+                    new_items_start.map(NewItemsStart::name),
+                    unpack.map(unpacking_name),
                 ],
             )
             .map_err(storage_error)?;
@@ -427,7 +447,32 @@ fn source_from_row(row: &Row<'_>) -> rusqlite::Result<StoredSource> {
             .get::<_, Option<String>>(12)?
             .as_deref()
             .and_then(NewItemsStart::from_name),
+        unpack: row
+            .get::<_, Option<String>>(13)?
+            .as_deref()
+            .and_then(unpacking_from_name),
     })
+}
+
+/// A source's Unpack Archives as `watched_sources.unpack` holds it.
+fn unpacking_name(unpacking: RuleUnpacking) -> &'static str {
+    match unpacking {
+        RuleUnpacking::Off => "off",
+        RuleUnpacking::Smart => "smart",
+        RuleUnpacking::ArchiveFolder => "archiveFolder",
+        RuleUnpacking::InPlace => "inPlace",
+    }
+}
+
+/// `None` for a name this version doesn't know (from a newer one): the rules and Settings decide.
+fn unpacking_from_name(name: &str) -> Option<RuleUnpacking> {
+    match name {
+        "off" => Some(RuleUnpacking::Off),
+        "smart" => Some(RuleUnpacking::Smart),
+        "archiveFolder" => Some(RuleUnpacking::ArchiveFolder),
+        "inPlace" => Some(RuleUnpacking::InPlace),
+        _ => None,
+    }
 }
 
 fn kind_name(kind: ListingKind) -> &'static str {

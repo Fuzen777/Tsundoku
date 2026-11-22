@@ -168,6 +168,7 @@ impl Test {
             logs_folder: folder.path().join("logs"),
             runner: runner.clone() as Arc<dyn JobRunner>,
             listener: listener.clone() as Arc<dyn QueueListener>,
+            source_choices: Arc::new(crate::watched::WatchedChoices::new(Arc::clone(database))),
         })
         .unwrap()
     }
@@ -2563,6 +2564,107 @@ fn a_rule_says_whether_and_where_archives_are_unpacked() {
         "the rule picked for it says first"
     );
     test.queue.cancel(picked.id).unwrap();
+}
+
+#[test]
+fn a_watched_sources_unpacking_beats_the_rules_and_settings() {
+    use crate::rules::{FolderRule, RuleUnpacking};
+    use crate::settings::UnpackPlace;
+
+    let test = Test::new();
+    let place_of = |item: &QueueItem| test.queue.job_for(item).unpack.map(|job| job.place);
+    let watched_unpacking = |name: Option<&str>| {
+        test.database
+            .lock()
+            .execute(
+                "UPDATE watched_sources SET unpack = ?1 WHERE url = ?2",
+                rusqlite::params![name, nasa().url],
+            )
+            .unwrap();
+    };
+    test.settings
+        .update(|settings| {
+            settings.downloads.unpack.place = UnpackPlace::ArchiveFolder;
+            settings.rules.list.push(FolderRule {
+                id: "rule-in-place".to_owned(),
+                folder: String::new(),
+                unpack: Some(RuleUnpacking::InPlace),
+                ..crate::rules::catch_all_rule()
+            });
+        })
+        .unwrap();
+    test.queue
+        .add_many(
+            vec![QueuePick {
+                video: shared_folder("from-nasa", &[0]),
+                preset_id: None,
+                overwrite: false,
+                folder: None,
+            }],
+            Some(nasa()),
+        )
+        .unwrap();
+    let picked = test.queue.items().pop().unwrap();
+    let alone = test.queue.add_post(shared_folder("alone", &[0])).unwrap();
+    assert_eq!(
+        place_of(&picked),
+        Some(UnpackPlace::InPlace),
+        "the rule, while the channel isn't watched"
+    );
+
+    test.database
+        .lock()
+        .execute(
+            "INSERT INTO watched_sources (url, kind, name, site_name, added_at) VALUES (?1, 'channel', 'NASA', 'youtube.com', 1)",
+            [nasa().url],
+        )
+        .unwrap();
+    assert_eq!(
+        place_of(&picked),
+        Some(UnpackPlace::InPlace),
+        "a watched source without a choice of its own leaves it to the rule"
+    );
+
+    watched_unpacking(Some("off"));
+    assert_eq!(
+        place_of(&picked),
+        None,
+        "the source leaves them packed, over the rule and Settings, read when the download runs"
+    );
+    assert_eq!(
+        place_of(&alone),
+        Some(UnpackPlace::InPlace),
+        "a download picked from elsewhere still follows the rule"
+    );
+
+    watched_unpacking(Some("smart"));
+    test.settings
+        .update(|settings| settings.downloads.unpack.enabled = false)
+        .unwrap();
+    assert_eq!(
+        place_of(&picked),
+        Some(UnpackPlace::Smart),
+        "the source unpacks even while Settings doesn't"
+    );
+
+    watched_unpacking(Some("fromANewerVersion"));
+    assert_eq!(
+        place_of(&picked),
+        Some(UnpackPlace::InPlace),
+        "a choice this version doesn't know leaves it to the rule"
+    );
+
+    test.database
+        .lock()
+        .execute("DELETE FROM watched_sources", [])
+        .unwrap();
+    assert_eq!(
+        place_of(&picked),
+        Some(UnpackPlace::InPlace),
+        "once the source isn't watched, the rule decides again"
+    );
+    test.queue.cancel(picked.id).unwrap();
+    test.queue.cancel(alone.id).unwrap();
 }
 
 #[test]

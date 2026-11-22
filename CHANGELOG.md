@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.33 · 2026-11-22
+
+### Added
+
+- **Unpack Archives for a watched source**: Edit on a source's card has Unpack Archives (Default, Skip, Smart, In Place or Folder), which decides for the archives its downloads bring over every rule and Settings → Archives. Default leaves it to them. A change reaches the source's downloads still waiting, and the open card says what it does.
+
 ## 0.2.32 · 2026-11-22
 
 ### Fixed

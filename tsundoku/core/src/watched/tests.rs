@@ -13,6 +13,7 @@ use crate::downloads::{
 use crate::history::NewDownload;
 use crate::listing::ListedItem;
 use crate::rules::DownloadKind;
+use crate::settings::UnpackPlace;
 use crate::tools::ToolManager;
 
 /// Answers each check with the listing a test set, newest first, noting whether the check said the items reached what
@@ -106,15 +107,26 @@ impl ListingReader for FakeReader {
     }
 }
 
-struct FailingRunner;
+/// Fails each run at once, noting where it would have unpacked its archives (`None` for left packed).
+#[derive(Default)]
+struct FailingRunner {
+    unpacked_to: Mutex<Vec<Option<UnpackPlace>>>,
+}
+
+impl FailingRunner {
+    fn unpacked_to(&self) -> Vec<Option<UnpackPlace>> {
+        lock(&self.unpacked_to).clone()
+    }
+}
 
 impl JobRunner for FailingRunner {
     fn run(
         &self,
-        _job: &JobSpec,
+        job: &JobSpec,
         _cancel: &CancelToken,
         _on_progress: &mut dyn FnMut(DownloadProgress),
     ) -> JobOutcome {
+        lock(&self.unpacked_to).push(job.unpack.as_ref().map(|unpack| unpack.place));
         JobOutcome::Failed(DownloadError::NoFile)
     }
 }
@@ -142,6 +154,7 @@ struct Test {
     database: Arc<Database>,
     history: Arc<History>,
     queue: Arc<DownloadQueue>,
+    runner: Arc<FailingRunner>,
     reader: Arc<FakeReader>,
     sources: Arc<WatchedSources>,
 }
@@ -166,6 +179,7 @@ impl Test {
             })
             .unwrap();
         let presets = Arc::new(PresetManager::new(Arc::clone(&settings)));
+        let runner = Arc::new(FailingRunner::default());
         let queue = DownloadQueue::open(QueueServices {
             database: Arc::clone(&database),
             history: Arc::clone(&history),
@@ -177,8 +191,9 @@ impl Test {
             presets: Arc::clone(&presets),
             settings: Arc::clone(&settings),
             logs_folder: folder.path().join("logs"),
-            runner: Arc::new(FailingRunner),
+            runner: runner.clone() as Arc<dyn JobRunner>,
             listener: Arc::new(NoQueueEvents),
+            source_choices: Arc::new(WatchedChoices::new(Arc::clone(&database))),
         })
         .unwrap();
         let reader = Arc::new(FakeReader::default());
@@ -197,6 +212,7 @@ impl Test {
             database,
             history,
             queue,
+            runner,
             reader,
             sources,
         }
@@ -594,7 +610,13 @@ fn downloading_queues_the_picked_and_skips_the_rest() {
     let test = Test::new();
     let id = test.add_new(&["a", "b", "c"]);
     test.sources
-        .edit(id, Some(" Channels\\{uploader} ".to_owned()), None, None)
+        .edit(
+            id,
+            Some(" Channels\\{uploader} ".to_owned()),
+            None,
+            None,
+            None,
+        )
         .unwrap();
     assert_eq!(
         test.sources
@@ -816,7 +838,7 @@ fn downloading_from_every_source_queues_each_with_its_own_choices() {
         &["shared", "c", "d"],
     );
     test.sources
-        .edit(second, Some("Other".to_owned()), None, None)
+        .edit(second, Some("Other".to_owned()), None, None, None)
         .unwrap();
     let added = test
         .sources
@@ -1248,6 +1270,7 @@ fn a_source_takes_settings_new_items_start_until_it_has_its_own() {
             Some("Folder".to_owned()),
             None,
             Some(NewItemsStart::Ticked),
+            None,
         )
         .unwrap();
     let source = test.source(id);
@@ -1255,13 +1278,13 @@ fn a_source_takes_settings_new_items_start_until_it_has_its_own() {
     assert_eq!(source.folder.as_deref(), Some("Folder"));
 
     test.sources
-        .edit(id, None, None, Some(NewItemsStart::Unticked))
+        .edit(id, None, None, Some(NewItemsStart::Unticked), None)
         .unwrap();
     assert_eq!(
         test.source(id).new_items_start,
         Some(NewItemsStart::Unticked)
     );
-    test.sources.edit(id, None, None, None).unwrap();
+    test.sources.edit(id, None, None, None, None).unwrap();
     assert_eq!(test.source(id).new_items_start, None);
 
     // A choice from a newer version is taken as none: Settings' applies.
@@ -1273,4 +1296,70 @@ fn a_source_takes_settings_new_items_start_until_it_has_its_own() {
         )
         .unwrap();
     assert_eq!(test.source(id).new_items_start, None);
+}
+
+#[test]
+fn a_sources_unpack_archives_is_read_when_its_downloads_run() {
+    let test = Test::new();
+    let id = test.add_new(&["a"]);
+    assert_eq!(test.source(id).unpack, None);
+    let ran = |times: usize| {
+        wait_until("the download ran", || {
+            test.runner.unpacked_to().len() == times
+                && test
+                    .queue
+                    .items()
+                    .iter()
+                    .all(|item| item.state == crate::downloads::QueueState::Failed)
+        });
+        test.runner.unpacked_to()[times - 1]
+    };
+
+    test.sources
+        .edit(id, None, None, None, Some(RuleUnpacking::InPlace))
+        .unwrap();
+    assert_eq!(test.source(id).unpack, Some(RuleUnpacking::InPlace));
+    test.sources.download(id, &[key("a")], &[]).unwrap();
+    assert_eq!(
+        ran(1),
+        Some(UnpackPlace::InPlace),
+        "the source's own choice"
+    );
+    let item = test.queue.items()[0].id;
+
+    test.sources
+        .edit(id, None, None, None, Some(RuleUnpacking::Off))
+        .unwrap();
+    test.queue.retry(item).unwrap();
+    assert_eq!(
+        ran(2),
+        None,
+        "a change reaches the download waiting: it's asked when it runs"
+    );
+
+    test.sources.edit(id, None, None, None, None).unwrap();
+    assert_eq!(test.source(id).unpack, None);
+    test.queue.retry(item).unwrap();
+    assert_eq!(ran(3), Some(UnpackPlace::Smart), "Default: Settings' place");
+
+    // A choice from a newer version is taken as none: the rules and Settings decide.
+    test.database
+        .lock()
+        .execute(
+            "UPDATE watched_sources SET unpack = 'askEachTime' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
+    assert_eq!(test.source(id).unpack, None);
+
+    test.sources
+        .edit(id, None, None, None, Some(RuleUnpacking::ArchiveFolder))
+        .unwrap();
+    test.sources.remove(id).unwrap();
+    test.queue.retry(item).unwrap();
+    assert_eq!(
+        ran(4),
+        Some(UnpackPlace::Smart),
+        "once it's no longer watched, its downloads follow Settings again"
+    );
 }

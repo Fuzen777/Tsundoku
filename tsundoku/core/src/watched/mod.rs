@@ -15,6 +15,11 @@
 //!
 //! What a check finds starts ticked or unticked on the source's card (`NewItemsStart`): the source's own choice, else
 //! Settings → Watched's (`WatchedSettings`). Only the UI reads it: the core never downloads an item nobody picked.
+//!
+//! A source can say whether the archives its downloads bring are unpacked, and where (`WatchedSource::unpack`), over
+//! every rule and Settings → Archives. The queue asks when a download runs (`WatchedChoices`), by the page it was picked
+//! from, so a change reaches the downloads already waiting, and a pick from the source's own list in the preview card
+//! follows it too.
 
 pub mod picture;
 mod store;
@@ -33,12 +38,12 @@ use ts_rs::TS;
 
 use crate::cancel::CancelToken;
 use crate::database::Database;
-use crate::downloads::{DownloadError, DownloadQueue, QueuePick, QueueSource};
+use crate::downloads::{DownloadError, DownloadQueue, QueuePick, QueueSource, SourceChoices};
 use crate::history::{History, PastDownload};
 use crate::listing::{self, Listing, ListingKind};
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::presets::PresetManager;
-use crate::rules::{self, RuleSubject};
+use crate::rules::{self, RuleSubject, RuleUnpacking};
 use crate::settings::SettingsStore;
 use crate::sites;
 use crate::sync::lock;
@@ -155,6 +160,9 @@ pub struct WatchedSource {
     pub preset_id: Option<String>,
     /// New Items Start: whether what a check finds starts ticked. `None` for Settings → Watched's choice.
     pub new_items_start: Option<NewItemsStart>,
+    /// Unpack Archives: whether the archives its downloads bring are unpacked, and where, over every rule and Settings
+    /// → Archives. `None` leaves it to them.
+    pub unpack: Option<RuleUnpacking>,
     /// Seconds since 1970.
     #[ts(type = "number")]
     pub added_at: i64,
@@ -359,6 +367,7 @@ impl WatchedSources {
             folder: blank_to_none(new.folder),
             preset_id: blank_to_none(new.preset_id),
             new_items_start: None,
+            unpack: None,
             added_at: now,
             last_checked_at: Some(now),
             last_error: None,
@@ -385,19 +394,22 @@ impl WatchedSources {
         Ok(id)
     }
 
-    /// Changes a source's Save In, Videos Start As and New Items Start (`None` for Settings').
+    /// Changes a source's Save In, Videos Start As, New Items Start (`None` for Settings') and Unpack Archives (`None`
+    /// for the rules', else Settings').
     pub fn edit(
         &self,
         id: i64,
         folder: Option<String>,
         preset_id: Option<String>,
         new_items_start: Option<NewItemsStart>,
+        unpack: Option<RuleUnpacking>,
     ) -> Result<(), WatchedError> {
         self.store.set_choices(
             id,
             blank_to_none(folder),
             blank_to_none(preset_id),
             new_items_start,
+            unpack,
         )?;
         self.notify();
         Ok(())
@@ -894,6 +906,7 @@ impl WatchedSources {
             folder: source.folder,
             preset_id: source.preset_id,
             new_items_start: source.new_items_start,
+            unpack: source.unpack,
             added_at: source.added_at,
             last_checked_at: source.last_checked_at,
             last_error: source.last_error,
@@ -909,6 +922,28 @@ impl WatchedSources {
         if let Ok(sources) = self.list() {
             self.listener.changed(&sources);
         }
+    }
+}
+
+/// The watched sources' own choices that the queue asks when a download runs (`SourceChoices`), read from the
+/// database alone, so the queue can have them before the watched sources open.
+pub struct WatchedChoices {
+    store: WatchedStore,
+}
+
+impl WatchedChoices {
+    pub fn new(database: Arc<Database>) -> Self {
+        Self {
+            store: WatchedStore::new(database),
+        }
+    }
+}
+
+impl SourceChoices for WatchedChoices {
+    /// The Unpack Archives of the watched source whose page the download was picked from: from its card, from All New
+    /// Items, or from its list in the preview card. `None` once it's no longer watched, or when it can't be read.
+    fn unpacking(&self, source: &QueueSource) -> Option<RuleUnpacking> {
+        self.store.unpacking_of(&source.url).ok().flatten()
     }
 }
 

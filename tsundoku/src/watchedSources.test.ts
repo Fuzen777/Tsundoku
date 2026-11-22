@@ -49,6 +49,7 @@ function source(id: number, facts: Partial<WatchedSource> = {}): WatchedSource {
     folder: null,
     presetId: null,
     newItemsStart: null,
+    unpack: null,
     addedAt: 1000 + id,
     lastCheckedAt: 2000 + id,
     lastError: null,

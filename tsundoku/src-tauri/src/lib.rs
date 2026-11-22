@@ -40,7 +40,7 @@ use tsundoku_core::rules::RuleManager;
 use tsundoku_core::settings::SettingsStore;
 use tsundoku_core::thumbnails::{FfmpegMaker, Thumbnails};
 use tsundoku_core::tools::ToolManager;
-use tsundoku_core::watched::{WatchedServices, WatchedSources};
+use tsundoku_core::watched::{WatchedChoices, WatchedServices, WatchedSources};
 
 /// How long the hidden main window waits for the UI to show it before showing itself, so a UI that fails to start
 /// still leaves a window on screen.
@@ -184,6 +184,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
             app: app.handle().clone(),
             status: queue_status,
         }),
+        source_choices: Arc::new(WatchedChoices::new(Arc::clone(&database))),
     })?;
     let watched_sources = WatchedSources::open(WatchedServices {
         database: Arc::clone(&database),

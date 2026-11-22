@@ -2,6 +2,7 @@
 import type { ListingKind } from "./ListingKind";
 import type { NewItemsStart } from "./NewItemsStart";
 import type { PreviewError } from "./PreviewError";
+import type { RuleUnpacking } from "./RuleUnpacking";
 import type { SourcePicture } from "./SourcePicture";
 import type { WatchedItem } from "./WatchedItem";
 
@@ -33,6 +34,11 @@ presetId: string | null,
  * New Items Start: whether what a check finds starts ticked. `None` for Settings → Watched's choice.
  */
 newItemsStart: NewItemsStart | null, 
+/**
+ * Unpack Archives: whether the archives its downloads bring are unpacked, and where, over every rule and Settings
+ * → Archives. `None` leaves it to them.
+ */
+unpack: RuleUnpacking | null, 
 /**
  * Seconds since 1970.
  */

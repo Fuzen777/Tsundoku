@@ -222,6 +222,7 @@ impl Test {
             logs_folder: folder.path().join("logs"),
             runner: Arc::new(FailingRunner),
             listener: Arc::new(NoQueueEvents),
+            source_choices: Arc::new(crate::watched::WatchedChoices::new(Arc::clone(&database))),
         })
         .unwrap();
         let reader = Arc::new(FakeReader::default());

@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
 use tsundoku_core::downloads::DownloadError;
+use tsundoku_core::rules::RuleUnpacking;
 use tsundoku_core::settings::{SettingsStore, WatchedSettings};
 use tsundoku_core::watched::picture::{self, PictureCrop};
 use tsundoku_core::watched::{
@@ -45,7 +46,8 @@ pub fn add_watched_source(
     watched.add(source)
 }
 
-/// A source's Save In, Videos Start As and New Items Start (`None` for Settings → Watched's).
+/// A source's Save In, Videos Start As, New Items Start (`None` for Settings → Watched's) and Unpack Archives (`None`
+/// for the rules', else Settings → Archives').
 #[tauri::command]
 pub fn edit_watched_source(
     watched: Watched<'_>,
@@ -53,8 +55,9 @@ pub fn edit_watched_source(
     folder: Option<String>,
     preset_id: Option<String>,
     new_items_start: Option<NewItemsStart>,
+    unpack: Option<RuleUnpacking>,
 ) -> Result<(), WatchedError> {
-    watched.edit(id, folder, preset_id, new_items_start)
+    watched.edit(id, folder, preset_id, new_items_start, unpack)
 }
 
 /// Settings → Watched: what every source does unless it has its own choice.

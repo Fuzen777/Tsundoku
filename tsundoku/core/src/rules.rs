@@ -95,8 +95,9 @@ pub struct FolderRule {
     pub unpack: Option<RuleUnpacking>,
 }
 
-/// What a rule says of the archives a matching download brings, over Settings → Archives: left as they are, or
-/// unpacked to a place (`UnpackPlace`). The passwords and what becomes of an archive after are Settings' alone.
+/// What a rule says of the archives a matching download brings, over Settings → Archives, or a watched source of its
+/// downloads' (`watched::WatchedSource::unpack`), over the rules too: left as they are, or unpacked to a place
+/// (`UnpackPlace`). The passwords and what becomes of an archive after are Settings' alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]

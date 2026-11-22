@@ -55,6 +55,7 @@ import type { QueuePick } from "./bindings/QueuePick"
 import type { QueueSource } from "./bindings/QueueSource"
 import type { RightAwayRule } from "./bindings/RightAwayRule"
 import type { RulePreset } from "./bindings/RulePreset"
+import type { RuleUnpacking } from "./bindings/RuleUnpacking"
 import type { ShownError } from "./bindings/ShownError"
 import type { SupportedSites } from "./bindings/SupportedSites"
 import type { ToolCaches } from "./bindings/ToolCaches"
@@ -1036,16 +1037,17 @@ export function addWatchedSource(source: NewWatchedSource): Promise<number> {
   return invoke<number>("add_watched_source", { source })
 }
 
-/** A source's Save In, Videos Start As and New Items Start, each null for the rules', the default and Settings →
- * Watched's. */
+/** A source's Save In, Videos Start As, New Items Start and Unpack Archives, each null for the rules', the default,
+ * Settings → Watched's and the rules' then Settings → Archives'. */
 export async function editWatchedSource(
   id: number,
   folder: string | null,
   presetId: string | null,
   newItemsStart: NewItemsStart | null,
+  unpack: RuleUnpacking | null,
 ): Promise<void> {
   if (!isTauri()) return outsideTauri()
-  await invoke("edit_watched_source", { id, folder, presetId, newItemsStart })
+  await invoke("edit_watched_source", { id, folder, presetId, newItemsStart, unpack })
 }
 
 /** Settings → Watched: whether what checks find starts ticked, for every source without its own choice. */

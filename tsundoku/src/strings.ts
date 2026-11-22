@@ -812,6 +812,9 @@ export const strings = {
     newItemsStartDefaultHint: (current: string) => `Default is Settings → Watched's choice: ${current}.`,
     /** On an open card, when the source has a choice of its own. */
     newItemsStartLine: { unticked: "New items start unticked", ticked: "New items start ticked" },
+    /** Whether the archives its downloads bring are unpacked, and where (Default, Skip, then the places). */
+    unpackArchives: "Unpack Archives",
+    unpackArchivesHint: "Beats every rule and Settings → Archives. Default leaves it to them.",
     newItemsHelp: {
       label: "How New Items Start",
       paragraphs: [
@@ -1187,7 +1190,7 @@ export const strings = {
       unpackArchives: [
         "Whether the zip, 7z and rar archives that matching downloads bring are unpacked, and where. Default follows Settings → Archives. Skip leaves them as they're downloaded, even while Settings unpacks.",
         "Smart puts an archive's one file or folder beside it as it is, and several in a folder named after the archive. In Place puts everything beside the archive as it is, with no folder made for it. Folder puts everything in a folder named after the archive, even a single file.",
-        "The passwords, and what becomes of the archive once unpacked, are Settings'.",
+        "The passwords, and what becomes of the archive once unpacked, are Settings'. A watched source's own Unpack Archives, in its Edit, beats every rule for its downloads.",
       ],
     },
     addRule: "Add Rule",
@@ -1300,8 +1303,6 @@ export const strings = {
     downloadRightAway: "Download Right Away",
     on: "On",
     unpackArchives: "Unpack Archives",
-    /** A rule's own two choices, before the places Settings → Archives offers too (`unpackPlaceChoices`). */
-    unpackChoices: { default: "Default", off: "Skip" },
     /** What a rule does besides picking a folder, under its folder in the list. */
     actions: {
       namesFiles: (name: string) => `Names files “${name}”`,
@@ -1310,8 +1311,6 @@ export const strings = {
       presetDeleted: "Starts with the default preset, since the one it picked was deleted",
       rightAway: "Downloads right away",
       notRightAway: "Waits to be started",
-      leavesArchivesPacked: "Leaves archives packed",
-      unpacksArchives: (place: string) => `Unpacks archives: ${place}`,
     },
     fields: {
       site: "Site",
@@ -1702,7 +1701,7 @@ export const strings = {
     archives: "Archives",
     unpackArchives: "Unpack Archives After Downloading",
     unpackArchivesHint:
-      "Zip, 7z and rar archives, in one file or split into parts, are unpacked beside them. An archive split over several links is unpacked once its last part is downloaded. A rule can say otherwise for the downloads it matches.",
+      "Zip, 7z and rar archives, in one file or split into parts, are unpacked beside them. An archive split over several links is unpacked once its last part is downloaded. A rule can say otherwise for the downloads it matches, and a watched source for its own.",
     unpackPlace: "Where to Unpack",
     /** The places as the toggles name them, in Settings → Archives and a rule's editor. */
     unpackPlaceChoices: { smart: "Smart", inPlace: "In Place", archiveFolder: "Folder" },
@@ -1712,6 +1711,11 @@ export const strings = {
       archiveFolder: "In a Folder Named After the Archive",
       inPlace: "In Place",
     },
+    /** A rule's or a watched source's own two choices, before the places (`unpackPlaceChoices`). */
+    unpackChoices: { default: "Default", off: "Skip" },
+    /** A rule's or a watched source's choice as a phrase: a rule's line, an open source's card. */
+    leavesArchivesPacked: "Leaves archives packed",
+    unpacksArchives: (place: string) => `Unpacks archives: ${place}`,
     afterUnpacking: "After Unpacking",
     afterUnpackingChoices: { recycleBin: "Recycle Bin", delete: "Delete", keep: "Keep" },
     /** The (?) beside Archives: what Where to Unpack's and After Unpacking's choices do. */
@@ -1720,7 +1724,7 @@ export const strings = {
       unpackPlace: [
         "Smart puts an archive's one file or folder beside it as it is, and several in a folder named after the archive, so there's never a folder in a folder or a pile of loose files.",
         "In Place puts everything beside the archive as it is, with no folder made for it. Folder puts everything in a folder named after the archive, even a single file.",
-        "A name already taken gets “(2)”, so nothing is replaced. A rule can pick another way, or none, for the downloads it matches.",
+        "A name already taken gets “(2)”, so nothing is replaced. A rule can pick another way, or none, for the downloads it matches, and a watched source for its own, over the rules.",
       ],
       afterUnpacking: [
         "What happens to the archive, all its parts, once what it holds is beside it. Recycle Bin moves them there, where they can be put back from; Delete deletes them for good; Keep leaves them where they are.",

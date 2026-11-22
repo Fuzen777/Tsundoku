@@ -1,7 +1,7 @@
 import { useRef } from "react"
 import { CaseSensitive, Plus, X } from "lucide-react"
 import { pickFolder } from "../../api"
-import { UNPACK_PLACES } from "../../archives"
+import { UNPACKING_CHOICES } from "../../archives"
 import type { ConditionJoin } from "../../bindings/ConditionJoin"
 import type { FolderRule } from "../../bindings/FolderRule"
 import type { MissingValues } from "../../bindings/MissingValues"
@@ -9,7 +9,6 @@ import type { Preset } from "../../bindings/Preset"
 import type { RuleCondition } from "../../bindings/RuleCondition"
 import type { RuleField } from "../../bindings/RuleField"
 import type { RuleOperator } from "../../bindings/RuleOperator"
-import type { RuleUnpacking } from "../../bindings/RuleUnpacking"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Field, SelectInput, TextInput } from "../../components/Field"
@@ -56,16 +55,6 @@ const RIGHT_AWAY_CHOICES: readonly { value: RightAwayChoice; label: string }[] =
 const MISSING_VALUE_CHOICES: readonly { value: MissingValues; label: string }[] = [
   { value: "standIn", label: text.missingValueChoices.standIn },
   { value: "leaveOut", label: text.missingValueChoices.leaveOut },
-]
-
-/** A rule's Unpack Archives: default follows the rules above it, then Settings → Archives. */
-type UnpackingChoice = RuleUnpacking | "default"
-
-/** Default, Skip (left packed), then the places Settings → Archives offers. What each does is in How Rules Work. */
-const UNPACKING_CHOICES: readonly { value: UnpackingChoice; label: string }[] = [
-  { value: "default", label: text.unpackChoices.default },
-  { value: "off", label: text.unpackChoices.off },
-  ...UNPACK_PLACES.map((place) => ({ value: place, label: strings.settings.unpackPlaceChoices[place] })),
 ]
 
 /** The site field's suggestions: every supported site. */

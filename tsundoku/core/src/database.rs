@@ -227,6 +227,10 @@ const MIGRATIONS: &[&str] = &[
         WHERE site IN ('fanbox', 'pixiv-novel') AND length(json_extract(item, '$.video.uploadDate')) = 8;
     UPDATE videos SET upload_date = substr(upload_date, 1, 4) || '-' || substr(upload_date, 5, 2) || '-' || substr(upload_date, 7, 2)
         WHERE site IN ('fanbox', 'pixiv-novel') AND length(upload_date) = 8;",
+    // 25: a watched source's Unpack Archives (`rules::RuleUnpacking` by its name: "off", "smart", "archiveFolder",
+    // "inPlace"), over the rules and Settings → Archives for its downloads; NULL leaves it to them, as every source
+    // watched before does.
+    "ALTER TABLE watched_sources ADD COLUMN unpack TEXT;",
 ];
 
 pub struct Database {
