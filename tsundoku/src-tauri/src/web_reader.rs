@@ -12,7 +12,10 @@ use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
 use tauri::webview::{NewWindowResponse, PageLoadEvent, PermissionResponse};
-use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+
+/// Each reader window's number, after its kind's label.
+static NEXT_WINDOW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 /// How long the page may take to load, and each answer to come.
 const LOAD_WAIT: Duration = Duration::from_secs(30);
@@ -32,7 +35,7 @@ pub struct PageReader {
     pub app: AppHandle,
     /// The sign-in window's profile.
     pub profile: PathBuf,
-    /// The window's label: one reader of each kind at a time.
+    /// The start of the window's label, which a number follows.
     pub label: &'static str,
     /// The site's page the addresses are asked from.
     pub page: &'static str,
@@ -64,14 +67,18 @@ impl PageReader {
 
     /// Opens the reader's window on its page, replacing one left open, and waits for the page to load.
     pub fn open(&self) -> Result<WebviewWindow, String> {
-        if let Some(window) = self.app.get_webview_window(self.label) {
-            let _ = window.destroy();
-        }
+        // A label of its own each time: a window destroyed a moment before keeps its label until Tauri lets it go, so
+        // building another under it fails ("already exists").
+        let label = format!(
+            "{}-{}",
+            self.label,
+            NEXT_WINDOW.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
         let page = Url::parse(self.page).map_err(|error| error.to_string())?;
         let host = page.host_str().unwrap_or_default().to_owned();
         let (loaded, on_load) = mpsc::channel::<Url>();
         let loaded = Mutex::new(loaded);
-        let window = WebviewWindowBuilder::new(&self.app, self.label, WebviewUrl::External(page))
+        let window = WebviewWindowBuilder::new(&self.app, label, WebviewUrl::External(page))
             .title("Tsundoku")
             .visible(false)
             .focused(false)

@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.32 · 2026-11-22
+
+### Fixed
+
+- **Fanbox's 403 Forbidden**: a supporter's post could be refused by Fanbox's file server when Tsundoku used a sign-in from before the latest one. It now asks for the sign-in each time, and a refusal, or a locked post once Fanbox's sign-in has ended, offers Sign In to Fanbox rather than a bare error or a plan.
+- Reading two Fanbox links in a row could fail with "a webview with label fanbox-reader already exists".
+
 ## 0.2.31 · 2026-11-22
 
 ### Fixed

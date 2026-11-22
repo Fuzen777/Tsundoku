@@ -286,10 +286,8 @@ impl tsundoku_core::hosts::fanbox::FanboxApi for SharedReader {
 impl FanboxReader {
     /// The reading window, open on Fanbox's page: the one kept from the last read, or a new one.
     fn window(&self, state: &mut ReaderState) -> Result<tauri::WebviewWindow, String> {
-        let open = state
-            .window
-            .take()
-            .filter(|window| self.app.get_webview_window(window.label()).is_some());
+        // One closed meanwhile (the app's windows all closing) is opened again.
+        let open = state.window.take().filter(|window| window.title().is_ok());
         match open {
             Some(window) => Ok(window),
             None => PageReader {
@@ -327,7 +325,6 @@ impl FanboxReader {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        // A window closed meanwhile (the app's windows all closing) is opened again.
         let window = self.window(&mut state)?;
         let mut answers = Vec::with_capacity(addresses.len());
         for address in addresses {

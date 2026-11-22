@@ -43,6 +43,8 @@ pub(super) const FACTS: HostFacts = HostFacts {
 /// The page of Fanbox's own its API is asked from.
 pub const API_PAGE: &str = "https://www.fanbox.cc/robots.txt";
 const POST_INFO: &str = "https://api.fanbox.cc/post.info?postId=";
+/// A request that tells whether the session is signed in: 401 when it isn't.
+const SIGNED_IN_CHECK: &str = "https://api.fanbox.cc/post.listSupporting?limit=1";
 /// Images whose sizes are asked at once while a post is read.
 const PROBES_AT_ONCE: usize = 4;
 
@@ -68,26 +70,13 @@ pub trait FanboxApi: Send + Sync {
 /// The cookie Fanbox keeps its session in, which its file server (`downloads.fanbox.cc`) asks for the files of a post
 /// for supporters: without it, they answer 403.
 pub const SESSION_COOKIE: &str = "FANBOXSESSID";
-/// How long the session's cookie is kept in memory before the window is asked for it again.
-const SESSION_KEPT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
-
-static SESSION: std::sync::Mutex<Option<(String, std::time::Instant)>> =
-    std::sync::Mutex::new(None);
-
 /// The `Cookie` header that gives Fanbox's file server the signed-in session, for the Fanbox host's client
-/// (`hosts::client_for`), which only ever asks Fanbox's own servers. `None` when the window isn't signed in. The value
-/// is only ever sent there, and never written anywhere.
+/// (`hosts::client_for`), which only ever asks Fanbox's own servers. `None` when the window has none. Asked of the
+/// window each time a client is made (a read, a download's run), never kept: a cookie read before the person signed in
+/// (a visitor's) would be refused for every supporter's file until it was dropped, as Fuzen met (0.2.32). The value is
+/// only ever sent there, and never written anywhere.
 pub(crate) fn session_header() -> Option<String> {
-    let mut kept = SESSION
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if let Some((value, at)) = kept.as_ref()
-        && at.elapsed() < SESSION_KEPT
-    {
-        return Some(format!("{SESSION_COOKIE}={value}"));
-    }
     let value = API.get()?.session().ok().flatten()?;
-    *kept = Some((value.clone(), std::time::Instant::now()));
     Some(format!("{SESSION_COOKIE}={value}"))
 }
 
@@ -309,8 +298,12 @@ fn with_files(post: Post) -> Result<Post, PreviewError> {
 pub fn read_post(client: &Client, link: &str, cancel: &CancelToken) -> Result<Post, PreviewError> {
     let id = post_id(link).ok_or_else(|| Host::Fanbox.link_not_recognized())?;
     let answer = ask(&format!("{POST_INFO}{id}"))?;
-    let listed = listed_post(&answer)
-        .map_err(|error| locked_for(error, fanbox_account::signed_in().is_some()))?;
+    let listed = listed_post(&answer).map_err(|error| match error {
+        // Locked: for a plan the account doesn't support, or for anyone signed out, as Fanbox shows a post for
+        // supporters to everyone signed out. Fanbox is asked which, since its session can end without Tsundoku knowing.
+        PreviewError::FanboxLocked { .. } => locked_for(error, session_signed_in()),
+        other => other,
+    })?;
     let sizes = sizes(client, &listed.files, cancel)?;
     let files = listed
         .files
@@ -417,6 +410,18 @@ fn text(value: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
+}
+
+/// Whether Fanbox counts the window's session as signed in: `post.listSupporting` answers 401 when it doesn't (and
+/// `ask` then forgets the sign-in). Anything else counts as signed in.
+fn session_signed_in() -> bool {
+    if fanbox_account::signed_in().is_none() {
+        return false;
+    }
+    !matches!(
+        ask(SIGNED_IN_CHECK),
+        Err(PreviewError::FanboxSignInNeeded { .. })
+    )
 }
 
 /// What a locked post means: signed out, Fanbox shows every post for supporters as locked, so it's a sign-in that's
@@ -684,6 +689,10 @@ fn sizes(
                         let answer = match size_of(client, &files[index].url, cancel) {
                             Ok(Answer::File(found)) => Ok(found.size),
                             Ok(Answer::Page(page)) => Err(match Host::Fanbox.page_error(&page) {
+                                // Refused: the session's sign-in is missing or out of date.
+                                _ if matches!(page.status.as_u16(), 401 | 403) => {
+                                    PreviewError::FanboxSignInNeeded { refused: true }
+                                }
                                 PreviewError::Failed { .. } => PreviewError::Failed {
                                     detail: format!(
                                         "{}: Fanbox's file server answered {} ({})",

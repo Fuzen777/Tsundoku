@@ -684,6 +684,9 @@ pub(crate) fn code_error(host: Host, status: StatusCode) -> Option<PreviewError>
     }
     let detail = format!("{} answered {status}", host.name());
     Some(match status.as_u16() {
+        // Fanbox's file server gives a supporter's file only to the signed-in session: its sign-in is missing, or out
+        // of date, and signing in again fixes it.
+        401 | 403 if host == Host::Fanbox => PreviewError::FanboxSignInNeeded { refused: true },
         404 | 410 => PreviewError::Unavailable { detail },
         429 | 509 => PreviewError::LimitReached {
             site: host.name().to_owned(),
