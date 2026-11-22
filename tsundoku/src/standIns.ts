@@ -1004,6 +1004,10 @@ export const standIns = {
       state: "failed",
       error: { kind: "signInRequired", detail: "login required", site: "Instagram", cookies: "notSignedIn" },
     }),
+    pendingStandIn(40, "https://someone.fanbox.cc/posts/12926792", {
+      state: "failed",
+      error: { kind: "fanboxSignInNeeded", refused: false },
+    }),
     pendingStandIn(12, "https://mega.nz/#P!AgESNFZ4mrwAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eH9VsEHziCLjOu1HNUk6o", {
       state: "needsPassword",
       error: { kind: "passwordNeeded", wrong: true, tried: 0 },

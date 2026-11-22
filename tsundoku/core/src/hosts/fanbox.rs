@@ -309,7 +309,8 @@ fn with_files(post: Post) -> Result<Post, PreviewError> {
 pub fn read_post(client: &Client, link: &str, cancel: &CancelToken) -> Result<Post, PreviewError> {
     let id = post_id(link).ok_or_else(|| Host::Fanbox.link_not_recognized())?;
     let answer = ask(&format!("{POST_INFO}{id}"))?;
-    let listed = listed_post(&answer)?;
+    let listed = listed_post(&answer)
+        .map_err(|error| locked_for(error, fanbox_account::signed_in().is_some()))?;
     let sizes = sizes(client, &listed.files, cancel)?;
     let files = listed
         .files
@@ -416,6 +417,18 @@ fn text(value: &Value, key: &str) -> Option<String> {
         .map(str::trim)
         .filter(|text| !text.is_empty())
         .map(str::to_owned)
+}
+
+/// What a locked post means: signed out, Fanbox shows every post for supporters as locked, so it's a sign-in that's
+/// needed (Fuzen's report: a creator he supports said only supporters could see a post); signed in, the account
+/// doesn't support a plan that opens it.
+fn locked_for(error: PreviewError, signed_in: bool) -> PreviewError {
+    match error {
+        PreviewError::FanboxLocked { .. } if !signed_in => {
+            PreviewError::FanboxSignInNeeded { refused: false }
+        }
+        other => other,
+    }
 }
 
 /// A post from `post.info`'s body: a locked one is `FanboxLocked`, with its plan's fee.
@@ -853,6 +866,16 @@ mod tests {
             ],
             "a profile and the post itself are left out, and the MEGA link is there once"
         );
+    }
+
+    #[test]
+    fn asks_to_sign_in_for_a_locked_post_while_signed_out() {
+        let locked = PreviewError::FanboxLocked { fee: 500 };
+        assert_eq!(
+            locked_for(locked.clone(), false),
+            PreviewError::FanboxSignInNeeded { refused: false }
+        );
+        assert_eq!(locked_for(locked.clone(), true), locked);
     }
 
     #[test]

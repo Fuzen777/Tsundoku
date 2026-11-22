@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.30 · 2026-11-22
+
+### Fixed
+
+- **Fanbox while signed out**: a post for supporters said it was only for a plan's supporters when Tsundoku simply wasn't signed in to Fanbox. It now asks you to sign in to Fanbox.
+- **Sign In to Pixiv and Sign In to Fanbox** open the sign-in window right away, instead of Settings, and try the link or download again once you're signed in.
+
+### Changed
+
+- **Needs an Account**: in Pending, links that need a sign-in or a subscription (Pixiv, Fanbox, a site that needs your browser signed in, 1fichier's subscribers) have a group of their own instead of Couldn't Be Read.
+
 ## 0.2.29 · 2026-11-22
 
 ### Added

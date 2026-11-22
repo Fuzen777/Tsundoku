@@ -1,5 +1,16 @@
-import { useState } from "react"
-import { installTool, setYtDlpChannel, updateGalleryDl, updateYtDlp } from "../api"
+import { useEffect, useRef, useState } from "react"
+import {
+  installTool,
+  onFanboxSignInChanged,
+  onFanboxSignInFailed,
+  onPixivAccountChanged,
+  onPixivSignInFailed,
+  setYtDlpChannel,
+  signInToFanbox,
+  signInToPixiv,
+  updateGalleryDl,
+  updateYtDlp,
+} from "../api"
 import type { ToolId } from "../bindings/ToolId"
 import { describeToolError, fixFor, isCancelled, type ErrorDescription } from "../errors"
 import { useAppActions } from "../navigation"
@@ -12,8 +23,9 @@ import { StatusMessage } from "./StatusMessage"
 /**
  * Buttons that may fix a failed preview or download (see `fixFor`): Update yt-dlp, or Try Nightly, or Update
  * gallery-dl, when a site's page couldn't be read; Set Up Cookies when a signed-in account is needed and cookies are
- * off; Try Again once signed in, when no browser is signed in to the site or its sign-in was refused; Sign In to Pixiv,
- * which opens Settings → Sign-Ins, when Pixiv needs Tsundoku's own sign-in; Set Up Image
+ * off; Try Again once signed in, when no browser is signed in to the site or its sign-in was refused; Sign In to Pixiv
+ * or to Fanbox, which opens the sign-in window itself and tries again once it's done (`SignInFix`), when the site needs
+ * Tsundoku's own sign-in; Set Up Image
  * Downloads for a post of images while gallery-dl isn't set up; a field for the password of an archive a download
  * brought, which `onArchivePassword` takes (the queue's row: it retries, which only unpacks). Nothing for other
  * failures.
@@ -51,11 +63,7 @@ export function FailureFixes({
     )
   }
   if (fix === "pixivSignIn" || fix === "fanboxSignIn") {
-    return (
-      <Button size="sm" onClick={() => navigate("settings", "settings-sign-ins")}>
-        {fix === "pixivSignIn" ? strings.queue.fixes.signInToPixiv : strings.queue.fixes.signInToFanbox}
-      </Button>
-    )
+    return <SignInFix site={fix === "pixivSignIn" ? "pixiv" : "fanbox"} onRetry={onRetry} />
   }
   if (fix === "updateYtDlp") return <UpdateYtDlp />
   if (fix === "updateGalleryDl") {
@@ -66,6 +74,81 @@ export function FailureFixes({
   }
   if (fix === "archivePassword" && onArchivePassword) return <EnterArchivePassword onEnter={onArchivePassword} />
   return null
+}
+
+/** Each site's sign-in window and what it says once it ends. */
+const SIGN_INS = {
+  pixiv: {
+    open: signInToPixiv,
+    onDone: (handler: () => void) => onPixivAccountChanged((account) => account && handler()),
+    onFailed: (handler: () => void) => onPixivSignInFailed(handler),
+    label: strings.queue.fixes.signInToPixiv,
+    waiting: strings.settings.signIns.waiting,
+  },
+  fanbox: {
+    open: signInToFanbox,
+    onDone: (handler: () => void) => onFanboxSignInChanged((signIn) => signIn && handler()),
+    onFailed: (handler: () => void) => onFanboxSignInFailed(handler),
+    label: strings.queue.fixes.signInToFanbox,
+    waiting: strings.settings.signIns.fanboxWaiting,
+  },
+} as const
+
+/** Sign In to Pixiv or to Fanbox: opens the site's sign-in window right here, rather than Settings, and tries again
+ * (`onRetry`) once the window says it's signed in. A sign-in that fails says so, with Settings → Sign-Ins at hand. */
+function SignInFix({ site, onRetry }: { site: keyof typeof SIGN_INS; onRetry?: () => void }) {
+  const { navigate } = useAppActions()
+  const signIn = SIGN_INS[site]
+  const [waiting, setWaiting] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+  // The latest retry, so the event's listener, set up once, calls the one the row has now.
+  const retry = useRef(onRetry)
+  useEffect(() => {
+    retry.current = onRetry
+  }, [onRetry])
+
+  useEffect(() => {
+    if (!waiting) return
+    const done = signIn.onDone(() => {
+      setWaiting(false)
+      retry.current?.()
+    })
+    const failure = signIn.onFailed(() => {
+      setWaiting(false)
+      setFailed(strings.queue.fixes.signInFailed)
+    })
+    return () => {
+      void done.then((unlisten) => unlisten())
+      void failure.then((unlisten) => unlisten())
+    }
+  }, [waiting, signIn])
+
+  async function open() {
+    setFailed(null)
+    try {
+      await signIn.open()
+      setWaiting(true)
+    } catch (caught) {
+      setFailed(String(caught))
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => void open()}>
+          {signIn.label}
+        </Button>
+        {failed && (
+          <Button size="sm" variant="ghost" onClick={() => navigate("settings", "settings-sign-ins")}>
+            {strings.queue.fixes.signInSettings}
+          </Button>
+        )}
+      </div>
+      {waiting && <StatusMessage tone="neutral" message={signIn.waiting} />}
+      {failed && <StatusMessage tone="danger" message={failed} />}
+    </div>
+  )
 }
 
 /** The password of an archive none of the known ones opened: the field and Unlock as a link's (`PasswordForm`), then

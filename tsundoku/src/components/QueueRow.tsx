@@ -131,7 +131,12 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
             {fixFor(item.error) && (
               <FailureFixes
                 error={item.error}
-                onRetry={item.error.kind === "unpack" ? () => act(retryDownload) : undefined}
+                // Unpacking again, or downloading once Pixiv's or Fanbox's sign-in window is done.
+                onRetry={
+                  item.error.kind === "unpack" || ["pixivSignIn", "fanboxSignIn"].includes(fixFor(item.error) ?? "")
+                    ? () => act(retryDownload)
+                    : undefined
+                }
                 // An archive's password, once entered, retries at once: it only unpacks.
                 onArchivePassword={(password) => act((id) => enterArchivePassword(id, password))}
               />

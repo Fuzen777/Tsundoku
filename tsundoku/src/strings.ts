@@ -341,6 +341,8 @@ export const strings = {
       cookieSettings: "Cookie Settings",
       signInToPixiv: "Sign In to Pixiv",
       signInToFanbox: "Sign In to Fanbox",
+      signInSettings: "Sign-In Settings",
+      signInFailed: "The sign-in didn't work. Try again, or look at Settings → Sign-Ins.",
       updated: (version: string | null) =>
         version === null ? "yt-dlp is updated. Try again." : `yt-dlp is now version ${version}. Try again.`,
       passwordSettings: "Password Settings",
@@ -595,6 +597,7 @@ export const strings = {
       downloadedBefore: "Downloaded Before",
       notRead: "Not Read Yet",
       needsPassword: "Needs a Password",
+      needsAccount: "Needs an Account",
       failed: "Couldn't Be Read",
       inQueue: "In Downloads",
     },
@@ -1011,12 +1014,12 @@ export const strings = {
       signInOff: (site: string | null) =>
         `${site ?? "This site"} needs you signed in. Turn on cookies so Tsundoku can use your browser's sign-in.`,
       signInNeeded: (site: string) => `${site} needs you signed in. Sign in to ${site} in your browser, then try again.`,
-      pixivSignIn: "Pixiv needs Tsundoku signed in to it: Settings → Sign-Ins.",
-      pixivSignInRefused: "Pixiv didn't accept Tsundoku's sign-in, as after a password change. Sign in again in Settings → Sign-Ins.",
+      pixivSignIn: "Pixiv needs Tsundoku signed in to it.",
+      pixivSignInRefused: "Pixiv didn't accept Tsundoku's sign-in, as after a password change. Sign in again.",
       pixivWarned:
         "Pixiv warned your account about downloading too much, so Tsundoku asks Pixiv nothing until you go on, from the notice at the top.",
-      fanboxSignIn: "Fanbox needs Tsundoku signed in to it: Settings → Sign-Ins.",
-      fanboxSignInRefused: "Fanbox no longer counts Tsundoku as signed in. Sign in again in Settings → Sign-Ins.",
+      fanboxSignIn: "Fanbox needs Tsundoku signed in to it, to see what the creators you support post for supporters.",
+      fanboxSignInRefused: "Fanbox no longer counts Tsundoku as signed in. Sign in again.",
       fanboxLocked: (fee: number) =>
         fee > 0
           ? `This post is for supporters of a plan of ¥${fee.toLocaleString()} a month or more, which your account doesn't support.`

@@ -12,6 +12,7 @@ import {
   ListChecks,
   ListVideo,
   Loader2,
+  Lock,
   PanelTopOpen,
   RefreshCw,
   X,
@@ -49,6 +50,7 @@ import {
 import type { Destination } from "../bindings/Destination"
 import type { ListGroup } from "../bindings/ListGroup"
 import type { PendingLink } from "../bindings/PendingLink"
+import type { PreviewError } from "../bindings/PreviewError"
 import type { PresetsOverview } from "../bindings/PresetsOverview"
 import type { RulePreset } from "../bindings/RulePreset"
 import type { VideoInfo } from "../bindings/VideoInfo"
@@ -756,6 +758,7 @@ const STATUS_ICONS: Partial<Record<PendingStatus | "reading" | "waiting", { icon
   waiting: { icon: Clock, className: "text-fg-secondary" },
   needsAttention: { icon: ListChecks, className: "text-accent" },
   needsPassword: { icon: KeyRound, className: "text-warning" },
+  needsAccount: { icon: Lock, className: "text-warning" },
   failed: { icon: CircleAlert, className: "text-danger" },
   inQueue: { icon: ListVideo, className: "text-fg-secondary" },
   downloadedBefore: { icon: History, className: "text-warning" },
@@ -1067,17 +1070,31 @@ const PENDING_STATUSES: readonly PendingStatus[] = [
   "downloadedBefore",
   "notRead",
   "needsPassword",
+  "needsAccount",
   "failed",
   "inQueue",
 ]
 
 function pendingStatus(link: PendingLink): PendingStatus {
   if (link.state === "needsPicking") return "needsAttention"
-  if (link.state === "failed") return "failed"
+  if (link.state === "failed") return needsAccount(link.error) ? "needsAccount" : "failed"
   if (link.state === "needsPassword") return "needsPassword"
   if (!link.preview) return "notRead"
   if (link.preview.inQueue) return "inQueue"
   return link.preview.lastDownload ? "downloadedBefore" : "ready"
+}
+
+/** Whether a link couldn't be read because the site wants an account: a sign-in (Tsundoku's own for Pixiv and Fanbox,
+ * a browser's elsewhere) or a subscription it doesn't have (a Fanbox plan, 1fichier's subscribers). */
+function needsAccount(error: PreviewError | null): boolean {
+  return (
+    error !== null &&
+    (error.kind === "signInRequired" ||
+      error.kind === "pixivSignInNeeded" ||
+      error.kind === "fanboxSignInNeeded" ||
+      error.kind === "fanboxLocked" ||
+      error.kind === "subscribersOnly")
+  )
 }
 
 /** Until it's read, a link is sorted by its address, with no uploader or site. */
