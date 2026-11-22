@@ -50,7 +50,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 ## Adding Links
 
 **77. Paste Link** · 0.2.5 · *one open decision*
-- [ ] Copy a link in your browser and click Paste Link → its preview opens, with nothing else to click. Claude tried the button, its notes, Type a Link, Ctrl+L and Esc in a test copy, but with a stand-in for the clipboard, so that what you had copied wasn't overwritten: only a real copy is left to try.
+- [ ] Copy a link in your browser and click Paste Link (at the top of the sidebar since 0.2.12) → its preview opens, with nothing else to click. Claude tried the button, its notes, Type a Link, Ctrl+L and Esc in a test copy, but with a stand-in for the clipboard, so that what you had copied wasn't overwritten: only a real copy is left to try.
 - [ ] If you use a Clipboard Shortcut: copy a sentence without a link and press it → "Nothing to Add". Copy two links with words around them → both are in Pending, and none of the words.
 
 **5. Pending tab** · 0.1.14

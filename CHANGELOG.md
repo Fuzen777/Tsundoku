@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.12 · 2026-11-22
+
+### Changed
+
+- **Paste Link is at the top of the sidebar**: Paste Link and Type a Link moved from above every view to the top of the sidebar, under the app's name, so the views now take the window's whole height. Type a Link, or Ctrl+L, opens its field in a panel under them, wide enough for a long link; Esc, its × or a click elsewhere closes it and keeps what you typed. "There's no link on the clipboard." shows under Paste Link for a few seconds. Ctrl+V outside a text field adds what you copied from any view, as before.
+
 ## 0.2.11 · 2026-11-22
 
 ### Added

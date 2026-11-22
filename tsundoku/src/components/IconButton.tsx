@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react"
+import type { ButtonHTMLAttributes, Ref } from "react"
 import type { LucideIcon } from "lucide-react"
 import { Button, type ButtonVariant } from "./Button"
 import { Tooltip } from "./Tooltip"
@@ -9,6 +9,8 @@ interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
   icon: LucideIcon
   variant?: ButtonVariant
   loading?: boolean
+  /** The button itself, for a caller that focuses it. */
+  ref?: Ref<HTMLButtonElement>
 }
 
 /**

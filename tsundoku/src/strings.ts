@@ -116,7 +116,7 @@ export const strings = {
   /** The ways to add links, as the empty Queue and Pending list them (WaysToAdd). */
   waysToAdd: {
     paste: "Paste a Link",
-    pasteState: "Ctrl+V anywhere, or Paste Link above.",
+    pasteState: "Ctrl+V anywhere, or Paste Link in the sidebar.",
     pasteAction: "Paste",
     drop: "Drop Links or Files",
     dropState: "From a browser, or a text file, bookmarks export or shortcut.",
@@ -138,12 +138,12 @@ export const strings = {
     change: "Change",
   },
   addBar: {
-    /** The button across the top, which adds the links the clipboard holds. */
+    /** The button at the top of the sidebar, which adds the links the clipboard holds. */
     paste: "Paste Link",
     pasteHint: "Paste One Link or Several",
-    /** Beside Paste Link when the clipboard holds no link, or nothing that's text. */
+    /** Under Paste Link when the clipboard holds no link, or nothing that's text. */
     noLinkCopied: "There's no link on the clipboard.",
-    /** Beside Paste Link: opens the field to type or edit a link. */
+    /** Beside Paste Link: opens a field under it to type or edit a link. */
     typeLink: "Type a Link",
     placeholder: "Type or Paste a Link",
     add: "Add",

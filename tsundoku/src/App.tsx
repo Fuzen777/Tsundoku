@@ -259,83 +259,88 @@ export function App() {
 
   return (
     <AppActionsContext value={actions}>
-      <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)] grid-rows-[auto_auto_minmax(0,1fr)]">
-        <AppTitle />
-        <div className="flex items-center py-3 pr-4">
-          <AddBar
-            ref={addBar}
-            onPaste={() => void pasteFromClipboard()}
-            note={pasteNote?.text ?? null}
-            onTypeLink={() => setPasteNote(null)}
-            link={link}
-            onLinkChange={setLink}
-            onSubmit={() => void addText(link)}
+      <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)]">
+        {/* The app's name, Paste Link and Type a Link, then the views. The view's column takes the whole height. */}
+        <div className="flex min-h-0 flex-col">
+          <AppTitle />
+          <div className="relative z-10 px-2 pb-3">
+            <AddBar
+              ref={addBar}
+              onPaste={() => void pasteFromClipboard()}
+              note={pasteNote?.text ?? null}
+              onTypeLink={() => setPasteNote(null)}
+              link={link}
+              onLinkChange={setLink}
+              onSubmit={() => void addText(link)}
+            />
+          </div>
+          <Sidebar
+            className="flex-1"
+            current={view}
+            counts={{
+              queue: unfinished,
+              pending: shownPendingLinks(pending).length,
+              watched: newlyWatched,
+            }}
+            onSelect={setView}
+            chapters={chapters?.view === view ? chapters : null}
+            onSelectChapter={(id) => setChapterTarget({ view, id })}
           />
         </div>
-        <Sidebar
-          className="col-start-1 row-span-2 row-start-2"
-          current={view}
-          counts={{
-            queue: unfinished,
-            pending: shownPendingLinks(pending).length,
-            watched: newlyWatched,
-          }}
-          onSelect={setView}
-          chapters={chapters?.view === view ? chapters : null}
-          onSelectChapter={(id) => setChapterTarget({ view, id })}
-        />
-        {/* Hidden while it has nothing to show, so the row takes no room. */}
-        <div className="col-start-2 row-start-2 flex flex-col gap-3 pr-4 pb-3 empty:hidden">
-          <UpdateBanner />
-          <WhatsNewCard browsing={browsingWhatsNew} onStopBrowsing={() => setBrowsingWhatsNew(false)} />
-          {addError && (
-            <Card className="flex items-start gap-3 p-4">
-              <div className="min-w-0 flex-1">
-                <StatusMessage tone="danger" {...addError} />
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => setAddError(null)}>
-                {strings.addBar.errors.dismiss}
-              </Button>
-            </Card>
-          )}
-          {fileProblems.length > 0 && (
-            <Card className="flex items-start gap-3 p-4">
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                {fileProblems.map((problem) => (
-                  <StatusMessage key={problem.message} tone="warning" {...problem} />
-                ))}
-              </div>
-              <Button size="sm" variant="ghost" onClick={() => setFileProblems([])}>
-                {strings.addBar.errors.dismiss}
-              </Button>
-            </Card>
-          )}
-          {preview.state.stage !== "idle" && (
-            <PreviewCard
-              state={preview.state}
-              onClose={preview.close}
-              onRetry={(retryLink, password) => void preview.show(retryLink, password)}
-              onUnlock={(password) => void preview.unlock(password)}
-              onAdded={() => {
-                donePicking()
-                preview.close()
-                setLink("")
-              }}
-              onWatched={() => {
-                donePicking()
-                preview.close()
-              }}
-            />
-          )}
+        <div className="flex min-h-0 flex-col pt-3">
+          {/* Hidden while it has nothing to show, so it takes no room. */}
+          <div className="flex flex-col gap-3 pr-4 pb-3 empty:hidden">
+            <UpdateBanner />
+            <WhatsNewCard browsing={browsingWhatsNew} onStopBrowsing={() => setBrowsingWhatsNew(false)} />
+            {addError && (
+              <Card className="flex items-start gap-3 p-4">
+                <div className="min-w-0 flex-1">
+                  <StatusMessage tone="danger" {...addError} />
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setAddError(null)}>
+                  {strings.addBar.errors.dismiss}
+                </Button>
+              </Card>
+            )}
+            {fileProblems.length > 0 && (
+              <Card className="flex items-start gap-3 p-4">
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  {fileProblems.map((problem) => (
+                    <StatusMessage key={problem.message} tone="warning" {...problem} />
+                  ))}
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setFileProblems([])}>
+                  {strings.addBar.errors.dismiss}
+                </Button>
+              </Card>
+            )}
+            {preview.state.stage !== "idle" && (
+              <PreviewCard
+                state={preview.state}
+                onClose={preview.close}
+                onRetry={(retryLink, password) => void preview.show(retryLink, password)}
+                onUnlock={(password) => void preview.unlock(password)}
+                onAdded={() => {
+                  donePicking()
+                  preview.close()
+                  setLink("")
+                }}
+                onWatched={() => {
+                  donePicking()
+                  preview.close()
+                }}
+              />
+            )}
+          </div>
+          <main className="relative min-h-0 flex-1 rounded-tl-lg border-t border-l border-line bg-surface">
+            {/* Outside the views, so an offer to undo stays when another view is opened. */}
+            <UndoToastProvider>
+              <ChaptersContext value={chaptersLink}>
+                <CurrentView view={view} settingsPlace={settingsPlace} historyTarget={historyTarget} />
+              </ChaptersContext>
+            </UndoToastProvider>
+          </main>
         </div>
-        <main className="relative col-start-2 row-start-3 min-h-0 rounded-tl-lg border-t border-l border-line bg-surface">
-          {/* Outside the views, so an offer to undo stays when another view is opened. */}
-          <UndoToastProvider>
-            <ChaptersContext value={chaptersLink}>
-              <CurrentView view={view} settingsPlace={settingsPlace} historyTarget={historyTarget} />
-            </ChaptersContext>
-          </UndoToastProvider>
-        </main>
       </div>
     </AppActionsContext>
   )

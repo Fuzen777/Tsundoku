@@ -45,7 +45,7 @@ interface PreviewCardProps {
   onUnlock: (password: string) => void
 }
 
-/** Under the add bar: what a link is, whether it was downloaded before, and Download; or, for a channel, playlist or
+/** Above the view: what a link is, whether it was downloaded before, and Download; or, for a channel, playlist or
  * account, its items to pick from (`ListingPicker`); or, for a link that needs a password, a field for it. */
 export function PreviewCard({ state, onClose, onAdded, onWatched, onRetry, onUnlock }: PreviewCardProps) {
   return (

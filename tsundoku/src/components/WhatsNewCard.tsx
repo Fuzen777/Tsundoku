@@ -19,7 +19,7 @@ interface WhatsNewCardProps {
 }
 
 /**
- * Under the add bar after an update: what changed since the version that ran last, from the changelog this version
+ * Above the view after an update: what changed since the version that ran last, from the changelog this version
  * was built with, until it's closed. A first install shows nothing. Opened by hand, it shows the running version's
  * changes instead, with a list of every version to pick another from.
  */

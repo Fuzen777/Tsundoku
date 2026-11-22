@@ -87,7 +87,7 @@ const SECTION_CONTENTS: Record<SettingsSectionId, () => ReactNode> = {
 
 /**
  * The version with What's New, which opens the What's New card on this version's changes, and Check for Updates, then
- * the data folder and Open Folder. A newer release shows as the banner under the add bar. A portable copy says it
+ * the data folder and Open Folder. A newer release shows as the banner above the view. A portable copy says it
  * doesn't update itself instead.
  */
 function AboutSection() {

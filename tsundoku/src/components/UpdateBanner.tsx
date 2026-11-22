@@ -15,7 +15,7 @@ import { StatusMessage } from "./StatusMessage"
 const text = strings.appUpdate
 
 /**
- * Under the add bar when a newer Tsundoku is out: Install and Restart, or Later, which hides it until next time. Under
+ * Above the view when a newer Tsundoku is out: Install and Restart, or Later, which hides it until next time. Under
  * them, What's New shows the release's notes, or Release Notes opens its page when it came without any.
  */
 export function UpdateBanner() {

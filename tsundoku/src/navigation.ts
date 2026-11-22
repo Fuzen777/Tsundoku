@@ -83,7 +83,7 @@ export interface AppActions {
   addFileLinks: (read: LinkFilesRead) => void
   /** Opens the history at a watched source's downloads: its Source filter set, the others cleared. */
   showWatchedDownloads: (sourceId: number) => void
-  /** Opens the What's New card under the add bar on the running version's changes, with the earlier versions' to
+  /** Opens the What's New card above the view on the running version's changes, with the earlier versions' to
    * pick from. */
   showWhatsNew: () => void
 }
