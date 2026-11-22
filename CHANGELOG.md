@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.31 · 2026-11-22
+
+### Fixed
+
+- **Pending stayed blank** once a Fanbox post was read: Fanbox's posts and Pixiv's novels kept their date in a form the window couldn't show. They're kept as every other date now, the ones already kept are mended when Tsundoku starts, and a date the window can't read shows as it is rather than leaving a view blank.
+
 ## 0.2.30 · 2026-11-22
 
 ### Fixed

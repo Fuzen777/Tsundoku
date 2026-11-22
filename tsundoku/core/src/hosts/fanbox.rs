@@ -214,10 +214,10 @@ pub(crate) fn listed_video(item: &Value) -> Option<VideoInfo> {
     })
 }
 
-/// A date Fanbox gives ("2026-11-20T17:30:00+09:00") as YYYYMMDD, the day where it was posted.
+/// A date Fanbox gives ("2026-11-20T17:30:00+09:00") as YYYY-MM-DD, as `VideoInfo.upload_date` takes it: the day
+/// where it was posted.
 fn day_of(date: &str) -> Option<String> {
-    let day: String = date.chars().take(10).filter(char::is_ascii_digit).collect();
-    (day.len() == 8).then_some(day)
+    crate::metadata::day_of_timestamp(date)
 }
 
 /// Asks Fanbox's API for each address in turn, 1 to 2 seconds apart, and gives each answer's `body`, or the first
@@ -395,7 +395,7 @@ fn answer_body(answer: &ApiAnswer) -> Result<Value, PreviewError> {
 struct Listed {
     id: String,
     title: String,
-    /// As YYYYMMDD.
+    /// As YYYY-MM-DD.
     date: Option<String>,
     files: Vec<ListedFile>,
     details: PostDetails,
@@ -791,7 +791,7 @@ mod tests {
     fn lists_an_articles_images_in_its_order_then_its_files() {
         let listed = listed_post(&article()).unwrap();
         assert_eq!(listed.title, "A Post");
-        assert_eq!(listed.date.as_deref(), Some("20261120"));
+        assert_eq!(listed.date.as_deref(), Some("2026-11-20"));
         let files: Vec<(&str, Option<u64>)> = listed
             .files
             .iter()

@@ -30,12 +30,13 @@ export function formatDuration(seconds: number): string {
     : `${minutes}:${remainingSeconds}`
 }
 
-/** A calendar date given as YYYY-MM-DD, in the reader's format ("Apr 24, 2005" in US English). */
+/** A calendar date given as YYYY-MM-DD, in the reader's format ("Apr 24, 2005" in US English), or the text as it is
+ * when it isn't one, so a date in another form never stops a view from showing. */
 export function formatCalendarDate(isoDate: string, locale?: string): string {
   // As UTC: a date without a time would otherwise shift a day in time zones west of UTC.
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
-    new Date(`${isoDate}T00:00:00Z`),
-  )
+  const day = new Date(`${isoDate}T00:00:00Z`)
+  if (Number.isNaN(day.getTime())) return isoDate
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(day)
 }
 
 /** A month given as YYYY-MM, in the reader's language ("November 2026" in US English), or the text as it is when it
@@ -54,7 +55,9 @@ export function formatDay(secondsSinceEpoch: number, locale?: string, timeZone?:
 /** A day a site only gives roughly ("3 weeks ago" in YouTube's listings), given as YYYY-MM-DD, as how long ago it was in
  * the reader's language, as roughly: "3 weeks ago", "last month". */
 export function formatRoughAge(isoDate: string, locale?: string, now = Date.now()): string {
-  const days = Math.max(0, Math.floor((now - Date.parse(`${isoDate}T00:00:00Z`)) / 86_400_000))
+  const day = Date.parse(`${isoDate}T00:00:00Z`)
+  if (Number.isNaN(day)) return isoDate
+  const days = Math.max(0, Math.floor((now - day) / 86_400_000))
   const relative = new Intl.RelativeTimeFormat(locale, { numeric: "auto" })
   if (days < 7) return relative.format(-days, "day")
   if (days < 30) return relative.format(-Math.round(days / 7), "week")

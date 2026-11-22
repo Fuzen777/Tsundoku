@@ -55,7 +55,7 @@ pub struct Novel {
     pub title: String,
     pub author: Option<String>,
     pub account: Option<String>,
-    /// As YYYYMMDD.
+    /// As YYYY-MM-DD.
     pub date: Option<String>,
     pub caption: Option<String>,
     pub tags: Vec<VideoTag>,
@@ -143,10 +143,8 @@ pub fn parse(json: &str) -> Result<Novel, PreviewError> {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let date = text(&details, "create_date").and_then(|date| {
-        let day: String = date.chars().take(10).filter(char::is_ascii_digit).collect();
-        (day.len() == 8).then_some(day)
-    });
+    let date =
+        text(&details, "create_date").and_then(|date| crate::metadata::day_of_timestamp(&date));
     Ok(Novel {
         title: text(&details, "title").unwrap_or_else(|| format!("Novel {id}")),
         author: user.and_then(|user| text(user, "name")),
@@ -215,11 +213,7 @@ impl Novel {
             title: self.title.clone(),
             author: self.author.clone(),
             language: "ja".to_owned(),
-            date: self
-                .date
-                .as_ref()
-                .filter(|date| date.len() == 8)
-                .map(|date| format!("{}-{}-{}", &date[..4], &date[4..6], &date[6..])),
+            date: self.date.clone(),
             description: self.caption.as_deref().map(strip_tags),
             subjects: self.tags.iter().map(|tag| tag.name.clone()).collect(),
             cover,
@@ -396,7 +390,7 @@ mod tests {
         assert_eq!(novel.characters, 3584);
         let video = novel.video_info();
         assert_eq!(video.url, "https://www.pixiv.net/novel/show.php?id=7");
-        assert_eq!(video.upload_date.as_deref(), Some("20261120"));
+        assert_eq!(video.upload_date.as_deref(), Some("2026-11-20"));
         assert_eq!(video.pixiv.unwrap().work_type, Some(PixivWorkType::Novel));
         let book = novel.book(None);
         assert_eq!(book.date.as_deref(), Some("2026-11-20"));

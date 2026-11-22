@@ -214,6 +214,19 @@ const MIGRATIONS: &[&str] = &[
     UPDATE videos SET url = 'https://www.pixiv.net/artworks/' || video_id
         WHERE site = 'pixiv' AND (url LIKE 'https://www.pixiv.net/users/%'
             OR url LIKE 'https://www.pixiv.net/bookmark_new_illust.php%' OR url LIKE 'https://www.pixiv.net/tags/%');",
+    // 24: Fanbox's posts and Pixiv's novels (0.2.25 to 0.2.30) were kept with their day as YYYYMMDD rather than the
+    // YYYY-MM-DD every other date is in, which the UI couldn't show (Pending stayed blank): each gets the dashes,
+    // wherever it's kept.
+    "UPDATE queue_items SET video = json_set(video, '$.uploadDate', substr(json_extract(video, '$.uploadDate'), 1, 4) || '-' || substr(json_extract(video, '$.uploadDate'), 5, 2) || '-' || substr(json_extract(video, '$.uploadDate'), 7, 2))
+        WHERE json_extract(video, '$.site') IN ('fanbox', 'pixiv-novel') AND length(json_extract(video, '$.uploadDate')) = 8;
+    UPDATE pending_links SET video = json_set(video, '$.uploadDate', substr(json_extract(video, '$.uploadDate'), 1, 4) || '-' || substr(json_extract(video, '$.uploadDate'), 5, 2) || '-' || substr(json_extract(video, '$.uploadDate'), 7, 2))
+        WHERE json_extract(video, '$.site') IN ('fanbox', 'pixiv-novel') AND length(json_extract(video, '$.uploadDate')) = 8;
+    UPDATE watched_items SET video = json_set(video, '$.uploadDate', substr(json_extract(video, '$.uploadDate'), 1, 4) || '-' || substr(json_extract(video, '$.uploadDate'), 5, 2) || '-' || substr(json_extract(video, '$.uploadDate'), 7, 2))
+        WHERE site IN ('fanbox', 'pixiv-novel') AND length(json_extract(video, '$.uploadDate')) = 8;
+    UPDATE saved_listing_items SET item = json_set(item, '$.video.uploadDate', substr(json_extract(item, '$.video.uploadDate'), 1, 4) || '-' || substr(json_extract(item, '$.video.uploadDate'), 5, 2) || '-' || substr(json_extract(item, '$.video.uploadDate'), 7, 2))
+        WHERE site IN ('fanbox', 'pixiv-novel') AND length(json_extract(item, '$.video.uploadDate')) = 8;
+    UPDATE videos SET upload_date = substr(upload_date, 1, 4) || '-' || substr(upload_date, 5, 2) || '-' || substr(upload_date, 7, 2)
+        WHERE site IN ('fanbox', 'pixiv-novel') AND length(upload_date) = 8;",
 ];
 
 pub struct Database {
@@ -397,6 +410,66 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM download_files", [], |row| row.get(0))
             .unwrap();
         assert_eq!(files, 2, "with its files");
+    }
+
+    #[test]
+    fn gives_fanbox_and_novel_dates_their_dashes() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("tsundoku.db");
+        let dates_migration = MIGRATIONS
+            .iter()
+            .position(|migration| migration.contains("$.uploadDate"))
+            .unwrap();
+        let video = |site: &str, date: &str| {
+            format!(
+                r#"{{"site": "{site}", "videoId": "1", "url": "https://x/1", "title": "Post", "uploadDate": "{date}"}}"#
+            )
+        };
+        {
+            let connection = Connection::open(&path).unwrap();
+            for migration in &MIGRATIONS[..dates_migration] {
+                connection.execute_batch(migration).unwrap();
+            }
+            connection
+                .pragma_update(None, "user_version", dates_migration as i64)
+                .unwrap();
+            for (site, date) in [
+                ("fanbox", "20261121"),
+                ("pixiv-novel", "20261120"),
+                ("youtube", "2005-04-24"),
+                ("fanbox", "2026-11-19"),
+            ] {
+                connection
+                    .execute(
+                        "INSERT INTO pending_links (link, state, video, added_at) VALUES ('x', 'read', ?1, 1)",
+                        [video(site, date)],
+                    )
+                    .unwrap();
+            }
+            connection
+                .execute_batch(
+                    "INSERT INTO videos (site, site_name, video_id, url, title, upload_date, first_downloaded_at)
+                    VALUES ('fanbox', 'fanbox.cc', '1', 'https://x/1', 'Post', '20261121', 1);",
+                )
+                .unwrap();
+        }
+        let database = Database::open(&path).unwrap();
+        let connection = database.lock();
+        let dates: Vec<String> = connection
+            .prepare("SELECT json_extract(video, '$.uploadDate') FROM pending_links ORDER BY id")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            dates,
+            ["2026-11-21", "2026-11-20", "2005-04-24", "2026-11-19"]
+        );
+        let kept: String = connection
+            .query_row("SELECT upload_date FROM videos", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(kept, "2026-11-21");
     }
 
     #[test]

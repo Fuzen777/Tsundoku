@@ -373,7 +373,7 @@ mod tests {
         let videos = posts_in(&page);
         assert_eq!(videos.len(), 2);
         assert_eq!(videos[0].url, "https://www.fanbox.cc/@someone/posts/2");
-        assert_eq!(videos[0].upload_date.as_deref(), Some("20261121"));
+        assert_eq!(videos[0].upload_date.as_deref(), Some("2026-11-21"));
         assert_eq!(
             videos[0].thumbnail_url.as_deref(),
             Some("https://pixiv.pximg.net/c/x.jpeg")

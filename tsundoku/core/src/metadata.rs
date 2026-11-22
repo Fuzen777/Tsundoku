@@ -155,6 +155,16 @@ impl VideoTag {
     }
 }
 
+/// The day of a timestamp a site gives, as "2026-11-20T17:30:00+09:00" or "2026-11-20", as YYYY-MM-DD, the day where
+/// it was posted: the form `VideoInfo.upload_date` takes. `None` for anything else.
+pub fn day_of_timestamp(timestamp: &str) -> Option<String> {
+    let day = timestamp.get(..10)?;
+    let bytes = day.as_bytes();
+    let digits = |range: std::ops::Range<usize>| bytes[range].iter().all(u8::is_ascii_digit);
+    (digits(0..4) && bytes[4] == b'-' && digits(5..7) && bytes[7] == b'-' && digits(8..10))
+        .then(|| day.to_owned())
+}
+
 /// Which name of each tag `tag_list` writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TagLanguage {
