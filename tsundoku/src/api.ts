@@ -42,8 +42,10 @@ import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { ItemKey } from "./bindings/ItemKey"
 import type { NewWatchedSource } from "./bindings/NewWatchedSource"
+import type { NewItemsStart } from "./bindings/NewItemsStart"
 import type { PictureCrop } from "./bindings/PictureCrop"
 import type { WatchedSource } from "./bindings/WatchedSource"
+import type { WatchedSettings } from "./bindings/WatchedSettings"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
 import type { QueueItem } from "./bindings/QueueItem"
@@ -104,6 +106,7 @@ export const queryKeys = {
   clickNLoad: ["click-n-load"],
   pixivAccount: ["pixiv-account"],
   backgroundOptions: ["background-options"],
+  watchedOptions: ["watched-options"],
   appearanceOptions: ["appearance-options"],
   defaultDownloadFolder: ["default-download-folder"],
   supportedSites: ["supported-sites"],
@@ -975,10 +978,28 @@ export function addWatchedSource(source: NewWatchedSource): Promise<number> {
   return invoke<number>("add_watched_source", { source })
 }
 
-/** A source's Save In and Videos Start As, each null for the rules' and the default. */
-export async function editWatchedSource(id: number, folder: string | null, presetId: string | null): Promise<void> {
+/** A source's Save In, Videos Start As and New Items Start, each null for the rules', the default and Settings →
+ * Watched's. */
+export async function editWatchedSource(
+  id: number,
+  folder: string | null,
+  presetId: string | null,
+  newItemsStart: NewItemsStart | null,
+): Promise<void> {
   if (!isTauri()) return outsideTauri()
-  await invoke("edit_watched_source", { id, folder, presetId })
+  await invoke("edit_watched_source", { id, folder, presetId, newItemsStart })
+}
+
+/** Settings → Watched: whether what checks find starts ticked, for every source without its own choice. */
+export function getWatchedOptions(): Promise<WatchedSettings> {
+  if (!isTauri()) return Promise.resolve(standIns.watchedOptions)
+  return invoke<WatchedSettings>("watched_options")
+}
+
+/** Saves Settings → Watched, and resolves to the options as saved. Rejects with a DownloadError. */
+export function saveWatchedOptions(options: WatchedSettings): Promise<WatchedSettings> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<WatchedSettings>("save_watched_options", { options })
 }
 
 export async function removeWatchedSource(id: number): Promise<void> {

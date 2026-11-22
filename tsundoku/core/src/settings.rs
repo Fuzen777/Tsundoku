@@ -17,6 +17,7 @@ use crate::rules::{RulesSettings, catch_all_rule, posts_folder_rule, with_catch_
 use crate::sites::{self, PacedSite};
 use crate::sync::lock;
 use crate::tools::ToolId;
+use crate::watched::NewItemsStart;
 
 /// Everything stored in `settings.json`. Missing fields take their defaults and unknown ones are ignored, so a file
 /// from an older or newer version still opens.
@@ -36,6 +37,9 @@ pub struct Settings {
     pub adding: AddingSettings,
     pub background: BackgroundSettings,
     pub appearance: AppearanceSettings,
+    /// A choice from a newer version, which this one can't read, only resets Settings → Watched.
+    #[serde(deserialize_with = "default_if_unreadable")]
+    pub watched: WatchedSettings,
     /// The version that ran last, so the first start on a newer one can say what changed (`changelog::whats_new`).
     pub last_run_version: Option<String>,
 }
@@ -214,6 +218,15 @@ pub struct BackgroundSettings {
     pub keep_in_tray: bool,
     /// Tsundoku starts when the user signs in to Windows: in the tray when `keep_in_tray` is on, else with its window.
     pub start_with_windows: bool,
+}
+
+/// What every watched source does unless it was given its own choice (Edit). Settings → Watched edits it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct WatchedSettings {
+    /// Whether what a check finds starts ticked, to untick what isn't wanted, or unticked, to tick what is.
+    pub new_items_start: NewItemsStart,
 }
 
 /// How Tsundoku looks. Settings → Appearance edits it.
@@ -1270,6 +1283,36 @@ mod tests {
                 descending: true,
             }
         );
+    }
+
+    #[test]
+    fn reads_settings_watched() {
+        let folder = tempfile::tempdir().unwrap();
+        assert_eq!(
+            store_in(&folder).get().watched.new_items_start,
+            NewItemsStart::Unticked,
+            "new items start unticked unless Settings says otherwise"
+        );
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "watched": { "newItemsStart": "ticked" }, "background": { "keepInTray": true } }"#,
+        )
+        .unwrap();
+        let settings = store_in(&folder).get();
+        assert_eq!(settings.watched.new_items_start, NewItemsStart::Ticked);
+
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "watched": { "newItemsStart": "askEachTime" }, "background": { "keepInTray": true } }"#,
+        )
+        .unwrap();
+        let settings = store_in(&folder).get();
+        assert_eq!(
+            settings.watched,
+            WatchedSettings::default(),
+            "a choice from a newer version resets only Settings → Watched"
+        );
+        assert!(settings.background.keep_in_tray);
     }
 
     #[test]

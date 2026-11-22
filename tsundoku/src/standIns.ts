@@ -45,6 +45,7 @@ import type { UnpackingRule } from "./bindings/UnpackingRule"
 import type { VideoInfo } from "./bindings/VideoInfo"
 import type { WatchedItem } from "./bindings/WatchedItem"
 import type { WatchedSource } from "./bindings/WatchedSource"
+import type { WatchedSettings } from "./bindings/WatchedSettings"
 import type { VideoPreview } from "./bindings/VideoPreview"
 
 const previewStandIn: VideoPreview = {
@@ -690,6 +691,7 @@ export const standIns = {
   clickNLoadStatus: { state: { kind: "off" }, port: 9666, senders: ["FileCrypt"] } satisfies ClickNLoadStatus,
   pixivAccount: { name: "Some One", account: "someone" } satisfies PixivAccount,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
+  watchedOptions: { newItemsStart: "unticked" } satisfies WatchedSettings,
   appearanceOptions: { theme: "auto", accent: "indigo", customAccent: "#165e83" } satisfies AppearanceSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   folderRules: [
@@ -1187,6 +1189,7 @@ function watchedStandIns(): WatchedSource[] {
       picture: null,
       folder: "D:\\Videos\\{uploader}",
       presetId: "best-audio",
+      newItemsStart: null,
       addedAt: now - 7 * 86_400,
       lastCheckedAt: now - 2 * 3600,
       lastError: null,
@@ -1206,6 +1209,7 @@ function watchedStandIns(): WatchedSource[] {
       picture: null,
       folder: null,
       presetId: null,
+      newItemsStart: null,
       addedAt: now - 30 * 86_400,
       lastCheckedAt: now - 3 * 86_400,
       lastError: null,
@@ -1225,6 +1229,7 @@ function watchedStandIns(): WatchedSource[] {
       picture: null,
       folder: null,
       presetId: null,
+      newItemsStart: null,
       addedAt: now - 10 * 86_400,
       lastCheckedAt: null,
       lastError: null,
@@ -1244,6 +1249,7 @@ function watchedStandIns(): WatchedSource[] {
       picture: null,
       folder: "X\\{account}",
       presetId: null,
+      newItemsStart: "ticked",
       addedAt: now - 5 * 86_400,
       lastCheckedAt: now - 20 * 60,
       lastError: null,
@@ -1263,6 +1269,7 @@ function watchedStandIns(): WatchedSource[] {
       picture: null,
       folder: null,
       presetId: null,
+      newItemsStart: null,
       addedAt: now - 2 * 86_400,
       lastCheckedAt: now - 600,
       lastError: { kind: "signInRequired", detail: "login required", site: "Instagram", cookies: "notSignedIn" },

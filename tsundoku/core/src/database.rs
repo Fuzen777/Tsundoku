@@ -185,6 +185,9 @@ const MIGRATIONS: &[&str] = &[
     // 21: the picture picked by hand for a watched source (`watched::picture::SourcePicture`: its file in the data
     // folder's `pictures\` and the area of it shown), as JSON; NULL for the listing's own picture.
     "ALTER TABLE watched_sources ADD COLUMN picture TEXT;",
+    // 22: a watched source's New Items Start (`watched::NewItemsStart`: "ticked" or "unticked"); NULL for Settings →
+    // Watched's choice, as every source watched before has it.
+    "ALTER TABLE watched_sources ADD COLUMN new_items_start TEXT;",
 ];
 
 pub struct Database {

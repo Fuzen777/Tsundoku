@@ -593,7 +593,7 @@ fn downloading_queues_the_picked_and_skips_the_rest() {
     let test = Test::new();
     let id = test.add_new(&["a", "b", "c"]);
     test.sources
-        .edit(id, Some(" Channels\\{uploader} ".to_owned()), None)
+        .edit(id, Some(" Channels\\{uploader} ".to_owned()), None, None)
         .unwrap();
     assert_eq!(
         test.sources
@@ -815,7 +815,7 @@ fn downloading_from_every_source_queues_each_with_its_own_choices() {
         &["shared", "c", "d"],
     );
     test.sources
-        .edit(second, Some("Other".to_owned()), None)
+        .edit(second, Some("Other".to_owned()), None, None)
         .unwrap();
     let added = test
         .sources
@@ -1233,4 +1233,43 @@ fn only_the_names_it_gives_are_pictures() {
         Some(picture::PictureKind::Gif)
     );
     assert_eq!(picture::PictureKind::of(b"<html>"), None);
+}
+
+#[test]
+fn a_source_takes_settings_new_items_start_until_it_has_its_own() {
+    let test = Test::new();
+    let id = test.add_new(&["a"]);
+    assert_eq!(test.source(id).new_items_start, None);
+
+    test.sources
+        .edit(
+            id,
+            Some("Folder".to_owned()),
+            None,
+            Some(NewItemsStart::Ticked),
+        )
+        .unwrap();
+    let source = test.source(id);
+    assert_eq!(source.new_items_start, Some(NewItemsStart::Ticked));
+    assert_eq!(source.folder.as_deref(), Some("Folder"));
+
+    test.sources
+        .edit(id, None, None, Some(NewItemsStart::Unticked))
+        .unwrap();
+    assert_eq!(
+        test.source(id).new_items_start,
+        Some(NewItemsStart::Unticked)
+    );
+    test.sources.edit(id, None, None, None).unwrap();
+    assert_eq!(test.source(id).new_items_start, None);
+
+    // A choice from a newer version is taken as none: Settings' applies.
+    test.database
+        .lock()
+        .execute(
+            "UPDATE watched_sources SET new_items_start = 'askEachTime' WHERE id = ?1",
+            [id],
+        )
+        .unwrap();
+    assert_eq!(test.source(id).new_items_start, None);
 }

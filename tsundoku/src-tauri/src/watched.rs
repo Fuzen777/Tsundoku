@@ -7,9 +7,12 @@ use std::sync::Arc;
 
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
+use tsundoku_core::downloads::DownloadError;
+use tsundoku_core::settings::{SettingsStore, WatchedSettings};
 use tsundoku_core::watched::picture::{self, PictureCrop};
 use tsundoku_core::watched::{
-    ItemKey, NewWatchedSource, WatchedError, WatchedListener, WatchedSource, WatchedSources,
+    ItemKey, NewItemsStart, NewWatchedSource, WatchedError, WatchedListener, WatchedSource,
+    WatchedSources,
 };
 
 /// Sent with every watched source when they change.
@@ -42,15 +45,35 @@ pub fn add_watched_source(
     watched.add(source)
 }
 
-/// A source's Save In and Videos Start As.
+/// A source's Save In, Videos Start As and New Items Start (`None` for Settings → Watched's).
 #[tauri::command]
 pub fn edit_watched_source(
     watched: Watched<'_>,
     id: i64,
     folder: Option<String>,
     preset_id: Option<String>,
+    new_items_start: Option<NewItemsStart>,
 ) -> Result<(), WatchedError> {
-    watched.edit(id, folder, preset_id)
+    watched.edit(id, folder, preset_id, new_items_start)
+}
+
+/// Settings → Watched: what every source does unless it has its own choice.
+#[tauri::command]
+pub fn watched_options(settings: State<'_, Arc<SettingsStore>>) -> WatchedSettings {
+    settings.get().watched
+}
+
+#[tauri::command]
+pub fn save_watched_options(
+    settings: State<'_, Arc<SettingsStore>>,
+    options: WatchedSettings,
+) -> Result<WatchedSettings, DownloadError> {
+    settings
+        .update(|settings| settings.watched = options)
+        .map_err(|error| DownloadError::Storage {
+            detail: error.to_string(),
+        })?;
+    Ok(options)
 }
 
 #[tauri::command]

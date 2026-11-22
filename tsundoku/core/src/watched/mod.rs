@@ -12,6 +12,9 @@
 //!
 //! A source shows its listing's picture, which each check keeps current, unless one of its own pictures was picked for
 //! it by hand, with the area of it to show (`picture`).
+//!
+//! What a check finds starts ticked or unticked on the source's card (`NewItemsStart`): the source's own choice, else
+//! Settings → Watched's (`WatchedSettings`). Only the UI reads it: the core never downloads an item nobody picked.
 
 pub mod picture;
 mod store;
@@ -100,6 +103,36 @@ pub enum WatchedError {
     UnknownPicture,
 }
 
+/// Whether what a check finds starts ticked on the source's card, to untick what isn't wanted (as before 0.2.22), or
+/// unticked, to tick what is. An item downloaded before starts unticked either way.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum NewItemsStart {
+    #[default]
+    Unticked,
+    Ticked,
+}
+
+impl NewItemsStart {
+    /// As `watched_sources.new_items_start` holds it.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Unticked => "unticked",
+            Self::Ticked => "ticked",
+        }
+    }
+
+    /// `None` for a name this version doesn't know (from a newer one): Settings' choice applies.
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "unticked" => Some(Self::Unticked),
+            "ticked" => Some(Self::Ticked),
+            _ => None,
+        }
+    }
+}
+
 /// A pinned channel, playlist or account, as the Watched view shows it.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -120,6 +153,8 @@ pub struct WatchedSource {
     pub folder: Option<String>,
     /// Videos Start As. `None` for the preset a rule picks, else the default.
     pub preset_id: Option<String>,
+    /// New Items Start: whether what a check finds starts ticked. `None` for Settings → Watched's choice.
+    pub new_items_start: Option<NewItemsStart>,
     /// Seconds since 1970.
     #[ts(type = "number")]
     pub added_at: i64,
@@ -323,6 +358,7 @@ impl WatchedSources {
             picture: None,
             folder: blank_to_none(new.folder),
             preset_id: blank_to_none(new.preset_id),
+            new_items_start: None,
             added_at: now,
             last_checked_at: Some(now),
             last_error: None,
@@ -349,15 +385,20 @@ impl WatchedSources {
         Ok(id)
     }
 
-    /// Changes a source's Save In and Videos Start As.
+    /// Changes a source's Save In, Videos Start As and New Items Start (`None` for Settings').
     pub fn edit(
         &self,
         id: i64,
         folder: Option<String>,
         preset_id: Option<String>,
+        new_items_start: Option<NewItemsStart>,
     ) -> Result<(), WatchedError> {
-        self.store
-            .set_choices(id, blank_to_none(folder), blank_to_none(preset_id))?;
+        self.store.set_choices(
+            id,
+            blank_to_none(folder),
+            blank_to_none(preset_id),
+            new_items_start,
+        )?;
         self.notify();
         Ok(())
     }
@@ -852,6 +893,7 @@ impl WatchedSources {
             picture: source.picture,
             folder: source.folder,
             preset_id: source.preset_id,
+            new_items_start: source.new_items_start,
             added_at: source.added_at,
             last_checked_at: source.last_checked_at,
             last_error: source.last_error,

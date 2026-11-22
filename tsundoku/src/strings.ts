@@ -783,6 +783,23 @@ export const strings = {
     clearFolder: "Let the Rules Decide",
     videosStartAs: "Videos Start As",
     rulesPreset: "As the Rules Say, Else the Default",
+    /** Whether what a check finds starts ticked on the source's card: in Edit, and Settings → Watched for every
+     * source that has no choice of its own. */
+    newItemsStart: "New Items Start",
+    newItemsStarts: { unticked: "Unticked", ticked: "Ticked" },
+    /** Edit's choice that takes Settings → Watched's. */
+    newItemsStartDefault: "Default",
+    newItemsStartDefaultHint: (current: string) => `Default is Settings → Watched's choice: ${current}.`,
+    /** On an open card, when the source has a choice of its own. */
+    newItemsStartLine: { unticked: "New items start unticked", ticked: "New items start ticked" },
+    newItemsHelp: {
+      label: "How New Items Start",
+      paragraphs: [
+        "Unticked: what a check finds waits on its source's card with nothing ticked. Tick what you want, then Download Selected.",
+        "Ticked: everything a check finds starts ticked. Untick what you don't want, then Download Selected.",
+        "Either way, what was downloaded before starts unticked, and Download Selected skips the items shown that are left unticked: they go under Skipped Before, where they can still be downloaded.",
+      ],
+    },
     cancel: "Cancel",
     added: "Watching it now. It's in Watched.",
     open: "Open Watched",
@@ -1546,6 +1563,9 @@ export const strings = {
     notifyFinished: "Notify When Downloads Finish",
     notifyFinishedHint:
       "While Tsundoku's window isn't in front: once every download started has ended, with how many finished and how many failed.",
+    /** Settings → Watched: what every watched source does unless it has its own choice (Edit). */
+    watched: "Watched",
+    newItemsStartHint: "For what checks find on every watched source. A source can pick its own under Edit.",
     background: "Running in the Background",
     /** Its name in the sidebar's list of sections, where the full one doesn't fit. */
     backgroundShort: "In the Background",

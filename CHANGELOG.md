@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.22 · 2026-11-22
+
+### Changed
+
+- **Watched: new items start unticked**: what a check finds now waits on its source's card with nothing ticked, so you tick what you want, then Download Selected. Settings → Watched → New Items Start switches every source back to Ticked, as before, where you untick what you don't want, and Edit on a source's card gives it its own choice (Default follows Settings). An item downloaded before is never ticked, either way.
+
 ## 0.2.21 · 2026-11-22
 
 ### Changed

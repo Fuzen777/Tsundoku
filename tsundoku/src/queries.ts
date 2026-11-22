@@ -43,6 +43,7 @@ import {
   getReleaseNotes,
   getQueueItems,
   getRulePreset,
+  getWatchedOptions,
   getWatchedSources,
   getWatchedPictureChoices,
   getRuleRightAway,
@@ -58,6 +59,7 @@ import {
   saveDownloadOptions,
   saveListArrangements,
   savePickerLayouts,
+  saveWatchedOptions,
 } from "./api"
 import { folderFromGroup, ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
 import { DEFAULT_PICKER_LAYOUTS, sizeStep } from "./pickerLayout"
@@ -85,6 +87,7 @@ import type { ToolsOverview } from "./bindings/ToolsOverview"
 import type { UpdateChannel } from "./bindings/UpdateChannel"
 import type { VideoInfo } from "./bindings/VideoInfo"
 import type { WatchedArrangement } from "./bindings/WatchedArrangement"
+import type { WatchedSettings } from "./bindings/WatchedSettings"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { applyAppearance } from "./theme"
 
@@ -613,6 +616,28 @@ export function useSaveBackgroundOptions() {
     setError(null)
     try {
       queryClient.setQueryData(queryKeys.backgroundOptions, await saveBackgroundOptions({ ...options, ...changes }))
+    } catch (caught) {
+      setError(describeDownloadError(caught))
+    }
+  }
+  return { options, save, error }
+}
+
+/** Settings → Watched: whether what checks find starts ticked, for the sources without their own choice. */
+export function useWatchedOptions() {
+  return useQuery({ queryKey: queryKeys.watchedOptions, queryFn: getWatchedOptions, staleTime: Infinity })
+}
+
+/** Saves changes to Settings → Watched, with the error if it failed. */
+export function useSaveWatchedOptions() {
+  const queryClient = useQueryClient()
+  const { data: options } = useWatchedOptions()
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const save = async (changes: Partial<WatchedSettings>) => {
+    if (!options) return
+    setError(null)
+    try {
+      queryClient.setQueryData(queryKeys.watchedOptions, await saveWatchedOptions({ ...options, ...changes }))
     } catch (caught) {
       setError(describeDownloadError(caught))
     }

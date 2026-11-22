@@ -8,7 +8,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use super::picture::SourcePicture;
-use super::{ItemKey, WatchedError};
+use super::{ItemKey, NewItemsStart, WatchedError};
 use crate::database::Database;
 use crate::listing::ListingKind;
 use crate::metadata::{PreviewError, VideoInfo};
@@ -59,6 +59,7 @@ pub(super) struct StoredSource {
     pub picture: Option<SourcePicture>,
     pub folder: Option<String>,
     pub preset_id: Option<String>,
+    pub new_items_start: Option<NewItemsStart>,
     pub added_at: i64,
     pub last_checked_at: Option<i64>,
     pub last_error: Option<PreviewError>,
@@ -79,7 +80,7 @@ pub(super) struct WatchedStore {
     database: Arc<Database>,
 }
 
-const SOURCE_COLUMNS: &str = "id, url, kind, name, site_name, thumbnail_url, folder, preset, added_at, last_checked_at, last_error, picture";
+const SOURCE_COLUMNS: &str = "id, url, kind, name, site_name, thumbnail_url, folder, preset, added_at, last_checked_at, last_error, picture, new_items_start";
 
 impl WatchedStore {
     pub fn new(database: Arc<Database>) -> Self {
@@ -192,8 +193,8 @@ impl WatchedStore {
         transaction
             .execute(
                 "INSERT INTO watched_sources (url, kind, name, site_name, thumbnail_url, folder, preset, added_at,
-                    last_checked_at, last_error)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL)",
+                    last_checked_at, last_error, new_items_start)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10)",
                 params![
                     source.url,
                     kind_name(source.kind),
@@ -204,6 +205,7 @@ impl WatchedStore {
                     source.preset_id,
                     source.added_at,
                     source.last_checked_at,
+                    source.new_items_start.map(NewItemsStart::name),
                 ],
             )
             .map_err(storage_error)?;
@@ -285,12 +287,18 @@ impl WatchedStore {
         source: i64,
         folder: Option<String>,
         preset_id: Option<String>,
+        new_items_start: Option<NewItemsStart>,
     ) -> Result<(), WatchedError> {
         let connection = self.database.lock();
         let changed = connection
             .execute(
-                "UPDATE watched_sources SET folder = ?2, preset = ?3 WHERE id = ?1",
-                params![source, folder, preset_id],
+                "UPDATE watched_sources SET folder = ?2, preset = ?3, new_items_start = ?4 WHERE id = ?1",
+                params![
+                    source,
+                    folder,
+                    preset_id,
+                    new_items_start.map(NewItemsStart::name)
+                ],
             )
             .map_err(storage_error)?;
         if changed == 0 {
@@ -415,6 +423,10 @@ fn source_from_row(row: &Row<'_>) -> rusqlite::Result<StoredSource> {
         picture: row
             .get::<_, Option<String>>(11)?
             .and_then(|json| from_json(&json)),
+        new_items_start: row
+            .get::<_, Option<String>>(12)?
+            .as_deref()
+            .and_then(NewItemsStart::from_name),
     })
 }
 

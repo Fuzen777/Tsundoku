@@ -16,6 +16,7 @@ import {
 } from "../api"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { ItemKey } from "../bindings/ItemKey"
+import type { NewItemsStart } from "../bindings/NewItemsStart"
 import type { WatchedGroup } from "../bindings/WatchedGroup"
 import type { WatchedItem } from "../bindings/WatchedItem"
 import type { WatchedShow } from "../bindings/WatchedShow"
@@ -57,6 +58,7 @@ import {
   usePickerLayout,
   usePresets,
   useWatchedArrangement,
+  useWatchedOptions,
   useWatchedSources,
 } from "../queries"
 import { strings } from "../strings"
@@ -65,7 +67,9 @@ import {
   allNewItems,
   arrangeSources,
   isExpanded,
+  NEW_ITEMS_STARTS,
   newCount,
+  newItemStartsTicked,
   stripShape,
   WATCHED_SORTS,
   type SourcedItem,
@@ -300,6 +304,7 @@ function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
                 {joinDetails([
                   source.folder ? text.savesIn(source.folder) : text.savesByRules,
                   presetName && text.startsAs(presetName),
+                  source.newItemsStart && text.newItemsStartLine[source.newItemsStart],
                 ])}
               </span>
             )}
@@ -429,12 +434,17 @@ function SourceSummary({ source }: { source: WatchedSource }) {
   )
 }
 
-/** Edit: the picture, Save In and Videos Start As, saved together. */
+/** Edit's New Items Start: the source's own choice, or Default for Settings → Watched's. */
+type NewItemsChoice = NewItemsStart | "default"
+
+/** Edit: the picture, Save In, Videos Start As and New Items Start, saved together. */
 function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () => void }) {
   const { data: presets } = usePresets()
+  const { data: watchedOptions } = useWatchedOptions()
   const [picture, setPicture] = useState(() => pictureDraftOf(source))
   const [folder, setFolder] = useState(source.folder ?? "")
   const [presetId, setPresetId] = useState(source.presetId ?? "")
+  const [newItemsStart, setNewItemsStart] = useState<NewItemsChoice>(source.newItemsStart ?? "default")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
 
@@ -449,7 +459,12 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
     try {
       // The picture first: reading it from its site is what may fail.
       await savePictureDraft(source, picture)
-      await editWatchedSource(source.id, folder.trim() || null, presetId || null)
+      await editWatchedSource(
+        source.id,
+        folder.trim() || null,
+        presetId || null,
+        newItemsStart === "default" ? null : newItemsStart,
+      )
       onDone()
     } catch (caught) {
       setError(describeWatchedError(caught))
@@ -492,6 +507,21 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
           </SelectInput>
         </Field>
       )}
+      <Field
+        label={text.newItemsStart}
+        hint={text.newItemsStartDefaultHint(text.newItemsStarts[watchedOptions?.newItemsStart ?? "unticked"])}
+      >
+        <SegmentedControl<NewItemsChoice>
+          label={text.newItemsStart}
+          options={[
+            { value: "default", label: text.newItemsStartDefault },
+            ...NEW_ITEMS_STARTS.map((start) => ({ value: start, label: text.newItemsStarts[start] })),
+          ]}
+          value={newItemsStart}
+          disabled={saving}
+          onChange={setNewItemsStart}
+        />
+      </Field>
       {error && <StatusMessage tone="danger" {...error} />}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" disabled={saving} onClick={onDone}>
@@ -506,14 +536,16 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
 }
 
 /**
- * What checks found: each item ticked unless the history or the queue has it. Download Selected queues the ticked ones
- * and skips the rest shown; Skip All skips what's shown. Those another type hides stay new.
+ * What checks found, ticked or not as New Items Start says (the source's, else Settings'), and never one downloaded
+ * before or in the queue. Download Selected queues the ticked ones and skips the rest shown; Skip All skips what's
+ * shown. Those another type hides stay new.
  */
 function NewItems({ source }: { source: WatchedSource }) {
+  const { data: options } = useWatchedOptions()
   return (
     <ItemPicker
       items={source.newItems}
-      startsTicked={(item) => !item.lastDownload}
+      startsTicked={(item) => newItemStartsTicked(item, source, options?.newItemsStart)}
       showUploader={source.kind === "playlist"}
       actions={({ picked, unpicked, shown }, run, busy) => (
         <>
@@ -571,18 +603,22 @@ function SkippedItems({ source }: { source: WatchedSource }) {
   )
 }
 
-/** All New Items: every source's new items in one picker, each named with its source, taking what the view's height
- * leaves it. Download Selected queues the ticked ones, each with its source's folder and preset, and skips the rest
- * shown. */
+/** All New Items: every source's new items in one picker, each named with its source and ticked or not as its source's
+ * New Items Start says, taking what the view's height leaves it. Download Selected queues the ticked ones, each with
+ * its source's folder and preset, and skips the rest shown. */
 function AllNewItems({ sources }: { sources: readonly WatchedSource[] }) {
+  const { data: options } = useWatchedOptions()
   const items = allNewItems(sources)
   if (items.length === 0) return <p className="text-fg-secondary">{text.allNewNone}</p>
+  const byId = new Map(sources.map((source) => [source.id, source]))
   return (
     <Card className="flex min-h-0 flex-col p-4">
       <ItemPicker
         fill
         items={items}
-        startsTicked={(item) => !item.lastDownload}
+        startsTicked={(item) =>
+          newItemStartsTicked(item, byId.get(item.sourceId) ?? { newItemsStart: null }, options?.newItemsStart)
+        }
         showUploader={false}
         sourceOf={(item: SourcedItem) => item.sourceName}
         actions={({ picked, unpicked, shown }, run, busy) => (

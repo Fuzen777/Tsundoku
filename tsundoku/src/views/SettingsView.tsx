@@ -27,6 +27,7 @@ import { ShortcutsSection } from "./settings/ShortcutsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
 import { SignInsSection } from "./settings/SignInsSection"
 import { ToolsSection } from "./settings/ToolsSection"
+import { WatchedSection } from "./settings/WatchedSection"
 
 /** Settings' sections as the sidebar lists them under Settings. */
 const SETTINGS_CHAPTERS: readonly Chapter[] = SETTINGS_SECTIONS.map(({ id, title }) => ({ id, title }))
@@ -75,6 +76,7 @@ const SECTION_CONTENTS: Record<SettingsSectionId, () => ReactNode> = {
   "settings-archives": ArchivesSection,
   "settings-passwords": PasswordsSection,
   "settings-adding": AddingSection,
+  "settings-watched": WatchedSection,
   "settings-background": BackgroundSection,
   "settings-appearance": AppearanceSection,
   "settings-shortcuts": ShortcutsSection,

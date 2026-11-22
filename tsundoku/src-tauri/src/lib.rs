@@ -435,6 +435,8 @@ pub fn run() {
             watched::watched_sources,
             watched::add_watched_source,
             watched::edit_watched_source,
+            watched::watched_options,
+            watched::save_watched_options,
             watched::remove_watched_source,
             watched::watched_picture_choices,
             watched::pick_watched_picture,

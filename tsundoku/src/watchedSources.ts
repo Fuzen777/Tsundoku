@@ -1,6 +1,7 @@
 import type { ItemGroup } from "./arrange"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryVideo } from "./bindings/HistoryVideo"
+import type { NewItemsStart } from "./bindings/NewItemsStart"
 import type { WatchedArrangement } from "./bindings/WatchedArrangement"
 import type { WatchedItem } from "./bindings/WatchedItem"
 import type { WatchedSort } from "./bindings/WatchedSort"
@@ -101,6 +102,19 @@ function sortValue(source: WatchedSource, sort: WatchedSort): string | number | 
     case "added":
       return source.addedAt
   }
+}
+
+/** New Items Start's choices, in the order offered. */
+export const NEW_ITEMS_STARTS: readonly NewItemsStart[] = ["unticked", "ticked"]
+
+/** Whether what a check found on a source starts ticked: its own choice, else Settings → Watched's (`fallback`, Unticked
+ * until it's read). An item downloaded before never does. */
+export function newItemStartsTicked(
+  item: WatchedItem,
+  source: Pick<WatchedSource, "newItemsStart">,
+  fallback: NewItemsStart | undefined,
+): boolean {
+  return !item.lastDownload && (source.newItemsStart ?? fallback ?? "unticked") === "ticked"
 }
 
 /** A new item in All New Items, with the source that found it. */

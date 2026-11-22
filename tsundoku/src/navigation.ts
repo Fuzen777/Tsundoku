@@ -34,6 +34,7 @@ export const SETTINGS_SECTIONS = [
   { id: "settings-archives", title: strings.settings.archives },
   { id: "settings-passwords", title: strings.settings.passwords },
   { id: "settings-adding", title: strings.settings.adding },
+  { id: "settings-watched", title: strings.settings.watched },
   { id: "settings-background", title: strings.settings.backgroundShort },
   { id: "settings-appearance", title: strings.settings.appearance },
   { id: "settings-shortcuts", title: strings.settings.keyboardShortcuts },

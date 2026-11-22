@@ -9,6 +9,7 @@ import {
   isExpanded,
   latestDownloadsQuery,
   newCount,
+  newItemStartsTicked,
   sortSources,
   stripShape,
 } from "./watchedSources"
@@ -47,6 +48,7 @@ function source(id: number, facts: Partial<WatchedSource> = {}): WatchedSource {
     picture: null,
     folder: null,
     presetId: null,
+    newItemsStart: null,
     addedAt: 1000 + id,
     lastCheckedAt: 2000 + id,
     lastError: null,
@@ -182,6 +184,34 @@ describe("newCount and isExpanded", () => {
     expect(isExpanded(busy, new Map())).toBe(true)
     expect(isExpanded(busy, new Map([[2, false]]))).toBe(false)
     expect(isExpanded(quiet, new Map([[1, true]]))).toBe(true)
+  })
+})
+
+describe("newItemStartsTicked", () => {
+  const downloaded: WatchedItem = {
+    ...item("old"),
+    lastDownload: {
+      id: 1,
+      preset: "Best Video",
+      filePath: "old.mp4",
+      fileSize: null,
+      format: null,
+      downloadedAt: 0,
+      fileExists: true,
+      fileCount: 1,
+    },
+  }
+
+  it("follows the source's own choice, else Settings', else unticked", () => {
+    expect(newItemStartsTicked(item("a"), source(1, { newItemsStart: "ticked" }), "unticked")).toBe(true)
+    expect(newItemStartsTicked(item("a"), source(1, { newItemsStart: "unticked" }), "ticked")).toBe(false)
+    expect(newItemStartsTicked(item("a"), source(1), "ticked")).toBe(true)
+    expect(newItemStartsTicked(item("a"), source(1), "unticked")).toBe(false)
+    expect(newItemStartsTicked(item("a"), source(1), undefined)).toBe(false)
+  })
+
+  it("never ticks what was downloaded before", () => {
+    expect(newItemStartsTicked(downloaded, source(1, { newItemsStart: "ticked" }), "ticked")).toBe(false)
   })
 })
 
