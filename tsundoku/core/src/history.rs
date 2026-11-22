@@ -1187,6 +1187,7 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
         post_files: Vec::new(),
         shared_files: Vec::new(),
         playlist: None,
+        tags: Vec::new(),
     })
 }
 
@@ -1486,6 +1487,7 @@ mod tests {
             post_files: Vec::new(),
             shared_files: Vec::new(),
             playlist: None,
+            tags: Vec::new(),
         }
     }
 

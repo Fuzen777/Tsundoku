@@ -183,6 +183,9 @@ pub enum RuleField {
     Kind,
     /// The preset, by its ID or its name. A post has none.
     Preset,
+    /// Its tags, each by its name or its English one (`VideoInfo::tags`). Is and Is Not take a list, one tag a line:
+    /// the download has one of them, or none of them.
+    Tags,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -500,6 +503,11 @@ impl RuleSubject<'_> {
                 .preset
                 .map(|preset| vec![preset.id.as_str(), preset.name.as_str()])
                 .unwrap_or_default(),
+            RuleField::Tags => video
+                .tags
+                .iter()
+                .flat_map(|tag| std::iter::once(tag.name.as_str()).chain(tag.english.as_deref()))
+                .collect(),
         }
     }
 }
@@ -566,6 +574,25 @@ impl FolderRule {
                 })
                 .then(Vec::new)
         })
+    }
+
+    /// What `{tag}` becomes in its folder and file name: the tag found by the first of its Tags conditions that looks
+    /// for tags (Is, Contains, Matches) and found one (`RuleCondition::found_tag`). `None` when it has no such
+    /// condition, so `{tag}` stays as it is, as `{1}` does in a rule without a pattern; `Some(None)` when none found one.
+    fn matched_tag(&self, subject: &RuleSubject<'_>) -> Option<Option<String>> {
+        let mut looking = self
+            .conditions
+            .iter()
+            .filter(|condition| {
+                condition.field == RuleField::Tags
+                    && matches!(
+                        condition.operator,
+                        RuleOperator::Is | RuleOperator::Contains | RuleOperator::Matches
+                    )
+            })
+            .peekable();
+        looking.peek()?;
+        Some(looking.find_map(|condition| condition.found_tag(subject)))
     }
 
     /// Whether it picks where matching downloads go.
@@ -644,7 +671,8 @@ impl RuleCondition {
             }
         };
         let wanted = folded(self.value.trim());
-        let is = |value: &str| folded(value) == wanted;
+        let listed: Vec<String> = self.listed_values().map(folded).collect();
+        let is = |value: &str| listed.contains(&folded(value));
         let contains = |value: &str| folded(value).contains(&wanted);
         match self.operator {
             RuleOperator::Is => found(&is),
@@ -657,6 +685,53 @@ impl RuleCondition {
             RuleOperator::DoesNotMatch => self
                 .pattern()
                 .is_ok_and(|pattern| !found(&|value: &str| pattern.is_match(value))),
+        }
+    }
+
+    /// What Is and Is Not compare to: on tags, each line of its value (a list of tags), else its whole value. Trimmed,
+    /// blank lines left out.
+    fn listed_values(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        let value = self.value.trim();
+        if self.field == RuleField::Tags {
+            Box::new(value.lines().map(str::trim).filter(|line| !line.is_empty()))
+        } else {
+            Box::new(std::iter::once(value))
+        }
+    }
+
+    /// For a Tags condition that looks for tags (Is, Contains, Matches), the tag it found, for `{tag}`: for Is, the
+    /// first of its own list the download has, as written in the condition (so a tag found by its English name is
+    /// spelled as the condition spells it); otherwise the first of the download's tags it found, by the name it was
+    /// found by. `None` when it found none.
+    fn found_tag(&self, subject: &RuleSubject<'_>) -> Option<String> {
+        let values = subject.values(RuleField::Tags);
+        let folded = |text: &str| {
+            if self.minds_case() {
+                text.to_owned()
+            } else {
+                text.to_lowercase()
+            }
+        };
+        match self.operator {
+            RuleOperator::Is => self
+                .listed_values()
+                .find(|wanted| values.iter().any(|value| folded(value) == folded(wanted)))
+                .map(str::to_owned),
+            RuleOperator::Contains => {
+                let wanted = folded(self.value.trim());
+                values
+                    .into_iter()
+                    .find(|value| folded(value).contains(&wanted))
+                    .map(str::to_owned)
+            }
+            RuleOperator::Matches => {
+                let pattern = self.pattern().ok()?;
+                values
+                    .into_iter()
+                    .find(|value| pattern.is_match(value))
+                    .map(str::to_owned)
+            }
+            RuleOperator::IsNot | RuleOperator::DoesNotContain | RuleOperator::DoesNotMatch => None,
         }
     }
 
@@ -933,10 +1008,12 @@ pub fn file_name(
                 .find(|rule| rule.applies_by_itself() && names_files(rule) && rule.matches(subject))
         })?;
     let captured = rule.captured(subject);
+    let tag = rule.matched_tag(subject).flatten();
     let filled = post_names::fill_rule_name(
         rule.file_name.trim(),
         video,
         captured.as_deref(),
+        tag.as_deref(),
         rule.missing_values,
     );
     let mut name = filled.trim().to_owned();
@@ -970,6 +1047,7 @@ fn rule_folder(
 ) -> PathBuf {
     let fill_in = FillIn {
         captured,
+        tag: rule.matched_tag(subject),
         today,
         missing: rule.missing_values,
     };
@@ -986,6 +1064,7 @@ pub fn filled_folder(template: &str, subject: &RuleSubject<'_>, download_folder:
     let today = local_date();
     let fill_in = FillIn {
         captured: None,
+        tag: None,
         today: &today,
         missing: MissingValues::StandIn,
     };
@@ -1012,6 +1091,8 @@ fn inside_download_folder(folder: String, download_folder: &Path) -> PathBuf {
 struct FillIn<'a> {
     /// The groups of the rule's first pattern that captures any (`FolderRule::captured`).
     captured: Option<Vec<Option<String>>>,
+    /// The tag its Tags condition found, for `{tag}` (`FolderRule::matched_tag`).
+    tag: Option<Option<String>>,
     /// The local date it's added, as YYYY-MM-DD.
     today: &'a str,
     /// What a placeholder the download has no value for becomes.
@@ -1121,6 +1202,15 @@ fn placeholder_value(
         "month" => (uploaded.and_then(|date| date.get(5..7)), "Unknown"),
         "date" => (uploaded, "Unknown"),
         "added" => (Some(fill_in.today), "Unknown"),
+        "tags" => {
+            let names: Vec<&str> = video.tags.iter().map(|tag| tag.name.as_str()).collect();
+            return Some(stand_in_or_left_out(
+                folder_part(&names.join(", ")),
+                "No Tags",
+                fill_in.missing,
+            ));
+        }
+        "tag" => (fill_in.tag.as_ref()?.as_deref(), "Unknown"),
         other => {
             let [digit @ b'1'..=b'9'] = other.as_bytes() else {
                 return None;
@@ -1130,12 +1220,26 @@ fn placeholder_value(
             (group.and_then(Option::as_deref), "Unknown")
         }
     };
-    let value = folder_part(value.unwrap_or_default());
-    Some(NamePart::Value(match fill_in.missing {
+    Some(stand_in_or_left_out(
+        folder_part(value.unwrap_or_default()),
+        stand_in,
+        fill_in.missing,
+    ))
+}
+
+/// A placeholder's value (made safe already, empty when it has none), else its stand-in word or nothing, as the rule
+/// says.
+fn stand_in_or_left_out(value: String, stand_in: &str, missing: MissingValues) -> NamePart {
+    NamePart::Value(match missing {
         _ if !value.is_empty() => Some(value),
         MissingValues::StandIn => Some(stand_in.to_owned()),
         MissingValues::LeaveOut => None,
-    }))
+    })
+}
+
+/// A placeholder's value as a rule's folder or a post file's name puts it: `folder_part`.
+pub(crate) fn placeholder_text(value: &str) -> String {
+    folder_part(value)
 }
 
 /// `value` made safe as one folder's name (`safe_folder_name`), cut to `LONGEST_PLACEHOLDER` characters; empty when
@@ -1260,6 +1364,7 @@ impl RuleManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::metadata::VideoTag;
     use crate::metadata::{FileContents, PostContents};
     use crate::presets::built_in_presets;
 
@@ -1281,6 +1386,7 @@ mod tests {
             post_files: Vec::new(),
             shared_files: Vec::new(),
             playlist: None,
+            tags: Vec::new(),
         }
     }
 
@@ -2976,6 +3082,126 @@ mod tests {
                 .start_preset(&soundcloud_track(), None, any_preset)
                 .map(|pick| pick.rule),
             Some(2)
+        );
+    }
+
+    fn tagged() -> VideoInfo {
+        let mut video = video();
+        video.tags = vec![
+            VideoTag::named("zoo"),
+            VideoTag {
+                name: "原神".to_owned(),
+                english: Some("Genshin Impact".to_owned()),
+            },
+            VideoTag::named("Elephants"),
+        ];
+        video
+    }
+
+    #[test]
+    fn a_tags_condition_looks_for_any_tag_of_its_list() {
+        let tagged = tagged();
+        let subject = RuleSubject {
+            video: &tagged,
+            preset: None,
+        };
+        let has = |list: &str| condition(RuleField::Tags, RuleOperator::Is, list);
+        assert!(
+            has("cats\nZOO").matches(&subject),
+            "any of the list, ignoring case"
+        );
+        assert!(
+            has(" genshin impact ").matches(&subject),
+            "by its English name"
+        );
+        assert!(has("原神").matches(&subject), "by its own name");
+        assert!(!has("cats\ndogs").matches(&subject));
+        assert!(!condition(RuleField::Tags, RuleOperator::IsNot, "dogs\nzoo").matches(&subject));
+        assert!(condition(RuleField::Tags, RuleOperator::IsNot, "dogs\ncats").matches(&subject));
+        assert!(condition(RuleField::Tags, RuleOperator::Contains, "phant").matches(&subject));
+        assert!(condition(RuleField::Tags, RuleOperator::Matches, "^gen.*act$").matches(&subject));
+        let untagged = video();
+        let bare = RuleSubject {
+            video: &untagged,
+            preset: None,
+        };
+        assert!(
+            !has("zoo").matches(&bare),
+            "nothing to find on a video without tags"
+        );
+        assert!(condition(RuleField::Tags, RuleOperator::IsNot, "zoo").matches(&bare));
+    }
+
+    #[test]
+    fn fills_in_the_tags_and_the_tag_a_condition_found() {
+        let tagged = tagged();
+        let franchises = rule(
+            vec![condition(
+                RuleField::Tags,
+                RuleOperator::Is,
+                "Blue Archive\nGenshin Impact\nzoo",
+            )],
+            r"D:\{tag}\{tags}",
+        );
+        assert_eq!(
+            folder_on(&[franchises], &tagged, None),
+            r"D:\Genshin Impact\zoo, 原神, Elephants",
+            "the first of the condition's list the download has, as the condition spells it"
+        );
+        let found = rule(
+            vec![condition(RuleField::Tags, RuleOperator::Contains, "PHANT")],
+            r"D:\{tag}",
+        );
+        assert_eq!(
+            folder_on(&[found], &tagged, None),
+            r"D:\Elephants",
+            "the download's tag it found, as the site writes it"
+        );
+        let without = rule(Vec::new(), r"D:\{tag}\{tags}");
+        assert_eq!(
+            folder_on(&[without], &video(), None),
+            r"D:\{tag}\No Tags",
+            "{{tag}} without a Tags condition stays as it is"
+        );
+        let left_out = FolderRule {
+            missing_values: MissingValues::LeaveOut,
+            ..rule(
+                vec![
+                    condition(RuleField::Title, RuleOperator::Contains, "zoo"),
+                    or(condition(RuleField::Tags, RuleOperator::Is, "cats")),
+                ],
+                r"D:\x\{tag}\{tags}",
+            )
+        };
+        assert_eq!(
+            folder_on(&[left_out], &video(), None),
+            r"D:\x",
+            "no tag found and no tags, left out"
+        );
+    }
+
+    #[test]
+    fn names_files_with_the_tags_and_the_tag_found() {
+        let mut post = tweet();
+        post.tags = tagged().tags;
+        let subject = RuleSubject {
+            video: &post,
+            preset: None,
+        };
+        let named = FolderRule {
+            file_name: "{tag} {tags} {post} {number}".to_owned(),
+            ..rule(
+                vec![condition(
+                    RuleField::Tags,
+                    RuleOperator::Is,
+                    "genshin impact",
+                )],
+                "",
+            )
+        };
+        assert_eq!(
+            file_name(&[named], &subject, None).as_deref(),
+            Some("genshin impact {tags} {post} {number}")
         );
     }
 }

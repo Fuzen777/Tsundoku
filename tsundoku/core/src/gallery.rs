@@ -8,7 +8,9 @@ use std::time::Duration;
 use serde_json::Value;
 
 use crate::cancel::CancelToken;
-use crate::metadata::{PostContents, PreviewError, TOO_MANY_REQUESTS_PHRASES, VideoInfo};
+use crate::metadata::{
+    PostContents, PreviewError, TOO_MANY_REQUESTS_PHRASES, VideoInfo, VideoTag, tags_from,
+};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::tools::{ToolCacheFolder, ToolId, start_error};
 
@@ -519,7 +521,36 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         post_files: post_files(files),
         shared_files: Vec::new(),
         playlist: None,
+        tags: post_tags(post),
     })
+}
+
+/// A post's tags, from its `tags` (Instagram's and Tumblr's lists of names, Pixiv's names or, with its original tags,
+/// names with their translations, a booru's names separated by spaces), else its `hashtags` (X, Bluesky).
+fn post_tags(post: &Value) -> Vec<VideoTag> {
+    let tags = ["tags", "hashtags"]
+        .into_iter()
+        .filter_map(|field| post.get(field))
+        .find(|tags| tags.as_array().is_some_and(|tags| !tags.is_empty()) || tags.is_string());
+    let Some(tags) = tags else {
+        return Vec::new();
+    };
+    if let Some(names) = tags.as_str() {
+        return tags_from(names.split_whitespace().map(VideoTag::named));
+    }
+    let listed = tags
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|tag| match tag {
+            Value::String(name) => Some(VideoTag::named(name)),
+            Value::Object(_) => Some(VideoTag {
+                name: text(tag, "name")?,
+                english: text(tag, "translated_name"),
+            }),
+            _ => None,
+        });
+    tags_from(listed)
 }
 
 /// Turns an error gallery-dl met while reading the site into the reason the link can't be downloaded.
@@ -1381,6 +1412,47 @@ mod tests {
                 others: 0,
             })
         );
+    }
+
+    #[test]
+    fn reads_a_posts_tags_whichever_way_its_site_gives_them() {
+        let tags_of = |post: &str| {
+            let json = format!(
+                r#"[[2, {post}], [3, "https://cdn.example/1.jpg", {{"category": "pixiv", "num": 0, "extension": "jpg"}}]]"#
+            );
+            let post = parse_answer(&json, "https://www.pixiv.net/artworks/1").unwrap();
+            post.tags
+                .into_iter()
+                .map(|tag| match tag.english {
+                    Some(english) => format!("{}={english}", tag.name),
+                    None => tag.name,
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            tags_of(r##"{"category": "pixiv", "id": 1, "tags": ["#cats", " dogs ", "Cats", ""]}"##),
+            ["cats", "dogs"],
+            "names, without a hash, each once"
+        );
+        assert_eq!(
+            tags_of(
+                r#"{"category": "pixiv", "id": 1, "tags": [{"name": "原神", "translated_name": "Genshin Impact"},
+                    {"name": "オリジナル", "translated_name": null}]}"#
+            ),
+            ["原神=Genshin Impact", "オリジナル"],
+            "names with their translations"
+        );
+        assert_eq!(
+            tags_of(r#"{"category": "danbooru", "id": 1, "tags": "1girl  solo"}"#),
+            ["1girl", "solo"],
+            "a booru's names separated by spaces"
+        );
+        assert_eq!(
+            tags_of(r#"{"category": "twitter", "tweet_id": 1, "hashtags": ["space"]}"#),
+            ["space"],
+            "X's hashtags"
+        );
+        assert!(tags_of(r#"{"category": "twitter", "tweet_id": 1}"#).is_empty());
     }
 
     #[test]

@@ -30,12 +30,13 @@ export const FOLDER_PLACEHOLDERS = [
   "month",
   "date",
   "added",
+  "tags",
 ] as const
 
 /** The most groups a rule's folder can take from its pattern, as `{1}` to `{9}`. */
 const MOST_CAPTURED_GROUPS = 9
 
-export const RULE_FIELDS: readonly RuleField[] = ["site", "uploader", "title", "link", "kind", "preset"]
+export const RULE_FIELDS: readonly RuleField[] = ["site", "uploader", "title", "link", "tags", "kind", "preset"]
 export const DOWNLOAD_KINDS: readonly DownloadKind[] = ["video", "audio", "post", "file"]
 
 /** The comparisons that fit a field: a kind or a preset is picked from a list, so it's either equal or not. Text can
@@ -44,6 +45,44 @@ export function operatorsFor(field: RuleField): readonly RuleOperator[] {
   return field === "kind" || field === "preset"
     ? ["is", "isNot"]
     : ["is", "isNot", "contains", "doesNotContain", "matches", "doesNotMatch"]
+}
+
+/** A comparison's label for a field: a Tags condition Has or Doesn't Have one of its list rather than Is or Is Not. */
+export function operatorLabel(field: RuleField, operator: RuleOperator): string {
+  return field === "tags" && (operator === "is" || operator === "isNot")
+    ? text.tagOperators[operator]
+    : text.operators[operator]
+}
+
+/** Whether a condition's value is a list of tags, one a line: a Tags condition's Has or Doesn't Have
+ * (`RuleCondition::listed_values` in the core). */
+export function takesTagList({ field, operator }: Pick<RuleCondition, "field" | "operator">): boolean {
+  return field === "tags" && (operator === "is" || operator === "isNot")
+}
+
+/** A Tags condition's list, one tag a line, as `components/TagInput.tsx` takes it. */
+export function tagList(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+/** A condition with another comparison, its value turned into a list of tags or back into text when that changes: a
+ * list's first tag, or the text as a list's one tag. */
+export function withOperator(condition: RuleCondition, operator: RuleOperator): RuleCondition {
+  const changed = { ...condition, operator }
+  if (takesTagList(condition) === takesTagList(changed)) return changed
+  return { ...changed, value: takesTagList(changed) ? condition.value.trim() : (tagList(condition.value)[0] ?? "") }
+}
+
+/** Whether a rule's conditions offer `{tag}`: one of them looks for tags (a Tags condition that Has, Contains or
+ * Matches), as `FolderRule::matched_tag` in the core reads it. */
+export function looksForTags(conditions: readonly RuleCondition[]): boolean {
+  return conditions.some(
+    ({ field, operator }) =>
+      field === "tags" && (operator === "is" || operator === "contains" || operator === "matches"),
+  )
 }
 
 /** Whether a comparison takes a pattern (a regular expression) rather than text. */
@@ -85,6 +124,7 @@ export function newCondition(field: RuleField, defaultPresetId: string): RuleCon
       return { field, operator: "contains", value: "", caseSensitive: false, join: "all" }
     case "site":
     case "uploader":
+    case "tags":
       return { field, operator: "is", value: "", caseSensitive: false, join: "all" }
   }
 }
@@ -202,6 +242,12 @@ function describeComparison({ field, operator, value }: RuleCondition, presets: 
   if (field === "kind") {
     const kind = isDownloadKind(value) ? sentence.kinds[value] : value
     return sentence.kind(operator === "isNot" || operator === "doesNotContain", kind)
+  }
+  if (field === "tags") {
+    if (operator === "is" || operator === "isNot") {
+      return sentence.hasTags(tagList(value).map(sentence.quoted), operator === "isNot")
+    }
+    return `${sentence.tagOperators[operator]} ${sentence.quoted(value)}`
   }
   const shown =
     field === "preset"

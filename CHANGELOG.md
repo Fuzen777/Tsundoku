@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.17 · 2026-11-22
+
+### Added
+
+- **Tags in rules**: a rule can check a download's tags, as its site gives them: a YouTube video's tags, an Instagram post's or an X post's hashtags. Tags Has and Doesn't Have take a list of tags (any one of them, or none of them); Contains and Matches look in each tag. A rule's folder and file name, and Settings' name for posts' files, can hold `{tags}`, every tag separated by commas, and a rule's can hold `{tag}`, the tag its Tags condition found: the first of its list the download has, as you wrote it, so one rule can give each franchise or topic a folder of its own. Links read before this version have no tags until they're read again.
+
 ## 0.2.16 · 2026-11-22
 
 ### Added

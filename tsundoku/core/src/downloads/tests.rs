@@ -236,6 +236,7 @@ fn video(video_id: &str) -> VideoInfo {
         post_files: Vec::new(),
         shared_files: Vec::new(),
         playlist: None,
+        tags: Vec::new(),
     }
 }
 
@@ -1237,6 +1238,7 @@ fn post(post_id: &str) -> VideoInfo {
         post_files: Vec::new(),
         shared_files: Vec::new(),
         playlist: None,
+        tags: Vec::new(),
     }
 }
 

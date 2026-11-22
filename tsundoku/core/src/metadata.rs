@@ -66,6 +66,50 @@ pub struct VideoInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub playlist: Option<String>,
+    /// Its tags, as the site writes them, in the site's order (`tags_from`): a YouTube video's, an Instagram post's
+    /// hashtags. Empty when the site gives none, and for a link read before Tsundoku kept them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<VideoTag>,
+}
+
+/// One of a video's or a post's tags.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct VideoTag {
+    /// As the site writes it, without a leading "#".
+    pub name: String,
+    /// Its English name, on a site that translates tags (Pixiv: 原神 is Genshin Impact). `None` elsewhere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub english: Option<String>,
+}
+
+impl VideoTag {
+    /// A tag without a translation.
+    pub fn named(name: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            english: None,
+        }
+    }
+}
+
+/// Tags as they come from a tool: trimmed, without a leading "#", each once (ignoring case), in their order. Blank
+/// ones are left out.
+pub(crate) fn tags_from(tags: impl IntoIterator<Item = VideoTag>) -> Vec<VideoTag> {
+    let mut seen = std::collections::HashSet::new();
+    tags.into_iter()
+        .filter_map(|tag| {
+            let name = tag.name.trim().trim_start_matches('#').trim().to_owned();
+            let english = tag
+                .english
+                .map(|english| english.trim().to_owned())
+                .filter(|english| !english.is_empty() && *english != name);
+            (!name.is_empty() && seen.insert(name.to_lowercase()))
+                .then_some(VideoTag { name, english })
+        })
+        .collect()
 }
 
 impl VideoInfo {
@@ -694,6 +738,8 @@ struct InfoJson {
     filesize_approx: Option<f64>,
     #[serde(default)]
     formats: Vec<FormatJson>,
+    #[serde(default)]
+    tags: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -771,6 +817,12 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         post_files: Vec::new(),
         shared_files: Vec::new(),
         playlist: None,
+        tags: tags_from(
+            info.tags
+                .unwrap_or_default()
+                .iter()
+                .map(|tag| VideoTag::named(tag)),
+        ),
     };
     // Kept for when it's downloaded, to check there's room for it first.
     room::remember_sizes(&video, sizes);
@@ -931,6 +983,24 @@ mod tests {
     fn failure(name: &str) -> PreviewError {
         let text = fixture(&format!("{name}.txt"));
         classify_failure(&text.lines().collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn keeps_a_videos_tags() {
+        let json = r##"{"id": "abc", "extractor_key": "Youtube", "title": "T",
+            "tags": ["#Zoo", "zoo", " elephants ", ""]}"##;
+        let video = parse_info(json).unwrap();
+        assert_eq!(
+            video.tags,
+            [VideoTag::named("Zoo"), VideoTag::named("elephants")]
+        );
+        let without =
+            parse_info(r#"{"id": "abc", "extractor_key": "Youtube", "title": "T"}"#).unwrap();
+        assert!(without.tags.is_empty());
+        assert!(
+            !serde_json::to_string(&without).unwrap().contains("tags"),
+            "left out of the JSON when there are none"
+        );
     }
 
     #[test]

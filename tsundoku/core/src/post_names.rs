@@ -36,16 +36,19 @@ pub enum PostNamePlaceholder {
     NumberIfMany,
     /// The site, as rules name it ("Instagram", "X").
     Site,
+    /// The post's tags, as the site writes them, separated by commas; nothing when it has none.
+    Tags,
 }
 
 impl PostNamePlaceholder {
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Account,
         Self::Date,
         Self::Post,
         Self::Number,
         Self::NumberIfMany,
         Self::Site,
+        Self::Tags,
     ];
 
     /// Its name between braces.
@@ -57,6 +60,7 @@ impl PostNamePlaceholder {
             Self::Number => "number",
             Self::NumberIfMany => "numberIfMany",
             Self::Site => "site",
+            Self::Tags => "tags",
         }
     }
 
@@ -83,14 +87,18 @@ pub enum PostNameError {
     ForbiddenCharacter { character: String },
 }
 
-/// A piece of a name: text as it is, a placeholder, or `{1}` to `{9}`, which a rule fills in with what its pattern
-/// captured (`fill_rule_name`) and which are text anywhere else.
+/// A piece of a name: text as it is, a placeholder, `{1}` to `{9}`, which a rule fills in with what its pattern
+/// captured (`fill_rule_name`), or `{tag}`, the tag its Tags condition found; those two are text anywhere else.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Part {
     Text(String),
     Placeholder(PostNamePlaceholder),
     Group(u8),
+    Tag,
 }
+
+/// The name of the rules' placeholder for the tag a rule's Tags condition found.
+const TAG_PLACEHOLDER: &str = "tag";
 
 /// Checks a post file name and returns it trimmed, or the default when it's blank. It must hold `{post}` and
 /// `{number}`, so each file of each post gets its own name, and nothing Windows refuses in a name.
@@ -150,6 +158,14 @@ fn parse(template: &str) -> Result<Vec<Part>, PostNameError> {
             rest = &rest[1..];
             continue;
         }
+        if word.eq_ignore_ascii_case(TAG_PLACEHOLDER) {
+            if !text.is_empty() {
+                parts.push(Part::Text(std::mem::take(&mut text)));
+            }
+            parts.push(Part::Tag);
+            rest = &rest[word_length + 2..];
+            continue;
+        }
         let placeholder =
             PostNamePlaceholder::named(word).ok_or_else(|| PostNameError::UnknownPlaceholder {
                 name: word.to_owned(),
@@ -183,16 +199,17 @@ pub fn check_text(template: &str) -> Result<(), PostNameError> {
 }
 
 /// A rule's file name (`rules::FolderRule::file_name`) for one download, ready for `gallery_format` or
-/// `shared_file_name`: `{1}` to `{9}` filled in with what the rule's pattern captured (`captured`, whole match first),
-/// made safe for a file name and without braces, `{date}` taken out when the date isn't known, as those two would, and,
-/// when the rule leaves out what's missing (`missing`), `{account}` when the download has no account. A group or a
-/// placeholder taken out goes with the text that separates it (`join_leaving_out`), here, where what the groups
-/// captured still counts as values. A name that doesn't parse, which only a settings.json edited by hand can hold,
-/// stays as it is.
+/// `shared_file_name`: `{1}` to `{9}` filled in with what the rule's pattern captured (`captured`, whole match first)
+/// and `{tag}` with the tag its Tags condition found (`tag`), made safe for a file name and without braces, `{date}`
+/// and `{tags}` taken out when the download has none, as those would, and, when the rule leaves out what's missing
+/// (`missing`), `{account}` when the download has no account. A group or a placeholder taken out goes with the text that
+/// separates it (`join_leaving_out`), here, where what the groups captured still counts as values. A name that doesn't
+/// parse, which only a settings.json edited by hand can hold, stays as it is.
 pub fn fill_rule_name(
     template: &str,
     video: &VideoInfo,
     captured: Option<&[Option<String>]>,
+    tag: Option<&str>,
     missing: MissingValues,
 ) -> String {
     let Ok(parts) = parse(template) else {
@@ -209,9 +226,14 @@ pub fn fill_rule_name(
                     .map(|value| rules::safe_folder_name(&value.replace(['{', '}'], ""), ""))
                     .filter(|value| !value.is_empty()),
             ),
+            Part::Tag => NamePart::Value(
+                tag.map(|tag| rules::safe_folder_name(&tag.replace(['{', '}'], ""), ""))
+                    .filter(|tag| !tag.is_empty()),
+            ),
             Part::Placeholder(placeholder) => {
                 let known = match placeholder {
                     PostNamePlaceholder::Date => video.upload_date.is_some(),
+                    PostNamePlaceholder::Tags => !video.tags.is_empty(),
                     PostNamePlaceholder::Account => {
                         missing == MissingValues::StandIn || has_account(video)
                     }
@@ -245,6 +267,7 @@ pub fn shared_file_name(template: &str, video: &VideoInfo) -> String {
         .map(|part| match part {
             Part::Text(text) => NamePart::Text(text),
             Part::Group(group) => NamePart::Text(format!("{{{group}}}")),
+            Part::Tag => NamePart::Text(format!("{{{TAG_PLACEHOLDER}}}")),
             Part::Placeholder(placeholder) => NamePart::Value(match placeholder {
                 PostNamePlaceholder::Account => {
                     Some(video.uploader.clone().unwrap_or_else(|| site.clone()))
@@ -254,6 +277,7 @@ pub fn shared_file_name(template: &str, video: &VideoInfo) -> String {
                 PostNamePlaceholder::Number => Some("1".to_owned()),
                 PostNamePlaceholder::NumberIfMany => None,
                 PostNamePlaceholder::Site => Some(site.clone()),
+                PostNamePlaceholder::Tags => tag_list(video),
             }),
         })
         .collect();
@@ -275,6 +299,7 @@ pub fn gallery_format(template: &str, post: &VideoInfo) -> String {
         .map(|part| match part {
             Part::Text(text) => NamePart::Text(literal(text)),
             Part::Group(group) => NamePart::Text(literal(&format!("{{{group}}}"))),
+            Part::Tag => NamePart::Text(literal(&format!("{{{TAG_PLACEHOLDER}}}"))),
             Part::Placeholder(placeholder) => NamePart::Value(value(*placeholder, post)),
         })
         .collect();
@@ -290,6 +315,7 @@ fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
         PostNamePlaceholder::Post => Some(literal(&post.video_id)),
         PostNamePlaceholder::Date => post.upload_date.as_deref().map(literal),
         PostNamePlaceholder::Site => Some(literal(&rules::site_name(post))),
+        PostNamePlaceholder::Tags => tag_list(post).as_deref().map(literal),
         // A post's file without a number of its own (on a site that gives none) keeps the name it has on the site,
         // so no two files of the post share a name.
         PostNamePlaceholder::Number => Some(NUMBER_FIELD.to_owned()),
@@ -321,6 +347,14 @@ fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
             Some(format!("{{{}|'{fallback}'}}", fields.join("|")))
         }
     }
+}
+
+/// A download's tags as `{tags}` puts them in a file's name: as the site writes them, separated by commas, made safe
+/// for a file name and cut as a rule's folder cuts a placeholder (`rules::placeholder_text`). `None` without tags.
+fn tag_list(video: &VideoInfo) -> Option<String> {
+    let names: Vec<&str> = video.tags.iter().map(|tag| tag.name.as_str()).collect();
+    let text = rules::placeholder_text(&names.join(", ").replace(['{', '}'], ""));
+    (!text.is_empty()).then_some(text)
 }
 
 /// Text that stays as it is in a gallery-dl format: its braces doubled.
@@ -364,6 +398,7 @@ mod tests {
             post_files: Vec::new(),
             shared_files: Vec::new(),
             playlist: None,
+            tags: Vec::new(),
         }
     }
 
@@ -536,6 +571,49 @@ mod tests {
         assert_eq!(
             gallery_format("{post} {number} {title}", &instagram()),
             gallery_format(DEFAULT_POST_FILE_NAME, &instagram())
+        );
+    }
+
+    #[test]
+    fn puts_the_tags_in_a_posts_names() {
+        let mut post = post("instagram", "https://www.instagram.com/p/DfPQchkG1tg/");
+        assert_eq!(
+            gallery_format("{tags} {post} {number}", &post),
+            "DfPQchkG1tg {num|filename}.{extension}",
+            "left out without tags"
+        );
+        post.tags = vec![
+            crate::metadata::VideoTag::named("a/b"),
+            crate::metadata::VideoTag::named("{c}"),
+        ];
+        assert_eq!(
+            gallery_format("{tags} {post} {number}", &post),
+            "a_b, c DfPQchkG1tg {num|filename}.{extension}",
+            "made safe for a file name, braces dropped"
+        );
+        assert_eq!(
+            check("{tag} {post} {number}"),
+            Ok("{tag} {post} {number}".to_owned())
+        );
+        assert_eq!(
+            gallery_format("{tag} {post} {number}", &post),
+            "{{tag}} DfPQchkG1tg {num|filename}.{extension}",
+            "{{tag}} is text outside a rule"
+        );
+        assert_eq!(
+            fill_rule_name(
+                "{tag} {tags} {post}",
+                &post,
+                None,
+                Some("Blue Archive"),
+                MissingValues::StandIn
+            ),
+            "Blue Archive {tags} {post}"
+        );
+        assert_eq!(
+            fill_rule_name("{tag} {post}", &post, None, None, MissingValues::StandIn),
+            "{post}",
+            "no tag found, left out with its space"
         );
     }
 }

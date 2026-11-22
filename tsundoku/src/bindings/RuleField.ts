@@ -3,4 +3,4 @@
 /**
  * What a condition looks at.
  */
-export type RuleField = "site" | "uploader" | "title" | "link" | "kind" | "preset";
+export type RuleField = "site" | "uploader" | "title" | "link" | "kind" | "preset" | "tags";

@@ -338,6 +338,7 @@ impl Share {
                 Vec::new()
             },
             playlist: None,
+            tags: Vec::new(),
         }
     }
 }

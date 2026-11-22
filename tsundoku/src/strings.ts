@@ -1207,6 +1207,8 @@ export const strings = {
       month: "The month it was uploaded, from 01 to 12, or Unknown.",
       date: "The day it was uploaded, as 2026-11-06, or Unknown.",
       added: "The day you added it, as 2026-11-06.",
+      tags: "The download's tags as its site writes them, separated by commas, cut to 80 characters, or No Tags.",
+      tag: "The tag your Tags condition found: the first of its list the download has, as you wrote it, else the download's own tag it found, or Unknown.",
     },
     capturedHint: (group: string) =>
       `The text the pattern captured in its parentheses number ${group}, counting from the left, or Unknown.`,
@@ -1247,14 +1249,20 @@ export const strings = {
       link: "Link",
       kind: "Kind",
       preset: "Preset",
+      tags: "Tags",
     },
     placeholders: {
       site: "Site Name",
       uploader: "Account or Channel",
       title: "Words in the Title",
       link: "Part of the Link",
+      tags: "Part of a Tag",
+      tagList: "Tags, Enter After Each",
       pattern: String.raw`Pattern, such as ^\[(.+?)\]`,
     },
+    /** Is and Is Not, as a Tags condition says them: it looks for one of a list of tags. */
+    tagOperators: { is: "Has", isNot: "Doesn't Have" },
+    removeTag: (tag: string) => `Remove ${tag}`,
     operators: {
       is: "Is",
       isNot: "Is Not",
@@ -1292,6 +1300,17 @@ export const strings = {
         doesNotMatch: "doesn't match",
       },
       kind: (isNot: boolean, kind: string) => (isNot ? `it isn't ${kind}` : `it's ${kind}`),
+      /** A Tags condition: "it has the tag “cats”", "it has one of the tags “cats”, “dogs”". */
+      hasTags: (tags: readonly string[], none: boolean) =>
+        tags.length === 1
+          ? `${none ? "it doesn't have" : "it has"} the tag ${tags[0]}`
+          : `it has ${none ? "none" : "one"} of the tags ${tags.join(", ")}`,
+      tagOperators: {
+        contains: "a tag contains",
+        doesNotContain: "no tag contains",
+        matches: "a tag matches",
+        doesNotMatch: "no tag matches",
+      },
       kinds: {
         video: "a video",
         audio: "audio",
@@ -1563,6 +1582,7 @@ export const strings = {
       numberIfMany:
         "The file's place in the post, only when several of its files are downloaded: a post of one file, or one file picked from it, gets none.",
       site: "The site, such as Instagram or X.",
+      tags: "The post's tags as its site writes them, separated by commas, or nothing when it has none.",
     },
     /** What the example under the field fills the placeholders with, and the extension it adds. */
     postNameSamples: {
@@ -1572,6 +1592,7 @@ export const strings = {
       number: "1",
       numberIfMany: "1",
       site: "Instagram",
+      tags: "space, mars",
     },
     postNameSampleExtension: "jpg",
     postNameErrors: {

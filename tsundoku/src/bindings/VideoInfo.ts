@@ -3,6 +3,7 @@ import type { FileContents } from "./FileContents";
 import type { PostContents } from "./PostContents";
 import type { PostFile } from "./PostFile";
 import type { SharedFile } from "./SharedFile";
+import type { VideoTag } from "./VideoTag";
 
 /**
  * A single video, as yt-dlp describes it, or a post of images and videos, as gallery-dl describes it (see `post`).
@@ -64,4 +65,9 @@ sharedFiles?: Array<SharedFile>,
  * The playlist, channel or account it was picked from (`listing`), for `{playlist}` in a rule's folder. `None` for
  * a link added on its own.
  */
-playlist?: string, };
+playlist?: string, 
+/**
+ * Its tags, as the site writes them, in the site's order (`tags_from`): a YouTube video's, an Instagram post's
+ * hashtags. Empty when the site gives none, and for a link read before Tsundoku kept them.
+ */
+tags?: Array<VideoTag>, };

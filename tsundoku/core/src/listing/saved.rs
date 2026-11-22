@@ -291,6 +291,7 @@ mod tests {
                 post_files: Vec::new(),
                 shared_files: Vec::new(),
                 playlist: Some("someone".to_owned()),
+                tags: Vec::new(),
             },
             approximate_date: None,
             last_download: None,

@@ -18,6 +18,7 @@ const POST_NAME_PLACEHOLDERS: readonly PostNamePlaceholder[] = [
   "number",
   "numberIfMany",
   "site",
+  "tags",
 ]
 
 interface PostNameInputProps {

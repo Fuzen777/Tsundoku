@@ -18,6 +18,7 @@ import { PlaceholderButtons } from "../../components/PlaceholderButtons"
 import { DEFAULT_POST_FILE_NAME, PostNameInput } from "../../components/PostNameInput"
 import { StatusMessage } from "../../components/StatusMessage"
 import { SegmentedControl } from "../../components/SegmentedControl"
+import { TagInput } from "../../components/TagInput"
 import { Tooltip } from "../../components/Tooltip"
 import type { ErrorDescription } from "../../errors"
 import { useDownloadOptions, useSupportedSites } from "../../queries"
@@ -31,8 +32,13 @@ import {
   canPickPreset,
   capturedGroups,
   isPattern,
+  looksForTags,
   mindsCase,
+  operatorLabel,
   operatorsFor,
+  tagList,
+  takesTagList,
+  withOperator,
 } from "./ruleLabels"
 
 const text = strings.rules
@@ -97,7 +103,8 @@ export function RuleEditor({
   const settingsPostName = downloadOptions?.postFileName.trim() || DEFAULT_POST_FILE_NAME
   const isCatchAll = draft.id === CATCH_ALL_RULE_ID
   const { placeholders, hints: placeholderHints } = folderPlaceholders(draft.conditions)
-  const capturedPlaceholders = placeholders.filter((placeholder) => /^\d$/.test(placeholder))
+  // The rule's own placeholders, after Settings' ones in its file name: `{1}`, `{2}`… and `{tag}`.
+  const capturedPlaceholders = placeholders.filter((placeholder) => /^\d$/.test(placeholder) || placeholder === "tag")
   const update = (changes: Partial<FolderRule>) => onChange({ ...draft, ...changes })
   const setCondition = (index: number, condition: RuleCondition) =>
     update({ conditions: draft.conditions.map((existing, at) => (at === index ? condition : existing)) })
@@ -292,14 +299,15 @@ interface ConditionRowProps {
   onRemove: () => void
 }
 
-/** The folder's placeholders, then `{1}`, `{2}`… for the groups the rule's pattern captures, each with its hover text. */
+/** The folder's placeholders, then `{tag}` when a condition looks for tags, and `{1}`, `{2}`… for the groups the rule's
+ * pattern captures, each with its hover text. */
 function folderPlaceholders(conditions: readonly RuleCondition[]): {
   placeholders: string[]
   hints: Record<string, string>
 } {
   const groups = Array.from({ length: capturedGroups(conditions) }, (_, index) => String(index + 1))
   return {
-    placeholders: [...FOLDER_PLACEHOLDERS, ...groups],
+    placeholders: [...FOLDER_PLACEHOLDERS, ...(looksForTags(conditions) ? ["tag"] : []), ...groups],
     hints: {
       ...text.placeholderHints,
       ...Object.fromEntries(groups.map((group) => [group, text.capturedHint(group)])),
@@ -341,11 +349,11 @@ function ConditionRow({ condition, first, presets, defaultPresetId, onChange, on
         aria-label={text.operator}
         title={text.operator}
         value={operator}
-        onChange={(event) => onChange({ ...condition, operator: event.target.value as RuleOperator })}
+        onChange={(event) => onChange(withOperator(condition, event.target.value as RuleOperator))}
       >
         {operatorsFor(field).map((option) => (
           <option key={option} value={option}>
-            {text.operators[option]}
+            {operatorLabel(field, option)}
           </option>
         ))}
       </SelectInput>
@@ -365,6 +373,13 @@ function ConditionRow({ condition, first, presets, defaultPresetId, onChange, on
             </option>
           ))}
         </SelectInput>
+      ) : takesTagList(condition) ? (
+        <TagInput
+          values={tagList(value)}
+          placeholder={text.placeholders.tagList}
+          removeLabel={text.removeTag}
+          onChange={(tags) => setValue(tags.join("\n"))}
+        />
       ) : (
         <TextInput
           aria-label={text.value}

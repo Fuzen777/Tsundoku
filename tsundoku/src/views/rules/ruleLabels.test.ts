@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest"
 import type { RuleCondition } from "../../bindings/RuleCondition"
-import { capturedGroups, describeConditions, describeManualConditions, newRule, shownFolder } from "./ruleLabels"
+import {
+  capturedGroups,
+  describeConditions,
+  describeManualConditions,
+  looksForTags,
+  newRule,
+  shownFolder,
+  withOperator,
+} from "./ruleLabels"
 
 const matches = (value: string): RuleCondition => ({
   field: "title",
@@ -65,6 +73,37 @@ describe("describeConditions", () => {
       String.raw`Conditions: the title matches “(RJ\d+)” OR the site is DLsite`,
     )
     expect(describeManualConditions([], [])).toBeNull()
+  })
+})
+
+describe("Tags conditions", () => {
+  const tags = (operator: RuleCondition["operator"], value: string): RuleCondition => ({
+    field: "tags",
+    operator,
+    value,
+    caseSensitive: false,
+    join: "all",
+  })
+
+  it("says what a Tags condition looks for", () => {
+    expect(describeConditions([tags("is", "cats")], [])).toBe("When it has the tag “cats”")
+    expect(describeConditions([tags("is", "cats\ndogs")], [])).toBe("When it has one of the tags “cats”, “dogs”")
+    expect(describeConditions([tags("isNot", "cats\ndogs")], [])).toBe("When it has none of the tags “cats”, “dogs”")
+    expect(describeConditions([tags("isNot", "cats")], [])).toBe("When it doesn't have the tag “cats”")
+    expect(describeConditions([tags("doesNotContain", "cat")], [])).toBe("When no tag contains “cat”")
+  })
+
+  it("turns a list of tags into text and back when the comparison changes", () => {
+    expect(withOperator(tags("is", "cats\ndogs"), "contains").value).toBe("cats")
+    expect(withOperator(tags("contains", " cat "), "isNot").value).toBe("cat")
+    expect(withOperator(tags("is", "cats\ndogs"), "isNot").value).toBe("cats\ndogs")
+  })
+
+  it("offers {tag} only when a condition looks for tags", () => {
+    expect(looksForTags([tags("is", "cats")])).toBe(true)
+    expect(looksForTags([tags("matches", "^c")])).toBe(true)
+    expect(looksForTags([tags("isNot", "cats"), tags("doesNotMatch", "^c")])).toBe(false)
+    expect(looksForTags([matches("(a)")])).toBe(false)
   })
 })
 
