@@ -160,6 +160,9 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Open a big X account (thousands of photos and videos), press Load All and leave it → it lists about 1,000 posts, says "Paused by X, resuming at…" with the time left, and goes on by itself after each wait, to the end ("Account · 3,412 posts", no Load buttons left). Tick and download a few posts during a wait.
 - Claude tried it in a test copy with x.com/NASA: 1,210 posts in 25 seconds, the pause with X's own time, the listing going on by itself on the second at 4:46 AM up to 2,070 posts, Stop during a wait, and the account opening with everything listed before, during the wait and after a restart (a YouTube channel listed whole too). It wasn't left running to the end, to spare your X allowance: each stretch uses up X's list for 15 minutes, for X's own Media tab in your browser too.
 
+**80. A Pixiv novel's book in your reader** · 0.2.29 · Claude checked the book's files, not how a reader shows it
+- [ ] Signed in to Pixiv, paste a novel's link (`https://www.pixiv.net/novel/show.php?id=…`) and download it. Open the `.epub` it saves in the reader you use: the cover first, then the novel's pages in order, its chapters listed in the reader's table of contents, furigana shown above their words, and links that open.
+
 ## Pending and the Queue
 
 **72. Unpacking archives** · 0.1.130
