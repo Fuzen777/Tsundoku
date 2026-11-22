@@ -123,14 +123,10 @@ export function pickerItems(items: readonly ListedItem[]): PickerItems {
  * The picker with items loaded later (Load More, Load All) added: each kept once, the first time it's met, since a read
  * may start with items listed before. An account's posts are put in date order with the others, newest first, since a
  * pinned post among the first ones may be older than those loaded. The ticks made stay; an added item that's new is
- * ticked when `tickNew` (anything was ticked when the load started), as the first ones were.
+ * ticked, as the first ones were, since the list shows only what's ticked (`splitByTicks`): one left unticked would
+ * go straight under Not Downloading.
  */
-export function withMoreItems(
-  current: PickerItems,
-  more: readonly ListedItem[],
-  kind: ListingKind,
-  tickNew: boolean,
-): PickerItems {
+export function withMoreItems(current: PickerItems, more: readonly ListedItem[], kind: ListingKind): PickerItems {
   const known = new Set(current.items.map(itemKey))
   const added = more.filter((item) => {
     const key = itemKey(item)
@@ -140,11 +136,42 @@ export function withMoreItems(
   })
   if (added.length === 0) return current
   const merged = [...current.items, ...added]
-  const ticked = tickNew ? added.filter((item) => !isKnown(item)).map(itemKey) : []
+  const ticked = added.filter((item) => !isKnown(item)).map(itemKey)
   return {
     items: kind === "account" ? newestFirst(merged) : merged,
     selection: ticked.length > 0 ? new Set([...current.selection, ...ticked]) : current.selection,
   }
+}
+
+/** The picker once these items, by their keys, joined the queue (Download and Load More): In Downloads, and no longer
+ * ticked. */
+export function withQueued(current: PickerItems, keys: ReadonlySet<string>): PickerItems {
+  const selection = new Set(current.selection)
+  for (const key of keys) selection.delete(key)
+  return {
+    items: current.items.map((item) => (keys.has(itemKey(item)) ? { ...item, inQueue: true } : item)),
+    selection,
+  }
+}
+
+/**
+ * The items the picker lists, in their order, split in two: what will download (ticked, and those unticked a moment
+ * ago, `leaving`, which fade before they move), and what won't (unticked, downloaded before or in Downloads), which the
+ * Not Downloading heading under the list folds away.
+ */
+export function splitByTicks<Item extends ListedItem>(
+  items: readonly Item[],
+  selection: ReadonlySet<string>,
+  leaving: ReadonlySet<string>,
+): { ticked: Item[]; leftOut: Item[] } {
+  const ticked: Item[] = []
+  const leftOut: Item[] = []
+  for (const item of items) {
+    const key = itemKey(item)
+    if ((selection.has(key) && !isQueued(item)) || leaving.has(key)) ticked.push(item)
+    else leftOut.push(item)
+  }
+  return { ticked, leftOut }
 }
 
 /** Items by their day, newest first, those without one last; items of one day keep their order. */

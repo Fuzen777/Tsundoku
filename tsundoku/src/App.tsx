@@ -326,6 +326,7 @@ export function App() {
                   preview.close()
                   setLink("")
                 }}
+                onSomeAdded={donePicking}
                 onWatched={() => {
                   donePicking()
                   preview.close()

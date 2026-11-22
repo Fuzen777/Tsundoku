@@ -721,7 +721,16 @@ export const strings = {
     inQueueHint: "Already in Downloads.",
     videosStartAs: "Videos Start As",
     videosStartAsHint: "For videos no rule picks a preset for.",
-    downloadSelected: (count: number) => (count === 0 ? "Download Selected" : `Download Selected (${count.toLocaleString()})`),
+    /** The buttons side by side under the list: what's ticked into Downloads, then the next ones listed, or alone. */
+    download: (count: number) => (count === 0 ? "Download" : `Download (${count.toLocaleString()})`),
+    downloadAndLoadMore: (count: number) =>
+      count === 0 ? "Download and Load More" : `Download (${count.toLocaleString()}) and Load More`,
+    downloadAndLoadMoreHint: (noun: readonly [string, string]) =>
+      `Puts what's ticked in Downloads, then lists the next ${noun[1]}, older than these, to go on picking.`,
+    /** Under the list: what won't download, folded away to start with. */
+    leftOut: "Not Downloading",
+    leftOutHint: "What's unticked, downloaded before or in Downloads. Tick one to download it after all.",
+    nothingTicked: "Nothing is ticked. Everything listed is under Not Downloading.",
   },
   /** How a picker lays out what it offers: a listing's items, a post's files (PickerViewControls.tsx). */
   pickerView: {

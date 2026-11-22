@@ -19,7 +19,9 @@ import {
   typeCounts,
   typeInEffect,
   withItem,
+  splitByTicks,
   withMoreItems,
+  withQueued,
   type PickedPreset,
 } from "./listingPicker"
 import { strings } from "./strings"
@@ -134,21 +136,21 @@ describe("what Download Selected queues", () => {
 describe("withMoreItems", () => {
   const ids = (list: readonly ListedItem[]) => list.map((entry) => entry.video.videoId)
 
-  it("adds the items after the first ones once each, ticking the new ones when anything was ticked", () => {
+  it("adds the items after the first ones once each, ticking the new ones", () => {
     const start = pickerItems([item("a"), item("b")])
     const more = [item("b"), item("c"), item("d", { lastDownload: downloadedWith("Best Video") }), item("c")]
-    const next = withMoreItems(start, more, "channel", true)
+    const next = withMoreItems(start, more, "channel")
     expect(ids(next.items)).toEqual(["a", "b", "c", "d"])
     expect([...next.selection].sort()).toEqual([itemKey(item("a")), itemKey(item("b")), itemKey(item("c"))].sort())
   })
 
-  it("keeps the ticks made, and leaves added items unticked when nothing was ticked", () => {
+  it("keeps the ticks made, and ticks the new arrivals even when nothing was ticked", () => {
     const start = withItem(pickerItems([item("a"), item("b")]).selection, item("a"), false)
-    const next = withMoreItems({ items: [item("a"), item("b")], selection: start }, [item("c")], "channel", true)
+    const next = withMoreItems({ items: [item("a"), item("b")], selection: start }, [item("c")], "channel")
     expect(next.selection.has(itemKey(item("a")))).toBe(false)
     expect(next.selection.has(itemKey(item("c")))).toBe(true)
-    const none = withMoreItems({ items: [item("a")], selection: new Set() }, [item("c")], "channel", false)
-    expect(none.selection.size).toBe(0)
+    const none = withMoreItems({ items: [item("a")], selection: new Set() }, [item("c")], "channel")
+    expect([...none.selection]).toEqual([itemKey(item("c"))])
   })
 
   it("puts an account's posts in date order, newest first, those without a date last", () => {
@@ -158,13 +160,41 @@ describe("withMoreItems", () => {
     }
     // A pinned post comes first, older than the newest.
     const start = pickerItems([dated("pinned", "2024-01-01"), dated("new", "2026-11-01"), dated("older", "2026-10-01")])
-    const next = withMoreItems(start, [dated("oldest", "2023-05-05"), dated("undated", null)], "account", true)
+    const next = withMoreItems(start, [dated("oldest", "2023-05-05"), dated("undated", null)], "account")
     expect(ids(next.items)).toEqual(["new", "older", "pinned", "oldest", "undated"])
   })
 
   it("answers the same picker when nothing new came", () => {
     const start = pickerItems([item("a")])
-    expect(withMoreItems(start, [item("a")], "channel", true)).toBe(start)
+    expect(withMoreItems(start, [item("a")], "channel")).toBe(start)
+  })
+})
+
+describe("withQueued", () => {
+  it("marks the items queued In Downloads and unticks them, leaving the others as they were", () => {
+    const start = pickerItems([item("a"), item("b"), item("c")])
+    const next = withQueued(start, new Set([itemKey(item("a")), itemKey(item("c"))]))
+    expect(next.items.map((entry) => entry.inQueue)).toEqual([true, false, true])
+    expect([...next.selection]).toEqual([itemKey(item("b"))])
+    expect(start.items[0].inQueue).toBe(false)
+  })
+})
+
+describe("splitByTicks", () => {
+  const ids = (list: readonly ListedItem[]) => list.map((entry) => entry.video.videoId)
+  const items = [
+    item("ticked"),
+    item("unticked"),
+    item("leaving"),
+    item("downloaded", { lastDownload: downloadedWith("Best Video") }),
+    item("queued", { inQueue: true }),
+  ]
+
+  it("lists what's ticked or fading on top, in order, and folds the rest away", () => {
+    const selection = new Set([itemKey(items[0]), itemKey(items[3]), itemKey(items[4])])
+    const { ticked, leftOut } = splitByTicks(items, selection, new Set([itemKey(items[2])]))
+    expect(ids(ticked)).toEqual(["ticked", "leaving", "downloaded"])
+    expect(ids(leftOut)).toEqual(["unticked", "queued"])
   })
 })
 

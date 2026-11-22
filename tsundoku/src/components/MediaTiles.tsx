@@ -10,7 +10,7 @@ import {
   TINY_TILE,
   tileWidthIn,
 } from "../pickerLayout"
-import { classes } from "./styles"
+import { classes, LEAVING_CLASSES } from "./styles"
 
 /** What a tile says under its picture, as the post strip's marks do. */
 export interface TileMark {
@@ -41,6 +41,8 @@ export interface MediaTile {
   /** At the bottom right, such as a video's length. */
   corner?: ReactNode
   mark?: TileMark | null
+  /** Unticked a moment ago: it fades slowly, undimmed, before it moves away (the listing picker's Not Downloading). */
+  leaving?: boolean
   onToggle: (picked: boolean) => void
 }
 
@@ -177,12 +179,13 @@ interface TileProps {
 function Tile({ spec, ratio, labels, disabled }: TileProps) {
   const [failed, setFailed] = useState(false)
   const [ownRatio, setOwnRatio] = useState<number | null>(null)
-  const { thumbnailUrl, fallbackIcon: FallbackIcon, picked, locked, mark } = spec
+  const { thumbnailUrl, fallbackIcon: FallbackIcon, picked, locked, mark, leaving = false } = spec
   const pictured = thumbnailUrl !== null && !failed
   const shown = picked && !locked
+  const dimmed = !shown && !leaving
   const inactive = disabled || locked
   return (
-    <li data-item={spec.key} className="min-w-0">
+    <li data-item={spec.key} className={classes("min-w-0 transition-opacity", leaving && LEAVING_CLASSES)}>
       <label
         title={spec.hint}
         style={{ aspectRatio: ratio ?? (pictured ? (ownRatio ?? spec.ratio) : 1) }}
@@ -199,7 +202,7 @@ function Tile({ spec, ratio, labels, disabled }: TileProps) {
             alt=""
             loading="lazy"
             referrerPolicy="no-referrer"
-            className={classes("size-full object-cover transition-opacity", !shown && "opacity-35")}
+            className={classes("size-full object-cover transition-opacity", dimmed && "opacity-35")}
             onLoad={(event) => {
               const shape = ownShape(event.currentTarget)
               if (shape !== null) setOwnRatio(shape)
@@ -210,7 +213,7 @@ function Tile({ spec, ratio, labels, disabled }: TileProps) {
           <span
             className={classes(
               "flex size-full items-center justify-center text-fg-muted transition-opacity",
-              !shown && "opacity-35",
+              dimmed && "opacity-35",
             )}
           >
             <FallbackIcon size={labels === "full" ? 24 : 16} />

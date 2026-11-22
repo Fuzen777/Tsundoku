@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.15 · 2026-11-22
+
+### Changed
+
+- **A channel's or account's list shows only what will download**: unticking an item fades it slowly for two seconds, then moves it under Not Downloading, a heading under the list folded to start with; ticking it again while it fades keeps it. What was downloaded before or is in Downloads waits there too, and unfolding it and ticking one moves it back up. Items listed by Load More, Load New or Load All now always arrive ticked.
+- **Download page by page**: Download Selected is now Download, with Download and Load More beside it while there's more to list: it queues what's ticked, keeps the card open, and lists the next ones to go on picking.
+
 ## 0.2.14 · 2026-11-22
 
 ### Changed
