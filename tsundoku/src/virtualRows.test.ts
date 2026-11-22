@@ -3,7 +3,7 @@ import { layOutRows, rowsBetween } from "./virtualRows"
 
 describe("layOutRows", () => {
   it("uses measured heights where known and the estimate elsewhere", () => {
-    const layout = layOutRows([1, 2, 3], new Map([[2, 150]]), 100)
+    const layout = layOutRows([1, 2, 3], new Map([["2", 150]]), 100)
     expect(layout).toEqual({ starts: [0, 100, 250], total: 350 })
   })
 

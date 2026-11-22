@@ -32,6 +32,7 @@ import {
   getSupportedSites,
   getHistoryFilters,
   getHistoryDataSize,
+  getHistoryGroups,
   getHistoryPage,
   getHistorySize,
   getVideoDownloads,
@@ -59,6 +60,7 @@ import {
 import { folderFromGroup, ruleGroup, STORED_ORDER, type GroupPlace } from "./arrange"
 import { DEFAULT_PICKER_LAYOUTS, sizeStep } from "./pickerLayout"
 import { DEFAULT_WATCHED_ARRANGEMENT, LATEST_DOWNLOADS, latestDownloadsQuery } from "./watchedSources"
+import { DEFAULT_HISTORY_ARRANGEMENT } from "./historyList"
 import { ruleLabel } from "./views/rules/ruleLabels"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
@@ -66,6 +68,7 @@ import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { Destination } from "./bindings/Destination"
 import type { DownloadSettings } from "./bindings/DownloadSettings"
 import type { FolderFrom } from "./bindings/FolderFrom"
+import type { HistoryArrangement } from "./bindings/HistoryArrangement"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { ListArrangement } from "./bindings/ListArrangement"
 import type { ListArrangements } from "./bindings/ListArrangements"
@@ -333,6 +336,19 @@ export function useListArrangement(list: "pending" | "queue") {
   }
 }
 
+/** How the History view groups and sorts the videos (its defaults until it's read), and a change to it, saved as the
+ * lists' arrangements are. */
+export function useHistoryArrangement() {
+  const { arrangements, change, error } = useListArrangements()
+  return {
+    arrangement: arrangements?.history ?? DEFAULT_HISTORY_ARRANGEMENT,
+    ready: arrangements !== undefined,
+    change: (changes: Partial<HistoryArrangement>) =>
+      change((current) => ({ ...current, history: { ...current.history, ...changes } })),
+    error,
+  }
+}
+
 /** How the Watched view shows its sources (its defaults until it's read), and a change to it, saved as the lists'
  * arrangements are. */
 export function useWatchedArrangement() {
@@ -429,6 +445,17 @@ export function useHistory(query: HistoryQuery) {
       return lastPage.videos.length === HISTORY_PAGE_SIZE && loaded < lastPage.total ? loaded : undefined
     },
     placeholderData: keepPreviousData,
+  })
+}
+
+/** The groups of the history view's results, in their order, with how many each holds (none ungrouped), the last
+ * answer kept while the next is read. Read again with the history, so they stay in step with its pages. */
+export function useHistoryGroups(query: HistoryQuery) {
+  return useQuery({
+    queryKey: [...queryKeys.history, "groups", query],
+    queryFn: () => getHistoryGroups(query),
+    placeholderData: keepPreviousData,
+    enabled: query.group !== "none",
   })
 }
 

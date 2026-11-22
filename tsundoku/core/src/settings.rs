@@ -10,6 +10,7 @@ use ts_rs::TS;
 
 use crate::atomic_file::write_atomically;
 use crate::data_folder;
+use crate::history::{HistoryGroup, HistorySort};
 use crate::post_names;
 use crate::presets::PresetsSettings;
 use crate::rules::{RulesSettings, catch_all_rule, posts_folder_rule, with_catch_all_first};
@@ -767,7 +768,7 @@ where
     Ok(T::deserialize(value).unwrap_or_default())
 }
 
-/// How the Pending, Queue and Watched views group and sort their lists, each chosen in its own toolbar.
+/// How the Pending, Queue, Watched and History views group and sort their lists, each chosen in its own toolbar.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
@@ -775,6 +776,29 @@ pub struct ListArrangements {
     pub pending: ListArrangement,
     pub queue: ListArrangement,
     pub watched: WatchedArrangement,
+    pub history: HistoryArrangement,
+}
+
+/// How the History view groups and sorts the videos, which the core does as it reads them a page at a time. By
+/// default, ungrouped and the latest downloaded first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct HistoryArrangement {
+    pub group: HistoryGroup,
+    pub sort: HistorySort,
+    /// Newest, largest or Z first.
+    pub descending: bool,
+}
+
+impl Default for HistoryArrangement {
+    fn default() -> Self {
+        Self {
+            group: HistoryGroup::None,
+            sort: HistorySort::Downloaded,
+            descending: true,
+        }
+    }
 }
 
 /// How one list is grouped and sorted. By default, ungrouped and oldest first, as the list is stored.
@@ -923,6 +947,10 @@ pub struct PickerLayouts {
     /// Every download in the Downloads view: one choice for the whole view. Named for the downloads under a channel's,
     /// playlist's or account's heading, the only ones it was for at first.
     pub queue_sources: PickerLayout,
+    /// Every link in the Pending view.
+    pub pending: PickerLayout,
+    /// Every video in the History view.
+    pub history: PickerLayout,
 }
 
 impl Default for PickerLayouts {
@@ -935,6 +963,8 @@ impl Default for PickerLayouts {
                 hide_downloaded: false,
             },
             queue_sources: PickerLayout::default(),
+            pending: PickerLayout::rows(),
+            history: PickerLayout::rows(),
         }
     }
 }
@@ -957,6 +987,16 @@ impl Default for PickerLayout {
             view: PickerView::Gallery,
             size: 2,
             hide_downloaded: false,
+        }
+    }
+}
+
+impl PickerLayout {
+    /// A row each, as the Pending and History views showed everything before they had views.
+    fn rows() -> Self {
+        Self {
+            view: PickerView::List,
+            ..Self::default()
         }
     }
 }
@@ -1165,6 +1205,33 @@ mod tests {
             WatchedArrangement::default(),
             "a file from before Watched had its arrangement"
         );
+        assert_eq!(
+            lists.history,
+            HistoryArrangement {
+                group: HistoryGroup::None,
+                sort: HistorySort::Downloaded,
+                descending: true,
+            },
+            "a file from before History kept its arrangement: the latest downloaded first"
+        );
+    }
+
+    #[test]
+    fn reads_the_history_arrangement() {
+        let folder = tempfile::tempdir().unwrap();
+        fs::write(
+            folder.path().join("settings.json"),
+            r#"{ "lists": { "history": { "group": "month", "sort": "title" } } }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            store_in(&folder).get().lists.history,
+            HistoryArrangement {
+                group: HistoryGroup::Month,
+                sort: HistorySort::Title,
+                descending: true,
+            }
+        );
     }
 
     #[test]
@@ -1219,6 +1286,16 @@ mod tests {
                     size: 2,
                     hide_downloaded: false,
                 },
+                pending: PickerLayout {
+                    view: PickerView::List,
+                    size: 2,
+                    hide_downloaded: false,
+                },
+                history: PickerLayout {
+                    view: PickerView::List,
+                    size: 2,
+                    hide_downloaded: false,
+                },
             }
         );
 
@@ -1243,6 +1320,9 @@ mod tests {
         );
         // From before the Queue had views: its own starts as Gallery.
         assert_eq!(pickers.queue_sources, PickerLayout::default());
+        // From before Pending and History had views: they keep their rows.
+        assert_eq!(pickers.pending.view, PickerView::List);
+        assert_eq!(pickers.history.view, PickerView::List);
     }
 
     #[test]
@@ -1280,6 +1360,16 @@ mod tests {
             queue_sources: PickerLayout {
                 view: PickerView::List,
                 size: 3,
+                hide_downloaded: false,
+            },
+            pending: PickerLayout {
+                view: PickerView::Gallery,
+                size: 1,
+                hide_downloaded: false,
+            },
+            history: PickerLayout {
+                view: PickerView::Masonry,
+                size: 4,
                 hide_downloaded: false,
             },
         };

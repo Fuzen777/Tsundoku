@@ -13,6 +13,8 @@ import {
   chosenFolderGroup,
   folderGroup,
   groupPath,
+  LIST_GROUPS,
+  LIST_SORTS,
   NO_GROUP,
   sameFolder,
   unknownRuleGroup,
@@ -90,8 +92,8 @@ const QUEUE_WAYS: readonly WayToAdd[] = ["paste", "drop", "watch", "shortcut", "
 /**
  * The Downloads view (the queue, in the code): every download added and not cleared yet, grouped and sorted as its
  * toolbar says, those picked together from one source under its heading, as rows (List) or pictures (Masonry, Gallery),
- * one choice for the whole view. Grouped, the sidebar lists its groups under it as chapters, a status's groups as their
- * subchapters.
+ * one choice for the whole view, kept in its header so it stays in sight however far the list is scrolled. Grouped, the
+ * sidebar lists its groups under it as chapters, a status's groups as their subchapters.
  */
 export function QueueView() {
   const { data: items = [] } = useQueue()
@@ -155,6 +157,7 @@ export function QueueView() {
           </Button>
         ))
       }
+      viewControls={items.length > 0 && <PickerViewControls layout={layout} onChange={changeLayout} />}
     >
       {queueError && <StatusMessage tone="danger" {...queueError} />}
       {items.length === 0 ? (
@@ -167,12 +170,11 @@ export function QueueView() {
             <p className="text-fg-secondary">{strings.queue.count(items.length)}</p>
             <ArrangeControls
               arrangement={arrangement}
+              groups={LIST_GROUPS}
+              sorts={LIST_SORTS}
               disabled={!ready}
               onChange={(changes) => void changeArrangement(changes)}
             />
-            <div className="ml-auto">
-              <PickerViewControls layout={layout} onChange={changeLayout} />
-            </div>
           </div>
           {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           <QueueLookContext value={look}>

@@ -17,4 +17,12 @@ postFiles: PickerLayout,
  * Every download in the Downloads view: one choice for the whole view. Named for the downloads under a channel's,
  * playlist's or account's heading, the only ones it was for at first.
  */
-queueSources: PickerLayout, };
+queueSources: PickerLayout, 
+/**
+ * Every link in the Pending view.
+ */
+pending: PickerLayout, 
+/**
+ * Every video in the History view.
+ */
+history: PickerLayout, };

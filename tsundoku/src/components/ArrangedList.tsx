@@ -1,48 +1,63 @@
 import { Fragment, type ReactNode } from "react"
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, Folder } from "lucide-react"
-import { bundled, groupPath, sharedBundles, type ItemGroup, type ListEntry } from "../arrange"
-import type { ListArrangement } from "../bindings/ListArrangement"
-import type { ListGroup } from "../bindings/ListGroup"
-import type { ListSort } from "../bindings/ListSort"
+import { bundled, groupPath, sharedBundles, type GroupPlace, type ItemGroup, type ListEntry } from "../arrange"
 import { useFoldedGroups, type FoldedGroups, type GroupedView } from "../foldedGroups"
 import { strings } from "../strings"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
 import { SegmentedControl, ToggleButton } from "./SegmentedControl"
+import { classes } from "./styles"
 
 const text = strings.lists
 
-const GROUP_OPTIONS = (["none", "site", "destination", "rule"] as const satisfies readonly ListGroup[]).map((group) => ({
-  value: group,
-  label: text.groups[group],
-}))
-const SORTS: readonly ListSort[] = ["added", "title", "uploader", "site"]
+/** What a list can be grouped by, each named as the toolbar's buttons name it. */
+type GroupName = keyof typeof text.groups
 
-interface ArrangeControlsProps {
-  arrangement: ListArrangement
-  onChange: (changes: Partial<ListArrangement>) => void
+/** How a list is grouped and sorted, as its toolbar changes it. */
+interface Arrangement<Group extends GroupName, Sort extends string> {
+  group: Group
+  sort: Sort
+  descending: boolean
+  /** Grouped by where each item stands first: a switch of its own, for the lists that have it. */
+  byStatus?: boolean
+}
+
+interface ArrangeControlsProps<Group extends GroupName, Sort extends string> {
+  arrangement: Arrangement<Group, Sort>
+  /** The groupings offered, in order: None first. */
+  groups: readonly Group[]
+  sorts: readonly { value: Sort; label: string }[]
+  onChange: (changes: Partial<Arrangement<Group, Sort>>) => void
   disabled?: boolean
 }
 
 /**
- * How the Pending and Queue views group and sort their lists: Status, a switch of its own, then Site, Folder or Rule
- * side by side, then the sort and its direction, as the history's.
+ * How the Pending, Downloads and History views group and sort their lists: Status, a switch of its own, where the list
+ * has it, then the groupings side by side, then the sort and its direction.
  */
-export function ArrangeControls({ arrangement, onChange, disabled = false }: ArrangeControlsProps) {
+export function ArrangeControls<Group extends GroupName, Sort extends string>({
+  arrangement,
+  groups,
+  sorts,
+  onChange,
+  disabled = false,
+}: ArrangeControlsProps<Group, Sort>) {
   const { descending, byStatus } = arrangement
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-fg-secondary">{text.groupBy}</span>
-      <ToggleButton
-        label={text.byStatus}
-        hint={text.byStatusHint}
-        pressed={byStatus}
-        disabled={disabled}
-        onChange={(pressed) => onChange({ byStatus: pressed })}
-      />
+      {byStatus !== undefined && (
+        <ToggleButton
+          label={text.byStatus}
+          hint={text.byStatusHint}
+          pressed={byStatus}
+          disabled={disabled}
+          onChange={(pressed) => onChange({ byStatus: pressed })}
+        />
+      )}
       <SegmentedControl
         label={text.groupBy}
-        options={GROUP_OPTIONS}
+        options={groups.map((group) => ({ value: group, label: text.groups[group] }))}
         value={arrangement.group}
         disabled={disabled}
         onChange={(group) => onChange({ group })}
@@ -52,11 +67,11 @@ export function ArrangeControls({ arrangement, onChange, disabled = false }: Arr
         title={text.sortBy}
         value={arrangement.sort}
         disabled={disabled}
-        onChange={(event) => onChange({ sort: event.target.value as ListSort })}
+        onChange={(event) => onChange({ sort: event.target.value as Sort })}
       >
-        {SORTS.map((sort) => (
-          <option key={sort} value={sort}>
-            {text.sorts[sort]}
+        {sorts.map((sort) => (
+          <option key={sort.value} value={sort.value}>
+            {sort.label}
           </option>
         ))}
       </SelectInput>
@@ -187,29 +202,17 @@ export function GroupedList<Item>({
     // Items in no group of the second grouping sit under their status's heading without one of their own.
     if (nested && group.key === "") return <Fragment key={key}>{rows(group.items, key)}</Fragment>
     const isCollapsed = collapsed.has(key)
-    const Chevron = isCollapsed ? ChevronRight : ChevronDown
     return (
       <section key={key} data-chapter={key} className={`flex scroll-mt-2 flex-col ${nested ? "gap-2" : "gap-3"}`}>
-        <div className={`flex min-w-0 items-center gap-2 ${nested ? "pl-4" : ""}`}>
-          {selection && <GroupCheckbox items={group.items} selection={selection} label={group.label} />}
-          <button
-            type="button"
-            aria-expanded={!isCollapsed}
-            aria-label={isCollapsed ? text.expand(group.label) : text.collapse(group.label)}
-            onClick={() => toggle(key)}
-            className={`flex min-w-0 items-center gap-1.5 rounded text-left text-xs text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-accent ${
-              nested ? "font-medium" : "font-semibold"
-            }`}
-          >
-            <Chevron size={14} className="shrink-0" aria-hidden />
-            {group.folder && <Folder size={14} className="shrink-0" aria-hidden />}
-            <span className="truncate" title={group.label}>
-              {group.label}
-            </span>
-            <span className="shrink-0 font-normal text-fg-muted tabular-nums">{group.items.length}</span>
-          </button>
-          {headingExtra?.(group)}
-        </div>
+        <GroupHeading
+          group={group}
+          count={group.items.length}
+          folded={isCollapsed}
+          onFold={() => toggle(key)}
+          nested={nested}
+          before={selection && <GroupCheckbox items={group.items} selection={selection} label={group.label} />}
+          after={headingExtra?.(group)}
+        />
         {!isCollapsed &&
           (group.subgroups ? (
             <div className="flex flex-col gap-3">{group.subgroups.map((subgroup) => section(subgroup, key, true))}</div>
@@ -220,6 +223,59 @@ export function GroupedList<Item>({
     )
   }
   return <div className="flex flex-col gap-4">{groups.map((group) => section(group, "", false))}</div>
+}
+
+interface GroupHeadingProps {
+  group: GroupPlace
+  /** How many items it holds. */
+  count: number
+  folded: boolean
+  onFold: () => void
+  /** A heading inside a status's group: smaller, and indented. */
+  nested?: boolean
+  /** Before it, such as the box that ticks the whole group. */
+  before?: ReactNode
+  /** After it, such as the group's actions. */
+  after?: ReactNode
+  className?: string
+}
+
+/** A group's heading, which folds it away or back: its name (a folder's path with its icon) and how many it holds.
+ * Every view's grouped list draws this one, so they look alike. */
+export function GroupHeading({
+  group,
+  count,
+  folded,
+  onFold,
+  nested = false,
+  before,
+  after,
+  className,
+}: GroupHeadingProps) {
+  const Chevron = folded ? ChevronRight : ChevronDown
+  return (
+    <div className={classes("flex min-w-0 items-center gap-2", nested && "pl-4", className)}>
+      {before}
+      <button
+        type="button"
+        aria-expanded={!folded}
+        aria-label={folded ? text.expand(group.label) : text.collapse(group.label)}
+        onClick={onFold}
+        className={classes(
+          "flex min-w-0 items-center gap-1.5 rounded text-left text-xs text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-accent",
+          nested ? "font-medium" : "font-semibold",
+        )}
+      >
+        <Chevron size={14} className="shrink-0" aria-hidden />
+        {group.folder && <Folder size={14} className="shrink-0" aria-hidden />}
+        <span className="truncate" title={group.label}>
+          {group.label}
+        </span>
+        <span className="shrink-0 font-normal text-fg-muted tabular-nums">{count}</span>
+      </button>
+      {after}
+    </div>
+  )
 }
 
 /** A group heading's box: ticked when all its items are, part-ticked when some are; it ticks or unticks them all. */

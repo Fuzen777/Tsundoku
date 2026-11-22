@@ -3,6 +3,7 @@ import type { Destination } from "./bindings/Destination"
 import type { FolderFrom } from "./bindings/FolderFrom"
 import type { FolderRule } from "./bindings/FolderRule"
 import type { ListArrangement } from "./bindings/ListArrangement"
+import type { ListGroup } from "./bindings/ListGroup"
 import type { ListSort } from "./bindings/ListSort"
 import { strings } from "./strings"
 import { ruleLabel } from "./views/rules/ruleLabels"
@@ -11,6 +12,12 @@ import { ruleLabel } from "./views/rules/ruleLabels"
   Grouping and sorting the Pending and Queue views' lists, as each view's toolbar chose (ListArrangement, saved in
   settings.json). Each view says what an item's title, site… are and which group it falls in; this does the rest.
 */
+
+/** The Pending and Downloads views' groupings and sorts, in their toolbars' order. */
+export const LIST_GROUPS: readonly ListGroup[] = ["none", "site", "destination", "rule"]
+export const LIST_SORTS: readonly { value: ListSort; label: string }[] = (
+  ["added", "title", "uploader", "site"] as const
+).map((sort) => ({ value: sort, label: strings.lists.sorts[sort] }))
 
 /** A list as it's stored: ungrouped, oldest first. Shown until the saved arrangement is read. */
 export const STORED_ORDER: ListArrangement = { group: "none", byStatus: false, sort: "added", descending: false }
@@ -234,6 +241,24 @@ export function chaptersOf<Item>(groups: readonly ItemGroup<Item>[], parent = ""
         subchapters: group.subgroups && chaptersOf(group.subgroups, path),
       }
     })
+}
+
+/** Where a group's first item comes in a grouped list as it's shown, counting every item before it, by the group's
+ * chapter ID (`groupPath`, a status's groups inside it), or null when no group has it. */
+export function firstIndexOf<Item>(
+  groups: readonly ItemGroup<Item>[],
+  id: string,
+  parent = "",
+  before = 0,
+): number | null {
+  let count = before
+  for (const group of groups) {
+    const path = groupPath(parent, group.key)
+    if (path === id) return count
+    if (group.subgroups && id.startsWith(`${path}/`)) return firstIndexOf(group.subgroups, id, path, count)
+    count += group.items.length
+  }
+  return null
 }
 
 /** Ranks that put a group after every rule's group, and after every group of the list's grouping. */

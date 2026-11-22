@@ -1,13 +1,19 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 import {
-  ArrowDownWideNarrow,
-  ArrowUpNarrowWide,
+  ChevronUp,
   ExternalLink,
+  Film,
+  FolderInput,
   FolderOpen,
   History,
+  Images,
+  PanelTopOpen,
   Play,
+  RotateCcw,
   Search,
+  TriangleAlert,
+  X,
 } from "lucide-react"
 import {
   confirmWithUser,
@@ -29,41 +35,59 @@ import {
 import type { DownloadKind } from "../bindings/DownloadKind"
 import type { FileState } from "../bindings/FileState"
 import type { HistoryQuery } from "../bindings/HistoryQuery"
-import type { HistorySort } from "../bindings/HistorySort"
 import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { MovedFiles } from "../bindings/MovedFiles"
 import type { PastDownload } from "../bindings/PastDownload"
+import { useChapters } from "../chapters"
+import { ArrangeControls, GroupHeading } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { EmptyState } from "../components/EmptyState"
 import { ExpandToggle } from "../components/LinkButton"
 import { SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
-import { Menu } from "../components/Menu"
+import { ItemTile, ItemTiles, type TilePlace } from "../components/ItemTiles"
+import { TileLabel } from "../components/MediaTiles"
+import { Menu, type MenuItem } from "../components/Menu"
 import { Page } from "../components/Page"
+import { PickerViewControls } from "../components/PickerViewControls"
 import { StatusMessage, type StatusTone } from "../components/StatusMessage"
 import { Thumbnail } from "../components/Thumbnail"
 import { describeHistoryError, type ErrorDescription } from "../errors"
+import { groupPath } from "../arrange"
+import { useFoldedGroups } from "../foldedGroups"
 import { formatBytes, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { DATE_RANGES, dateBounds, type DateBounds, type DateRange } from "../historyDates"
+import {
+  HISTORY_GROUPS,
+  HISTORY_SORTS,
+  historyChapters,
+  historyEntries,
+  historyGroups,
+  type HistoryEntry,
+} from "../historyList"
 import { type HistoryTarget, useAppActions } from "../navigation"
+import { columnsFor, TILE_GAP, tileWidthIn } from "../pickerLayout"
 import {
   useDownloadFiles,
   useHistory,
+  useHistoryArrangement,
   useHistoryDataSize,
   useHistoryFilters,
+  useHistoryGroups,
   useHistorySize,
+  usePickerLayout,
   useVideoDownloads,
   useWatchedSources,
 } from "../queries"
 import { strings } from "../strings"
+import { useShownRow } from "../tileRows"
 import { useDebouncedValue } from "../useDebouncedValue"
 import { useVirtualRows } from "../virtualRows"
 import { sourceLabels } from "../watchedSources"
 
 const text = strings.history
 
-const SORTS: readonly HistorySort[] = ["downloaded", "title", "uploader", "site", "duration", "size", "preset"]
 const KINDS: readonly DownloadKind[] = ["video", "audio", "post", "file"]
 const FILE_STATES: readonly FileState[] = ["present", "missing"]
 /** Showing more folders than this asks first, since each opens a window. */
@@ -71,16 +95,25 @@ const FOLDERS_WITHOUT_ASKING = 5
 
 /** A row's height before it's measured: a card with a 112 px thumbnail, and the 12 px under it (`pb-3`). */
 const ROW_ESTIMATE = 102
+/** A group's heading's height before it's measured, with the space around it. */
+const HEADING_ESTIMATE = 40
 /** How far past each edge of the screen rows are drawn, in pixels. */
 const OVERSCAN = 600
-/** How close to the last row loaded the list reads the next page. */
-const LOAD_AHEAD = 30
+/** How close to the end of what's read, in pixels, the list reads the next page. */
+const LOAD_AHEAD = 3000
+/** How many lines of pictures a block of the list holds in Masonry and Gallery: a block is drawn whole, and Masonry's
+ * columns start again level at each. */
+const LINES_PER_BLOCK = 4
+/** The room around a block's pictures, for their focus outline (`ItemTiles`' `p-1`), in pixels. */
+const TILES_PADDING = 8
 
 /**
- * Every video downloaded, newest first, with search, filters and sorting. The history is read a page at a time as the
- * list scrolls, and only the rows on screen are drawn, so a history of thousands stays quick. Which rows are expanded is
- * kept here, so a row scrolled away and back keeps its lists open. Opened from a watched source (`target`), it shows
- * only that source's items.
+ * Every video downloaded, newest first, with search, filters, grouping and sorting, as rows (List) or pictures (Masonry,
+ * Gallery), chosen in the header so the choice stays in sight. The history is read a page at a time as the list
+ * scrolls, grouped and sorted by the core, and only what's on screen is drawn, so a history of thousands stays quick.
+ * Grouped, the sidebar lists the groups as chapters, and going to one reads the history up to it. Which rows are
+ * expanded is kept here, so a row scrolled away and back keeps its lists open. Opened from a watched source (`target`),
+ * it shows only that source's items.
  */
 export function HistoryView({ target = null }: { target?: HistoryTarget | null }) {
   const queryClient = useQueryClient()
@@ -98,8 +131,8 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
     to: "",
     bounds: { from: null, until: null },
   })
-  const [sort, setSort] = useState<HistorySort>("downloaded")
-  const [descending, setDescending] = useState(true)
+  const { arrangement, ready, change: changeArrangement, error: arrangeError } = useHistoryArrangement()
+  const { group, sort, descending } = arrangement
   // The search runs once typing pauses rather than on every key.
   const settledSearch = useDebouncedValue(search.trim(), 250)
   const query: HistoryQuery = {
@@ -111,13 +144,18 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
     downloadedFrom: dates.bounds.from,
     downloadedUntil: dates.bounds.until,
     watchedSource,
+    group,
     sort,
     descending,
   }
-  const { data, hasNextPage, isFetchingNextPage, fetchNextPage } = useHistory(query)
+  const queryKey = JSON.stringify(query)
+  const { data, hasNextPage, isFetchingNextPage, fetchNextPage, isPlaceholderData: pagesAreOld } = useHistory(query)
+  const { data: groupCounts, isPlaceholderData: groupsAreOld } = useHistoryGroups(query)
   const { data: filters } = useHistoryFilters()
   const { data: size, isPlaceholderData: sizeIsOld } = useHistorySize(query)
   const { data: ownData } = useHistoryDataSize()
+  const { layout, change: changeLayout } = usePickerLayout("history")
+  const tiles = layout.view === "list" ? null : layout.view
   const isFiltered =
     query.search !== null ||
     site !== null ||
@@ -131,48 +169,102 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
   const changeDates = (range: DateRange, from = dates.from, to = dates.to) =>
     setDates({ range, from, to, bounds: dateBounds(range, new Date(), from, to) })
   const videos = useMemo(() => uniqueVideos(data?.pages.flatMap((page) => page.videos) ?? []), [data])
-  const videoIds = useMemo(() => videos.map((video) => video.id), [videos])
   const total = data?.pages[0]?.total
   const [openFiles, toggleFiles] = useToggledIds()
   const [openDownloads, toggleDownloads] = useToggledIds()
 
-  const scroller = useRef<HTMLDivElement>(null)
   const head = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLDivElement>(null)
-  // Where the list starts in the scrolled content, under the toolbar, which wraps at narrow widths: read whenever the
-  // toolbar's size changes, which also happens once as soon as it's observed.
-  const [listTop, setListTop] = useState(0)
+  // Where the list starts in the scrolled content, under the toolbar, which wraps at narrow widths, and how wide it
+  // is: read whenever either's size changes, which also happens once as soon as they're observed.
+  const [listBox, setListBox] = useState({ top: 0, width: 0 })
+
+  // Grouped, the groups' counts place each group's videos among those read: only while both answer the same query
+  // (neither is the last query's, kept while the new one is read) and agree on how many there are. Meanwhile the list
+  // keeps what it showed.
+  // The last query's groups, kept while this one's are read, belong to its grouping, which may not be this one.
+  const groupsShown = useMemo(
+    () => (group === "none" || !groupCounts || groupsAreOld ? null : historyGroups(group, groupCounts)),
+    [group, groupCounts, groupsAreOld],
+  )
+  const inStep =
+    group === "none" ||
+    (groupsShown !== null && !pagesAreOld && groupsShown.reduce((sum, shown) => sum + shown.count, 0) === total)
+  const folds = useFoldedGroups("history")
+  const tileColumns = columnsFor(listBox.width - TILES_PADDING, layout.size)
+  const perBlock = tiles ? tileColumns * LINES_PER_BLOCK : null
+  const builtEntries = useMemo(
+    () => (inStep ? historyEntries({ videos, groups: groupsShown, folded: folds.collapsed, perBlock }) : null),
+    [inStep, videos, groupsShown, folds.collapsed, perBlock],
+  )
+  const [lastEntries, setLastEntries] = useState<HistoryEntry[]>([])
+  if (builtEntries && builtEntries !== lastEntries) setLastEntries(builtEntries)
+  const entries = builtEntries ?? lastEntries
+  const entryKeys = useMemo(() => entries.map((entry) => entry.key), [entries])
+
+  // Gallery cuts the pictures to squares when they're all posts, else to 16:9; Masonry is guessed at 16:9 until drawn.
+  const galleryRatio = videos.length > 0 && videos.every((video) => video.post !== null) ? 1 : 16 / 9
+  const lineHeight = tileWidthIn(listBox.width - TILES_PADDING, tileColumns) / galleryRatio + TILE_GAP
+  const estimate = useCallback(
+    (index: number) => {
+      const entry = entries[index]
+      if (entry.kind === "heading") return HEADING_ESTIMATE
+      if (entry.kind === "row") return ROW_ESTIMATE
+      return Math.ceil(entry.videos.length / tileColumns) * lineHeight + TILES_PADDING
+    },
+    [entries, tileColumns, lineHeight],
+  )
+
+  // Going to a group not read yet reads the history up to it, for that query only.
+  const [readTarget, setReadTarget] = useState({ queryKey, upTo: 0 })
+  const readUpTo = readTarget.queryKey === queryKey ? readTarget.upTo : 0
+  const chapters = useMemo(() => (groupsShown && inStep ? historyChapters(groupsShown) : []), [groupsShown, inStep])
+  const { scrollRef: scroller, markShown } = useChapters({
+    view: "history",
+    chapters,
+    reveal: (id) => {
+      const shown = groupsShown?.find((candidate) => groupPath("", candidate.key) === id)
+      if (shown) setReadTarget({ queryKey, upTo: shown.start + 1 })
+    },
+    // Asked after the list is laid out, never while it's drawn.
+    place: (id) => {
+      const index = entries.findIndex((entry) => entry.kind === "heading" && entry.chapter === id)
+      const start = index === -1 ? undefined : rows.layout.starts[index]
+      return start === undefined ? null : start + listBox.top
+    },
+  })
+
   useEffect(() => {
-    if (!head.current) return
+    if (!head.current || !list.current) return
     const observer = new ResizeObserver(() => {
       if (!scroller.current || !list.current) return
-      const top =
-        list.current.getBoundingClientRect().top -
-        scroller.current.getBoundingClientRect().top +
-        scroller.current.scrollTop
-      setListTop(Math.round(top))
+      const box = list.current.getBoundingClientRect()
+      const top = box.top - scroller.current.getBoundingClientRect().top + scroller.current.scrollTop
+      setListBox({ top: Math.round(top), width: box.width })
     })
     observer.observe(head.current)
+    observer.observe(list.current)
     return () => observer.disconnect()
-  }, [])
+  }, [scroller])
 
   const rows = useVirtualRows({
-    keys: videoIds,
+    keys: entryKeys,
     scroller,
-    offset: listTop,
-    estimate: ROW_ESTIMATE,
+    offset: listBox.top,
+    estimate,
     overscan: OVERSCAN,
   })
   useEffect(() => {
-    if (hasNextPage && !isFetchingNextPage && rows.last >= videos.length - LOAD_AHEAD) void fetchNextPage()
-  }, [hasNextPage, isFetchingNextPage, rows.last, videos.length, fetchNextPage])
+    if (hasNextPage && !isFetchingNextPage && (rows.after < LOAD_AHEAD || videos.length < readUpTo)) {
+      void fetchNextPage()
+    }
+  }, [hasNextPage, isFetchingNextPage, rows.after, videos.length, readUpTo, fetchNextPage])
 
-  // A new search, filter or sort starts from the top of its results, with nothing ticked: ticked rows the new results
-  // don't show could otherwise be forgotten unseen.
-  const queryKey = JSON.stringify(query)
+  // A new search, filter, grouping or sort starts from the top of its results, with nothing ticked: ticked rows the
+  // new results don't show could otherwise be forgotten unseen.
   useEffect(() => {
     scroller.current?.scrollTo({ top: 0 })
-  }, [queryKey])
+  }, [queryKey, scroller])
   const [ticked, setTicked] = useState<{ queryKey: string; ids: ReadonlySet<number> }>({ queryKey, ids: new Set() })
   const selected = ticked.queryKey === queryKey ? ticked.ids : NOTHING_TICKED
   const allSelected = total !== undefined && total > 0 && selected.size === total
@@ -188,6 +280,8 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
+  // In Masonry and Gallery, the video whose row shows under its line of pictures, kept across the list's blocks.
+  const tileRows = useShownRow<null>(list)
 
   async function act(action: () => Promise<void>) {
     setBusy(true)
@@ -280,8 +374,70 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
     </>
   )
 
+  const historyRow = (video: HistoryVideo, onHide?: () => void) => (
+    <HistoryRow
+      video={video}
+      selected={selected.has(video.id)}
+      onSelect={tick}
+      filesOpen={openFiles.has(video.id)}
+      onToggleFiles={toggleFiles}
+      downloadsOpen={openDownloads.has(video.id)}
+      onToggleDownloads={toggleDownloads}
+      onMoveFiles={moveFiles}
+      onHide={onHide}
+    />
+  )
+  const drawEntry = (entry: HistoryEntry) => {
+    switch (entry.kind) {
+      case "heading":
+        return (
+          <GroupHeading
+            group={entry.group}
+            count={entry.group.count}
+            folded={folds.collapsed.has(entry.chapter)}
+            onFold={() => folds.toggle(entry.chapter)}
+          />
+        )
+      case "row":
+        return historyRow(entry.video)
+      case "tiles":
+        return (
+          tiles && (
+            <ItemTiles
+              items={entry.videos}
+              view={tiles}
+              size={layout.size}
+              keyOf={(video) => video.id}
+              galleryRatio={galleryRatio}
+              rows={tileRows}
+              renderRow={(video, shown) => <div key={shown.opened}>{historyRow(video, tileRows.hide)}</div>}
+              renderTile={(video, place) => (
+                <HistoryTile
+                  video={video}
+                  place={place}
+                  selected={selected.has(video.id)}
+                  anySelected={selected.size > 0}
+                  onSelect={tick}
+                  onShow={() => tileRows.show(video.id, null)}
+                  onHide={tileRows.hide}
+                  onMoveFiles={moveFiles}
+                  onError={setError}
+                />
+              )}
+            />
+          )
+        )
+    }
+  }
+
   return (
-    <Page title={strings.nav.history} actions={selectionButtons} scrollRef={scroller}>
+    <Page
+      title={strings.nav.history}
+      actions={selectionButtons}
+      viewControls={<PickerViewControls layout={layout} onChange={changeLayout} />}
+      scrollRef={scroller}
+      onScroll={markShown}
+    >
       <div className="flex flex-col gap-3">
         <div ref={head} className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -299,23 +455,12 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
                 className="w-full pl-8"
               />
             </div>
-            <SelectInput
-              aria-label={text.sortBy}
-              title={text.sortBy}
-              value={sort}
-              onChange={(event) => setSort(event.target.value as HistorySort)}
-            >
-              {SORTS.map((option) => (
-                <option key={option} value={option}>
-                  {text.sorts[option]}
-                </option>
-              ))}
-            </SelectInput>
-            <IconButton
-              label={descending ? text.descending : text.ascending}
-              icon={descending ? ArrowDownWideNarrow : ArrowUpNarrowWide}
-              variant="secondary"
-              onClick={() => setDescending((isDescending) => !isDescending)}
+            <ArrangeControls
+              arrangement={arrangement}
+              groups={HISTORY_GROUPS}
+              sorts={HISTORY_SORTS}
+              disabled={!ready}
+              onChange={(changes) => void changeArrangement(changes)}
             />
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -462,6 +607,7 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
               )}
             </div>
           )}
+          {arrangeError && <StatusMessage tone="danger" {...arrangeError} />}
           {error && <StatusMessage tone="danger" {...error} />}
           {moveNotice && <StatusMessage {...moveNotice} />}
           {total === 0 &&
@@ -474,24 +620,149 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
 
         <div ref={list}>
           {rows.before > 0 && <div style={{ height: rows.before }} />}
-          {videos.slice(rows.first, rows.last + 1).map((video) => (
-            <div key={video.id} data-row-key={video.id} ref={rows.measure} className="pb-3">
-              <HistoryRow
-                video={video}
-                selected={selected.has(video.id)}
-                onSelect={tick}
-                filesOpen={openFiles.has(video.id)}
-                onToggleFiles={toggleFiles}
-                downloadsOpen={openDownloads.has(video.id)}
-                onToggleDownloads={toggleDownloads}
-                onMoveFiles={moveFiles}
-              />
+          {entries.slice(rows.first, rows.last + 1).map((entry, index) => (
+            <div
+              key={entry.key}
+              data-row-key={entry.key}
+              data-chapter={entry.kind === "heading" ? entry.chapter : undefined}
+              ref={rows.measure}
+              className={entrySpacing(entry, rows.first + index)}
+            >
+              {drawEntry(entry)}
             </div>
           ))}
           {rows.after > 0 && <div style={{ height: rows.after }} />}
         </div>
       </div>
     </Page>
+  )
+}
+
+/** The room under an entry (inside it, so it's measured with it): rows and headings have 12 px, a heading after a
+ * group's videos more above it, as between a grouped list's sections; blocks of pictures none, since the room around
+ * their pictures already makes the gap between two blocks the same as between two lines. */
+function entrySpacing(entry: HistoryEntry, index: number): string | undefined {
+  if (entry.kind === "tiles") return undefined
+  return entry.kind === "heading" && index > 0 ? "pt-2 pb-3" : "pb-3"
+}
+
+/** Forgets a video once the user agrees: the history and yt-dlp's archive lose it, its files stay. */
+async function forgetOne(queryClient: QueryClient, video: HistoryVideo): Promise<void> {
+  const confirmed = await confirmWithUser({
+    title: text.forgetTitle,
+    message: text.forgetMessage(video.title),
+    confirmLabel: text.forget,
+    cancelLabel: strings.dialogs.cancel,
+  })
+  if (!confirmed) return
+  await forgetVideo(video.id)
+  await queryClient.invalidateQueries({ queryKey: queryKeys.history })
+  await queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
+}
+
+interface HistoryTileProps {
+  video: HistoryVideo
+  place: TilePlace
+  selected: boolean
+  /** Whether anything is ticked, which shows every picture's tick box. */
+  anySelected: boolean
+  onSelect: (videoId: number, selected: boolean) => void
+  onShow: () => void
+  onHide: () => void
+  onMoveFiles: (videoIds: number[]) => Promise<void>
+  onError: (error: ErrorDescription | null) => void
+}
+
+/** A video in the history as its picture: File Missing in its corner, its row's actions in its right-click menu, and a
+ * double-click opening its file while it's there. */
+function HistoryTile({
+  video,
+  place,
+  selected,
+  anySelected,
+  onSelect,
+  onShow,
+  onHide,
+  onMoveFiles,
+  onError,
+}: HistoryTileProps) {
+  const { showLink } = useAppActions()
+  const queryClient = useQueryClient()
+  const { lastDownload } = video
+  const kept = video.thumbnailFile && keptThumbnailUrl(video.thumbnailFile)
+  const exists = lastDownload.fileExists
+  const isPost = video.post !== null
+  const run = (action: () => Promise<void>) => {
+    onError(null)
+    action().catch((caught: unknown) => onError(describeHistoryError(caught)))
+  }
+  const details = joinDetails([
+    video.uploader,
+    video.siteName,
+    video.durationSeconds !== null && formatDuration(video.durationSeconds),
+    formatContents(video),
+  ])
+  const downloaded = joinDetails([
+    lastDownload.preset,
+    formatDay(lastDownload.downloadedAt),
+    lastDownload.fileSize !== null && formatBytes(lastDownload.fileSize),
+  ])
+  const hint = [
+    video.title,
+    details,
+    downloaded,
+    !exists && text.fileMissing,
+    exists && strings.tiles.openHint,
+    strings.tiles.hint,
+  ]
+    .filter(Boolean)
+    .join("\n")
+  const menuItems = (): MenuItem[] => [
+    ...(exists
+      ? [
+          { label: text.openFile, icon: Play, onSelect: () => run(() => openDownload(lastDownload.id)) },
+          { label: text.showInFolder, icon: FolderOpen, onSelect: () => run(() => showDownloadInFolder(lastDownload.id)) },
+        ]
+      : []),
+    { label: text.openSourcePage, icon: ExternalLink, onSelect: () => run(() => openWebPage(video.url)) },
+    place.shown
+      ? { label: strings.tiles.hideDetails, icon: ChevronUp, onSelect: onHide }
+      : { label: strings.tiles.showDetails, icon: PanelTopOpen, onSelect: onShow },
+    { label: text.downloadAgain, icon: RotateCcw, onSelect: () => showLink(video.url) },
+    { label: text.moveFiles, icon: FolderInput, onSelect: () => void onMoveFiles([video.id]) },
+    { label: text.forget, icon: X, danger: true, onSelect: () => run(() => forgetOne(queryClient, video)) },
+  ]
+  return (
+    <ItemTile
+      id={video.id}
+      place={place}
+      title={video.title}
+      thumbnailUrl={kept || video.thumbnailUrl}
+      fallbackIcon={isPost ? Images : Film}
+      shape={isPost ? 4 / 5 : 16 / 9}
+      hint={hint}
+      ariaLabel={joinDetails([video.title, details])}
+      corner={
+        !exists && (
+          <TileLabel>
+            <span className="flex items-center gap-1 text-warning">
+              <TriangleAlert size={12} />
+              {place.labels === "full" && text.fileMissing}
+            </span>
+          </TileLabel>
+        )
+      }
+      selection={{
+        selected,
+        showing: anySelected,
+        label: text.select,
+        onSelect: (on) => onSelect(video.id, on),
+      }}
+      menuLabel={strings.tiles.menu(video.title)}
+      menuItems={menuItems}
+      onToggle={place.shown ? onHide : onShow}
+      onOpen={exists ? () => run(() => openDownload(lastDownload.id)) : undefined}
+    />
   )
 }
 
@@ -534,6 +805,8 @@ interface HistoryRowProps {
   onToggleDownloads: (videoId: number) => void
   /** Move Files…, for this video alone. */
   onMoveFiles: (videoIds: number[]) => Promise<void>
+  /** Shown for a picture: hides the row again, with a button of its own. */
+  onHide?: () => void
 }
 
 /** A video in the history. Drawn again only when its own props change, not each time the list scrolls. */
@@ -563,6 +836,7 @@ const HistoryRow = memo(function HistoryRow({
   downloadsOpen,
   onToggleDownloads,
   onMoveFiles,
+  onHide,
 }: HistoryRowProps) {
   const { showLink } = useAppActions()
   const queryClient = useQueryClient()
@@ -575,19 +849,7 @@ const HistoryRow = memo(function HistoryRow({
     setError(null)
     action().catch((caught: unknown) => setError(describeHistoryError(caught)))
   }
-  const forget = () =>
-    run(async () => {
-      const confirmed = await confirmWithUser({
-        title: text.forgetTitle,
-        message: text.forgetMessage(video.title),
-        confirmLabel: text.forget,
-        cancelLabel: strings.dialogs.cancel,
-      })
-      if (!confirmed) return
-      await forgetVideo(video.id)
-      await queryClient.invalidateQueries({ queryKey: queryKeys.history })
-      await queryClient.invalidateQueries({ queryKey: queryKeys.historyFilters })
-    })
+  const forget = () => run(() => forgetOne(queryClient, video))
 
   return (
     <Card className="flex flex-col gap-2 p-3">
@@ -663,6 +925,7 @@ const HistoryRow = memo(function HistoryRow({
             { label: text.forget, onSelect: forget, danger: true },
           ]}
         />
+        {onHide && <IconButton label={strings.tiles.hideDetails} icon={ChevronUp} onClick={onHide} />}
       </div>
       {filesOpen && <FileList downloadId={lastDownload.id} onError={setError} />}
       {downloadsOpen && <DownloadList videoId={video.id} onError={setError} />}

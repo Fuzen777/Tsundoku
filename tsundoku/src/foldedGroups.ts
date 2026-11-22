@@ -1,13 +1,14 @@
 import { useState } from "react"
 
 /** The views with a grouped list (`components/ArrangedList.tsx`): each remembers the groups folded away in it. */
-export type GroupedView = "pending" | "queue" | "watched"
+export type GroupedView = "pending" | "queue" | "watched" | "history"
 
 /** The groups folded away in each view, by heading, kept while the app runs so leaving a view doesn't unfold them. */
 const collapsedByView: Record<GroupedView, ReadonlySet<string>> = {
   pending: new Set(),
   queue: new Set(),
   watched: new Set(),
+  history: new Set(),
 }
 
 /** A view's folded groups: the headings' keys (`/<group key>`, a subgroup's after its group's). */

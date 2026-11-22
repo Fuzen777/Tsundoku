@@ -11,8 +11,8 @@ use tauri::{Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
 use tsundoku_core::data_folder::{DataPaths, HistoryData};
 use tsundoku_core::downloads::DownloadQueue;
 use tsundoku_core::history::{
-    History, HistoryError, HistoryFile, HistoryFilters, HistoryPage, HistoryQuery, HistorySize,
-    PastDownload, folder_count,
+    History, HistoryError, HistoryFile, HistoryFilters, HistoryGroupCount, HistoryPage,
+    HistoryQuery, HistorySize, PastDownload, folder_count,
 };
 use tsundoku_core::listing::{self, ListingKind, ListingMore, MoreRead};
 use tsundoku_core::metadata::PreviewError;
@@ -272,6 +272,17 @@ pub async fn history_ids(
 ) -> Result<Vec<i64>, HistoryError> {
     let history = Arc::clone(&history);
     blocking(move || history.ids(&query)).await
+}
+
+/// The history view's groups for its query, in order, with how many videos each holds. Off the async runtime's threads,
+/// since Only Missing Files checks each file.
+#[tauri::command]
+pub async fn history_groups(
+    history: State<'_, Arc<History>>,
+    query: HistoryQuery,
+) -> Result<Vec<HistoryGroupCount>, HistoryError> {
+    let history = Arc::clone(&history);
+    blocking(move || history.groups(&query)).await
 }
 
 /// What the files of the videos the history view's query matches take on the disk: every download's files that are

@@ -4,9 +4,10 @@ import { scrollWithin } from "./scrollWithin"
 
 /*
   A view's chapters: the parts the sidebar lists under the view while it's open, to jump to, marking the one at the top
-  as the view scrolls. Settings' sections, the Downloads view's groups. A view lists them with `useChapters`, each
-  chapter's element marked with `data-chapter`, and passes `scrollRef` and `markShown` to its `Page`; the app passes them
-  to the sidebar (`ChaptersContext`).
+  as the view scrolls. Settings' sections, Rules' lists, the Downloads, Pending and History views' groups. A view lists
+  them with `useChapters`, each chapter's element marked with `data-chapter` (or placed by `place`, for a list that draws
+  only what's on screen), and passes `scrollRef` and `markShown` to its `Page`; the app passes them to the sidebar
+  (`ChaptersContext`). Clicking the open view in the sidebar takes it back to its top the same way.
 */
 
 /** A part of a view, as the sidebar lists it. */
@@ -30,10 +31,11 @@ export interface ShownChapters {
   shown: string | null
 }
 
-/** A chapter the sidebar asked a view to go to: a new object each time, so asking again goes there again. */
+/** A chapter the sidebar asked a view to go to, or its top (`id` null, the open view clicked again): a new object each
+ * time, so asking again goes there again. */
 export interface ChapterTarget {
   view: ViewId
-  id: string
+  id: string | null
 }
 
 interface ChaptersLink {
@@ -56,21 +58,27 @@ interface ChaptersOptions {
   chapters: readonly Chapter[]
   /** Makes a chapter drawn before going to it, such as unfolding the group that holds it. */
   reveal?: (id: string) => void
+  /** For a list that draws only what's on screen: where a chapter starts in the scrolling area's content, in pixels,
+   * drawn or not, or null while it isn't known yet (not read yet). Without it, chapters are found by `data-chapter`. */
+  place?: (id: string) => number | null
 }
 
 /**
  * Lists a view's chapters in the sidebar, under the view, and goes to one when the sidebar asks: its element comes to the
- * top of the scrolling area (`scrollRef`, for `Page`'s), smoothly. The one at the top is marked as the view scrolls
- * (`markShown`, for `Page`'s `onScroll`), but one gone to stays marked until the user scrolls themselves, since the end of the view can keep it from
- * reaching the top. `goTo` goes to one for the view itself, such as a section another view sent the user to.
+ * top of the scrolling area (`scrollRef`, for `Page`'s), smoothly, or at once in a list that draws only what's on
+ * screen (`place`), whose rows passed on the way would change its place as they're drawn. The one at the top is marked
+ * as the view scrolls (`markShown`, for `Page`'s `onScroll`), but one gone to stays marked until the user scrolls
+ * themselves, since the end of the view can keep it from reaching the top. Asked for the top (the open view clicked
+ * again in the sidebar), it scrolls there smoothly. `goTo` goes to one for the view itself, such as a section another
+ * view sent the user to.
  */
-export function useChapters({ view, chapters, reveal }: ChaptersOptions) {
+export function useChapters({ view, chapters, reveal, place }: ChaptersOptions) {
   const { publish, withdraw, target } = useContext(ChaptersContext)
   const scrollRef = useRef<HTMLDivElement>(null)
-  // The latest chapters and reveal, for the handlers and effects, which shouldn't run again for each render.
-  const latest = useRef({ chapters, reveal })
+  // The latest chapters, reveal and place, for the handlers and effects, which shouldn't run again for each render.
+  const latest = useRef({ chapters, reveal, place })
   useLayoutEffect(() => {
-    latest.current = { chapters, reveal }
+    latest.current = { chapters, reveal, place }
   })
   const shown = useRef<string | null>(null)
   // The chapter gone to last, marked until the user scrolls.
@@ -85,10 +93,18 @@ export function useChapters({ view, chapters, reveal }: ChaptersOptions) {
   const atTop = useCallback((): string | null => {
     const area = scrollRef.current
     if (asked.current !== null || !area) return asked.current
-    const reached = area.getBoundingClientRect().top + REACHED_TOP
     const ids = everyId(latest.current.chapters)
     // The last one whose heading has reached the top, else the first.
     let found = ids[0] ?? null
+    const placed = latest.current.place
+    if (placed) {
+      for (const id of ids) {
+        const top = placed(id)
+        if (top !== null && top <= area.scrollTop + REACHED_TOP) found = id
+      }
+      return found
+    }
+    const reached = area.getBoundingClientRect().top + REACHED_TOP
     for (const id of ids) {
       const element = chapterElement(area, id)
       if (element && element.getBoundingClientRect().top <= reached) found = id
@@ -104,7 +120,16 @@ export function useChapters({ view, chapters, reveal }: ChaptersOptions) {
 
   const scrollToPending = useCallback(() => {
     const area = scrollRef.current
-    const element = area && pending.current !== null ? chapterElement(area, pending.current) : null
+    if (!area || pending.current === null) return
+    const placed = latest.current.place
+    if (placed) {
+      const top = placed(pending.current)
+      if (top === null) return
+      pending.current = null
+      area.scrollTo({ top })
+      return
+    }
+    const element = chapterElement(area, pending.current)
     if (!element) return
     pending.current = null
     scrollWithin(element, "start", "smooth")
@@ -119,6 +144,11 @@ export function useChapters({ view, chapters, reveal }: ChaptersOptions) {
     },
     [scrollToPending, markShown],
   )
+  const goToTop = useCallback(() => {
+    asked.current = null
+    pending.current = null
+    scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })
+  }, [])
 
   // A chapter unfolded by `reveal` is drawn now.
   useLayoutEffect(scrollToPending)
@@ -132,8 +162,10 @@ export function useChapters({ view, chapters, reveal }: ChaptersOptions) {
   useEffect(() => () => withdraw(view), [withdraw, view])
 
   useEffect(() => {
-    if (target?.view === view) goTo(target.id)
-  }, [target, view, goTo])
+    if (target?.view !== view) return
+    if (target.id === null) goToTop()
+    else goTo(target.id)
+  }, [target, view, goTo, goToTop])
 
   // Scrolling by hand (the wheel, a drag on the scrollbar, the keyboard) goes back to marking the one at the top.
   useEffect(() => {

@@ -38,6 +38,14 @@ export function formatCalendarDate(isoDate: string, locale?: string): string {
   )
 }
 
+/** A month given as YYYY-MM, in the reader's language ("November 2026" in US English), or the text as it is when it
+ * isn't one. */
+export function formatMonth(isoMonth: string, locale?: string): string {
+  const start = new Date(`${isoMonth}-01T00:00:00Z`)
+  if (Number.isNaN(start.getTime())) return isoMonth
+  return new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(start)
+}
+
 /** The day of a moment given in seconds since 1970, in the reader's time zone and format. */
 export function formatDay(secondsSinceEpoch: number, locale?: string, timeZone?: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone }).format(new Date(secondsSinceEpoch * 1000))

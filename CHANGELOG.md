@@ -2,6 +2,18 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.13 · 2026-11-22
+
+### Added
+
+- **History is grouped and shown as pictures too**: History's toolbar groups the downloads by Site, Folder, Uploader or Month, under headings that fold away, with the groups listed in the sidebar to jump to, as in Downloads. Its header has the same List, Masonry and Gallery buttons and − / + sizes: a picture shows its row under it when clicked, and a right-click offers its actions. It still reads the history a page at a time and draws only what's on screen, so it stays quick with thousands of downloads. Its grouping and sort are now remembered.
+- **Pending as pictures, with chapters**: Pending's header has the List, Masonry and Gallery buttons too, and while it's grouped, the sidebar lists its groups to jump to.
+- **Back to the top**: clicking the open view in the sidebar again scrolls it back to its top.
+
+### Changed
+
+- **The view buttons stay in sight**: in Downloads, the List, Masonry and Gallery buttons and − / + moved into the header beside Clear Finished, so they're there however far down the list you've scrolled.
+
 ## 0.2.12 · 2026-11-22
 
 ### Changed

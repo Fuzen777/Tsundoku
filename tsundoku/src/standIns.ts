@@ -13,6 +13,7 @@ import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryData } from "./bindings/HistoryData"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
+import type { HistoryGroupCount } from "./bindings/HistoryGroupCount"
 import type { HistoryPage } from "./bindings/HistoryPage"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistorySize } from "./bindings/HistorySize"
@@ -235,12 +236,54 @@ function matchingHistory(query: HistoryQuery, count: number | null): HistoryVide
       : count === null
         ? historyStandIns
         : manyHistoryStandIns(count)
-  return videos.filter(
+  const found = videos.filter(
     (video) =>
       video.title.toLowerCase().includes((query.search ?? "").toLowerCase()) &&
       (query.kind === null || (query.kind === "post") === (video.post !== null)) &&
       (query.files === null || (query.files === "missing") !== video.lastDownload.fileExists),
   )
+  // Grouped, each group's videos come together, as the core gives them.
+  if (query.group === "none") return found
+  const order = new Map(historyGroupsOf(query, found).map((group, index) => [group.key, index]))
+  return found
+    .map((video, index) => ({ video, index, group: order.get(standInGroup(query, video).key) ?? 0 }))
+    .sort((first, second) => first.group - second.group || first.index - second.index)
+    .map(({ video }) => video)
+}
+
+/** A stand-in video's group, roughly as the core works it out. */
+function standInGroup(query: HistoryQuery, video: HistoryVideo): { key: string | null; label: string | null } {
+  const folder = video.lastDownload.filePath.replace(/[\\/][^\\/]*$/, "")
+  const month = new Date(video.lastDownload.downloadedAt * 1000).toISOString().slice(0, 7)
+  switch (query.group) {
+    case "site":
+      return { key: video.site, label: video.siteName }
+    case "destination":
+      return { key: folder.toLowerCase(), label: folder }
+    case "uploader":
+      return { key: video.uploader?.toLowerCase() || null, label: video.uploader }
+    case "month":
+      return { key: month, label: month }
+    case "none":
+      return { key: null, label: null }
+  }
+}
+
+/** The stand-in videos' groups, by key, months newest first and the rest by name, the videos without one last. */
+function historyGroupsOf(query: HistoryQuery, videos: readonly HistoryVideo[]): HistoryGroupCount[] {
+  const groups = new Map<string | null, HistoryGroupCount>()
+  for (const video of videos) {
+    const { key, label } = standInGroup(query, video)
+    const group = groups.get(key)
+    if (group) group.count += 1
+    else groups.set(key, { key, label, count: 1 })
+  }
+  const sorted = [...groups.values()].sort((first, second) =>
+    first.key === null || second.key === null
+      ? Number(first.key === null) - Number(second.key === null)
+      : (first.label ?? "").localeCompare(second.label ?? ""),
+  )
+  return query.group === "month" ? sorted.reverse() : sorted
 }
 
 /** A watched source's downloads: as many as its card counts, from its stand-in listing's items (an account's posts,
@@ -580,6 +623,8 @@ export const standIns = {
   },
   historyIds: (query: HistoryQuery, count: number | null): number[] =>
     matchingHistory(query, count).map((video) => video.id),
+  historyGroups: (query: HistoryQuery, count: number | null): HistoryGroupCount[] =>
+    query.group === "none" ? [] : historyGroupsOf(query, matchingHistory(query, count)),
   historyData: {
     database: 12_582_912,
     thumbnails: 30_146_560,
@@ -944,11 +989,14 @@ export const standIns = {
     pending: { group: "none", byStatus: false, sort: "added", descending: false },
     queue: { group: "none", byStatus: false, sort: "added", descending: false },
     watched: { show: "sources", group: "site", sort: "mostNew", descending: true },
+    history: { group: "none", sort: "downloaded", descending: true },
   } satisfies ListArrangements,
   pickerLayouts: {
     items: { view: "gallery", size: 2, hideDownloaded: false },
     postFiles: { view: "gallery", size: 1, hideDownloaded: false },
     queueSources: { view: "gallery", size: 2, hideDownloaded: false },
+    pending: { view: "list", size: 2, hideDownloaded: false },
+    history: { view: "list", size: 2, hideDownloaded: false },
   } satisfies PickerLayouts,
   /** Words that start with http:// or https://, each once: the core also takes links without them. */
   linksInText(text: string): string[] {

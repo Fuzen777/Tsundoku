@@ -23,6 +23,8 @@ export const DEFAULT_PICKER_LAYOUTS: PickerLayouts = {
   items: { view: "gallery", size: 2, hideDownloaded: false },
   postFiles: { view: "gallery", size: 1, hideDownloaded: false },
   queueSources: { view: "gallery", size: 2, hideDownloaded: false },
+  pending: { view: "list", size: 2, hideDownloaded: false },
+  history: { view: "list", size: 2, hideDownloaded: false },
 }
 
 /** A size kept by an older or newer version, brought within this one's steps. */

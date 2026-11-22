@@ -212,7 +212,7 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
             ]}
           />
         )}
-        {onHide && <IconButton label={strings.queue.tiles.hideDetails} icon={ChevronUp} onClick={onHide} />}
+        {onHide && <IconButton label={strings.tiles.hideDetails} icon={ChevronUp} onClick={onHide} />}
       </div>
     </Card>
   )

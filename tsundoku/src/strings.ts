@@ -235,13 +235,6 @@ export const strings = {
       done: "Done",
     },
     /** Downloads as pictures, in Masonry or Gallery (QueueTiles). */
-    tiles: {
-      hint: "Right-click for its actions, or click for its details.",
-      openHint: "Double-click to open it.",
-      menu: (title: string) => `Actions for ${title}`,
-      showDetails: "Show Details",
-      hideDetails: "Hide Details",
-    },
     /** The heading over the downloads picked together from one channel, playlist or account (QueueSourceGroup). */
     source: {
       done: (done: number, total: number) => `${done} of ${total} done`,
@@ -461,7 +454,15 @@ export const strings = {
       openFailed: "Windows couldn't open it.",
     },
   },
-  /** The Pending and Downloads views' grouping and sorting. */
+  /** The Pending, Downloads and History views' items as pictures (Masonry and Gallery: `ItemTiles`). */
+  tiles: {
+    hint: "Right-click for its actions, or click for its details.",
+    openHint: "Double-click to open it.",
+    menu: (title: string) => `Actions for ${title}`,
+    showDetails: "Show Details",
+    hideDetails: "Hide Details",
+  },
+  /** The Pending, Downloads and History views' grouping and sorting. */
   lists: {
     groupBy: "Group By",
     groups: {
@@ -469,7 +470,11 @@ export const strings = {
       site: "Site",
       destination: "Folder",
       rule: "Rule",
+      uploader: "Uploader",
+      month: "Month",
     },
+    /** The history's videos without an uploader, grouped by uploader. */
+    noUploader: "No Uploader",
     byStatus: "Status",
     byStatusHint: "Group by where each one stands first",
     ruleGroup: (rule: string, folder: string) => `${rule} · ${folder}`,

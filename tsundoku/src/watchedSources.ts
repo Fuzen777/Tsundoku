@@ -193,6 +193,7 @@ export function latestDownloadsQuery(sourceId: number): HistoryQuery {
     downloadedFrom: null,
     downloadedUntil: null,
     watchedSource: sourceId,
+    group: "none",
     sort: "downloaded",
     descending: true,
   }

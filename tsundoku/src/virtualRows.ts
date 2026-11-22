@@ -14,13 +14,23 @@ export interface RowLayout {
   total: number
 }
 
-export function layOutRows(keys: readonly number[], heights: ReadonlyMap<number, number>, estimate: number): RowLayout {
+/** A row's key: an item's ID, or any text that names it. */
+export type RowKey = string | number
+
+/** A row's height until it's drawn and measured: one for every row, or one for each. */
+export type RowEstimate = number | ((index: number) => number)
+
+export function layOutRows(
+  keys: readonly RowKey[],
+  heights: ReadonlyMap<string, number>,
+  estimate: RowEstimate,
+): RowLayout {
   const starts: number[] = []
   let total = 0
-  for (const key of keys) {
+  keys.forEach((key, index) => {
     starts.push(total)
-    total += heights.get(key) ?? estimate
-  }
+    total += heights.get(String(key)) ?? (typeof estimate === "number" ? estimate : estimate(index))
+  })
   return { starts, total }
 }
 
@@ -55,34 +65,37 @@ function startingAfter(starts: readonly number[], position: number): number {
 }
 
 interface VirtualRowsOptions {
-  /** Each row's key, in order: the ID its measured height is kept by. Keep the same array while the rows don't change. */
-  keys: readonly number[]
+  /** Each row's key, in order: what its measured height is kept by. Keep the same array while the rows don't change. */
+  keys: readonly RowKey[]
   /** The element that scrolls. */
   scroller: RefObject<HTMLElement | null>
   /** Where the list starts in the scrolled content, in pixels. */
   offset: number
-  /** A row's height until it's drawn and measured, with the space after it. */
-  estimate: number
+  /** A row's height until it's drawn and measured, with the space after it. A function of the row's place must stay
+   * the same function while its answers don't change. */
+  estimate: RowEstimate
   /** How far past each edge of the screen rows are drawn, in pixels. */
   overscan: number
 }
 
 export interface VirtualRows extends RowRange {
+  /** Where each row starts, from the list's top, measured or estimated: where a row not drawn would be. */
+  layout: RowLayout
   /** The ref of each row drawn, which also needs its key in `data-row-key`: it measures the row whenever its size
    * changes. The space between rows belongs inside it, as padding, so it's measured too. */
   measure: (element: HTMLElement | null) => (() => void) | undefined
 }
 
 export function useVirtualRows({ keys, scroller, offset, estimate, overscan }: VirtualRowsOptions): VirtualRows {
-  const [heights, setHeights] = useState<ReadonlyMap<number, number>>(new Map())
+  const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map())
   const [rowObserver] = useState(
     () =>
       new ResizeObserver((entries) => {
         setHeights((current) => {
-          let changed: Map<number, number> | null = null
+          let changed: Map<string, number> | null = null
           for (const entry of entries) {
             const element = entry.target as HTMLElement
-            const key = Number(element.dataset.rowKey)
+            const key = element.dataset.rowKey ?? ""
             const height = entry.borderBoxSize[0]?.blockSize ?? element.offsetHeight
             if (current.get(key) !== height) {
               changed ??= new Map(current)
@@ -122,5 +135,5 @@ export function useVirtualRows({ keys, scroller, offset, estimate, overscan }: V
     },
     [rowObserver],
   )
-  return { ...range, measure }
+  return { ...range, layout, measure }
 }

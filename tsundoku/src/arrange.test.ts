@@ -3,6 +3,7 @@ import {
   arrange,
   arrangeNested,
   bundled,
+  firstIndexOf,
   firstItems,
   fixedFolder,
   folderGroup,
@@ -113,6 +114,15 @@ describe("arrangeNested", () => {
       undefined,
     ])
     expect(arrangeNested(items, STORED_ORDER, facts, null, parity).map((group) => group.key)).toEqual(["", "p0", "p1"])
+  })
+
+  it("finds where a group's first item comes, a status's groups inside it", () => {
+    const groups = arrangeNested(items, STORED_ORDER, facts, status, parity)
+    expect(firstIndexOf(groups, "/waiting")).toBe(0)
+    expect(firstIndexOf(groups, "/waiting/p1")).toBe(1)
+    expect(firstIndexOf(groups, "/done")).toBe(2)
+    expect(firstIndexOf(groups, "/done/p1")).toBe(3)
+    expect(firstIndexOf(groups, "/stopped")).toBeNull()
   })
 })
 

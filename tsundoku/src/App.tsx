@@ -282,7 +282,8 @@ export function App() {
               pending: shownPendingLinks(pending).length,
               watched: newlyWatched,
             }}
-            onSelect={setView}
+            // The open view clicked again goes back to its top.
+            onSelect={(to) => (to === view ? setChapterTarget({ view, id: null }) : setView(to))}
             chapters={chapters?.view === view ? chapters : null}
             onSelectChapter={(id) => setChapterTarget({ view, id })}
           />

@@ -7,6 +7,7 @@ import { classes } from "./styles"
 
 interface SidebarProps {
   current: ViewId
+  /** Opens a view, or takes the open one back to its top. */
   onSelect: (view: ViewId) => void
   /** A count shown beside a view's name, such as the downloads not done yet beside Queue. */
   counts?: Partial<Record<ViewId, number>>

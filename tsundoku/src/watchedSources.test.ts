@@ -206,7 +206,7 @@ describe("checkFoundItems", () => {
 })
 
 describe("the latest downloads strip", () => {
-  it("asks the history for what the source met, the latest downloaded first, with no other filter", () => {
+  it("asks the history for what the source met, the latest downloaded first, ungrouped, with no other filter", () => {
     expect(latestDownloadsQuery(7)).toEqual({
       search: null,
       site: null,
@@ -216,6 +216,7 @@ describe("the latest downloads strip", () => {
       downloadedFrom: null,
       downloadedUntil: null,
       watchedSource: 7,
+      group: "none",
       sort: "downloaded",
       descending: true,
     })

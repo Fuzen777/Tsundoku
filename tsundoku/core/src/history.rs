@@ -209,11 +209,96 @@ pub struct HistoryQuery {
     /// Only the items of this watched source (`watched`), by its ID: what its checks or its adding met.
     #[ts(type = "number | null")]
     pub watched_source: Option<i64>,
+    /// What the videos are grouped by: each group's videos come together, in the groups' order (`History::groups`),
+    /// sorted within it.
+    pub group: HistoryGroup,
     pub sort: HistorySort,
     pub descending: bool,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, TS)]
+/// What the history view groups its videos by.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum HistoryGroup {
+    #[default]
+    None,
+    Site,
+    /// The folder the latest download's file is in (a post's first file).
+    Destination,
+    /// The uploader, ignoring case, those without one last.
+    Uploader,
+    /// The month of the latest download, in local time.
+    Month,
+}
+
+/// The folder a download's file is in: its path up to the last `\` or `/`, without it. `rtrim` takes off every last
+/// character found in the path's other characters, which stops at the last separator.
+const DOWNLOAD_FOLDER: &str =
+    r"rtrim(rtrim(d.file_path, replace(replace(d.file_path, '\', ''), '/', '')), '\/')";
+
+impl HistoryGroup {
+    /// What tells a row's (`v`, `d`) group apart, NULL for none, and what the group is called, or None ungrouped.
+    fn key_and_label(self) -> Option<(String, String)> {
+        let folder = DOWNLOAD_FOLDER;
+        let month = "strftime('%Y-%m', d.downloaded_at, 'unixepoch', 'localtime')";
+        Some(match self {
+            Self::None => return None,
+            // A site's name as the filter lists it, whichever of its videos the query takes.
+            Self::Site => (
+                "v.site".to_owned(),
+                "(SELECT MIN(s.site_name) FROM videos s WHERE s.site = v.site)".to_owned(),
+            ),
+            Self::Destination => (format!("lower({folder})"), folder.to_owned()),
+            Self::Uploader => (
+                "nullif(lower(v.uploader), '')".to_owned(),
+                "v.uploader".to_owned(),
+            ),
+            Self::Month => (month.to_owned(), month.to_owned()),
+        })
+    }
+
+    /// The groups' order, as ORDER BY terms over a group's key and label (expressions or columns): sites by name,
+    /// folders by path, uploaders by name with the videos without one last, months newest first, unless the videos
+    /// are sorted by when they were downloaded, oldest first.
+    fn order(self, key: &str, label: &str, query: &HistoryQuery) -> Option<String> {
+        Some(match self {
+            Self::None => return None,
+            Self::Site => format!("{label} COLLATE NOCASE, {key}"),
+            Self::Destination => key.to_owned(),
+            Self::Uploader => format!("{key} IS NULL, {key}"),
+            Self::Month => {
+                let oldest_first = query.sort == HistorySort::Downloaded && !query.descending;
+                format!("{key} {}", if oldest_first { "ASC" } else { "DESC" })
+            }
+        })
+    }
+
+    /// The ORDER BY terms that put a row's group first, with a comma after them, or nothing ungrouped.
+    fn row_order(self, query: &HistoryQuery) -> String {
+        self.key_and_label()
+            .and_then(|(key, label)| self.order(&key, &label, query))
+            .map(|terms| format!("{terms}, "))
+            .unwrap_or_default()
+    }
+}
+
+/// One of the history view's groups, in the order they come.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HistoryGroupCount {
+    /// What tells it apart: the site, the folder or the uploader in lowercase, the month as YYYY-MM. `None` for the
+    /// videos without an uploader.
+    pub key: Option<String>,
+    /// What it's called: the site's name, the folder, the uploader as one of its videos writes it, the month as
+    /// YYYY-MM.
+    pub label: Option<String>,
+    /// How many of the query's videos it holds.
+    pub count: u32,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum HistorySort {
@@ -580,8 +665,9 @@ impl History {
                     nullif(v.thumbnail_file, '')
                 {VIDEOS_WITH_LATEST_DOWNLOAD}
                 {filter}
-                ORDER BY {column} {direction}, d.downloaded_at DESC, v.id DESC
+                ORDER BY {groups}{column} {direction}, d.downloaded_at DESC, v.id DESC
                 LIMIT ?{limit} OFFSET ?{offset}",
+                groups = query.group.row_order(query),
                 column = query.sort.column(),
                 limit = values.len() - 1,
                 offset = values.len(),
@@ -619,7 +705,8 @@ impl History {
         let connection = self.database.lock();
         let mut statement = connection.prepare(&format!(
             "SELECT v.id {VIDEOS_WITH_LATEST_DOWNLOAD} {filter}
-            ORDER BY {column} {direction}, d.downloaded_at DESC, v.id DESC",
+            ORDER BY {groups}{column} {direction}, d.downloaded_at DESC, v.id DESC",
+            groups = query.group.row_order(query),
             column = query.sort.column(),
             direction = if query.descending { "DESC" } else { "ASC" },
         ))?;
@@ -627,6 +714,38 @@ impl History {
             .query_map(params_from_iter(&values), |row| row.get(0))?
             .collect::<Result<_, _>>()?;
         Ok(ids)
+    }
+
+    /// The query's groups, in the order `page` gives their videos, each with how many it holds; none ungrouped. A
+    /// group's first video is at the sum of the counts before it, which the view's sidebar goes to.
+    pub fn groups(&self, query: &HistoryQuery) -> Result<Vec<HistoryGroupCount>, HistoryError> {
+        let Some((key, label)) = query.group.key_and_label() else {
+            return Ok(Vec::new());
+        };
+        if query.files.is_some() {
+            self.note_missing(query)?;
+        }
+        let order = query
+            .group
+            .order("group_key", "group_label", query)
+            .unwrap_or_default();
+        let (filter, values) = filter_of(query);
+        let connection = self.database.lock();
+        let mut statement = connection.prepare(&format!(
+            "SELECT {key} AS group_key, MIN({label}) AS group_label, COUNT(*)
+            {VIDEOS_WITH_LATEST_DOWNLOAD} {filter}
+            GROUP BY group_key ORDER BY {order}"
+        ))?;
+        let groups = statement
+            .query_map(params_from_iter(&values), |row| {
+                Ok(HistoryGroupCount {
+                    key: row.get(0)?,
+                    label: row.get(1)?,
+                    count: row.get(2)?,
+                })
+            })?
+            .collect::<Result<_, _>>()?;
+        Ok(groups)
     }
 
     /// What the videos matching the query take on the disk: every file their downloads made (each download, not only
@@ -1716,6 +1835,157 @@ mod tests {
             ["beta", "gamma", "Alpha"]
         );
         assert_eq!(sorted(HistorySort::Size, false), ["gamma", "beta", "Alpha"]);
+    }
+
+    /// Records a video downloaded to `file_path` at `downloaded_at`, titled after its ID.
+    fn record_at(
+        test: &TestHistory,
+        site: &str,
+        id: &str,
+        uploader: Option<&str>,
+        file_path: &str,
+        at: i64,
+    ) {
+        let mut subject = video(site, id, id, "", 1.0);
+        subject.uploader = uploader.map(str::to_owned);
+        let mut saved = download("p", at, 1);
+        saved.file_path = file_path.to_owned();
+        test.history.record(&subject, &saved).unwrap();
+    }
+
+    fn grouped(
+        test: &TestHistory,
+        group: HistoryGroup,
+        sort: HistorySort,
+        descending: bool,
+    ) -> GroupedTitles {
+        let query = HistoryQuery {
+            group,
+            sort,
+            descending,
+            ..HistoryQuery::default()
+        };
+        let groups = test.history.groups(&query).unwrap();
+        let titles = titles(&test.history.search(&query).unwrap())
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        let ids = test.history.ids(&query).unwrap();
+        assert_eq!(
+            ids,
+            test.history
+                .search(&query)
+                .unwrap()
+                .iter()
+                .map(|video| video.id)
+                .collect::<Vec<_>>(),
+            "Select All takes them in the same order"
+        );
+        GroupedTitles { groups, titles }
+    }
+
+    struct GroupedTitles {
+        groups: Vec<HistoryGroupCount>,
+        titles: Vec<String>,
+    }
+
+    fn group(key: Option<&str>, label: Option<&str>, count: u32) -> HistoryGroupCount {
+        HistoryGroupCount {
+            key: key.map(str::to_owned),
+            label: label.map(str::to_owned),
+            count,
+        }
+    }
+
+    #[test]
+    fn groups_come_together_in_their_order_each_sorted_within() {
+        let test = TestHistory::new();
+        record_at(
+            &test,
+            "youtube",
+            "a",
+            Some("Zed"),
+            r"D:\Videos\Zed\a.mkv",
+            100,
+        );
+        record_at(&test, "vimeo", "b", Some("amy"), r"D:\Videos\b.mkv", 300);
+        record_at(&test, "youtube", "c", Some("Amy"), r"d:\videos\c.mkv", 200);
+        record_at(&test, "youtube", "d", None, "D:/Music/d.opus", 400);
+
+        let by_site = grouped(&test, HistoryGroup::Site, HistorySort::Downloaded, true);
+        assert_eq!(
+            by_site.groups,
+            [
+                group(Some("vimeo"), Some("vimeo.com"), 1),
+                group(Some("youtube"), Some("youtube.com"), 3)
+            ]
+        );
+        assert_eq!(
+            by_site.titles,
+            ["b", "d", "c", "a"],
+            "newest first within each"
+        );
+
+        let by_uploader = grouped(&test, HistoryGroup::Uploader, HistorySort::Title, false);
+        assert_eq!(
+            by_uploader.groups,
+            [
+                group(Some("amy"), Some("Amy"), 2),
+                group(Some("zed"), Some("Zed"), 1),
+                group(None, None, 1),
+            ],
+            "ignoring case, the videos without one last"
+        );
+        assert_eq!(by_uploader.titles, ["b", "c", "a", "d"]);
+
+        let by_folder = grouped(&test, HistoryGroup::Destination, HistorySort::Title, true);
+        assert_eq!(
+            by_folder.groups,
+            [
+                group(Some("d:/music"), Some("D:/Music"), 1),
+                group(Some(r"d:\videos"), Some(r"D:\Videos"), 2),
+                group(Some(r"d:\videos\zed"), Some(r"D:\Videos\Zed"), 1),
+            ],
+            "the folders of the files, ignoring case"
+        );
+        assert_eq!(by_folder.titles, ["d", "c", "b", "a"]);
+    }
+
+    #[test]
+    fn months_come_newest_first_unless_sorted_oldest_first() {
+        let test = TestHistory::new();
+        // Mid-month at noon, so every time zone puts them in the same months.
+        let january = 1_705_320_000; // 2024-01-15 12:00 UTC
+        let march = 1_710_504_000; // 2024-03-15 12:00 UTC
+        record_at(&test, "youtube", "a", None, r"C:\a.mkv", january);
+        record_at(&test, "youtube", "b", None, r"C:\b.mkv", march);
+        record_at(&test, "youtube", "c", None, r"C:\c.mkv", march + 60);
+
+        let newest = grouped(&test, HistoryGroup::Month, HistorySort::Title, false);
+        assert_eq!(
+            newest.groups,
+            [
+                group(Some("2024-03"), Some("2024-03"), 2),
+                group(Some("2024-01"), Some("2024-01"), 1)
+            ]
+        );
+        assert_eq!(newest.titles, ["b", "c", "a"]);
+
+        let oldest = grouped(&test, HistoryGroup::Month, HistorySort::Downloaded, false);
+        assert_eq!(oldest.titles, ["a", "b", "c"]);
+        assert_eq!(oldest.groups[0].key.as_deref(), Some("2024-01"));
+    }
+
+    #[test]
+    fn ungrouped_has_no_groups() {
+        let test = TestHistory::new();
+        record_at(&test, "youtube", "a", None, r"C:\a.mkv", 1);
+        assert!(
+            test.history
+                .groups(&HistoryQuery::default())
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

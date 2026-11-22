@@ -1,5 +1,22 @@
-import { useMemo, useState } from "react"
-import { Download, Inbox, KeyRound, ListChecks, Loader2, RefreshCw, X } from "lucide-react"
+import { useMemo, useRef, useState, type ReactNode } from "react"
+import {
+  ChevronUp,
+  CircleAlert,
+  Clock,
+  Download,
+  Film,
+  History,
+  Images,
+  Inbox,
+  KeyRound,
+  ListChecks,
+  ListVideo,
+  Loader2,
+  PanelTopOpen,
+  RefreshCw,
+  X,
+  type LucideIcon,
+} from "lucide-react"
 import {
   confirmWithUser,
   readPendingLinkAgain,
@@ -17,8 +34,13 @@ import {
   AFTER_GROUPS,
   arrange,
   arrangeNested,
+  chaptersOf,
+  firstIndexOf,
   firstItems,
   folderGroup,
+  groupPath,
+  LIST_GROUPS,
+  LIST_SORTS,
   NO_GROUP,
   type GroupPlace,
   type ItemGroup,
@@ -30,6 +52,7 @@ import type { PendingLink } from "../bindings/PendingLink"
 import type { PresetsOverview } from "../bindings/PresetsOverview"
 import type { RulePreset } from "../bindings/RulePreset"
 import type { VideoInfo } from "../bindings/VideoInfo"
+import { useChapters } from "../chapters"
 import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
@@ -40,7 +63,11 @@ import { PostFilesPicker } from "../components/PostFilesPicker"
 import { SharedFilesList } from "../components/SharedFilesList"
 import { Checkbox, SelectInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
+import { ItemTile, ItemTiles, type TilePlace } from "../components/ItemTiles"
+import { TileLabel } from "../components/MediaTiles"
+import type { MenuItem } from "../components/Menu"
 import { Page } from "../components/Page"
+import { PickerViewControls } from "../components/PickerViewControls"
 import { PasswordForm } from "../components/PasswordForm"
 import { PresetRuleLink } from "../components/PresetRuleLink"
 import { StatusMessage } from "../components/StatusMessage"
@@ -48,6 +75,7 @@ import { classes } from "../components/styles"
 import { Thumbnail } from "../components/Thumbnail"
 import { WaysToAdd, type WayToAdd } from "../components/WaysToAdd"
 import { describeDownloadError, describePreviewError, fixFor, needsPassword, type ErrorDescription } from "../errors"
+import { useFoldedGroups } from "../foldedGroups"
 import { formatCalendarDate, formatContents, formatDay, formatDuration, joinDetails } from "../format"
 import { listsPostFiles, pickedOf, pickSummary, postLeftOutMessage } from "../postFiles"
 import { sameFiles, sharedLeftOutMessage, sharedPickedOf } from "../sharedFiles"
@@ -60,6 +88,7 @@ import {
   useLeftOutFiles,
   useLeftOutSharedFiles,
   useListArrangement,
+  usePickerLayout,
   useRuleGroupOf,
   usePendingLinks,
   usePresets,
@@ -69,6 +98,7 @@ import {
 } from "../queries"
 import { useDeleteKey } from "../shortcuts"
 import { strings } from "../strings"
+import { useShownRow, type ShownRow } from "../tileRows"
 import { useOfferUndo } from "../undo"
 
 /** The ways to add links an empty Pending offers: the ones that work on their own first. */
@@ -85,7 +115,8 @@ const DEFAULT_PRESET = ""
  * nothing to download. Start All sends every link not downloaded before to the queue (those still being read go once
  * they're read); with links selected, Start Selected and Remove Selected act on those instead. The list is grouped and
  * sorted as its toolbar says, under Needs Attention's channels, playlists and accounts, which nothing starts: each is
- * picked from in the preview card.
+ * picked from in the preview card. The links show as rows (List) or pictures (Masonry, Gallery), chosen in the header
+ * so the choice stays in sight; grouped, the sidebar lists the groups under it as chapters.
  */
 export function PendingView() {
   const { data: allLinks = [] } = usePendingLinks()
@@ -153,6 +184,22 @@ export function PendingView() {
     grouped || toPick.length === 0
       ? arranged
       : arranged.map((only) => ({ ...only, key: "otherLinks", label: strings.pending.otherLinks }))
+  const headed = grouped || toPick.length > 0
+  const { layout, change: changeLayout } = usePickerLayout("pending")
+  const tiles = layout.view === "list" ? null : layout.view
+
+  // Going to a group shows the links up to it, and unfolds the status holding it.
+  const folds = useFoldedGroups("pending")
+  const { scrollRef, markShown } = useChapters({
+    view: "pending",
+    chapters: [...chaptersOf(attentionGroups), ...(headed ? chaptersOf(groups) : [])],
+    reveal: (id) => {
+      const holder = groupPath("", id.split("/")[1])
+      if (holder !== id && folds.collapsed.has(holder)) folds.toggle(holder)
+      const first = firstIndexOf(groups, id)
+      if (first !== null && first >= shownCount) setShownCount((Math.floor(first / PENDING_PAGE) + 1) * PENDING_PAGE)
+    },
+  })
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -258,6 +305,24 @@ export function PendingView() {
     )
 
 
+  const pendingRow = (link: PendingLink, shownFor?: { shown: ShownRow<PendingOpening>; hide: () => void }) => (
+    <PendingRow
+      key={shownFor?.shown.opened}
+      link={link}
+      presets={presets}
+      allPresetId={followedPreset(link)}
+      batchPresetId={presetId}
+      rulePreset={rulePresetOf.get(link.id) ?? null}
+      folderInHeading={group === "destination"}
+      selected={selection.has(link.id)}
+      onSelect={(on) => toggle(link.id, on)}
+      onStart={() => void start([link])}
+      busy={busy}
+      opens={shownFor?.shown.opens}
+      onHide={shownFor?.hide}
+    />
+  )
+
   return (
     <Page
       title={strings.nav.pending}
@@ -267,6 +332,9 @@ export function PendingView() {
           {buttons}
         </>
       }
+      viewControls={links.length > 0 && <PickerViewControls layout={layout} onChange={changeLayout} />}
+      scrollRef={scrollRef}
+      onScroll={markShown}
     >
       {adding.error && <StatusMessage tone="danger" {...adding.error} />}
       {[
@@ -302,6 +370,8 @@ export function PendingView() {
             </label>
             <ArrangeControls
               arrangement={arrangement}
+              groups={LIST_GROUPS}
+              sorts={LIST_SORTS}
               disabled={!ready}
               onChange={(changes) => void changeArrangement(changes)}
             />
@@ -329,23 +399,30 @@ export function PendingView() {
                   key={index}
                   view="pending"
                   groups={shownGroups}
-                  grouped={index === 0 || grouped || toPick.length > 0}
+                  grouped={index === 0 || headed}
                   keyOf={(link) => link.id}
                   selection={{ isSelected: (link) => selection.has(link.id), onSelect: selectAllOf }}
-                  renderItem={(link) => (
-                    <PendingRow
-                      link={link}
-                      presets={presets}
-                      allPresetId={followedPreset(link)}
-                      batchPresetId={presetId}
-                      rulePreset={rulePresetOf.get(link.id) ?? null}
-                      folderInHeading={group === "destination"}
-                      selected={selection.has(link.id)}
-                      onSelect={(on) => toggle(link.id, on)}
-                      onStart={() => void start([link])}
-                      busy={busy}
-                    />
-                  )}
+                  renderItem={(link) => pendingRow(link)}
+                  renderItems={
+                    tiles
+                      ? (run) => (
+                          <PendingTiles
+                            links={run}
+                            view={tiles}
+                            size={layout.size}
+                            renderRow={pendingRow}
+                            tileOf={(link) => ({
+                              byStatus,
+                              selected: selection.has(link.id),
+                              anySelected: selected.length > 0,
+                              onSelect: (on) => toggle(link.id, on),
+                              onStart: startsFromTile(link) && presetId && !busy ? () => void start([link]) : null,
+                            })}
+                          />
+                        )
+                      : undefined
+                  }
+                  folds={folds}
                 />
               ),
           )}
@@ -377,7 +454,15 @@ interface PendingRowProps {
   onSelect: (selected: boolean) => void
   onStart: () => void
   busy: boolean
+  /** Shown for a picture: what it opens with (its files, or its password field). */
+  opens?: PendingOpening
+  /** Shown for a picture: hides the row again, with a button of its own. */
+  onHide?: () => void
 }
+
+/** What a link's row opens with, when it's shown for a picture in Masonry or Gallery: its files to pick, or the field
+ * for its password. */
+type PendingOpening = "files" | "password" | null
 
 function PendingRow({
   link,
@@ -390,6 +475,8 @@ function PendingRow({
   onSelect,
   onStart,
   busy,
+  opens = null,
+  onHide,
 }: PendingRowProps) {
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const removeLinks = useRemoveLinks()
@@ -400,14 +487,10 @@ function PendingRow({
   // Videos Start As's preset shows as Default, unless a rule picks the link's preset, which the rule's link says.
   const showsDefault = presetId !== null && presetId === batchPresetId && !rulePreset
   const batchPresetName = presets?.presets.find((preset) => preset.id === batchPresetId)?.name
-  const [showsFiles, setShowsFiles] = useState(false)
-  const files = video?.postFiles ?? []
+  const [showsFiles, setShowsFiles] = useState(opens === "files")
   const sharedFiles = video?.sharedFiles ?? []
-  // A post of one file has nothing to pick; a file host's link lists its files only when it holds several.
-  const picksFiles = (files.length > 1 || sharedFiles.length > 0) && !preview?.inQueue
-  const nothingPicked =
-    (files.length > 0 && files.every((file) => !file.picked)) ||
-    (sharedFiles.length > 0 && sharedFiles.every((file) => !file.picked))
+  const picksFiles = picksFilesOf(link)
+  const nothingPicked = video !== null && nothingPickedIn(video)
   const hold = link.state === "waiting" ? link.hold : null
   const holdTimeLeft = useTimeLeft(hold?.until ?? null)
 
@@ -484,7 +567,11 @@ function PendingRow({
           />
         ))}
         {link.state === "needsPassword" && (
-          <PendingPassword link={link} onUnlock={(password) => act(() => unlockPendingLink(link.id, password))} />
+          <PendingPassword
+            link={link}
+            autoFocus={opens === "password"}
+            onUnlock={(password) => act(() => unlockPendingLink(link.id, password))}
+          />
         )}
         {link.state === "needsPicking" && (
           <p className="flex items-center gap-1.5 text-xs text-fg-secondary">
@@ -570,8 +657,204 @@ function PendingRow({
           )
         )}
         <IconButton label={strings.pending.remove} icon={X} onClick={() => act(() => removeLinks([link.id]))} />
+        {onHide && <IconButton label={strings.tiles.hideDetails} icon={ChevronUp} onClick={onHide} />}
       </div>
     </Card>
+  )
+}
+
+/** Whether a link's files can be picked: a post of several, or a file host's folder, not in Downloads already. */
+function picksFilesOf(link: PendingLink): boolean {
+  const video = link.preview?.video
+  if (!video || link.preview?.inQueue) return false
+  // A post of one file has nothing to pick; a file host's link lists its files only when it holds several.
+  return (video.postFiles?.length ?? 0) > 1 || (video.sharedFiles?.length ?? 0) > 0
+}
+
+/** Whether every file of a post or a folder is unticked, which leaves nothing to start. */
+function nothingPickedIn(video: VideoInfo): boolean {
+  const files = video.postFiles ?? []
+  const sharedFiles = video.sharedFiles ?? []
+  return (
+    (files.length > 0 && files.every((file) => !file.picked)) ||
+    (sharedFiles.length > 0 && sharedFiles.every((file) => !file.picked))
+  )
+}
+
+/** Whether a link's Start (or Download Again) shows, as its row's button does: read or not, but not one that needs
+ * picking, a password, or reading again, is in Downloads already, waits to start once read, or has nothing ticked. */
+function startsFromTile(link: PendingLink): boolean {
+  const video = link.preview?.video
+  return (
+    link.state !== "needsPicking" &&
+    link.state !== "failed" &&
+    link.state !== "needsPassword" &&
+    !link.preview?.inQueue &&
+    !link.startWhenRead &&
+    !(video && nothingPickedIn(video))
+  )
+}
+
+/** What a link's picture needs from the view. */
+interface PendingTileFacts {
+  /** Grouped by where links stand: the heading says it, so the picture doesn't, unless it says more (being read or
+   * waiting its turn, under Not Read Yet). */
+  byStatus: boolean
+  selected: boolean
+  /** Whether anything is ticked, which shows every picture's tick box. */
+  anySelected: boolean
+  onSelect: (selected: boolean) => void
+  /** Starts it, or null when it can't start from here now. */
+  onStart: (() => void) | null
+}
+
+interface PendingTilesProps {
+  links: readonly PendingLink[]
+  view: "masonry" | "gallery"
+  /** The step of the size buttons (`TILE_WIDTHS`). */
+  size: number
+  renderRow: (link: PendingLink, shownFor: { shown: ShownRow<PendingOpening>; hide: () => void }) => ReactNode
+  tileOf: (link: PendingLink) => PendingTileFacts
+}
+
+/** Links as pictures (`ItemTiles`), each showing its row under its line when clicked. Gallery cuts them to squares
+ * when they're all posts, else to 16:9. */
+function PendingTiles({ links, view, size, renderRow, tileOf }: PendingTilesProps) {
+  const [error, setError] = useState<ErrorDescription | null>(null)
+  const box = useRef<HTMLDivElement>(null)
+  const rows = useShownRow<PendingOpening>(box)
+  const galleryRatio = links.every((link) => link.preview?.video.post) ? 1 : 16 / 9
+  return (
+    <div ref={box} className="flex flex-col gap-2">
+      {error && <StatusMessage tone="danger" {...error} />}
+      <ItemTiles
+        items={links}
+        view={view}
+        size={size}
+        keyOf={(link) => link.id}
+        galleryRatio={galleryRatio}
+        rows={rows}
+        renderRow={(link, shown) => renderRow(link, { shown, hide: rows.hide })}
+        renderTile={(link, place) => (
+          <PendingTile
+            link={link}
+            place={place}
+            facts={tileOf(link)}
+            onShow={(opens) => rows.show(link.id, opens)}
+            onHide={rows.hide}
+            onError={setError}
+          />
+        )}
+      />
+    </div>
+  )
+}
+
+/** The icon in a link's picture for where it stands, and its color; none when it's ready to start. */
+const STATUS_ICONS: Partial<Record<PendingStatus | "reading" | "waiting", { icon: LucideIcon; className: string }>> = {
+  reading: { icon: Loader2, className: "animate-spin text-fg-secondary" },
+  waiting: { icon: Clock, className: "text-fg-secondary" },
+  needsAttention: { icon: ListChecks, className: "text-accent" },
+  needsPassword: { icon: KeyRound, className: "text-warning" },
+  failed: { icon: CircleAlert, className: "text-danger" },
+  inQueue: { icon: ListVideo, className: "text-fg-secondary" },
+  downloadedBefore: { icon: History, className: "text-warning" },
+}
+
+/** A link as its picture: where it stands in its corner, its row's actions in its right-click menu. */
+function PendingTile({
+  link,
+  place,
+  facts,
+  onShow,
+  onHide,
+  onError,
+}: {
+  link: PendingLink
+  place: TilePlace
+  facts: PendingTileFacts
+  onShow: (opens: PendingOpening) => void
+  onHide: () => void
+  onError: (error: ErrorDescription | null) => void
+}) {
+  const removeLinks = useRemoveLinks()
+  const { pickFromPending } = useAppActions()
+  const video = link.preview?.video ?? null
+  const status = pendingStatus(link)
+  const shownStatus = status === "notRead" ? (link.state === "reading" ? "reading" : "waiting") : status
+  // Needs Attention is always a heading of its own.
+  const headingSaysIt = (facts.byStatus || status === "needsAttention") && shownStatus === status
+  const statusIcon = headingSaysIt ? undefined : STATUS_ICONS[shownStatus]
+  const title = video?.title ?? link.link
+  const details = video
+    ? joinDetails([
+        video.uploader,
+        video.siteName,
+        video.durationSeconds !== null && formatDuration(video.durationSeconds),
+        pickSummary(video) ?? formatContents(video),
+      ])
+    : null
+  const statusText = shownStatus === "reading" ? strings.pending.reading : strings.pending.groups[status]
+  const hint = [title, details, statusText, strings.tiles.hint].filter(Boolean).join("\n")
+  const act = (action: () => Promise<void>) => {
+    onError(null)
+    action().catch((error: unknown) => onError(describeDownloadError(error)))
+  }
+  const menuItems = (): MenuItem[] => [
+    ...(link.state === "needsPicking"
+      ? [{ label: strings.pending.pick, icon: ListChecks, onSelect: () => pickFromPending(link.id, link.link) }]
+      : []),
+    ...(link.state === "failed"
+      ? [{ label: strings.pending.tryAgain, icon: RefreshCw, onSelect: () => act(() => readPendingLinkAgain(link.id)) }]
+      : []),
+    ...(link.state === "needsPassword"
+      ? [{ label: strings.queue.enterPassword, icon: KeyRound, onSelect: () => onShow("password") }]
+      : []),
+    ...(facts.onStart
+      ? [
+          {
+            label: link.preview?.lastDownload ? strings.pending.downloadAgain : strings.pending.start,
+            icon: Download,
+            onSelect: facts.onStart,
+          },
+        ]
+      : []),
+    ...(picksFilesOf(link) ? [{ label: strings.postFiles.pickFiles, icon: ListChecks, onSelect: () => onShow("files") }] : []),
+    place.shown
+      ? { label: strings.tiles.hideDetails, icon: ChevronUp, onSelect: onHide }
+      : { label: strings.tiles.showDetails, icon: PanelTopOpen, onSelect: () => onShow(null) },
+    { label: strings.pending.remove, icon: X, danger: true, onSelect: () => act(() => removeLinks([link.id])) },
+  ]
+  const isPost = video?.post != null
+  return (
+    <ItemTile
+      id={link.id}
+      place={place}
+      title={title}
+      thumbnailUrl={video?.thumbnailUrl ?? null}
+      fallbackIcon={isPost ? Images : Film}
+      shape={isPost ? 4 / 5 : 16 / 9}
+      hint={hint}
+      ariaLabel={joinDetails([title, statusText])}
+      dimmed={!video}
+      failed={link.state === "failed"}
+      corner={
+        statusIcon && (
+          <TileLabel>
+            <statusIcon.icon size={12} className={statusIcon.className} />
+          </TileLabel>
+        )
+      }
+      selection={{
+        selected: facts.selected,
+        showing: facts.anySelected,
+        label: strings.pending.select,
+        onSelect: facts.onSelect,
+      }}
+      menuLabel={strings.tiles.menu(title)}
+      menuItems={menuItems}
+      onToggle={place.shown ? onHide : () => onShow(null)}
+    />
   )
 }
 
@@ -736,7 +1019,15 @@ function destinationRequest(
 
 /** For a link that needs a password: why it waits, whether a password tried was wrong, and the field to unlock it,
  * which reads it again with the password. */
-function PendingPassword({ link, onUnlock }: { link: PendingLink; onUnlock: (password: string) => void }) {
+function PendingPassword({
+  link,
+  autoFocus,
+  onUnlock,
+}: {
+  link: PendingLink
+  autoFocus: boolean
+  onUnlock: (password: string) => void
+}) {
   const wrong = needsPassword(link.error) && link.error.wrong
   return (
     <div className="flex flex-col gap-1.5">
@@ -747,7 +1038,7 @@ function PendingPassword({ link, onUnlock }: { link: PendingLink; onUnlock: (pas
           link.startWhenRead && strings.pending.startsWhenUnlocked,
         ])}
       </p>
-      <PasswordForm size="sm" autoFocus={false} onUnlock={onUnlock} />
+      <PasswordForm size="sm" autoFocus={autoFocus} onUnlock={onUnlock} />
     </div>
   )
 }

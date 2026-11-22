@@ -23,6 +23,7 @@ import type { FolderRule } from "./bindings/FolderRule"
 import type { HistoryData } from "./bindings/HistoryData"
 import type { HistoryFile } from "./bindings/HistoryFile"
 import type { HistoryFilters } from "./bindings/HistoryFilters"
+import type { HistoryGroupCount } from "./bindings/HistoryGroupCount"
 import type { HistoryQuery } from "./bindings/HistoryQuery"
 import type { HistoryPage } from "./bindings/HistoryPage"
 import type { HistorySize } from "./bindings/HistorySize"
@@ -1088,6 +1089,13 @@ export async function showDownloadFileInFolder(downloadId: number, position: num
 export async function forgetVideo(videoId: number): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("forget_video", { videoId })
+}
+
+/** The groups of the videos a query matches, in the order their videos come, each with how many it holds: none
+ * ungrouped. */
+export function getHistoryGroups(query: HistoryQuery): Promise<HistoryGroupCount[]> {
+  if (!isTauri()) return Promise.resolve(standIns.historyGroups(query, addressNumber("history")))
+  return invoke<HistoryGroupCount[]>("history_groups", { query })
 }
 
 /** The IDs of every video a query matches, for ticking them all. */
