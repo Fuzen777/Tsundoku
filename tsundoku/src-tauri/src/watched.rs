@@ -1,9 +1,13 @@
 //! The watched sources' commands: `tsundoku_core`'s watched channels, playlists and accounts exposed to the UI, with
 //! their changes sent as an event.
 
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::http::{Request, Response, StatusCode, header};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State, UriSchemeContext, UriSchemeResponder};
+use tsundoku_core::watched::picture::{self, PictureCrop};
 use tsundoku_core::watched::{
     ItemKey, NewWatchedSource, WatchedError, WatchedListener, WatchedSource, WatchedSources,
 };
@@ -52,6 +56,86 @@ pub fn edit_watched_source(
 #[tauri::command]
 pub fn remove_watched_source(watched: Watched<'_>, id: i64) -> Result<(), WatchedError> {
     watched.remove(id)
+}
+
+/// The pictures a source can show instead of its listing's: the listing's, then its items', newest first.
+#[tauri::command]
+pub fn watched_picture_choices(watched: Watched<'_>, id: i64) -> Result<Vec<String>, WatchedError> {
+    watched.picture_choices(id)
+}
+
+/// Custom: one of the source's pictures, read from its site and kept, with the area of it to show.
+#[tauri::command]
+pub async fn pick_watched_picture(
+    watched: Watched<'_>,
+    id: i64,
+    url: String,
+    crop: PictureCrop,
+) -> Result<(), WatchedError> {
+    let watched = Arc::clone(&watched);
+    tauri::async_runtime::spawn_blocking(move || {
+        watched.pick_picture(id, &url, crop, &picture::download)
+    })
+    .await
+    .unwrap_or_else(|error| {
+        Err(WatchedError::Storage {
+            detail: error.to_string(),
+        })
+    })
+}
+
+/// Another area of the picture picked for a source.
+#[tauri::command]
+pub fn crop_watched_picture(
+    watched: Watched<'_>,
+    id: i64,
+    crop: PictureCrop,
+) -> Result<(), WatchedError> {
+    watched.crop_picture(id, crop)
+}
+
+/// Automatic: the source shows its listing's picture again.
+#[tauri::command]
+pub fn reset_watched_picture(watched: Watched<'_>, id: i64) -> Result<(), WatchedError> {
+    watched.reset_picture(id)
+}
+
+/// The data folder's `pictures\`, for `serve_picture`.
+pub struct PicturesFolder(pub PathBuf);
+
+/// Serves a picture picked for a watched source to the window, at `picture://localhost/<name>`
+/// (`http://picture.localhost/<name>` in WebView2), read off the async runtime's threads. Only names
+/// `picture::file_name` gives are served, from the pictures folder alone, so the window can't read any other file.
+pub fn serve_picture<R: Runtime>(
+    context: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
+    let folder = context
+        .app_handle()
+        .try_state::<PicturesFolder>()
+        .map(|folder| folder.0.clone());
+    let name = request.uri().path().trim_start_matches('/').to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let picture = folder
+            .zip(picture::kind_of_file(&name))
+            .and_then(|(folder, kind)| {
+                fs::read(folder.join(&name)).ok().map(|bytes| (kind, bytes))
+            });
+        let response = match picture {
+            // A picture's name changes with the picture, so it never goes stale.
+            Some((kind, bytes)) => Response::builder()
+                .header(header::CONTENT_TYPE, kind.content_type())
+                .header(header::CACHE_CONTROL, "max-age=31536000, immutable")
+                .body(bytes),
+            None => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Vec::new()),
+        };
+        if let Ok(response) = response {
+            responder.respond(response);
+        }
+    });
 }
 
 /// Check Now: the check runs in the background, and `watched-changed` tells when it ends.

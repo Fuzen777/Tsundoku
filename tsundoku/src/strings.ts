@@ -842,10 +842,33 @@ export const strings = {
     download: "Download",
     save: "Save",
     discard: "Discard",
+    /** Edit → Picture: the listing's own picture, or one of the source's picked by hand and cropped. */
+    picture: "Picture",
+    pictures: {
+      automatic: "Automatic",
+      custom: "Custom",
+      automaticHint: {
+        channel: "The channel's own picture, kept current by each check.",
+        account: "The account's own picture, kept current by each check.",
+        playlist: "The playlist's own picture, its first video's, kept current by each check.",
+      },
+      customHint: "One of its pictures: drag it to show the part you want in the frame, and zoom in with the wheel.",
+      area: "Picture",
+      areaHint: "Drag to move it. The wheel, + and − zoom, and the arrow keys move it too.",
+      zoom: "Zoom",
+      notLoaded: "This picture doesn't load. Pick another one.",
+      pickOne: "Pick one of its pictures.",
+      choices: (count: number) => `Its Pictures (${count})`,
+      choice: (number: number) => `Picture ${number}`,
+      loading: "Reading its pictures…",
+      none: "It has no pictures yet. A check may find some.",
+    },
     errors: {
       notFound: "This source isn't watched anymore.",
       alreadyWatched: "This source is watched already.",
       storage: "Couldn't save the watched sources.",
+      pictureUnavailable: "Couldn't get this picture from its site. Pick another one, or try again.",
+      unknownPicture: "This picture isn't one of the source's anymore. Pick another one.",
     },
   },
   /** The field that opens a link that needs a password, on the preview card, a pending link and a download. */

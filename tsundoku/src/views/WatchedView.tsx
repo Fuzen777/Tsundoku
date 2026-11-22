@@ -30,11 +30,13 @@ import { Field, SelectInput, TextInput } from "../components/Field"
 import { IconButton } from "../components/IconButton"
 import { ItemTypeFilter } from "../components/ItemTypeFilter"
 import { ExpandToggle } from "../components/LinkButton"
-import { ListedItems, ListingPicture } from "../components/ListingPicker"
+import { ListedItems } from "../components/ListingPicker"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
 import { PickerViewControls } from "../components/PickerViewControls"
 import { SegmentedControl } from "../components/SegmentedControl"
+import { SourcePicture } from "../components/SourcePicture"
+import { SourcePictureField } from "../components/SourcePictureField"
 import { StatusMessage } from "../components/StatusMessage"
 import { classes } from "../components/styles"
 import { Thumbnail } from "../components/Thumbnail"
@@ -49,6 +51,7 @@ import { useFoldedGroups } from "../foldedGroups"
 import { formatDay, formatRoughAge, formatTimeAgo, joinDetails } from "../format"
 import { isQueued, itemKey } from "../listingPicker"
 import { useAppActions } from "../navigation"
+import { pictureDraftOf, savePictureDraft } from "../pictureDraft"
 import {
   useLatestWatchedDownloads,
   usePickerLayout,
@@ -283,7 +286,7 @@ function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
           className="flex min-w-0 flex-1 items-start gap-3 rounded text-left focus-visible:outline-2 focus-visible:outline-accent"
         >
           <Chevron size={16} className="mt-5 shrink-0 text-fg-secondary" aria-hidden />
-          <ListingPicture listing={source} small />
+          <SourcePicture listing={source} picture={source.picture} />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate font-semibold" title={source.name}>
               {source.name}
@@ -426,9 +429,10 @@ function SourceSummary({ source }: { source: WatchedSource }) {
   )
 }
 
-/** Edit: Save In and Videos Start As, saved together. */
+/** Edit: the picture, Save In and Videos Start As, saved together. */
 function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () => void }) {
   const { data: presets } = usePresets()
+  const [picture, setPicture] = useState(() => pictureDraftOf(source))
   const [folder, setFolder] = useState(source.folder ?? "")
   const [presetId, setPresetId] = useState(source.presetId ?? "")
   const [saving, setSaving] = useState(false)
@@ -443,6 +447,8 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
     setSaving(true)
     setError(null)
     try {
+      // The picture first: reading it from its site is what may fail.
+      await savePictureDraft(source, picture)
       await editWatchedSource(source.id, folder.trim() || null, presetId || null)
       onDone()
     } catch (caught) {
@@ -453,6 +459,7 @@ function SourceEditor({ source, onDone }: { source: WatchedSource; onDone: () =>
 
   return (
     <div className="flex flex-col gap-3 border-t border-line pt-3">
+      <SourcePictureField source={source} draft={picture} onChange={setPicture} disabled={saving} />
       <Field label={text.saveIn} hint={text.saveInHint} htmlFor={`watched-folder-${source.id}`}>
         <div className="flex gap-2">
           <TextInput

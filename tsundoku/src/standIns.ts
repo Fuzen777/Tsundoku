@@ -797,6 +797,16 @@ export const standIns = {
   },
   /** Rule 3's preset for a title with "zoo" in it, as the stand-in rules have it. */
   watchedSources: watchedStandIns,
+  /** A watched source's pictures, as the core lists them: its listing's, then its items', a post's files one by one. */
+  watchedPictureChoices(id: number): string[] {
+    const source = watchedStandIns().find((watched) => watched.id === id)
+    if (!source) return []
+    const items = [...source.newItems, ...source.skippedItems].flatMap(({ video }) => {
+      const files = (video.postFiles ?? []).flatMap((file) => (file.thumbnailUrl ? [file.thumbnailUrl] : []))
+      return files.length > 0 ? files : video.thumbnailUrl ? [video.thumbnailUrl] : []
+    })
+    return [...new Set([source.thumbnailUrl, ...items].filter((url): url is string => url !== null))]
+  },
   ruleRightAway(video: VideoInfo): RightAwayRule | null {
     // As the stand-in rules have it: rule 3 downloads videos with "zoo" in their title right away.
     return video.title.toLowerCase().includes("zoo") ? { downloadRightAway: true, rule: 4 } : null
@@ -1172,6 +1182,7 @@ function watchedStandIns(): WatchedSource[] {
       name: channel.title,
       siteName: channel.siteName,
       thumbnailUrl: channel.thumbnailUrl,
+      picture: null,
       folder: "D:\\Videos\\{uploader}",
       presetId: "best-audio",
       addedAt: now - 7 * 86_400,
@@ -1190,6 +1201,7 @@ function watchedStandIns(): WatchedSource[] {
       name: "A Quiet Channel",
       siteName: "youtube.com",
       thumbnailUrl: channel.thumbnailUrl,
+      picture: null,
       folder: null,
       presetId: null,
       addedAt: now - 30 * 86_400,
@@ -1208,6 +1220,7 @@ function watchedStandIns(): WatchedSource[] {
       name: "A Long Playlist",
       siteName: "youtube.com",
       thumbnailUrl: channel.thumbnailUrl,
+      picture: null,
       folder: null,
       presetId: null,
       addedAt: now - 10 * 86_400,
@@ -1226,6 +1239,7 @@ function watchedStandIns(): WatchedSource[] {
       name: "Someone on X",
       siteName: "x.com",
       thumbnailUrl: account.thumbnailUrl,
+      picture: null,
       folder: "X\\{account}",
       presetId: null,
       addedAt: now - 5 * 86_400,
@@ -1244,6 +1258,7 @@ function watchedStandIns(): WatchedSource[] {
       name: account.title,
       siteName: account.siteName,
       thumbnailUrl: account.thumbnailUrl,
+      picture: null,
       folder: null,
       presetId: null,
       addedAt: now - 2 * 86_400,

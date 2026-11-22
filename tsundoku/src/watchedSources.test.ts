@@ -44,6 +44,7 @@ function source(id: number, facts: Partial<WatchedSource> = {}): WatchedSource {
     name: `Source ${id}`,
     siteName: "youtube.com",
     thumbnailUrl: null,
+    picture: null,
     folder: null,
     presetId: null,
     addedAt: 1000 + id,

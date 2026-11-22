@@ -139,6 +139,7 @@ impl WatchedListener for CountingListener {
 
 struct Test {
     folder: tempfile::TempDir,
+    database: Arc<Database>,
     history: Arc<History>,
     queue: Arc<DownloadQueue>,
     reader: Arc<FakeReader>,
@@ -182,16 +183,18 @@ impl Test {
         .unwrap();
         let reader = Arc::new(FakeReader::default());
         let sources = WatchedSources::open(WatchedServices {
-            database,
+            database: Arc::clone(&database),
             history: Arc::clone(&history),
             queue: Arc::clone(&queue),
             presets,
             settings,
             reader: reader.clone() as Arc<dyn ListingReader>,
             listener: Arc::new(CountingListener::default()),
+            pictures_folder: folder.path().join("pictures"),
         });
         Self {
             folder,
+            database,
             history,
             queue,
             reader,
@@ -919,4 +922,313 @@ fn downloading_from_every_source_skips_only_what_it_showed() {
     assert_eq!(test.new_ids(first), ["b"]);
     assert_eq!(ids(&test.source(second).skipped_items), ["c"]);
     assert_eq!(test.new_ids(second), ["d"]);
+}
+
+/// A JPEG's first bytes, which is all `picture::PictureKind` looks at, then `tag`, so two pictures differ.
+fn jpeg(tag: &str) -> Vec<u8> {
+    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xE0];
+    bytes.extend_from_slice(tag.as_bytes());
+    bytes
+}
+
+/// Reads a picture as the site would answer it: a JPEG for any link but `not-a-picture`, a page.
+fn read_picture(url: &str) -> Result<Vec<u8>, WatchedError> {
+    if url.ends_with("not-a-picture") {
+        Ok(b"<!doctype html><title>Not Found</title>".to_vec())
+    } else {
+        Ok(jpeg(url))
+    }
+}
+
+const WHOLE: PictureCrop = PictureCrop {
+    x: 0.0,
+    y: 0.0,
+    width: 1.0,
+    height: 1.0,
+};
+
+impl Test {
+    /// Adds an account with its own picture, whose items "a" (with a picture), "b" (a post of two files, each with
+    /// its picture) and "c" (none) are listed newest first.
+    fn add_with_pictures(&self) -> i64 {
+        let post = VideoInfo {
+            thumbnail_url: Some(picture_of("b")),
+            post_files: (1..=2)
+                .map(|number| crate::metadata::PostFile {
+                    number,
+                    video: false,
+                    thumbnail_url: Some(picture_of(&format!("b{number}"))),
+                    picked: true,
+                    name: None,
+                    size: None,
+                })
+                .collect(),
+            ..video("b")
+        };
+        let items = [
+            VideoInfo {
+                thumbnail_url: Some(picture_of("a")),
+                ..video("a")
+            },
+            post,
+            video("c"),
+        ];
+        self.sources
+            .add(NewWatchedSource {
+                url: CHANNEL.to_owned(),
+                kind: ListingKind::Account,
+                name: "Someone".to_owned(),
+                site_name: "youtube.com".to_owned(),
+                thumbnail_url: Some(picture_of("avatar")),
+                items: items
+                    .into_iter()
+                    .map(|video| ListedVideo {
+                        video,
+                        approximate_date: None,
+                    })
+                    .collect(),
+                first: FirstItems::All,
+                folder: None,
+                preset_id: None,
+            })
+            .unwrap()
+    }
+
+    fn picture(&self, id: i64) -> Option<SourcePicture> {
+        self.source(id).picture
+    }
+
+    fn pictures_on_disk(&self) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(self.folder.path().join("pictures"))
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .unwrap_or_default();
+        names.sort();
+        names
+    }
+}
+
+#[test]
+fn a_sources_pictures_are_its_listings_then_its_items_newest_first() {
+    let test = Test::new();
+    let id = test.add_with_pictures();
+    assert_eq!(
+        test.sources.picture_choices(id).unwrap(),
+        [
+            picture_of("avatar"),
+            picture_of("a"),
+            // A post's files one by one, rather than its cover, which is the first of them.
+            picture_of("b1"),
+            picture_of("b2"),
+        ]
+    );
+    assert_eq!(
+        test.sources.picture_choices(id + 1),
+        Err(WatchedError::NotFound)
+    );
+}
+
+#[test]
+fn a_picked_picture_is_kept_with_its_area_until_the_automatic_one_is_back() {
+    let test = Test::new();
+    let id = test.add_with_pictures();
+    assert_eq!(test.picture(id), None);
+
+    let face = PictureCrop {
+        x: 0.25,
+        y: 0.1,
+        width: 0.5,
+        height: 0.4,
+    };
+    test.sources
+        .pick_picture(id, &picture_of("b2"), face, &read_picture)
+        .unwrap();
+    let picked = test.picture(id).unwrap();
+    assert_eq!(picked.crop, face);
+    assert_eq!(
+        picked.file,
+        picture::file_name(id, &jpeg(&picture_of("b2")), picture::PictureKind::Jpeg)
+    );
+    assert_eq!(test.pictures_on_disk(), std::slice::from_ref(&picked.file));
+    assert_eq!(
+        test.source(id).thumbnail_url,
+        Some(picture_of("avatar")),
+        "the listing's picture is still known, for Automatic"
+    );
+
+    // Another area of it: the same file.
+    test.sources.crop_picture(id, WHOLE).unwrap();
+    assert_eq!(
+        test.picture(id),
+        Some(SourcePicture {
+            file: picked.file.clone(),
+            crop: WHOLE,
+        })
+    );
+
+    // Another picture replaces it on the disk too.
+    test.sources
+        .pick_picture(id, &picture_of("a"), face, &read_picture)
+        .unwrap();
+    let replaced = test.picture(id).unwrap();
+    assert_ne!(replaced.file, picked.file);
+    assert_eq!(test.pictures_on_disk(), [replaced.file]);
+
+    // Automatic.
+    test.sources.reset_picture(id).unwrap();
+    assert_eq!(test.picture(id), None);
+    assert!(test.pictures_on_disk().is_empty());
+    assert_eq!(
+        test.sources.crop_picture(id, face),
+        Err(WatchedError::UnknownPicture),
+        "there's no picture of its own to crop"
+    );
+}
+
+#[test]
+fn only_a_sources_own_pictures_can_be_picked() {
+    let test = Test::new();
+    let id = test.add_with_pictures();
+    let read_anything =
+        |_: &str| -> Result<Vec<u8>, WatchedError> { panic!("only its pictures are read") };
+    assert_eq!(
+        test.sources
+            .pick_picture(id, "https://elsewhere.example/a.jpg", WHOLE, &read_anything),
+        Err(WatchedError::UnknownPicture)
+    );
+    assert_eq!(test.picture(id), None);
+}
+
+#[test]
+fn a_page_instead_of_a_picture_is_refused_and_leaves_the_picture_as_it_was() {
+    let test = Test::new();
+    let id = test.add_with_pictures();
+    test.sources
+        .pick_picture(id, &picture_of("a"), WHOLE, &read_picture)
+        .unwrap();
+    let kept = test.picture(id);
+    let page = |_: &str| read_picture("not-a-picture");
+    assert!(matches!(
+        test.sources
+            .pick_picture(id, &picture_of("b1"), WHOLE, &page),
+        Err(WatchedError::PictureUnavailable { .. })
+    ));
+    let failing = |_: &str| -> Result<Vec<u8>, WatchedError> {
+        Err(WatchedError::PictureUnavailable {
+            detail: "the site answered 404 Not Found".to_owned(),
+        })
+    };
+    assert!(
+        test.sources
+            .pick_picture(id, &picture_of("b1"), WHOLE, &failing)
+            .is_err()
+    );
+    assert_eq!(test.picture(id), kept);
+    assert_eq!(test.pictures_on_disk().len(), 1);
+}
+
+#[test]
+fn a_check_keeps_the_picked_picture() {
+    let test = Test::new();
+    let id = test.add_with_pictures();
+    test.sources
+        .pick_picture(id, &picture_of("a"), WHOLE, &read_picture)
+        .unwrap();
+    let picked = test.picture(id);
+    *lock(&test.reader.listing) = vec!["d".to_owned(), "a".to_owned()];
+    test.check(id);
+    assert_eq!(test.picture(id), picked);
+}
+
+#[test]
+fn stopping_watching_deletes_its_picture_and_opening_deletes_what_no_source_shows() {
+    let test = Test::new();
+    let id = test.add_with_pictures();
+    test.sources
+        .pick_picture(id, &picture_of("a"), WHOLE, &read_picture)
+        .unwrap();
+    let shown = test.picture(id).unwrap().file;
+    test.sources.remove(id).unwrap();
+    assert!(test.pictures_on_disk().is_empty());
+
+    // Left behind: a picture no source shows, one half written, and a file that isn't one of its pictures.
+    let folder = test.folder.path().join("pictures");
+    fs::write(folder.join(&shown), b"gone").unwrap();
+    fs::write(folder.join("watched-7-0123456789abcdef.png.part"), b"half").unwrap();
+    fs::write(folder.join("notes.txt"), b"someone's").unwrap();
+    WatchedSources::open(WatchedServices {
+        database: Arc::clone(&test.database),
+        history: Arc::clone(&test.history),
+        queue: Arc::clone(&test.queue),
+        presets: Arc::clone(&test.sources.presets),
+        settings: Arc::clone(&test.sources.settings),
+        reader: test.reader.clone() as Arc<dyn ListingReader>,
+        listener: Arc::new(CountingListener::default()),
+        pictures_folder: folder,
+    });
+    assert_eq!(test.pictures_on_disk(), ["notes.txt"]);
+}
+
+#[test]
+fn an_area_is_kept_inside_its_picture() {
+    let checked = |x: f64, y: f64, width: f64, height: f64| {
+        PictureCrop {
+            x,
+            y,
+            width,
+            height,
+        }
+        .checked()
+    };
+    assert_eq!(checked(0.2, 0.3, 0.5, 0.5), checked(0.2, 0.3, 0.5, 0.5));
+    assert_eq!(
+        checked(0.8, -0.5, 0.5, 2.0),
+        PictureCrop {
+            x: 0.5,
+            y: 0.0,
+            width: 0.5,
+            height: 1.0,
+        }
+    );
+    assert_eq!(checked(f64::NAN, 0.0, f64::INFINITY, 0.0001).width, 1.0);
+    assert_eq!(checked(f64::NAN, 0.0, 1.0, 0.0001).height, 0.01);
+    assert_eq!(checked(f64::NAN, 0.0, 1.0, 1.0).x, 0.0);
+}
+
+#[test]
+fn only_the_names_it_gives_are_pictures() {
+    let name = picture::file_name(12, b"picture", picture::PictureKind::Webp);
+    assert!(name.starts_with("watched-12-") && name.ends_with(".webp"));
+    assert_eq!(
+        picture::kind_of_file(&name),
+        Some(picture::PictureKind::Webp)
+    );
+    for refused in [
+        "watched-12-0123456789abcdef.exe",
+        "watched--0123456789abcdef.jpg",
+        "watched-12-0123456789ABCDEF.jpg",
+        "watched-12-0123.jpg",
+        "../watched-12-0123456789abcdef.jpg",
+        "watched-12-0123456789abcdef.jpg/x",
+        "youtube-0123456789abcdef.jpg",
+    ] {
+        assert_eq!(picture::kind_of_file(refused), None, "{refused}");
+    }
+    assert_eq!(
+        picture::PictureKind::of(b"\x89PNG\r\n\x1a\n...."),
+        Some(picture::PictureKind::Png)
+    );
+    assert_eq!(
+        picture::PictureKind::of(b"RIFF\0\0\0\0WEBPVP8 "),
+        Some(picture::PictureKind::Webp)
+    );
+    assert_eq!(
+        picture::PictureKind::of(b"GIF89a"),
+        Some(picture::PictureKind::Gif)
+    );
+    assert_eq!(picture::PictureKind::of(b"<html>"), None);
 }

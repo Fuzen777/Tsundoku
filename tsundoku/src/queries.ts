@@ -43,6 +43,7 @@ import {
   getQueueItems,
   getRulePreset,
   getWatchedSources,
+  getWatchedPictureChoices,
   getRuleRightAway,
   getRuleUnpacking,
   getToolDownloads,
@@ -271,6 +272,15 @@ export function useRuleUnpacking(
 /** The watched sources, kept current by `watched-changed`. */
 export function useWatchedSources() {
   return useQuery({ queryKey: queryKeys.watched, queryFn: getWatchedSources, staleTime: Infinity })
+}
+
+/** The pictures a watched source can show instead of its listing's, read once its picture is being picked. */
+export function useWatchedPictureChoices(id: number, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.watched, id, "pictures"],
+    queryFn: () => getWatchedPictureChoices(id),
+    enabled,
+  })
 }
 
 /** The preset a rule picks for a video, the one picked for it (`ruleId`) first, and which rule: null when none does.

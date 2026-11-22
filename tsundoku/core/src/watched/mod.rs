@@ -9,13 +9,18 @@
 //! Checks run by hand for now (Check Now, Check All), on a thread per site (`sites::site_of`, the key the queue's
 //! waits use): one at a time on each site, in the order asked, and side by side across sites, so an X account doesn't
 //! wait for the Instagram accounts asked before it. They keep to a site's "too many requests" wait as previews do.
+//!
+//! A source shows its listing's picture, which each check keeps current, unless one of its own pictures was picked for
+//! it by hand, with the area of it to show (`picture`).
 
+pub mod picture;
 mod store;
 #[cfg(test)]
 mod tests;
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, Weak};
 use std::thread;
@@ -34,7 +39,11 @@ use crate::rules::{self, RuleSubject};
 use crate::settings::SettingsStore;
 use crate::sites;
 use crate::sync::lock;
+use picture::{PictureCrop, SourcePicture};
 use store::{ItemState, StoredItem, StoredSource, WatchedStore};
+
+/// The most pictures offered to pick from: the listing's, then the newest items'.
+const PICTURE_CHOICES_AT_MOST: usize = 500;
 
 /// Reads a watched source's listing, as the preview card reads a channel, playlist or account.
 pub trait ListingReader: Send + Sync {
@@ -62,6 +71,8 @@ pub struct WatchedServices {
     pub settings: Arc<SettingsStore>,
     pub reader: Arc<dyn ListingReader>,
     pub listener: Arc<dyn WatchedListener>,
+    /// Where the pictures picked by hand are kept: the data folder's `pictures\`.
+    pub pictures_folder: PathBuf,
 }
 
 /// Why an action on the watched sources failed.
@@ -81,6 +92,12 @@ pub enum WatchedError {
     /// The database couldn't be read or written.
     #[error("couldn't save the watched sources: {detail}")]
     Storage { detail: String },
+    /// A picture picked for the source couldn't be read from its site, or isn't a picture.
+    #[error("couldn't get the picture: {detail}")]
+    PictureUnavailable { detail: String },
+    /// The picture isn't one of the source's, or there's no picture picked to crop.
+    #[error("this picture isn't one of the source's")]
+    UnknownPicture,
 }
 
 /// A pinned channel, playlist or account, as the Watched view shows it.
@@ -97,6 +114,8 @@ pub struct WatchedSource {
     /// The site as people know it ("youtube.com").
     pub site_name: String,
     pub thumbnail_url: Option<String>,
+    /// The picture picked for it by hand (Edit → Picture), shown instead of `thumbnail_url`.
+    pub picture: Option<SourcePicture>,
     /// Save In: where its downloads go, beating every rule, with the rules' placeholders. `None` lets the rules decide.
     pub folder: Option<String>,
     /// Videos Start As. `None` for the preset a rule picks, else the default.
@@ -206,6 +225,7 @@ pub struct WatchedSources {
     settings: Arc<SettingsStore>,
     reader: Arc<dyn ListingReader>,
     listener: Arc<dyn WatchedListener>,
+    pictures_folder: PathBuf,
     /// Sources whose check is running or waiting.
     checking: Mutex<HashSet<i64>>,
     /// Each site's checks' thread, by the site's key (`check_site`), started with its first check.
@@ -216,7 +236,7 @@ pub struct WatchedSources {
 
 impl WatchedSources {
     pub fn open(services: WatchedServices) -> Arc<Self> {
-        Arc::new_cyclic(|this| Self {
+        let sources = Arc::new_cyclic(|this| Self {
             store: WatchedStore::new(services.database),
             history: services.history,
             queue: services.queue,
@@ -224,10 +244,13 @@ impl WatchedSources {
             settings: services.settings,
             reader: services.reader,
             listener: services.listener,
+            pictures_folder: services.pictures_folder,
             checking: Mutex::default(),
             to_check: Mutex::default(),
             this: this.clone(),
-        })
+        });
+        sources.settle_pictures();
+        sources
     }
 
     /// Every source, in the order added, with its new and skipped items.
@@ -297,6 +320,7 @@ impl WatchedSources {
             name: new.name,
             site_name: new.site_name,
             thumbnail_url: new.thumbnail_url,
+            picture: None,
             folder: blank_to_none(new.folder),
             preset_id: blank_to_none(new.preset_id),
             added_at: now,
@@ -338,11 +362,124 @@ impl WatchedSources {
         Ok(())
     }
 
-    /// Stops watching a source, forgetting its items. What was queued from it stays in the queue.
+    /// Stops watching a source, forgetting its items and its picture. What was queued from it stays in the queue.
     pub fn remove(&self, id: i64) -> Result<(), WatchedError> {
+        let picture = self.store.source(id)?.and_then(|source| source.picture);
         self.store.delete_source(id)?;
+        if let Some(picture) = picture {
+            picture::delete(&self.pictures_folder, &picture.file);
+        }
         self.notify();
         Ok(())
+    }
+
+    /// The pictures a source can show instead of its listing's: the listing's own first, then each item's, newest
+    /// first, a post's files one by one, each once, `PICTURE_CHOICES_AT_MOST` at most.
+    pub fn picture_choices(&self, id: i64) -> Result<Vec<String>, WatchedError> {
+        let source = self.store.source(id)?.ok_or(WatchedError::NotFound)?;
+        let items = self.store.items(id)?;
+        let mut seen = HashSet::new();
+        let pictures = source
+            .thumbnail_url
+            .into_iter()
+            .chain(items.into_iter().flat_map(|item| {
+                let video = item.video;
+                let files: Vec<String> = video
+                    .post_files
+                    .into_iter()
+                    .filter_map(|file| file.thumbnail_url)
+                    .collect();
+                if files.is_empty() {
+                    video.thumbnail_url.into_iter().collect()
+                } else {
+                    files
+                }
+            }));
+        Ok(pictures
+            .filter(|url| seen.insert(url.clone()))
+            .take(PICTURE_CHOICES_AT_MOST)
+            .collect())
+    }
+
+    /// Custom: shows one of the source's pictures (`picture_choices`) instead of its listing's, the `crop` of it. The
+    /// picture is read with `read` and kept in the data folder, since sites' links expire; the one it replaces is
+    /// deleted.
+    pub fn pick_picture(
+        &self,
+        id: i64,
+        url: &str,
+        crop: PictureCrop,
+        read: &dyn Fn(&str) -> Result<Vec<u8>, WatchedError>,
+    ) -> Result<(), WatchedError> {
+        if !self.picture_choices(id)?.iter().any(|choice| choice == url) {
+            return Err(WatchedError::UnknownPicture);
+        }
+        let bytes = read(url)?;
+        let file = picture::save(&self.pictures_folder, id, &bytes)?;
+        let before = self.store.source(id)?.and_then(|source| source.picture);
+        let picked = SourcePicture {
+            file: file.clone(),
+            crop: crop.checked(),
+        };
+        if let Err(error) = self.store.set_picture(id, Some(&picked)) {
+            if before.as_ref().is_none_or(|before| before.file != file) {
+                picture::delete(&self.pictures_folder, &file);
+            }
+            return Err(error);
+        }
+        if let Some(before) = before.filter(|before| before.file != file) {
+            picture::delete(&self.pictures_folder, &before.file);
+        }
+        self.notify();
+        Ok(())
+    }
+
+    /// Shows another area of the picture picked for the source.
+    pub fn crop_picture(&self, id: i64, crop: PictureCrop) -> Result<(), WatchedError> {
+        let source = self.store.source(id)?.ok_or(WatchedError::NotFound)?;
+        let picture = source.picture.ok_or(WatchedError::UnknownPicture)?;
+        self.store.set_picture(
+            id,
+            Some(&SourcePicture {
+                file: picture.file,
+                crop: crop.checked(),
+            }),
+        )?;
+        self.notify();
+        Ok(())
+    }
+
+    /// Automatic: the source shows its listing's picture again, and the one picked for it is deleted.
+    pub fn reset_picture(&self, id: i64) -> Result<(), WatchedError> {
+        let source = self.store.source(id)?.ok_or(WatchedError::NotFound)?;
+        self.store.set_picture(id, None)?;
+        if let Some(picture) = source.picture {
+            picture::delete(&self.pictures_folder, &picture.file);
+        }
+        self.notify();
+        Ok(())
+    }
+
+    /// Deletes what the pictures folder holds that no source shows: a source's removed while the app closed, a
+    /// picture half written as it quit. Best effort: a folder that can't be read is left alone.
+    fn settle_pictures(&self) {
+        let Ok(shown) = self.store.picture_files() else {
+            return;
+        };
+        let Ok(entries) = fs::read_dir(&self.pictures_folder) else {
+            return;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let half_written = name
+                .strip_suffix(".part")
+                .is_some_and(|name| picture::kind_of_file(name).is_some());
+            if half_written {
+                let _ = fs::remove_file(entry.path());
+            } else if !shown.contains(&name) {
+                picture::delete(&self.pictures_folder, &name);
+            }
+        }
     }
 
     /// Check Now: reads the source again, on its site's checks' thread, after the checks on that site before it.
@@ -712,6 +849,7 @@ impl WatchedSources {
             name: source.name,
             site_name: source.site_name,
             thumbnail_url: source.thumbnail_url,
+            picture: source.picture,
             folder: source.folder,
             preset_id: source.preset_id,
             added_at: source.added_at,

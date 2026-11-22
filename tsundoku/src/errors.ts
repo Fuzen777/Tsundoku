@@ -297,6 +297,10 @@ export function describeWatchedError(error: unknown): ErrorDescription {
       return describeDownloadError(error.error)
     case "storage":
       return { message: text.storage, detail: error.detail }
+    case "pictureUnavailable":
+      return { message: text.pictureUnavailable, detail: error.detail }
+    case "unknownPicture":
+      return { message: text.unknownPicture }
   }
 }
 

@@ -132,6 +132,11 @@ impl DataPaths {
         self.root.join("thumbnails")
     }
 
+    /// The pictures picked by hand for watched sources (`watched::picture`).
+    pub fn pictures_folder(&self) -> PathBuf {
+        self.root.join("pictures")
+    }
+
     /// The check window's browser profile (its cookies, such as a check passed, and its cache), kept apart from the
     /// app's own WebView.
     pub fn browser_folder(&self) -> PathBuf {

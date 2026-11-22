@@ -182,6 +182,9 @@ const MIGRATIONS: &[&str] = &[
     // folder or the download folder), as JSON, so the Downloads view groups it by the rule it was added with rather than
     // the one that matches now. NULL for a folder picked for it, and for items added before.
     "ALTER TABLE queue_items ADD COLUMN folder_from TEXT;",
+    // 21: the picture picked by hand for a watched source (`watched::picture::SourcePicture`: its file in the data
+    // folder's `pictures\` and the area of it shown), as JSON; NULL for the listing's own picture.
+    "ALTER TABLE watched_sources ADD COLUMN picture TEXT;",
 ];
 
 pub struct Database {

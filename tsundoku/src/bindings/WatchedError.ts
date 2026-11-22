@@ -4,4 +4,4 @@ import type { DownloadError } from "./DownloadError";
 /**
  * Why an action on the watched sources failed.
  */
-export type WatchedError = { "kind": "notFound" } | { "kind": "alreadyWatched" } | { "kind": "queue", error: DownloadError, } | { "kind": "storage", detail: string, };
+export type WatchedError = { "kind": "notFound" } | { "kind": "alreadyWatched" } | { "kind": "queue", error: DownloadError, } | { "kind": "storage", detail: string, } | { "kind": "pictureUnavailable", detail: string, } | { "kind": "unknownPicture" };

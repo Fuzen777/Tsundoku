@@ -40,6 +40,7 @@ import type { PastDownload } from "./bindings/PastDownload"
 import type { PendingLink } from "./bindings/PendingLink"
 import type { ItemKey } from "./bindings/ItemKey"
 import type { NewWatchedSource } from "./bindings/NewWatchedSource"
+import type { PictureCrop } from "./bindings/PictureCrop"
 import type { WatchedSource } from "./bindings/WatchedSource"
 import type { Preset } from "./bindings/Preset"
 import type { PresetsOverview } from "./bindings/PresetsOverview"
@@ -949,6 +950,38 @@ export async function editWatchedSource(id: number, folder: string | null, prese
 export async function removeWatchedSource(id: number): Promise<void> {
   if (!isTauri()) return outsideTauri()
   await invoke("remove_watched_source", { id })
+}
+
+/** The pictures a source can show instead of its listing's: the listing's own, then its items', newest first, a
+ * post's files one by one. */
+export function getWatchedPictureChoices(id: number): Promise<string[]> {
+  if (!isTauri()) return Promise.resolve(standIns.watchedPictureChoices(id))
+  return invoke<string[]>("watched_picture_choices", { id })
+}
+
+/** Custom: one of `getWatchedPictureChoices`' pictures, read from its site and kept, showing `crop` of it. */
+export async function pickWatchedPicture(id: number, url: string, crop: PictureCrop): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("pick_watched_picture", { id, url, crop })
+}
+
+/** Another area of the picture picked for a source. */
+export async function cropWatchedPicture(id: number, crop: PictureCrop): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("crop_watched_picture", { id, crop })
+}
+
+/** Automatic: the source shows its listing's own picture again. */
+export async function resetWatchedPicture(id: number): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  await invoke("reset_watched_picture", { id })
+}
+
+/** Where the window reads a picture picked for a watched source (`SourcePicture.file`): the app's `picture` protocol.
+ * None in a browser, where the listing's own picture shows instead. */
+export function watchedPictureUrl(fileName: string): string | null {
+  if (!isTauri()) return null
+  return convertFileSrc(fileName, "picture")
 }
 
 /** Check Now: runs in the background; the source's `checking` says when it's done. */

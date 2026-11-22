@@ -145,6 +145,7 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let presets = Arc::new(PresetManager::new(Arc::clone(&settings)));
     let rules = Arc::new(RuleManager::new(Arc::clone(&settings)));
     let logs_folder = paths.logs_folder();
+    let pictures_folder = paths.pictures_folder();
     let tools = Arc::new(ToolManager::new(
         paths,
         Arc::clone(&settings),
@@ -190,7 +191,9 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
         listener: Arc::new(watched::EventListener {
             app: app.handle().clone(),
         }),
+        pictures_folder: pictures_folder.clone(),
     });
+    app.manage(watched::PicturesFolder(pictures_folder));
     let pending = PendingLinks::open(PendingServices {
         database: Arc::clone(&database),
         history: Arc::clone(&history),
@@ -291,6 +294,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_notification::init())
         .register_asynchronous_uri_scheme_protocol("thumbnail", history::serve_thumbnail)
+        .register_asynchronous_uri_scheme_protocol("picture", watched::serve_picture)
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -425,6 +429,10 @@ pub fn run() {
             watched::add_watched_source,
             watched::edit_watched_source,
             watched::remove_watched_source,
+            watched::watched_picture_choices,
+            watched::pick_watched_picture,
+            watched::crop_watched_picture,
+            watched::reset_watched_picture,
             watched::check_watched_source,
             watched::check_watched_sources,
             watched::download_watched_items,

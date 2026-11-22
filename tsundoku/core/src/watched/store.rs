@@ -1,12 +1,13 @@
 //! The watched sources and their items in `tsundoku.db` (`watched_sources`, `watched_items`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
+use super::picture::SourcePicture;
 use super::{ItemKey, WatchedError};
 use crate::database::Database;
 use crate::listing::ListingKind;
@@ -55,6 +56,7 @@ pub(super) struct StoredSource {
     pub name: String,
     pub site_name: String,
     pub thumbnail_url: Option<String>,
+    pub picture: Option<SourcePicture>,
     pub folder: Option<String>,
     pub preset_id: Option<String>,
     pub added_at: i64,
@@ -77,7 +79,7 @@ pub(super) struct WatchedStore {
     database: Arc<Database>,
 }
 
-const SOURCE_COLUMNS: &str = "id, url, kind, name, site_name, thumbnail_url, folder, preset, added_at, last_checked_at, last_error";
+const SOURCE_COLUMNS: &str = "id, url, kind, name, site_name, thumbnail_url, folder, preset, added_at, last_checked_at, last_error, picture";
 
 impl WatchedStore {
     pub fn new(database: Arc<Database>) -> Self {
@@ -297,6 +299,35 @@ impl WatchedStore {
         Ok(())
     }
 
+    /// Sets the picture picked for a source, or none for its listing's.
+    pub fn set_picture(
+        &self,
+        source: i64,
+        picture: Option<&SourcePicture>,
+    ) -> Result<(), WatchedError> {
+        let connection = self.database.lock();
+        let changed = connection
+            .execute(
+                "UPDATE watched_sources SET picture = ?2 WHERE id = ?1",
+                params![source, picture.map(to_json)],
+            )
+            .map_err(storage_error)?;
+        if changed == 0 {
+            return Err(WatchedError::NotFound);
+        }
+        Ok(())
+    }
+
+    /// The files of the pictures picked for the sources.
+    pub fn picture_files(&self) -> Result<HashSet<String>, WatchedError> {
+        Ok(self
+            .sources()?
+            .into_iter()
+            .filter_map(|source| source.picture)
+            .map(|picture| picture.file)
+            .collect())
+    }
+
     pub fn set_state(
         &self,
         source: i64,
@@ -379,6 +410,10 @@ fn source_from_row(row: &Row<'_>) -> rusqlite::Result<StoredSource> {
         last_checked_at: row.get(9)?,
         last_error: row
             .get::<_, Option<String>>(10)?
+            .and_then(|json| from_json(&json)),
+        // One that can't be read back (from a newer version) is left out: the listing's picture shows.
+        picture: row
+            .get::<_, Option<String>>(11)?
             .and_then(|json| from_json(&json)),
     })
 }

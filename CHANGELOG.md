@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.16 · 2026-11-22
+
+### Added
+
+- **Pick a watched source's picture**: Edit → Picture → Custom picks the picture a channel, playlist or account shows in Watched, and on its heading in Downloads, from its own pictures, its posts' and videos' included, and the part of it to show: drag it in the circle to center a face, and zoom in with the wheel or the slider. The picture is kept in Tsundoku's data folder, so it stays when the site's link to it expires, and can be cropped again later. Automatic puts the site's own picture back.
+
 ## 0.2.15 · 2026-11-22
 
 ### Changed

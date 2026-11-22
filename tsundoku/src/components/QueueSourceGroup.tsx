@@ -20,7 +20,7 @@ import { strings } from "../strings"
 import { useOfferUndo } from "../undo"
 import { Card } from "./Card"
 import { IconButton } from "./IconButton"
-import { ListingPicture } from "./ListingPicker"
+import { QueueSourcePicture } from "./SourcePicture"
 import { ProgressBar } from "./ProgressBar"
 import { StatusMessage } from "./StatusMessage"
 
@@ -96,7 +96,7 @@ export function QueueSourceGroup({ source, items, folded, onFold, rows }: QueueS
             />
             {/* The chevron is the control; the picture and the name only make it easier to hit. */}
             <div className="flex min-w-0 flex-1 cursor-pointer items-center gap-3" onClick={onFold}>
-              <ListingPicture listing={source} small />
+              <QueueSourcePicture listing={source} />
               <div className="flex min-w-0 flex-col gap-1">
                 <p className="truncate font-semibold" title={source.name}>
                   {source.name}
