@@ -14,6 +14,7 @@ import {
   dismissWhatsNew,
   getAddingOptions,
   getClickNLoadStatus,
+  getFanboxSignIn,
   getPixivAccount,
   getPixivWarningStatus,
   getAppInfo,
@@ -579,6 +580,11 @@ export function useAddingOptions() {
 /** The pixiv account Tsundoku is signed in to; the app's event keeps it current (main.tsx). */
 export function usePixivAccount() {
   return useQuery({ queryKey: queryKeys.pixivAccount, queryFn: getPixivAccount, staleTime: Infinity })
+}
+
+/** Whether Tsundoku is signed in to Fanbox; the app's event keeps it current (main.tsx). */
+export function useFanboxSignIn() {
+  return useQuery({ queryKey: queryKeys.fanboxSignIn, queryFn: getFanboxSignIn, staleTime: Infinity })
 }
 
 /** The check of Pixiv's messages for a warning; the app's event keeps it current (main.tsx). */

@@ -14,9 +14,12 @@ use std::thread;
 use tauri::webview::{NewWindowResponse, PermissionKind, PermissionResponse};
 use tauri::{AppHandle, Emitter, Manager, State, Url, WebviewUrl, WebviewWindowBuilder};
 use tsundoku_core::data_folder::DataPaths;
+use tsundoku_core::fanbox_account::{self, FanboxSignIn};
 use tsundoku_core::pixiv_account::{self, AccountError, PixivAccount, PixivLogin};
+use tsundoku_core::site_limits::now_ms;
 
 use crate::DataFolder;
+use crate::web_reader::PageReader;
 
 const LABEL: &str = "pixiv-sign-in";
 const WIDTH: f64 = 520.0;
@@ -41,6 +44,24 @@ const SIGN_IN_FAILED_EVENT: &str = "pixiv-sign-in-failed";
 
 /// The window's title.
 const TITLE: &str = "Sign In to Pixiv";
+
+const FANBOX_LABEL: &str = "fanbox-sign-in";
+const FANBOX_TITLE: &str = "Sign In to Fanbox";
+/// Fanbox's sign-in, which goes through Pixiv's and comes back to Fanbox's home page.
+const FANBOX_LOGIN: &str = "https://www.fanbox.cc/login?return_to=https%3A%2F%2Fwww.fanbox.cc%2F";
+const FANBOX_DOMAIN: &str = "fanbox.cc";
+const FANBOX_HOME: &str = "www.fanbox.cc";
+/// A page of Fanbox's own to ask its API from, and the request that tells whether the session is signed in (401
+/// signed out, the creators supported otherwise).
+const FANBOX_PAGE: &str = "https://www.fanbox.cc/robots.txt";
+const FANBOX_SIGNED_IN_CHECK: &str = "https://api.fanbox.cc/post.listSupporting?limit=1";
+const FANBOX_CHECK_LABEL: &str = "fanbox-sign-in-check";
+const FANBOX_READER_LABEL: &str = "fanbox-reader";
+/// The pause between two of Fanbox's requests, at random within it: Fanbox, like Pixiv, flags requests made with no
+/// pause between them.
+const FANBOX_PAUSE_MS: (u64, u64) = (1000, 2000);
+const FANBOX_CHANGED_EVENT: &str = "fanbox-sign-in-changed";
+const FANBOX_FAILED_EVENT: &str = "fanbox-sign-in-failed";
 
 /// The pixiv account Tsundoku is signed in to, if any.
 #[tauri::command]
@@ -97,11 +118,173 @@ pub async fn sign_out_of_pixiv(
     if let Some(window) = app.get_webview_window(LABEL) {
         let _ = window.destroy();
     }
+    if let Some(window) = app.get_webview_window(FANBOX_LABEL) {
+        let _ = window.destroy();
+    }
     pixiv_account::forget()?;
+    // Fanbox's sign-in lives in the same profile.
+    fanbox_account::forget();
     // Best effort: a profile still in use (a window just closed) stays, and Pixiv then signs in again at once.
     let _ = fs::remove_dir_all(DataPaths::new(data_folder.path.clone()).accounts_browser_folder());
     let _ = app.emit(ACCOUNT_CHANGED_EVENT, None::<PixivAccount>);
+    let _ = app.emit(FANBOX_CHANGED_EVENT, None::<FanboxSignIn>);
     Ok(())
+}
+
+/// Whether the person signed in to Fanbox in Tsundoku's window.
+#[tauri::command]
+pub fn fanbox_sign_in() -> Option<FanboxSignIn> {
+    fanbox_account::signed_in()
+}
+
+/// Opens Fanbox's sign-in in Tsundoku's window, on the profile Pixiv's sign-in uses: Fanbox signs in with the pixiv
+/// account, and the person continues there once. When the window comes back to Fanbox's home page, Fanbox is asked
+/// whether the session is signed in, and the window closes. `async` for the reason `sign_in_to_pixiv` is.
+#[tauri::command]
+pub async fn sign_in_to_fanbox(
+    app: AppHandle,
+    data_folder: State<'_, DataFolder>,
+) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(FANBOX_LABEL) {
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    let url = Url::parse(FANBOX_LOGIN).map_err(|error| error.to_string())?;
+    let profile = DataPaths::new(data_folder.path.clone()).accounts_browser_folder();
+    let taken = Arc::new(AtomicBool::new(false));
+    let finisher = app.clone();
+    let reader_profile = profile.clone();
+    WebviewWindowBuilder::new(&app, FANBOX_LABEL, WebviewUrl::External(url))
+        .title(FANBOX_TITLE)
+        .inner_size(WIDTH, HEIGHT)
+        .center()
+        .data_directory(profile)
+        .on_navigation(move |url| {
+            if is_fanbox_home(url) && !taken.swap(true, Ordering::SeqCst) {
+                finish_fanbox(finisher.clone(), reader_profile.clone());
+            }
+            is_login_page(url) || on_fanbox(url)
+        })
+        .on_permission_request(|_, kind| permission(kind))
+        .on_new_window(|_, _| NewWindowResponse::Deny)
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+/// Asks Fanbox, from the window's session, whether it's signed in, keeps the answer, closes the window and tells the
+/// UI, on a thread of its own.
+fn finish_fanbox(app: AppHandle, profile: std::path::PathBuf) {
+    thread::spawn(move || {
+        if let Some(window) = app.get_webview_window(FANBOX_LABEL) {
+            let _ = window.close();
+        }
+        let reader = PageReader {
+            app: app.clone(),
+            profile,
+            label: FANBOX_CHECK_LABEL,
+            page: FANBOX_PAGE,
+        };
+        let answer = reader
+            .read(
+                &[FANBOX_SIGNED_IN_CHECK.to_owned()],
+                std::time::Duration::ZERO,
+            )
+            .and_then(|mut answers| {
+                answers
+                    .pop()
+                    .ok_or_else(|| "Fanbox didn't answer".to_owned())
+            })
+            .and_then(|answer| answer);
+        let outcome = match answer.map(|answer| fanbox_account::answer_signed_in(answer.status)) {
+            Ok(Some(true)) => fanbox_account::keep(now_ms()),
+            Ok(Some(false)) => Err("Fanbox didn't count the window as signed in".to_owned()),
+            Ok(None) => Err("Fanbox didn't say whether it's signed in".to_owned()),
+            Err(error) => Err(error),
+        };
+        let _ = match outcome {
+            Ok(sign_in) => app.emit(FANBOX_CHANGED_EVENT, Some(sign_in)),
+            Err(error) => app.emit(FANBOX_FAILED_EVENT, error),
+        };
+    });
+}
+
+/// Gives the core the reader Fanbox's API is asked through: the sign-in window's session, in a hidden window.
+pub fn start_fanbox(app: &AppHandle, profile: std::path::PathBuf) {
+    tsundoku_core::hosts::fanbox::start(Box::new(FanboxReader {
+        app: app.clone(),
+        profile,
+        last: std::sync::Mutex::new(None),
+    }));
+}
+
+/// Fanbox's API, asked one read at a time, with a pause since the last request.
+struct FanboxReader {
+    app: AppHandle,
+    profile: std::path::PathBuf,
+    /// When the last read ended; held while one runs, so reads take turns.
+    last: std::sync::Mutex<Option<std::time::Instant>>,
+}
+
+impl tsundoku_core::hosts::fanbox::FanboxApi for FanboxReader {
+    fn get(
+        &self,
+        addresses: &[String],
+    ) -> Result<Vec<Result<tsundoku_core::hosts::fanbox::ApiAnswer, String>>, String> {
+        let mut last = self
+            .last
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let pause = fanbox_pause();
+        if let Some(waited) = last.map(|at| at.elapsed()).filter(|waited| *waited < pause) {
+            thread::sleep(pause - waited);
+        }
+        let reader = PageReader {
+            app: self.app.clone(),
+            profile: self.profile.clone(),
+            label: FANBOX_READER_LABEL,
+            page: FANBOX_PAGE,
+        };
+        let answers = reader.read(addresses, fanbox_pause());
+        *last = Some(std::time::Instant::now());
+        Ok(answers?
+            .into_iter()
+            .map(|answer| {
+                answer.map(|answer| tsundoku_core::hosts::fanbox::ApiAnswer {
+                    status: answer.status,
+                    body: answer.body,
+                })
+            })
+            .collect())
+    }
+}
+
+/// A pause within `FANBOX_PAUSE_MS`, picked from the clock.
+fn fanbox_pause() -> std::time::Duration {
+    let (least, most) = FANBOX_PAUSE_MS;
+    let spread = most.saturating_sub(least).max(1);
+    let noise = u64::from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.subsec_nanos()),
+    );
+    std::time::Duration::from_millis(least + noise % spread)
+}
+
+/// Fanbox's home page, where its sign-in ends: www.fanbox.cc, but not its login or the sign-in's own pages.
+fn is_fanbox_home(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.host_str() == Some(FANBOX_HOME)
+        && !url.path().starts_with("/login")
+        && !url.path().starts_with("/auth")
+}
+
+fn on_fanbox(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.host_str().is_some_and(|host| {
+            host == FANBOX_DOMAIN || host.ends_with(&format!(".{FANBOX_DOMAIN}"))
+        })
 }
 
 /// Turns the code into the token on a thread of its own, keeps it, closes the window and tells the UI.
@@ -140,6 +323,7 @@ pub fn open(paths: &DataPaths) {
     let folder = paths.accounts_folder();
     pixiv_account::remove_left_configs(&folder);
     pixiv_account::open(&folder);
+    fanbox_account::open(&folder);
 }
 
 #[cfg(test)]
@@ -157,5 +341,18 @@ mod tests {
         assert!(!page("http://accounts.pixiv.net/login"), "only https");
         assert!(!page("https://pixiv.net.example.com/"));
         assert!(!page("https://example.com/"));
+    }
+
+    #[test]
+    fn ends_fanboxs_sign_in_on_its_home_page() {
+        let home = |address: &str| is_fanbox_home(&Url::parse(address).unwrap());
+        assert!(home("https://www.fanbox.cc/"));
+        assert!(home("https://www.fanbox.cc/home"));
+        assert!(!home("https://www.fanbox.cc/login?return_to=x"));
+        assert!(!home("https://www.fanbox.cc/auth/start?code=x"));
+        assert!(!home("https://accounts.pixiv.net/login"));
+        let fanbox = |address: &str| on_fanbox(&Url::parse(address).unwrap());
+        assert!(fanbox("https://api.fanbox.cc/x") && fanbox("https://someone.fanbox.cc/"));
+        assert!(!fanbox("https://fanbox.cc.example.com/"));
     }
 }

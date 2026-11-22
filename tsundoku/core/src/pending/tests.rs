@@ -13,7 +13,7 @@ use crate::history::NewDownload;
 use crate::metadata::{FileContents, PostContents, SignInCookies};
 use crate::passwords::Password;
 use crate::rules::DownloadKind;
-use crate::settings::{ClipboardShortcut, SitePace, SitePacing};
+use crate::settings::{ClipboardShortcut, PauseRange, SitePace, SitePacing};
 use crate::tools::ToolManager;
 
 /// Answers what each link is: a YouTube video, an Instagram post or a MEGA folder named after the link's end, unless
@@ -204,6 +204,7 @@ impl Test {
                     x: pace,
                     pixiv: pace,
                     tumblr: pace,
+                    fanbox: pace,
                 };
             })
             .unwrap();

@@ -531,6 +531,7 @@ pub struct SitePacing {
     pub x: SitePace,
     pub pixiv: SitePace,
     pub tumblr: SitePace,
+    pub fanbox: SitePace,
 }
 
 impl Default for SitePacing {
@@ -543,6 +544,7 @@ impl Default for SitePacing {
             x: SitePace::default(),
             pixiv: SitePace::PIXIV,
             tumblr: SitePace::default(),
+            fanbox: SitePace::FANBOX,
         }
     }
 }
@@ -555,6 +557,7 @@ impl SitePacing {
             PacedSite::X => self.x,
             PacedSite::Pixiv => self.pixiv,
             PacedSite::Tumblr => self.tumblr,
+            PacedSite::Fanbox => self.fanbox,
         }
     }
 
@@ -569,6 +572,7 @@ impl SitePacing {
             x: normalized(self.x),
             pixiv: normalized(self.pixiv),
             tumblr: normalized(self.tumblr),
+            fanbox: normalized(self.fanbox),
         }
     }
 
@@ -591,6 +595,7 @@ impl SitePacing {
             x: with_pause(earlier.site_pauses.x, defaults.x),
             pixiv: with_pause(earlier.site_pauses.pixiv, defaults.pixiv),
             tumblr: with_pause(earlier.site_pauses.tumblr, defaults.tumblr),
+            fanbox: defaults.fanbox,
         }
     }
 }
@@ -623,6 +628,13 @@ impl SitePace {
         at_once: 3,
         pause: PauseRange { min: 1, max: 2 },
     };
+
+    /// Fanbox's to start with (Fuzen's choice): one download at a time, its files 1 to 2 seconds apart, as its API's
+    /// requests are (the app crate's `FanboxReader`).
+    pub const FANBOX: Self = Self {
+        at_once: 1,
+        pause: PauseRange { min: 1, max: 2 },
+    };
 }
 
 /// A random wait between `min` and `max` seconds.
@@ -635,6 +647,20 @@ pub struct PauseRange {
 }
 
 impl PauseRange {
+    /// A random time within the range, in whole seconds, as gallery-dl's `--sleep` picks one before each file.
+    pub fn random(self) -> std::time::Duration {
+        use std::hash::{BuildHasher, Hasher};
+        let range = self.normalized();
+        let spread = u64::from(range.max - range.min) + 1;
+        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+        hasher.write_u128(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_nanos()),
+        );
+        std::time::Duration::from_secs(u64::from(range.min) + hasher.finish() % spread)
+    }
+
     /// The longest pause that can be set, in seconds.
     pub const LONGEST: u32 = 600;
 

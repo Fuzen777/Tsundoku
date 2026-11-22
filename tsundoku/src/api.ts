@@ -13,6 +13,7 @@ import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { ClickNLoadStatus } from "./bindings/ClickNLoadStatus"
 import type { AccountError } from "./bindings/AccountError"
+import type { FanboxSignIn } from "./bindings/FanboxSignIn"
 import type { PixivAccount } from "./bindings/PixivAccount"
 import type { PixivWarningStatus } from "./bindings/PixivWarningStatus"
 import type { Destination } from "./bindings/Destination"
@@ -107,6 +108,7 @@ export const queryKeys = {
   clickNLoad: ["click-n-load"],
   pixivAccount: ["pixiv-account"],
   pixivWarning: ["pixiv-warning"],
+  fanboxSignIn: ["fanbox-sign-in"],
   backgroundOptions: ["background-options"],
   watchedOptions: ["watched-options"],
   appearanceOptions: ["appearance-options"],
@@ -135,6 +137,8 @@ const CLICK_N_LOAD_CHANGED_EVENT = "click-n-load-changed"
 const PIXIV_ACCOUNT_CHANGED_EVENT = "pixiv-account-changed"
 const PIXIV_SIGN_IN_FAILED_EVENT = "pixiv-sign-in-failed"
 const PIXIV_WARNING_CHANGED_EVENT = "pixiv-warning-changed"
+const FANBOX_SIGN_IN_CHANGED_EVENT = "fanbox-sign-in-changed"
+const FANBOX_SIGN_IN_FAILED_EVENT = "fanbox-sign-in-failed"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -917,6 +921,28 @@ export function onPixivAccountChanged(handler: (account: PixivAccount | null) =>
 export function onPixivSignInFailed(handler: (error: AccountError) => void): Promise<UnlistenFn> {
   if (!isTauri()) return Promise.resolve(() => {})
   return listen<AccountError>(PIXIV_SIGN_IN_FAILED_EVENT, (event) => handler(event.payload))
+}
+
+/** Whether the person signed in to Fanbox in Tsundoku's window, or `null`. In a browser, `?pixiv` shows it signed in. */
+export function getFanboxSignIn(): Promise<FanboxSignIn | null> {
+  if (!isTauri()) return Promise.resolve(addressHas("pixiv") ? standIns.fanboxSignIn : null)
+  return invoke<FanboxSignIn | null>("fanbox_sign_in")
+}
+
+/** Opens Fanbox's sign-in in Tsundoku's window; `onFanboxSignInChanged` or `onFanboxSignInFailed` tells how it ended. */
+export function signInToFanbox(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<void>("sign_in_to_fanbox")
+}
+
+export function onFanboxSignInChanged(handler: (signIn: FanboxSignIn | null) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<FanboxSignIn | null>(FANBOX_SIGN_IN_CHANGED_EVENT, (event) => handler(event.payload))
+}
+
+export function onFanboxSignInFailed(handler: (reason: string) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<string>(FANBOX_SIGN_IN_FAILED_EVENT, (event) => handler(event.payload))
 }
 
 /** Where the person reads their Pixiv messages. */

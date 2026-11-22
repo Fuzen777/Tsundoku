@@ -10,7 +10,7 @@ export type PreviewError = { "kind": "invalidLink" } | { "kind": "playlist" } | 
 /**
  * The site's name, when it's one of `sites::SIGN_IN_SITES`.
  */
-site: string | null, cookies: SignInCookies, } | { "kind": "pixivSignInNeeded", refused: boolean, } | { "kind": "pixivWarned" } | { "kind": "limitReached", site: string, detail: string, } | { "kind": "waitBetweenDownloads", site: string, seconds: number, } | { "kind": "noSupportedMirror", site: string, mirrors: Array<string>, } | { "kind": "shortLinkPage", site: string, } | { "kind": "shortLinkToUnsupportedSite", site: string, target: string, } | { "kind": "subscribersOnly", site: string, } | { "kind": "passwordProtected", site: string, } | { "kind": "passwordNeeded", 
+site: string | null, cookies: SignInCookies, } | { "kind": "pixivSignInNeeded", refused: boolean, } | { "kind": "pixivWarned" } | { "kind": "fanboxSignInNeeded", refused: boolean, } | { "kind": "fanboxLocked", fee: number, } | { "kind": "limitReached", site: string, detail: string, } | { "kind": "waitBetweenDownloads", site: string, seconds: number, } | { "kind": "noSupportedMirror", site: string, mirrors: Array<string>, } | { "kind": "shortLinkPage", site: string, } | { "kind": "shortLinkToUnsupportedSite", site: string, target: string, } | { "kind": "subscribersOnly", site: string, } | { "kind": "passwordProtected", site: string, } | { "kind": "passwordNeeded", 
 /**
  * A password the person typed was tried and didn't open it.
  */

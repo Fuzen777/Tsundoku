@@ -196,6 +196,7 @@ mod tests {
             cookies: Some("firefox:C:\\Profiles\\main".to_owned()),
             post: None,
             files: None,
+            files_pause: None,
             picked_files: None,
             shared_file_name: None,
             caught_links: Vec::new(),

@@ -15,6 +15,7 @@ mod report;
 mod shell;
 mod tools;
 mod watched;
+mod web_reader;
 mod whats_new;
 
 use std::error::Error;
@@ -226,6 +227,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(presets);
     app.manage(rules);
     app.manage(queue);
+    // Fanbox's API, read from the sign-in window's session.
+    accounts::start_fanbox(app.handle(), accounts_profile.clone());
     // Pixiv's warnings, which stop the queue's Pixiv downloads.
     pixiv_messages::start(app.handle(), accounts_folder, accounts_profile);
     app.manage(pending);
@@ -336,6 +339,8 @@ pub fn run() {
             accounts::pixiv_account,
             accounts::sign_in_to_pixiv,
             accounts::sign_out_of_pixiv,
+            accounts::fanbox_sign_in,
+            accounts::sign_in_to_fanbox,
             pixiv_messages::pixiv_warning_status,
             pixiv_messages::check_pixiv_messages,
             pixiv_messages::dismiss_pixiv_warning,

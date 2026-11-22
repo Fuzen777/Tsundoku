@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.25 · 2026-11-22
+
+### Added
+
+- **Fanbox posts**: a Fanbox post's link (`<creator>.fanbox.cc/posts/<id>` or `www.fanbox.cc/@<creator>/posts/<id>`) previews with its creator, cover and tags, and downloads its images, in the post's order, and its files. Fanbox only answers a browser, so Tsundoku reads it through its own window: Settings → Sign-Ins has a Fanbox line, whose Sign In opens Fanbox's sign-in once (continue there as your pixiv account). A post for a plan your account doesn't support says which plan. Fanbox is paced like Pixiv (Settings → Pacing): one download at a time, 1 to 2 seconds between its files and between its requests.
+
 ## 0.2.24 · 2026-11-22
 
 ### Added

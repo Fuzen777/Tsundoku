@@ -50,10 +50,10 @@ export function FailureFixes({
       </div>
     )
   }
-  if (fix === "pixivSignIn") {
+  if (fix === "pixivSignIn" || fix === "fanboxSignIn") {
     return (
       <Button size="sm" onClick={() => navigate("settings", "settings-sign-ins")}>
-        {strings.queue.fixes.signInToPixiv}
+        {fix === "pixivSignIn" ? strings.queue.fixes.signInToPixiv : strings.queue.fixes.signInToFanbox}
       </Button>
     )
   }

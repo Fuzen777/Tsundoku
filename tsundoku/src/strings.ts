@@ -340,6 +340,7 @@ export const strings = {
       tryAgain: "Try Again",
       cookieSettings: "Cookie Settings",
       signInToPixiv: "Sign In to Pixiv",
+      signInToFanbox: "Sign In to Fanbox",
       updated: (version: string | null) =>
         version === null ? "yt-dlp is updated. Try again." : `yt-dlp is now version ${version}. Try again.`,
       passwordSettings: "Password Settings",
@@ -1009,6 +1010,12 @@ export const strings = {
       pixivSignInRefused: "Pixiv didn't accept Tsundoku's sign-in, as after a password change. Sign in again in Settings → Sign-Ins.",
       pixivWarned:
         "Pixiv warned your account about downloading too much, so Tsundoku asks Pixiv nothing until you go on, from the notice at the top.",
+      fanboxSignIn: "Fanbox needs Tsundoku signed in to it: Settings → Sign-Ins.",
+      fanboxSignInRefused: "Fanbox no longer counts Tsundoku as signed in. Sign in again in Settings → Sign-Ins.",
+      fanboxLocked: (fee: number) =>
+        fee > 0
+          ? `This post is for supporters of a plan of ¥${fee.toLocaleString()} a month or more, which your account doesn't support.`
+          : "This post is for supporters of a plan your account doesn't support.",
       signInRefused: (site: string) =>
         `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
       limitReached: (site: string) =>
@@ -1748,7 +1755,7 @@ export const strings = {
     },
     pacing: "Pacing",
     pacingIntro: "Some sites block accounts that read too fast, so Tsundoku goes easy on these.",
-    pacedSites: { instagram: "Instagram", x: "X", pixiv: "Pixiv", tumblr: "Tumblr" },
+    pacedSites: { instagram: "Instagram", x: "X", pixiv: "Pixiv", tumblr: "Tumblr", fanbox: "Fanbox" },
     /** One line per site, around its fields: "X from [0] to [2] seconds, [1] at once". */
     pacingLine: { from: "from", to: "to", seconds: "seconds,", atOnce: "at once" },
     pauseFrom: (site: string) => `${site}: Shortest Pause`,
@@ -1785,6 +1792,12 @@ export const strings = {
       pixivHint:
         "Pixiv needs Tsundoku signed in to it, rather than your browser's cookies. Sign In opens Pixiv's own login page in a window of Tsundoku's: sign in there once with your pixiv account. Tsundoku never sees your password, and keeps the sign-in encrypted for your Windows account, out of backups.",
       waiting: "Finish signing in in Pixiv's window.",
+      fanbox: "Fanbox",
+      fanboxSignedIn: "Signed in with your pixiv account",
+      fanboxHint:
+        "Fanbox signs in with your pixiv account. Sign In opens Fanbox's sign-in in a window of Tsundoku's: continue there once as your pixiv account. Tsundoku then reads Fanbox in that window's session. Signing out of Pixiv signs out of Fanbox too.",
+      fanboxWaiting: "Finish signing in in Fanbox's window.",
+      fanboxFailed: "Fanbox's sign-in didn't work.",
       checkHint:
         "Tsundoku reads your Pixiv messages for a warning about downloading too much when it starts using Pixiv, then every hour and every 100 files while it goes on, and stops Pixiv's downloads when it finds one.",
       checked: (ago: string) => `Messages checked ${ago}: no warning.`,

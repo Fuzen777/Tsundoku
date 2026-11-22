@@ -368,6 +368,14 @@ pub enum PreviewError {
     /// the person goes on past it.
     #[error("Pixiv warned the account about too many requests")]
     PixivWarned,
+    /// Fanbox, which needs Tsundoku's window signed in to it (Settings → Sign-Ins, `fanbox_account`): it isn't, or
+    /// Fanbox no longer counts it as signed in (`refused`).
+    #[error("Fanbox needs Tsundoku signed in to it")]
+    FanboxSignInNeeded { refused: bool },
+    /// A Fanbox post for supporters of a plan the account doesn't support: `fee` a month, in yen (0 when Fanbox
+    /// doesn't say).
+    #[error("this Fanbox post is for supporters of a plan of {fee} yen a month")]
+    FanboxLocked { fee: u32 },
     /// A file host's free downloads for this connection are used up for now, such as MEGA's transfer quota.
     #[error("{site}'s download limit is reached: {detail}")]
     LimitReached { site: String, detail: String },

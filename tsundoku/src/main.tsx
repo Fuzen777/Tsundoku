@@ -9,6 +9,7 @@ import {
   getToolsNeedSetup,
   onAddingOptionsChanged,
   onClickNLoadChanged,
+  onFanboxSignInChanged,
   onPixivAccountChanged,
   onPixivWarningChanged,
   onToolsChanged,
@@ -46,6 +47,7 @@ void onAddingOptionsChanged((options) => queryClient.setQueryData(queryKeys.addi
 void onClickNLoadChanged((status) => queryClient.setQueryData(queryKeys.clickNLoad, status))
 void onPixivAccountChanged((account) => queryClient.setQueryData(queryKeys.pixivAccount, account))
 void onPixivWarningChanged((status) => queryClient.setQueryData(queryKeys.pixivWarning, status))
+void onFanboxSignInChanged((signIn) => queryClient.setQueryData(queryKeys.fanboxSignIn, signIn))
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

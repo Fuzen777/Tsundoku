@@ -1,3 +1,4 @@
+import type { FanboxSignIn } from "./bindings/FanboxSignIn"
 import type { PixivAccount } from "./bindings/PixivAccount"
 import type { PixivWarningStatus } from "./bindings/PixivWarningStatus"
 import type { AddingSettings } from "./bindings/AddingSettings"
@@ -676,6 +677,7 @@ export const standIns = {
       x: { atOnce: 2, pause: { min: 2, max: 5 } },
       pixiv: { atOnce: 1, pause: { min: 0, max: 2 } },
       tumblr: { atOnce: 1, pause: { min: 0, max: 0 } },
+      fanbox: { atOnce: 1, pause: { min: 1, max: 2 } },
     },
     hourlyFileLimit: null,
     unpack: { enabled: true, place: "smart", after: "recycleBin", passwords: [] },
@@ -692,6 +694,7 @@ export const standIns = {
   } satisfies AddingSettings,
   clickNLoadStatus: { state: { kind: "off" }, port: 9666, senders: ["FileCrypt"] } satisfies ClickNLoadStatus,
   pixivAccount: { name: "Some One", account: "someone" } satisfies PixivAccount,
+  fanboxSignIn: { signedInAt: Date.now() - 86_400_000 } satisfies FanboxSignIn,
   pixivWarningChecked: {
     warning: null,
     checkedAt: Date.now() - 12 * 60_000,

@@ -31,10 +31,17 @@ pub enum PacedSite {
     X,
     Pixiv,
     Tumblr,
+    Fanbox,
 }
 
 impl PacedSite {
-    const ALL: [Self; 4] = [Self::Instagram, Self::X, Self::Pixiv, Self::Tumblr];
+    const ALL: [Self; 5] = [
+        Self::Instagram,
+        Self::X,
+        Self::Pixiv,
+        Self::Tumblr,
+        Self::Fanbox,
+    ];
 
     /// The site's domains: its links, and their subdomains.
     fn domains(self) -> &'static [&'static str] {
@@ -43,6 +50,7 @@ impl PacedSite {
             Self::X => &["x.com", "twitter.com"],
             Self::Pixiv => &["pixiv.net"],
             Self::Tumblr => &["tumblr.com"],
+            Self::Fanbox => &["fanbox.cc"],
         }
     }
 }
@@ -251,6 +259,10 @@ mod tests {
         assert_eq!(
             paced_site("https://someone.tumblr.com/post/1"),
             Some(PacedSite::Tumblr)
+        );
+        assert_eq!(
+            paced_site("https://someone.fanbox.cc/posts/1"),
+            Some(PacedSite::Fanbox)
         );
         assert_eq!(paced_site("https://notinstagram.com/p/1"), None);
         assert_eq!(paced_site("https://www.youtube.com/watch?v=1"), None);

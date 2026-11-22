@@ -52,6 +52,9 @@ pub struct JobSpec {
     pub post: Option<PostJob>,
     /// Set for a file host's link (`hosts`), which Tsundoku downloads itself.
     pub files: Option<FileContents>,
+    /// The pause before each of a file host's files after the first, on a site that blocks fast readers (Fanbox:
+    /// `DownloadSettings::pause_for`).
+    pub files_pause: Option<PauseRange>,
     /// The paths of a shared folder's files picked when not all are (`VideoInfo::picked_shared_files`): the download
     /// takes only those. `None` for the whole folder, and for anything but a file host's link.
     pub picked_files: Option<Vec<String>>,
@@ -436,6 +439,7 @@ mod tests {
             cookies: None,
             post: None,
             files: None,
+            files_pause: None,
             picked_files: None,
             shared_file_name: None,
             caught_links: Vec::new(),

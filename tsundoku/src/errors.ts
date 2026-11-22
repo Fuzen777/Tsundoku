@@ -114,6 +114,10 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: error.refused ? text.pixivSignInRefused : text.pixivSignIn }
     case "pixivWarned":
       return { message: text.pixivWarned }
+    case "fanboxSignInNeeded":
+      return { message: error.refused ? text.fanboxSignInRefused : text.fanboxSignIn }
+    case "fanboxLocked":
+      return { message: text.fanboxLocked(error.fee) }
     case "limitReached":
       return { message: text.limitReached(error.site), detail: error.detail }
     case "waitBetweenDownloads":
@@ -362,6 +366,7 @@ export type FailureFix =
   | "cookies"
   | "signIn"
   | "pixivSignIn"
+  | "fanboxSignIn"
   | "setUpImages"
   | "archivePassword"
 
@@ -379,6 +384,8 @@ export function fixFor(error: unknown): FailureFix | null {
       return failure.cookies === "notSignedIn" || failure.cookies === "signedIn" ? "signIn" : "cookies"
     case "pixivSignInNeeded":
       return "pixivSignIn"
+    case "fanboxSignInNeeded":
+      return "fanboxSignIn"
     case "imagesNotSetUp":
       return "setUpImages"
     default:

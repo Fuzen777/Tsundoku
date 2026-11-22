@@ -1453,6 +1453,7 @@ impl DownloadQueue {
                 ),
             }),
             files: item.video.files,
+            files_pause: pause,
             picked_files: item.video.picked_shared_files(),
             shared_file_name: item
                 .video

@@ -15,9 +15,8 @@ pub mod files;
 mod store;
 pub mod watcher;
 
-use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
-use std::hash::{BuildHasher, Hasher};
+
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -36,7 +35,7 @@ use crate::passwords::{self, Password};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::preview::VideoPreview;
 use crate::rules::{self, RuleSubject};
-use crate::settings::{AddingSettings, PauseRange, SettingsStore};
+use crate::settings::{AddingSettings, SettingsStore};
 use crate::site_limits::SiteWait;
 use crate::sites::{self, PacedSite};
 use crate::sync::lock;
@@ -942,7 +941,7 @@ impl PendingLinks {
             ) {
                 state
                     .paced_until
-                    .insert(site, Instant::now() + random_pause(pause));
+                    .insert(site, Instant::now() + pause.random());
             }
             // Removed while it was read.
             if turn.cancel.is_cancelled() {
@@ -1296,19 +1295,6 @@ fn listing_here_already(entries: &[Entry], id: i64, link: &str) -> bool {
 
 fn same_video(first: &VideoInfo, second: &VideoInfo) -> bool {
     first.site == second.site && first.video_id == second.video_id
-}
-
-/// A random time within the range, as gallery-dl's `--sleep` picks one before each file.
-fn random_pause(range: PauseRange) -> Duration {
-    let range = range.normalized();
-    let spread = u64::from(range.max - range.min) + 1;
-    let mut hasher = RandomState::new().build_hasher();
-    hasher.write_u128(
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |elapsed| elapsed.as_nanos()),
-    );
-    Duration::from_secs(u64::from(range.min) + hasher.finish() % spread)
 }
 
 fn find(entries: &mut [Entry], id: i64) -> Result<&mut Entry, DownloadError> {

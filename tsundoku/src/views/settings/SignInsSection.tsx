@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { checkPixivMessages, onPixivSignInFailed, queryKeys, signInToPixiv, signOutOfPixiv } from "../../api"
+import {
+  checkPixivMessages,
+  onFanboxSignInChanged,
+  onFanboxSignInFailed,
+  onPixivSignInFailed,
+  queryKeys,
+  signInToFanbox,
+  signInToPixiv,
+  signOutOfPixiv,
+} from "../../api"
 import type { AccountError } from "../../bindings/AccountError"
 import { Button } from "../../components/Button"
 import { Card } from "../../components/Card"
 import { Section } from "../../components/Section"
 import { StatusMessage } from "../../components/StatusMessage"
 import { formatTimeAgo } from "../../format"
-import { usePixivAccount, usePixivWarning } from "../../queries"
+import { useFanboxSignIn, usePixivAccount, usePixivWarning } from "../../queries"
 import { strings } from "../../strings"
 
 const text = strings.settings.signIns
@@ -78,7 +87,57 @@ export function SignInsSection() {
         {error && <StatusMessage tone="danger" message={error} />}
         {account && <WarningCheck onSignIn={() => void signIn()} />}
       </Card>
+      <FanboxSignInCard />
     </Section>
+  )
+}
+
+/** Fanbox's line: signed in or not, with Sign In, which opens Fanbox's sign-in in Tsundoku's window (`accounts.rs`).
+ * Signing out of Pixiv signs out of Fanbox too, as both live in that window's profile. */
+function FanboxSignInCard() {
+  const { data: fanboxSignIn } = useFanboxSignIn()
+  const [waiting, setWaiting] = useState(false)
+  const [error, setError] = useState<{ message: string; detail?: string } | null>(null)
+
+  useEffect(() => {
+    const changed = onFanboxSignInChanged(() => setWaiting(false))
+    const failed = onFanboxSignInFailed((reason) => {
+      setWaiting(false)
+      setError({ message: text.fanboxFailed, detail: reason })
+    })
+    return () => {
+      void changed.then((unlisten) => unlisten())
+      void failed.then((unlisten) => unlisten())
+    }
+  }, [])
+
+  async function startSignIn() {
+    setError(null)
+    try {
+      await signInToFanbox()
+      setWaiting(true)
+    } catch (caught) {
+      setError({ message: text.fanboxFailed, detail: String(caught) })
+    }
+  }
+
+  return (
+    <Card className="mt-3 flex flex-col gap-3 p-4">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">{text.fanbox}</p>
+          <p className="truncate text-fg-secondary">{fanboxSignIn ? text.fanboxSignedIn : text.signedOut}</p>
+        </div>
+        {!fanboxSignIn && (
+          <Button size="sm" variant="primary" onClick={() => void startSignIn()}>
+            {text.signIn}
+          </Button>
+        )}
+      </div>
+      <p className="text-xs text-fg-muted">{text.fanboxHint}</p>
+      {waiting && !fanboxSignIn && <StatusMessage tone="neutral" message={text.fanboxWaiting} />}
+      {error && <StatusMessage tone="danger" {...error} />}
+    </Card>
   )
 }
 

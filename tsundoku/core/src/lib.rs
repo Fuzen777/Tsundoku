@@ -17,6 +17,7 @@ pub mod clipboard;
 pub mod data_folder;
 pub mod database;
 pub mod downloads;
+pub mod fanbox_account;
 pub mod first_run;
 pub mod gallery;
 pub mod history;

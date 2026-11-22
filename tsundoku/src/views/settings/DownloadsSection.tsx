@@ -260,14 +260,15 @@ export function PostsSection() {
 }
 
 /** The sites Settings → Pacing paces, in the order shown. */
-const PACED_SITES: readonly (keyof SitePacing)[] = ["instagram", "x", "pixiv", "tumblr"]
+const PACED_SITES: readonly (keyof SitePacing)[] = ["instagram", "x", "pixiv", "tumblr", "fanbox"]
 
 /** As the core has it before Settings is read (`SitePacing::default`). */
 const DEFAULT_PACING: SitePacing = {
   instagram: { atOnce: 1, pause: { min: 3, max: 5 } },
   x: { atOnce: 1, pause: { min: 0, max: 2 } },
-  pixiv: { atOnce: 1, pause: { min: 0, max: 2 } },
+  pixiv: { atOnce: 3, pause: { min: 1, max: 2 } },
   tumblr: { atOnce: 1, pause: { min: 0, max: 2 } },
+  fanbox: { atOnce: 1, pause: { min: 1, max: 2 } },
 }
 
 /** Settings → Pacing: a line for each site that blocks accounts reading too fast, "X from [0] to [2] seconds, [1] at

@@ -552,8 +552,8 @@ fn read_with_tools(
     // A file host Tsundoku reads itself goes there first, since its domains are exact, unless it leaves the link to
     // the tools.
     let fetched = match read_host(link, password, cancel) {
-        Some(read) => read.map(|share| Fetched {
-            video: share.video_info(),
+        Some(read) => read.map(|video| Fetched {
+            video,
             missing_js_runtime: false,
         }),
         None => read_link(
@@ -596,9 +596,9 @@ fn read_for_preview(
         }
         .map(Found::Listing)
     } else if let Some(read) = host_read {
-        read.map(|share| {
+        read.map(|video| {
             Found::One(Fetched {
-                video: share.video_info(),
+                video,
                 missing_js_runtime: false,
             })
         })
@@ -662,9 +662,9 @@ fn read_host(
     link: &str,
     password: Option<&Password>,
     cancel: &CancelToken,
-) -> Option<Result<hosts::Share, PreviewError>> {
+) -> Option<Result<VideoInfo, PreviewError>> {
     Host::of(link)?;
-    match hosts::read(link, password, cancel) {
+    match hosts::read_preview(link, password, cancel) {
         Err(PreviewError::UnsupportedSite) => None,
         read => Some(read),
     }

@@ -152,6 +152,8 @@ fn download(
         .as_deref()
         .filter(|_| share.files.len() == 1);
     let last_index = taken.indexes.last().copied();
+    // A paced site's files wait a moment after the first one fetched (Fanbox's).
+    let mut fetched_one = false;
     // Each file keeps its place in the whole share for its part file's name, so a stopped download continues the
     // right one whatever was picked since.
     for &index in &taken.indexes {
@@ -209,6 +211,10 @@ fn download(
             continue;
         }
 
+        if let Some(pause) = job.files_pause.filter(|_| fetched_one) {
+            pause_between(pause.random(), cancel)?;
+        }
+        fetched_one = true;
         let part = job.temp_folder.join(format!("{index}.part"));
         let offset = fs::metadata(&part).map_or(0, |metadata| metadata.len());
         // The address the window offered, or one it gave before: asked first, and kept only when it's strictly the
@@ -436,6 +442,21 @@ fn last_segment(address: &str) -> Option<String> {
 }
 
 /// Waits out a host's countdown before a free download, showing the seconds left.
+/// Waits `pause` between two of a paced site's files, unless the download is stopped meanwhile.
+fn pause_between(pause: Duration, cancel: &CancelToken) -> Result<(), Stop> {
+    let end = Instant::now() + pause;
+    while Instant::now() < end {
+        if cancel.is_cancelled() {
+            return Err(Stop::Cancelled);
+        }
+        thread::sleep(PAUSE_TICK.min(end.saturating_duration_since(Instant::now())));
+    }
+    Ok(())
+}
+
+/// How often a pause between files looks for a stop.
+const PAUSE_TICK: Duration = Duration::from_millis(100);
+
 fn wait_out(
     countdown: Duration,
     cancel: &CancelToken,
@@ -1373,6 +1394,7 @@ mod onedrive_live {
             cookies: None,
             post: None,
             files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
+            files_pause: None,
             picked_files: None,
             shared_file_name: None,
             caught_links: Vec::new(),
@@ -1520,6 +1542,7 @@ mod host_live {
             cookies: None,
             post: None,
             files: Some(crate::metadata::FileContents { count: 1, bytes: 0 }),
+            files_pause: None,
             picked_files,
             shared_file_name: None,
             caught_links: Vec::new(),

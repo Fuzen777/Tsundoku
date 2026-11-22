@@ -8,6 +8,7 @@ pub mod boxcom;
 pub mod check;
 pub mod drive;
 pub mod dropbox;
+pub mod fanbox;
 pub mod filemail;
 pub mod filesfm;
 pub mod icedrive;
@@ -77,6 +78,8 @@ pub enum Host {
     UploadEe,
     TransferNow,
     Filemail,
+    /// Fanbox's posts, read through Tsundoku's window (`fanbox`).
+    Fanbox,
     /// A site read only through the check window (`window_sites`).
     Window(window_sites::WindowSite),
 }
@@ -117,7 +120,7 @@ pub(crate) type Unlock = fn(&Client, &str, &Password, &CancelToken) -> Result<Sh
 
 impl Host {
     /// The hosts with a reader of their own.
-    pub const BUILT_IN: [Self; 17] = [
+    pub const BUILT_IN: [Self; 18] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -135,6 +138,7 @@ impl Host {
         Self::UploadEe,
         Self::TransferNow,
         Self::Filemail,
+        Self::Fanbox,
     ];
 
     /// Every host: those with a reader of their own, then the sites read only through the check window.
@@ -159,6 +163,7 @@ impl Host {
             Self::UploadEe => &uploadee::FACTS,
             Self::TransferNow => &transfernow::FACTS,
             Self::Filemail => &filemail::FACTS,
+            Self::Fanbox => &fanbox::FACTS,
             Self::Window(site) => &window_sites::LIST[site.0],
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
@@ -385,6 +390,7 @@ pub enum FileSource {
     Filemail(filemail::FilemailFile),
     /// A file only the check window can give (`windowed`).
     Windowed(windowed::WindowedFile),
+    Fanbox(fanbox::FanboxFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -440,6 +446,7 @@ impl FileSource {
             Self::TransferNow(file) => transfernow::address(client, file, cancel),
             Self::Filemail(file) => filemail::address(client, file, cancel),
             Self::Windowed(file) => windowed::address(file),
+            Self::Fanbox(file) => Ok(fanbox::address(file)),
         }
     }
 
@@ -530,6 +537,22 @@ pub fn read(
 ) -> Result<Share, PreviewError> {
     let host = Host::of(link).ok_or(PreviewError::UnsupportedSite)?;
     host.read(&client_for(host)?, link, password, cancel)
+}
+
+/// A link's files as the preview card shows them: the share, with what a Fanbox post says of itself (its creator,
+/// cover and tags).
+pub fn read_preview(
+    link: &str,
+    password: Option<&Password>,
+    cancel: &CancelToken,
+) -> Result<VideoInfo, PreviewError> {
+    let host = Host::of(link).ok_or(PreviewError::UnsupportedSite)?;
+    let client = client_for(host)?;
+    if host == Host::Fanbox {
+        return fanbox::read_post(&client, link, cancel).map(|post| post.video_info());
+    }
+    host.read(&client, link, password, cancel)
+        .map(|share| share.video_info())
 }
 
 /// Form fields as a request's body (`application/x-www-form-urlencoded`).
