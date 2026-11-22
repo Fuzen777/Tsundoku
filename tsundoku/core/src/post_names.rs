@@ -16,6 +16,19 @@ pub const DEFAULT_POST_FILE_NAME: &str = "{account} {date} {post} {number}";
 /// gallery-dl's field for a file's place in its post, else its name on the site.
 const NUMBER_FIELD: &str = "{num|filename}";
 
+/// Pixiv's, which counts a work's pages from 0 (gallery-dl's `num`, which `NUMBER_FIELD` would take as missing on the
+/// first page): from 1, as other sites count.
+const PIXIV_NUMBER_FIELD: &str = "{num:A+1/}";
+
+/// The number field for a post's site.
+fn number_field(post: &VideoInfo) -> &'static str {
+    if post.site == "pixiv" {
+        PIXIV_NUMBER_FIELD
+    } else {
+        NUMBER_FIELD
+    }
+}
+
 /// Characters Windows refuses in a file name, besides control characters. `\` and `/` would also make folders.
 const FORBIDDEN_CHARACTERS: &str = r#"<>:"/\|?*"#;
 
@@ -318,10 +331,10 @@ fn value(placeholder: PostNamePlaceholder, post: &VideoInfo) -> Option<String> {
         PostNamePlaceholder::Tags => tag_list(post).as_deref().map(literal),
         // A post's file without a number of its own (on a site that gives none) keeps the name it has on the site,
         // so no two files of the post share a name.
-        PostNamePlaceholder::Number => Some(NUMBER_FIELD.to_owned()),
+        PostNamePlaceholder::Number => Some(number_field(post).to_owned()),
         // Left out, with the text before it, for a post of one file or one file picked from it.
         PostNamePlaceholder::NumberIfMany => {
-            (post.post_file_count().unwrap_or(1) > 1).then(|| NUMBER_FIELD.to_owned())
+            (post.post_file_count().unwrap_or(1) > 1).then(|| number_field(post).to_owned())
         }
         PostNamePlaceholder::Account => {
             let fields: &[&str] = match post.site.as_str() {
@@ -571,6 +584,15 @@ mod tests {
         assert_eq!(
             gallery_format("{post} {number} {title}", &instagram()),
             gallery_format(DEFAULT_POST_FILE_NAME, &instagram())
+        );
+    }
+
+    #[test]
+    fn counts_a_pixiv_works_pages_from_one() {
+        let work = post("pixiv", "https://www.pixiv.net/artworks/1");
+        assert_eq!(
+            gallery_format("{post} {number}", &work),
+            "DfPQchkG1tg {num:A+1/}.{extension}"
         );
     }
 

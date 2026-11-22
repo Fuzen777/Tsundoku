@@ -14,6 +14,7 @@ import {
   dismissWhatsNew,
   getAddingOptions,
   getClickNLoadStatus,
+  getPixivAccount,
   getAppInfo,
   getAppearanceOptions,
   getBackgroundOptions,
@@ -569,6 +570,11 @@ export function useSaveDownloadOptions() {
 
 export function useAddingOptions() {
   return useQuery({ queryKey: queryKeys.addingOptions, queryFn: getAddingOptions, staleTime: Infinity })
+}
+
+/** The pixiv account Tsundoku is signed in to; the app's event keeps it current (main.tsx). */
+export function usePixivAccount() {
+  return useQuery({ queryKey: queryKeys.pixivAccount, queryFn: getPixivAccount, staleTime: Infinity })
 }
 
 /** Whether Click'n'Load buttons can send links here; the app's event keeps it current (main.tsx). */

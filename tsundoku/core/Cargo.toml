@@ -40,11 +40,12 @@ zip = { version = "9", default-features = false, features = ["aes-crypto", "bzip
 
 # Job objects, so ending a program also ends everything it started (process.rs), the clipboard the clipboard
 # watcher reads (clipboard.rs), the local time an automatic backup is named after (backup.rs), Windows' version for
-# Copy Details (system.rs), and a drive's free space (room.rs).
+# Copy Details (system.rs), a drive's free space (room.rs), and Pixiv's sign-in kept encrypted (pixiv_account.rs).
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",
     "Win32_System_DataExchange",
     "Win32_System_Diagnostics_ToolHelp",

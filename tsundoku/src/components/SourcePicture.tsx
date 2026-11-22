@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { watchedPictureUrl } from "../api"
+import { sitePictureUrl, watchedPictureUrl } from "../api"
 import type { ListingKind } from "../bindings/ListingKind"
 import type { PictureCrop } from "../bindings/PictureCrop"
 import type { SourcePicture as PickedPicture } from "../bindings/SourcePicture"
@@ -49,7 +49,7 @@ export function CroppedPicture({ kind, url, crop, onError }: CroppedPictureProps
       )}
     >
       <img
-        src={url}
+        src={sitePictureUrl(url)}
         alt=""
         referrerPolicy="no-referrer"
         draggable={false}

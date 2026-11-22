@@ -22,6 +22,7 @@ use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
 use crate::passwords::{self, Password};
 use crate::pending::LinkReader;
+use crate::pixiv_account;
 use crate::settings::{CookiesBrowser, SettingsStore};
 use crate::short_links::{self, ShortLink};
 use crate::sites;
@@ -676,7 +677,10 @@ fn with_sign_in_state(
     cookies_choice: Option<CookiesBrowser>,
     link: &str,
 ) -> PreviewError {
-    match browsers::slow_down_if_signed_in(error, cookies_choice, link) {
+    match pixiv_account::explain(
+        browsers::slow_down_if_signed_in(error, cookies_choice, link),
+        link,
+    ) {
         PreviewError::SignInRequired { detail, .. } => PreviewError::SignInRequired {
             detail,
             site: sites::sign_in_site(link).map(|site| site.name.to_owned()),

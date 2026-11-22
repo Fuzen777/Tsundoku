@@ -6,6 +6,7 @@ import { strings } from "../strings"
 import { PictureCropper } from "./PictureCropper"
 import { SegmentedControl } from "./SegmentedControl"
 import { classes } from "./styles"
+import { sitePictureUrl } from "../api"
 
 const text = strings.watched.pictures
 
@@ -102,7 +103,7 @@ function PictureChoices({
                 )}
               >
                 <img
-                  src={url}
+                  src={sitePictureUrl(url)}
                   alt=""
                   loading="lazy"
                   referrerPolicy="no-referrer"

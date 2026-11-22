@@ -39,6 +39,7 @@ use crate::history::{History, NewDownload, SavedFile};
 use crate::listing::ListingKind;
 use crate::metadata::{PreviewError, VideoInfo};
 use crate::passwords::{KnownPasswords, Password};
+use crate::pixiv_account;
 use crate::post_names::{self, PostNameError};
 use crate::presets::{Preset, PresetError, PresetManager};
 use crate::room::{DiskSpace, SystemDisks};
@@ -1526,6 +1527,12 @@ impl DownloadQueue {
                     let choice = queue.options().cookies_browser;
                     JobOutcome::Failed(DownloadError::YtDlp {
                         error: browsers::slow_down_if_signed_in(error, choice, &job.url),
+                    })
+                }
+                // Pixiv's sign-in is Tsundoku's own, which Settings → Sign-Ins fixes.
+                JobOutcome::Failed(DownloadError::YtDlp { error }) => {
+                    JobOutcome::Failed(DownloadError::YtDlp {
+                        error: pixiv_account::explain(error, &job.url),
                     })
                 }
                 other => other,

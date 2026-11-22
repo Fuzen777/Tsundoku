@@ -25,6 +25,7 @@ import { BackupRow } from "./settings/BackupRow"
 import { CookiesSection, DownloadsSection, PacingSection, PostsSection } from "./settings/DownloadsSection"
 import { ShortcutsSection } from "./settings/ShortcutsSection"
 import { SupportedSitesSection } from "./settings/SupportedSitesSection"
+import { SignInsSection } from "./settings/SignInsSection"
 import { ToolsSection } from "./settings/ToolsSection"
 
 /** Settings' sections as the sidebar lists them under Settings. */
@@ -80,6 +81,7 @@ const SECTION_CONTENTS: Record<SettingsSectionId, () => ReactNode> = {
   "settings-posts": PostsSection,
   "settings-pacing": PacingSection,
   "settings-cookies": CookiesSection,
+  "settings-sign-ins": SignInsSection,
   "settings-sites": SupportedSitesSection,
   "settings-tools": ToolsSection,
   "settings-about": AboutSection,

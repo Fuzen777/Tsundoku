@@ -40,6 +40,7 @@ export const SETTINGS_SECTIONS = [
   { id: "settings-posts", title: strings.settings.posts },
   { id: "settings-pacing", title: strings.settings.pacing },
   { id: "settings-cookies", title: strings.settings.cookies },
+  { id: "settings-sign-ins", title: strings.settings.signIns.title },
   { id: "settings-sites", title: strings.settings.sites.title },
   { id: "settings-tools", title: strings.settings.tools },
   { id: "settings-about", title: strings.settings.about },

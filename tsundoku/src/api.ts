@@ -12,6 +12,8 @@ import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
 import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { ClickNLoadStatus } from "./bindings/ClickNLoadStatus"
+import type { AccountError } from "./bindings/AccountError"
+import type { PixivAccount } from "./bindings/PixivAccount"
 import type { Destination } from "./bindings/Destination"
 import type { DetectedTool } from "./bindings/DetectedTool"
 import type { DownloadLog } from "./bindings/DownloadLog"
@@ -100,6 +102,7 @@ export const queryKeys = {
   pastPasswordCount: ["past-password-count"],
   addingOptions: ["adding-options"],
   clickNLoad: ["click-n-load"],
+  pixivAccount: ["pixiv-account"],
   backgroundOptions: ["background-options"],
   appearanceOptions: ["appearance-options"],
   defaultDownloadFolder: ["default-download-folder"],
@@ -124,6 +127,8 @@ const WATCHED_CHANGED_EVENT = "watched-changed"
 const ADDING_OPTIONS_CHANGED_EVENT = "adding-options-changed"
 /** Sent by the app when the Click'n'Load receiver starts or stops listening, or can't. */
 const CLICK_N_LOAD_CHANGED_EVENT = "click-n-load-changed"
+const PIXIV_ACCOUNT_CHANGED_EVENT = "pixiv-account-changed"
+const PIXIV_SIGN_IN_FAILED_EVENT = "pixiv-sign-in-failed"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -879,6 +884,35 @@ export function onClickNLoadChanged(handler: (status: ClickNLoadStatus) => void)
   return listen<ClickNLoadStatus>(CLICK_N_LOAD_CHANGED_EVENT, (event) => handler(event.payload))
 }
 
+/** The pixiv account Tsundoku is signed in to (Settings → Sign-Ins), or `null`. In a browser, `?pixiv` shows one. */
+export function getPixivAccount(): Promise<PixivAccount | null> {
+  if (!isTauri()) return Promise.resolve(addressHas("pixiv") ? standIns.pixivAccount : null)
+  return invoke<PixivAccount | null>("pixiv_account")
+}
+
+/** Opens Pixiv's login page in a window of Tsundoku's; `onPixivAccountChanged` or `onPixivSignInFailed` tells how it
+ * ended. */
+export function signInToPixiv(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<void>("sign_in_to_pixiv")
+}
+
+/** Forgets the sign-in, and the window's own. */
+export function signOutOfPixiv(): Promise<void> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<void>("sign_out_of_pixiv")
+}
+
+export function onPixivAccountChanged(handler: (account: PixivAccount | null) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<PixivAccount | null>(PIXIV_ACCOUNT_CHANGED_EVENT, (event) => handler(event.payload))
+}
+
+export function onPixivSignInFailed(handler: (error: AccountError) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<AccountError>(PIXIV_SIGN_IN_FAILED_EVENT, (event) => handler(event.payload))
+}
+
 /** Puts text on the clipboard, such as the browser bookmark's address. Tsundoku's own copies never reach the
  * clipboard watcher. */
 export function copyText(text: string): Promise<void> {
@@ -1083,6 +1117,15 @@ export function getHistoryPage(query: HistoryQuery, offset: number, limit: numbe
 
 /** Where the window reads a thumbnail kept in the data folder (`HistoryVideo.thumbnailFile`): the app's `thumbnail`
  * protocol. None in a browser, where the site's picture shows instead. */
+/** A site picture's address the window can show: Pixiv's (i.pximg.net), which Pixiv serves only to its own pages,
+ * through the `sitepicture` protocol (`history::serve_site_picture`), named by its address in base64url; any other as
+ * it is. */
+export function sitePictureUrl<T extends string | null | undefined>(url: T): T {
+  if (!url || !isTauri() || !/^https:\/\/[is]\.pximg\.net\//.test(url)) return url
+  const name = btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+  return convertFileSrc(name, "sitepicture") as T
+}
+
 export function keptThumbnailUrl(fileName: string): string | null {
   if (!isTauri()) return null
   return convertFileSrc(fileName, "thumbnail")

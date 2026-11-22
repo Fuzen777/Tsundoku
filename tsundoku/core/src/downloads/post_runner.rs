@@ -12,6 +12,7 @@ use super::{DownloadError, DownloadProgress, DownloadStage};
 use crate::cancel::CancelToken;
 use crate::gallery::classify_download_failure;
 use crate::metadata::PreviewError;
+use crate::pixiv_account::{self, GalleryDlConfig};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
 use crate::tools::{ToolId, start_error};
 
@@ -32,7 +33,9 @@ pub(super) fn run(
     if let Err(error) = make_folders(job) {
         return JobOutcome::Failed(error);
     }
-    let args = arguments(job, post);
+    // Pixiv's sign-in, kept until the run ends, which deletes it.
+    let config = pixiv_account::gallery_dl_config(&job.url, job.ffmpeg.as_deref());
+    let args = arguments(job, post, config.as_ref());
     let command = ProgramCommand::new(gallery_dl).args(&args);
 
     // Appended to, so a resumed or retried download keeps the earlier runs' output above.
@@ -95,7 +98,11 @@ pub(super) fn run(
 
 /// gallery-dl's arguments for a post: its files straight into the item's folder under the names Settings gives,
 /// partial files in the temporary folder, plain output with one path per line, then the link.
-pub(crate) fn arguments(job: &JobSpec, post: &PostJob) -> Vec<String> {
+pub(crate) fn arguments(
+    job: &JobSpec,
+    post: &PostJob,
+    config: Option<&GalleryDlConfig>,
+) -> Vec<String> {
     let mut args: Vec<String> = [
         // A config file of the user's can't change where files go or what is written.
         "--config-ignore",
@@ -139,6 +146,9 @@ pub(crate) fn arguments(job: &JobSpec, post: &PostJob) -> Vec<String> {
     }
     if job.overwrite {
         args.push("--no-skip".to_owned());
+    }
+    if let Some(config) = config {
+        args.extend(config.args());
     }
     // After "--", the link can't be taken for an option.
     args.extend(["--".to_owned(), job.url.clone()]);
@@ -210,14 +220,14 @@ mod tests {
     fn keeps_gallery_dls_cache_where_chosen() {
         let (mut job, post) = job(None, false);
         assert!(
-            !arguments(&job, &post)
+            !arguments(&job, &post, None)
                 .iter()
                 .any(|arg| arg.starts_with("cache.file="))
         );
         job.caches = Some(crate::tools::ToolCacheFolder::new(PathBuf::from(
             r"C:\data\cache",
         )));
-        let args = arguments(&job, &post);
+        let args = arguments(&job, &post, None);
         assert!(args.contains(&r"cache.file=C:\data\cache\gallery-dl\cache.sqlite3".to_owned()));
         assert_eq!(args[args.len() - 1], job.url);
     }
@@ -225,7 +235,7 @@ mod tests {
     #[test]
     fn saves_into_the_folder_and_ends_with_the_link() {
         let (job, post) = job(Some(PauseRange { min: 10, max: 20 }), false);
-        let args = arguments(&job, &post);
+        let args = arguments(&job, &post, None);
         assert_eq!(args[0], "--config-ignore");
         assert_eq!(pair(&args, "--directory"), Some(r"D:\Pictures\Instagram"));
         assert_eq!(
@@ -254,9 +264,9 @@ mod tests {
     #[test]
     fn downloads_only_the_files_picked() {
         let (job, mut post) = job(None, false);
-        assert_eq!(pair(&arguments(&job, &post), "--range"), None);
+        assert_eq!(pair(&arguments(&job, &post, None), "--range"), None);
         post.range = Some(vec![1, 3, 6]);
-        let args = arguments(&job, &post);
+        let args = arguments(&job, &post, None);
         assert_eq!(pair(&args, "--range"), Some("1,3,6"));
         assert_eq!(
             &args[args.len() - 2..],
@@ -267,7 +277,7 @@ mod tests {
     #[test]
     fn pauses_only_when_asked_and_replaces_files_when_asked() {
         let (job, post) = job(None, true);
-        let args = arguments(&job, &post);
+        let args = arguments(&job, &post, None);
         assert_eq!(pair(&args, "--sleep"), None);
         assert!(args.contains(&"--no-skip".to_owned()));
     }

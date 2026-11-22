@@ -7,6 +7,7 @@ import { strings } from "../strings"
 import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
 import { PickerViewControls } from "./PickerViewControls"
 import { classes } from "./styles"
+import { sitePictureUrl } from "../api"
 
 const text = strings.postFiles
 
@@ -164,7 +165,7 @@ function PostFileRow({ file, picked, mark, disabled, onToggle }: PostFileRowProp
         >
           {file.thumbnailUrl && !failed ? (
             <img
-              src={file.thumbnailUrl}
+              src={sitePictureUrl(file.thumbnailUrl)}
               alt=""
               loading="lazy"
               referrerPolicy="no-referrer"

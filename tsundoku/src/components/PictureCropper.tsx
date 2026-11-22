@@ -5,6 +5,7 @@ import { coverCrop, cropPlacement, frameAspect, MOST_ZOOM, movedBy, zoomedTo, zo
 import { strings } from "../strings"
 import { CroppedPicture } from "./SourcePicture"
 import { classes } from "./styles"
+import { sitePictureUrl } from "../api"
 
 const text = strings.watched.pictures
 
@@ -126,7 +127,7 @@ export function PictureCropper({ kind, url, crop, onChange, disabled = false }: 
           >
             {!failed && (
               <img
-                src={url}
+                src={sitePictureUrl(url)}
                 alt=""
                 referrerPolicy="no-referrer"
                 draggable={false}

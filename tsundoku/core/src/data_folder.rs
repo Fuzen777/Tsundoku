@@ -143,6 +143,18 @@ impl DataPaths {
         self.root.join("browser")
     }
 
+    /// Tsundoku's own sign-ins (`pixiv_account`): Pixiv's token, encrypted, and the config files gallery-dl reads it
+    /// from for a moment. Never in a backup.
+    pub fn accounts_folder(&self) -> PathBuf {
+        self.root.join("accounts")
+    }
+
+    /// The sign-in window's browser profile, where the pixiv account stays signed in (for Fanbox and Pixiv's
+    /// messages), apart from the check window's.
+    pub fn accounts_browser_folder(&self) -> PathBuf {
+        self.accounts_folder().join("browser")
+    }
+
     /// What the data folder holds for the history, by part, as it is on the disk now.
     pub fn history_data(&self) -> HistoryData {
         let database = self.database_file();

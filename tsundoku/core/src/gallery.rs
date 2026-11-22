@@ -11,7 +11,9 @@ use crate::cancel::CancelToken;
 use crate::metadata::{
     PostContents, PreviewError, TOO_MANY_REQUESTS_PHRASES, VideoInfo, VideoTag, tags_from,
 };
+use crate::pixiv_account::{self, GalleryDlConfig};
 use crate::process::{self, OutputLine, ProgramCommand, RunError};
+use crate::site_pictures;
 use crate::tools::{ToolCacheFolder, ToolId, start_error};
 
 /// Some sites take a while to answer; a fetch still running after this long is given up.
@@ -110,8 +112,10 @@ pub(crate) fn run_watched(
     };
     let mut json = String::new();
     let mut log = Vec::new();
+    // Kept until the run ends, which deletes it.
+    let config = pixiv_account::gallery_dl_config(link, None);
     let status = process::run(
-        &command(tools, gallery_dl, extra, link),
+        &command(tools, gallery_dl, extra, link, config.as_ref()),
         cancel,
         Some(timeout),
         |line| match line {
@@ -188,7 +192,13 @@ pub(crate) fn last_cursor(log: &[String]) -> Option<String> {
     looks_like_one.then(|| cursor.to_owned())
 }
 
-fn command(tools: &GalleryTools, gallery_dl: &Path, extra: &[&str], link: &str) -> ProgramCommand {
+fn command(
+    tools: &GalleryTools,
+    gallery_dl: &Path,
+    extra: &[&str],
+    link: &str,
+    config: Option<&GalleryDlConfig>,
+) -> ProgramCommand {
     let mut command = ProgramCommand::new(gallery_dl).args([
         // gallery-dl's spelling of yt-dlp's --ignore-config: a config file of the user's can't change the answer.
         "--config-ignore",
@@ -205,6 +215,10 @@ fn command(tools: &GalleryTools, gallery_dl: &Path, extra: &[&str], link: &str) 
     }
     if let Some(caches) = tools.caches {
         command = command.args(caches.gallery_dl_args());
+    }
+    // Pixiv's sign-in, in a file rather than on the command line.
+    if let Some(config) = config {
+        command = command.args(config.args());
     }
     // After "--", a link can't be taken for an option, whatever it starts with.
     command.args(extra).arg("--").arg(link)
@@ -702,11 +716,20 @@ fn uploader(post: &Value) -> Option<String> {
         .or_else(|| author.and_then(|author| text(author, "name")))
         .or_else(|| text(post, "username"))
         .or_else(|| text(post, "author"))
+        // Pixiv's and Fanbox's artist.
+        .or_else(|| {
+            post.get("user")
+                .filter(|user| user.is_object())
+                .and_then(|user| text(user, "name"))
+        })
 }
 
 /// The caption's first line, shortened, as the post's title.
 fn caption_title(post: &Value) -> Option<String> {
-    let caption = text(post, "description").or_else(|| text(post, "content"))?;
+    let caption = text(post, "description")
+        .or_else(|| text(post, "content"))
+        // A Pixiv work's title, its caption being HTML.
+        .or_else(|| text(post, "title"))?;
     let line = caption
         .lines()
         .map(str::trim)
@@ -730,9 +753,12 @@ fn thumbnail(files: &[FoundFile]) -> Option<String> {
 }
 
 /// A file's picture when it isn't the file itself: Instagram's `display_url`, which its videos have as their cover,
-/// or the cover X lists after a video (`is_cover`), at its small size.
+/// the cover X lists after a video (`is_cover`), at its small size, or a Pixiv animation's first frame.
 fn cover(file: &FoundFile) -> Option<String> {
-    text(file.details, "display_url").or_else(|| file.cover.map(small_image))
+    text(file.details, "display_url")
+        .or_else(|| file.cover.map(small_image))
+        // A Pixiv animation's first frame, from its zip's address.
+        .or_else(|| site_pictures::pixiv_preview(file.url))
 }
 
 /// The name of a post's only file when it's neither an image nor a video, such as a .zip shared on Pixeldrain: the
@@ -780,17 +806,21 @@ fn post_files(files: &[FoundFile]) -> Vec<crate::metadata::PostFile> {
         .collect()
 }
 
-/// An image's address, asking X for its small size rather than the original, which can be 4K. X's covers take the
-/// same sizes as its images.
+/// An image's address, asking X for its small size rather than the original, which can be 4K, and Pixiv for its smaller
+/// copy (`site_pictures::pixiv_preview`). X's covers take the same sizes as its images.
 fn small_image(url: &str) -> String {
     if url.starts_with("https://pbs.twimg.com/") {
         url.replace("name=orig", "name=small")
     } else {
-        url.to_owned()
+        site_pictures::pixiv_preview(url).unwrap_or_else(|| url.to_owned())
     }
 }
 
 fn kind_of(file: &Value) -> FileKind {
+    // A Pixiv animation (ugoira): a zip of frames with their timings, which its download makes a video of.
+    if file.get("frames").is_some_and(Value::is_array) {
+        return FileKind::Video;
+    }
     let extension = text(file, "extension").map(|extension| extension.to_ascii_lowercase());
     let mime = text(file, "mime_type").map(|mime| mime.to_ascii_lowercase());
     let mime_is = |start: &str| mime.as_deref().is_some_and(|mime| mime.starts_with(start));
@@ -1625,7 +1655,7 @@ mod tests {
             cookies: Some("firefox".to_owned()),
             caches: None,
         };
-        let args: Vec<String> = command(&tools, Path::new("gallery-dl.exe"), &[], "-x")
+        let args: Vec<String> = command(&tools, Path::new("gallery-dl.exe"), &[], "-x", None)
             .arguments()
             .iter()
             .map(|arg| arg.to_string_lossy().into_owned())
@@ -1648,6 +1678,7 @@ mod tests {
             Path::new("gallery-dl.exe"),
             &["--post-range", "1-50"],
             "-x",
+            None,
         )
         .arguments()
         .iter()

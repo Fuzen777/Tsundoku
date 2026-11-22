@@ -110,6 +110,8 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: text.unavailable, detail: error.detail }
     case "signInRequired":
       return { message: describeSignIn(error.site, error.cookies), detail: error.detail }
+    case "pixivSignInNeeded":
+      return { message: error.refused ? text.pixivSignInRefused : text.pixivSignIn }
     case "limitReached":
       return { message: text.limitReached(error.site), detail: error.detail }
     case "waitBetweenDownloads":
@@ -352,7 +354,14 @@ export function describePostNameError(error: PostNameError): ErrorDescription {
 /** What may fix a failed preview or download: updating the tool that couldn't read a site's page, reading browser
  * cookies when a signed-in account is needed, signing in to the site in a browser and trying again, setting up
  * gallery-dl for a post of images, or adding the password of an archive the download brought. */
-export type FailureFix = "updateYtDlp" | "updateGalleryDl" | "cookies" | "signIn" | "setUpImages" | "archivePassword"
+export type FailureFix =
+  | "updateYtDlp"
+  | "updateGalleryDl"
+  | "cookies"
+  | "signIn"
+  | "pixivSignIn"
+  | "setUpImages"
+  | "archivePassword"
 
 export function fixFor(error: unknown): FailureFix | null {
   if (isCoreError<DownloadError>(error) && error.kind === "unpack") {
@@ -366,6 +375,8 @@ export function fixFor(error: unknown): FailureFix | null {
       return failure.tool === "galleryDl" ? "updateGalleryDl" : "updateYtDlp"
     case "signInRequired":
       return failure.cookies === "notSignedIn" || failure.cookies === "signedIn" ? "signIn" : "cookies"
+    case "pixivSignInNeeded":
+      return "pixivSignIn"
     case "imagesNotSetUp":
       return "setUpImages"
     default:

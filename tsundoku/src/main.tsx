@@ -9,6 +9,7 @@ import {
   getToolsNeedSetup,
   onAddingOptionsChanged,
   onClickNLoadChanged,
+  onPixivAccountChanged,
   onToolsChanged,
   queryKeys,
 } from "./api"
@@ -42,6 +43,7 @@ void onToolsChanged(() => void queryClient.invalidateQueries({ queryKey: queryKe
 // The tray's Watch Clipboard changes the options outside the UI.
 void onAddingOptionsChanged((options) => queryClient.setQueryData(queryKeys.addingOptions, options))
 void onClickNLoadChanged((status) => queryClient.setQueryData(queryKeys.clickNLoad, status))
+void onPixivAccountChanged((account) => queryClient.setQueryData(queryKeys.pixivAccount, account))
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

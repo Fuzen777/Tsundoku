@@ -70,7 +70,35 @@ impl Settings {
             settings.rules.last_wins = true;
         }
         settings.rules.list = with_catch_all_first(std::mem::take(&mut settings.rules.list));
+        // Pixiv's pace as every paced site started before Pixiv could be read takes Pixiv's own, once: a copy that
+        // ran this version or a later one keeps what's saved.
+        if settings.downloads.pacing.pixiv == SitePace::default()
+            && !ran_since(settings.last_run_version.as_deref(), PIXIV_PACE_SINCE)
+        {
+            settings.downloads.pacing.pixiv = SitePace::PIXIV;
+        }
         Some(settings)
+    }
+}
+
+/// The version Pixiv's pace started with `SitePace::PIXIV`.
+const PIXIV_PACE_SINCE: (u32, u32, u32) = (0, 2, 18);
+
+/// Whether the version that ran last (`Settings::last_run_version`) is `version` or a later one.
+fn ran_since(last_run: Option<&str>, version: (u32, u32, u32)) -> bool {
+    let Some(last_run) = last_run else {
+        return false;
+    };
+    let mut parts = last_run
+        .split('.')
+        .map(|part| part.trim().parse::<u32>().ok());
+    match (
+        parts.next().flatten(),
+        parts.next().flatten(),
+        parts.next().flatten(),
+    ) {
+        (Some(major), Some(minor), Some(patch)) => (major, minor, patch) >= version,
+        _ => false,
     }
 }
 
@@ -453,7 +481,8 @@ pub fn default_download_folder() -> PathBuf {
 }
 
 /// How fast each site that limits how fast it's read (`PacedSite`) is read: one download at a time each to start
-/// with, Instagram's files 3 to 5 seconds apart, the others' 0 to 2.
+/// with, Instagram's files 3 to 5 seconds apart, the others' 0 to 2, but Pixiv's three at a time with its files 1 to 2
+/// seconds apart (`SitePace::PIXIV`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
@@ -472,7 +501,7 @@ impl Default for SitePacing {
                 pause: PauseRange::INSTAGRAM,
             },
             x: SitePace::default(),
-            pixiv: SitePace::default(),
+            pixiv: SitePace::PIXIV,
             tumblr: SitePace::default(),
         }
     }
@@ -545,6 +574,15 @@ impl Default for SitePace {
             pause: PauseRange::SHORT,
         }
     }
+}
+
+impl SitePace {
+    /// Pixiv's to start with (Fuzen's experience, 22 November: Pixiv flags many requests with no pause between them,
+    /// while six works at once with 1 to 2 seconds between files went fine), from 0.2.18. Before, it had the others'.
+    pub const PIXIV: Self = Self {
+        at_once: 3,
+        pause: PauseRange { min: 1, max: 2 },
+    };
 }
 
 /// A random wait between `min` and `max` seconds.
@@ -1441,6 +1479,44 @@ mod tests {
             "Click'n'Load stays off in settings saved before it"
         );
         assert_eq!(settings.background, BackgroundSettings::default());
+    }
+
+    #[test]
+    fn pixiv_takes_its_own_pace_once() {
+        let read = |json: &str| {
+            Settings::from_json(json.as_bytes())
+                .unwrap()
+                .downloads
+                .pacing
+                .pixiv
+        };
+        let old = r#""pacing": { "pixiv": { "atOnce": 1, "pause": { "min": 0, "max": 2 } } }"#;
+        assert_eq!(
+            read(&format!(
+                r#"{{ "lastRunVersion": "0.2.16", "downloads": {{ {old} }} }}"#
+            )),
+            SitePace::PIXIV,
+            "the pace every paced site started with, saved before Pixiv could be read"
+        );
+        let (major, minor, patch) = PIXIV_PACE_SINCE;
+        assert_eq!(
+            read(&format!(
+                r#"{{ "lastRunVersion": "{major}.{minor}.{patch}", "downloads": {{ {old} }} }}"#
+            )),
+            SitePace::default(),
+            "chosen since"
+        );
+        assert_eq!(
+            read(
+                r#"{ "lastRunVersion": "0.2.16", "downloads": { "pacing": { "pixiv": { "atOnce": 2, "pause": { "min": 0, "max": 2 } } } } }"#
+            ),
+            SitePace {
+                at_once: 2,
+                pause: PauseRange::SHORT,
+            },
+            "a pace of the user's own"
+        );
+        assert_eq!(read("{}"), SitePace::PIXIV);
     }
 
     #[test]

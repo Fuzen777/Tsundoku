@@ -19,8 +19,8 @@ use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::passwords::Password;
 use tsundoku_core::preview::{LinkPreview, MoreEvent, PreviewService};
 use tsundoku_core::relocate::MovedFiles;
-use tsundoku_core::thumbnails;
 use tsundoku_core::tools::ToolManager;
+use tsundoku_core::{site_pictures, thumbnails};
 
 use crate::{DataFolder, shell};
 
@@ -382,6 +382,32 @@ pub fn serve_thumbnail<R: Runtime>(
                 .header(header::CACHE_CONTROL, "max-age=3600")
                 .body(bytes),
             None => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Vec::new()),
+        };
+        if let Ok(response) = response {
+            responder.respond(response);
+        }
+    });
+}
+
+/// Serves a Pixiv picture to the window, at `sitepicture://localhost/<its address in base64url>`
+/// (`http://sitepicture.localhost/…` in WebView2): Pixiv serves its pictures only with its own Referer, which the
+/// window can't send (`site_pictures::fetch`, which asks only Pixiv's picture servers). Fetched off the async runtime's
+/// threads, and kept by the window a day.
+pub fn serve_site_picture<R: Runtime>(
+    _context: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
+    let name = request.uri().path().trim_start_matches('/').to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let response = match site_pictures::fetch(&name) {
+            Ok(picture) => Response::builder()
+                .header(header::CONTENT_TYPE, picture.content_type)
+                .header(header::CACHE_CONTROL, "max-age=86400")
+                .body(picture.bytes),
+            Err(_) => Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Vec::new()),
         };

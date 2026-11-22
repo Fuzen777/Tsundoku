@@ -63,6 +63,7 @@ import { StatusMessage } from "./StatusMessage"
 import { classes, LEAVING_CLASSES } from "./styles"
 import { Thumbnail } from "./Thumbnail"
 import { WatchForm } from "./WatchForm"
+import { sitePictureUrl } from "../api"
 
 interface ListingPickerProps {
   listing: Listing
@@ -623,7 +624,7 @@ export function ListingPicture({
     <div className={classes("shrink-0 overflow-hidden rounded-full bg-input", small ? "size-14" : "size-24")}>
       {listing.thumbnailUrl && !failed && (
         <img
-          src={listing.thumbnailUrl}
+          src={sitePictureUrl(listing.thumbnailUrl)}
           alt=""
           referrerPolicy="no-referrer"
           className="size-full object-cover"

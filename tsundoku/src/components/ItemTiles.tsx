@@ -6,6 +6,7 @@ import { ContextMenu, type MenuClose } from "./ContextMenu"
 import { TiledItems, type TileLabels } from "./MediaTiles"
 import type { MenuItem } from "./Menu"
 import { classes } from "./styles"
+import { sitePictureUrl } from "../api"
 
 /*
   A list's items as pictures, in Masonry or Gallery, each opening its full row under its line of pictures: the
@@ -198,7 +199,7 @@ export function ItemTile({
       >
         {pictured ? (
           <img
-            src={thumbnailUrl}
+            src={sitePictureUrl(thumbnailUrl)}
             alt=""
             loading="lazy"
             referrerPolicy="no-referrer"

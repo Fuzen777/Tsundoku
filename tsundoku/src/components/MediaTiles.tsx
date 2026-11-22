@@ -11,6 +11,7 @@ import {
   tileWidthIn,
 } from "../pickerLayout"
 import { classes, LEAVING_CLASSES } from "./styles"
+import { sitePictureUrl } from "../api"
 
 /** What a tile says under its picture, as the post strip's marks do. */
 export interface TileMark {
@@ -198,7 +199,7 @@ function Tile({ spec, ratio, labels, disabled }: TileProps) {
       >
         {pictured ? (
           <img
-            src={thumbnailUrl}
+            src={sitePictureUrl(thumbnailUrl)}
             alt=""
             loading="lazy"
             referrerPolicy="no-referrer"

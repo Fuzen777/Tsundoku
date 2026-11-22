@@ -12,7 +12,8 @@ import { StatusMessage } from "./StatusMessage"
 /**
  * Buttons that may fix a failed preview or download (see `fixFor`): Update yt-dlp, or Try Nightly, or Update
  * gallery-dl, when a site's page couldn't be read; Set Up Cookies when a signed-in account is needed and cookies are
- * off; Try Again once signed in, when no browser is signed in to the site or its sign-in was refused; Set Up Image
+ * off; Try Again once signed in, when no browser is signed in to the site or its sign-in was refused; Sign In to Pixiv,
+ * which opens Settings → Sign-Ins, when Pixiv needs Tsundoku's own sign-in; Set Up Image
  * Downloads for a post of images while gallery-dl isn't set up; a field for the password of an archive a download
  * brought, which `onArchivePassword` takes (the queue's row: it retries, which only unpacks). Nothing for other
  * failures.
@@ -47,6 +48,13 @@ export function FailureFixes({
           {strings.queue.fixes.cookieSettings}
         </Button>
       </div>
+    )
+  }
+  if (fix === "pixivSignIn") {
+    return (
+      <Button size="sm" onClick={() => navigate("settings", "settings-sign-ins")}>
+        {strings.queue.fixes.signInToPixiv}
+      </Button>
     )
   }
   if (fix === "updateYtDlp") return <UpdateYtDlp />

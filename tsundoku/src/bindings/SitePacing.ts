@@ -3,6 +3,7 @@ import type { SitePace } from "./SitePace";
 
 /**
  * How fast each site that limits how fast it's read (`PacedSite`) is read: one download at a time each to start
- * with, Instagram's files 3 to 5 seconds apart, the others' 0 to 2.
+ * with, Instagram's files 3 to 5 seconds apart, the others' 0 to 2, but Pixiv's three at a time with its files 1 to 2
+ * seconds apart (`SitePace::PIXIV`).
  */
 export type SitePacing = { instagram: SitePace, x: SitePace, pixiv: SitePace, tumblr: SitePace, };

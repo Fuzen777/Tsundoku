@@ -294,6 +294,10 @@ pub enum PreviewError {
         #[serde(default)]
         cookies: SignInCookies,
     },
+    /// Pixiv, which needs Tsundoku's own sign-in (Settings → Sign-Ins, `pixiv_account`) rather than a browser's
+    /// cookies: none yet, or Pixiv refused the one kept (`refused`), as after a password change.
+    #[error("Pixiv needs Tsundoku signed in to it")]
+    PixivSignInNeeded { refused: bool },
     /// A file host's free downloads for this connection are used up for now, such as MEGA's transfer quota.
     #[error("{site}'s download limit is reached: {detail}")]
     LimitReached { site: String, detail: String },

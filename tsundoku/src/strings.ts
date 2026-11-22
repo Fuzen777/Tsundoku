@@ -334,6 +334,7 @@ export const strings = {
       setUpCookies: "Set Up Cookies",
       tryAgain: "Try Again",
       cookieSettings: "Cookie Settings",
+      signInToPixiv: "Sign In to Pixiv",
       updated: (version: string | null) =>
         version === null ? "yt-dlp is updated. Try again." : `yt-dlp is now version ${version}. Try again.`,
       passwordSettings: "Password Settings",
@@ -961,6 +962,8 @@ export const strings = {
       signInOff: (site: string | null) =>
         `${site ?? "This site"} needs you signed in. Turn on cookies so Tsundoku can use your browser's sign-in.`,
       signInNeeded: (site: string) => `${site} needs you signed in. Sign in to ${site} in your browser, then try again.`,
+      pixivSignIn: "Pixiv needs Tsundoku signed in to it: Settings → Sign-Ins.",
+      pixivSignInRefused: "Pixiv didn't accept Tsundoku's sign-in, as after a password change. Sign in again in Settings → Sign-Ins.",
       signInRefused: (site: string) =>
         `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
       limitReached: (site: string) =>
@@ -1685,16 +1688,32 @@ export const strings = {
       pauseParagraphs: (longest: number) => [
         "Before each file of a post, and between the site's links read in Pending, Tsundoku waits a random time in the site's range, up to " +
           `${longest} seconds. 0 to 0 is no pause.`,
-        "Instagram starts with 3 to 5 seconds, the others with 0 to 2.",
+        "Instagram starts with 3 to 5 seconds, Pixiv with 1 to 2, the others with 0 to 2.",
       ],
       atOnce: "At Once",
       atOnceParagraphs: [
-        "How many of the site's downloads run at the same time, one to start with. The site's other downloads wait their turn while downloads from other sites go ahead.",
+        "How many of the site's downloads run at the same time: one to start with, three for Pixiv. The site's other downloads wait their turn while downloads from other sites go ahead.",
         "Each download running pauses on its own, so two at once read about twice as fast as one. Downloads at Once, in Downloads, still limits every download together.",
       ],
       hourlyLimitParagraphs: [
         "Leave it empty for no limit. Once the past hour holds this many Instagram files, the next Instagram download waits, then continues by itself.",
       ],
+    },
+    signIns: {
+      title: "Sign-Ins",
+      pixiv: "Pixiv",
+      signedInAs: (name: string, account: string) => (account ? `Signed in as ${name} (${account})` : `Signed in as ${name}`),
+      signedOut: "Not signed in",
+      signIn: "Sign In…",
+      signOut: "Sign Out",
+      pixivHint:
+        "Pixiv needs Tsundoku signed in to it, rather than your browser's cookies. Sign In opens Pixiv's own login page in a window of Tsundoku's: sign in there once with your pixiv account. Tsundoku never sees your password, and keeps the sign-in encrypted for your Windows account, out of backups.",
+      waiting: "Finish signing in in Pixiv's window.",
+      errors: {
+        network: "Pixiv couldn't be reached. Check your connection, then sign in again.",
+        refused: "Pixiv didn't accept the sign-in, which happens when it takes more than 30 seconds to finish. Sign in again.",
+        storage: "The sign-in couldn't be saved in Tsundoku's data folder.",
+      },
     },
     cookies: "Cookies",
     cookiesBrowser: "Read Cookies from",

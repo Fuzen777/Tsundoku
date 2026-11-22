@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.18 · 2026-11-22
+
+### Added
+
+- **Pixiv**: Settings → Sign-Ins → Sign In opens Pixiv's own login page in a window of Tsundoku's: sign in there once with your pixiv account, and Pixiv works then preview and download like other posts, with their tags. Their animations are saved as WebM videos, lossless: every frame exactly, each shown as long as Pixiv says. Tsundoku never sees your password, keeps the sign-in encrypted for your Windows account and out of backups, and Sign Out forgets it. A Pixiv link without the sign-in says so, with a Sign In to Pixiv button.
+
+### Changed
+
+- **Pixiv's pace**: three downloads at once with 1 to 2 seconds between files to start with, instead of one at a time with 0 to 2. A copy still on the old start takes the new one.
+
 ## 0.2.17 · 2026-11-22
 
 ### Added

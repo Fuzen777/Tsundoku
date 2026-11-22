@@ -1,3 +1,4 @@
+import type { PixivAccount } from "./bindings/PixivAccount"
 import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
@@ -687,6 +688,7 @@ export const standIns = {
     clickNLoad: false,
   } satisfies AddingSettings,
   clickNLoadStatus: { state: { kind: "off" }, port: 9666, senders: ["FileCrypt"] } satisfies ClickNLoadStatus,
+  pixivAccount: { name: "Some One", account: "someone" } satisfies PixivAccount,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
   appearanceOptions: { theme: "auto", accent: "indigo", customAccent: "#165e83" } satisfies AppearanceSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,

@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { classes } from "./styles"
+import { sitePictureUrl } from "../api"
 
 interface ThumbnailProps {
   url: string | null
@@ -22,7 +23,7 @@ export function Thumbnail({ url, fallbackUrl = null, className }: ThumbnailProps
       {source && (
         <img
           key={source}
-          src={source}
+          src={sitePictureUrl(source)}
           alt=""
           loading="lazy"
           referrerPolicy="no-referrer"

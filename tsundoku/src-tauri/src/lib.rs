@@ -1,5 +1,6 @@
 //! The Tauri app: the window, the plugins, and the commands that expose `tsundoku_core` to the UI.
 
+mod accounts;
 mod appearance;
 mod background;
 mod backup;
@@ -132,6 +133,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let paths = DataPaths::new(root.clone());
     fs::create_dir_all(paths.root())?;
     app.manage(DataFolder { path: root });
+    // Pixiv's sign-in (Settings → Sign-Ins), which gallery-dl's runs read.
+    accounts::open(&paths);
 
     let settings = Arc::new(SettingsStore::open(paths.settings_file())?);
     let database = Arc::new(Database::open(&paths.database_file())?);
@@ -295,6 +298,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .register_asynchronous_uri_scheme_protocol("thumbnail", history::serve_thumbnail)
         .register_asynchronous_uri_scheme_protocol("picture", watched::serve_picture)
+        .register_asynchronous_uri_scheme_protocol("sitepicture", history::serve_site_picture)
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -324,6 +328,9 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            accounts::pixiv_account,
+            accounts::sign_in_to_pixiv,
+            accounts::sign_out_of_pixiv,
             app_info,
             open_data_folder,
             open_download_folder,
