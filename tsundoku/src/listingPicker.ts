@@ -294,6 +294,14 @@ export function restEstimate(pace: ListingPace | null, media: MediaCount | null)
 }
 
 /** What a listing's items are called: an account's posts, YouTube's videos, anything else's items. */
+/** Whether a listing's items name who posted them: a playlist's, and a list of several artists' works (Pixiv's
+ * following feed or a tag's), whose posters differ. An account's or a channel's are all its own. */
+export function showsUploaders(listing: Pick<Listing, "kind" | "items">): boolean {
+  if (listing.kind === "playlist") return true
+  const uploaders = new Set(listing.items.map(({ video }) => video.uploader ?? ""))
+  return uploaders.size > 1
+}
+
 export function nounOf(listing: Pick<Listing, "kind" | "siteName">): keyof typeof strings.picker.nouns {
   if (listing.kind === "account") return "post"
   return listing.kind === "channel" || listing.siteName === "youtube.com" ? "video" : "item"

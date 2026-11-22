@@ -95,6 +95,20 @@ const X_PAGING: Paging = Paging {
     check_first: X_CHECK_FIRST,
 };
 
+/// Pixiv answers 30 works per request through its app's API, which gallery-dl asks 1 to 2 seconds apart for Pixiv
+/// (`pixiv_account::gallery_dl_config`). A read can't start where the last one stopped (Pixiv's pages go by offset,
+/// which gallery-dl doesn't take), so each one reads the pages before it again: Load All reads 600 works at a time, so
+/// an artist of 1,000 works takes two reads, about 55 requests, against 34 in one go.
+const PIXIV_PAGING: Paging = Paging {
+    page: 30,
+    next: 60,
+    step: 150,
+    all_step: 600,
+    pause: Duration::from_secs(2),
+    // One page, nothing pinned: a check reaches what it saw before within it unless 29 or more works came since.
+    check_first: 30 - 1,
+};
+
 /// How far X lets an account be listed at a time (`x_media`).
 const X_PACE: ListingPace = ListingPace {
     items: x_media::POSTS_PER_WINDOW,
@@ -194,8 +208,9 @@ pub enum ListingKind {
     Channel,
     /// A playlist, in its own order, on YouTube or another site.
     Playlist,
-    /// An Instagram account's posts and reels, as on its grid, or an X account's posts with pictures or videos, as on
-    /// its Media tab.
+    /// An Instagram account's posts and reels, as on its grid, an X account's posts with pictures or videos, as on
+    /// its Media tab, or a Pixiv artist's works; also Pixiv's lists of many artists' works, newest first: the
+    /// following feed and a tag's search.
     Account,
 }
 
@@ -413,6 +428,10 @@ pub fn listing_link(link: &str) -> Option<ListingLink> {
         });
     }
 
+    if sites::on_domain(&host, "pixiv.net") {
+        return pixiv_listing(&segments, query);
+    }
+
     if on_x(&host) {
         let account = match segments.as_slice() {
             [name] => *name,
@@ -429,6 +448,94 @@ pub fn listing_link(link: &str) -> Option<ListingLink> {
     None
 }
 
+/// A Pixiv listing, from its address's segments (a language first, such as "en", left out) and query: an artist's
+/// works (`/users/<id>`, with any of its tabs of works), the works of the artists the account follows
+/// (`/bookmark_new_illust.php`), or a tag's newest works (`/tags/<tag>`, with any of its tabs of works, keeping how the
+/// tag is matched, `s_mode`).
+fn pixiv_listing(segments: &[&str], query: &str) -> Option<ListingLink> {
+    let segments = match segments {
+        [language, rest @ ..]
+            if language.len() == 2 && language.chars().all(|c| c.is_ascii_lowercase()) =>
+        {
+            rest
+        }
+        all => all,
+    };
+    let link = match segments {
+        ["users", id] | ["users", id, "artworks" | "illustrations" | "manga"]
+            if !id.is_empty() && id.chars().all(|character| character.is_ascii_digit()) =>
+        {
+            format!("https://www.pixiv.net/users/{id}/artworks")
+        }
+        ["bookmark_new_illust.php"] => PIXIV_FOLLOWING.to_owned(),
+        ["tags", tag] | ["tags", tag, "artworks" | "illustrations" | "manga" | "top"]
+            if !tag.is_empty() =>
+        {
+            let mode = query_value(query, "s_mode")
+                .filter(|mode| ["s_tag", "s_tag_full", "s_tc"].contains(mode))
+                .map(|mode| format!("?s_mode={mode}"))
+                .unwrap_or_default();
+            format!("https://www.pixiv.net/tags/{tag}/artworks{mode}")
+        }
+        _ => return None,
+    };
+    Some(ListingLink {
+        kind: ListingKind::Account,
+        link,
+    })
+}
+
+/// The works of the artists the Pixiv account follows, newest first.
+const PIXIV_FOLLOWING: &str = "https://www.pixiv.net/bookmark_new_illust.php";
+
+/// Whether a listing's page is Pixiv's.
+fn on_pixiv(link: &str) -> bool {
+    sites::host(link).is_some_and(|host| sites::on_domain(&host, "pixiv.net"))
+}
+
+/// The name of a Pixiv listing of many artists' works, which no artist names: the following feed's, or a tag's.
+/// `None` for an artist's works and anything else.
+fn pixiv_list_title(link: &str) -> Option<String> {
+    if !on_pixiv(link) {
+        return None;
+    }
+    if link == PIXIV_FOLLOWING {
+        return Some("Pixiv Following".to_owned());
+    }
+    let (path, _) = path_and_query(link);
+    let tag = path.strip_prefix("tags/")?.split('/').next()?;
+    let decoded = reqwest::Url::parse(&format!("https://x/{tag}"))
+        .ok()
+        .and_then(|url| url.path_segments()?.next().map(str::to_owned))
+        .map(|segment| percent_decoded(&segment))
+        .unwrap_or_else(|| tag.to_owned());
+    Some(format!("#{decoded}"))
+}
+
+/// Text with its %-escapes decoded as UTF-8, or as it is when they don't make UTF-8.
+fn percent_decoded(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let escaped = (bytes[index] == b'%')
+            .then(|| text.get(index + 1..index + 3))
+            .flatten()
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        match escaped {
+            Some(byte) => {
+                decoded.push(byte);
+                index += 3;
+            }
+            None => {
+                decoded.push(bytes[index]);
+                index += 1;
+            }
+        }
+    }
+    String::from_utf8(decoded).unwrap_or_else(|_| text.to_owned())
+}
+
 /// Whether a host is X's, under either of its domains.
 fn on_x(host: &str) -> bool {
     sites::on_domain(host, "x.com") || sites::on_domain(host, "twitter.com")
@@ -441,6 +548,10 @@ fn is_on_x(link: &str) -> bool {
 
 /// An account's own page, on the site of its listing's page (`link`).
 fn account_page(link: &str, name: &str) -> String {
+    if on_pixiv(link) {
+        // A Pixiv artist's page goes by its number, which the listing's own page has.
+        return link.to_owned();
+    }
     if is_on_x(link) {
         format!("https://x.com/{name}")
     } else {
@@ -734,6 +845,8 @@ const READS_OF_NOTHING_AT_MOST: u32 = 4;
 fn paging_of(link: &str) -> Paging {
     if on_instagram(link) {
         INSTAGRAM_PAGING
+    } else if on_pixiv(link) {
+        PIXIV_PAGING
     } else {
         X_PAGING
     }
@@ -1395,7 +1508,14 @@ fn account_listing(
     mut items: Vec<ListedItem>,
     more: impl FnOnce(&str, Option<u32>) -> Option<ListingMore>,
 ) -> Listing {
-    let account = account.unwrap_or_default();
+    // A Pixiv listing of many artists is named after itself, not after its newest work's artist.
+    let account = match pixiv_list_title(link) {
+        Some(title) => AccountInfo {
+            full_name: Some(title),
+            ..AccountInfo::default()
+        },
+        None => account.unwrap_or_default(),
+    };
     let name_in_link = sites::host(link).and_then(|_| {
         path_and_query(link)
             .0

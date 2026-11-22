@@ -374,7 +374,21 @@ fn found_posts(messages: &[Value], link: &str) -> Result<FoundPosts, PreviewErro
 /// posts of an animated GIF and 8 replies with a video that the lists don't have, 142 files in all.
 fn account_info(post: &Value) -> Option<AccountInfo> {
     let user = post.get("user").filter(|user| user.is_object())?;
-    let on_x = text(post, "category").as_deref() == Some("twitter");
+    let category = text(post, "category");
+    let on_x = category.as_deref() == Some("twitter");
+    if category.as_deref() == Some("pixiv") {
+        // A Pixiv artist: `account` (the handle), `name` and `profile_image_urls.medium`; Pixiv doesn't say how many
+        // works.
+        return Some(AccountInfo {
+            username: text(user, "account"),
+            full_name: text(user, "name"),
+            picture: user
+                .get("profile_image_urls")
+                .and_then(|pictures| text(pictures, "medium")),
+            post_count: None,
+            media_count: None,
+        });
+    }
     let (username, full_name, picture) = if on_x {
         ("name", "nick", "profile_image")
     } else {

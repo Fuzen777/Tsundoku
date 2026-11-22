@@ -138,6 +138,54 @@ fn lists_an_x_accounts_media_whatever_tab_the_link_opens() {
 }
 
 #[test]
+fn lists_pixiv_artists_the_following_feed_and_tags() {
+    let account = |link: &str| Some((ListingKind::Account, link.to_owned()));
+    let artist = account("https://www.pixiv.net/users/11/artworks");
+    assert_eq!(listing_of("https://www.pixiv.net/users/11"), artist);
+    assert_eq!(
+        listing_of("https://www.pixiv.net/en/users/11/illustrations"),
+        artist
+    );
+    assert_eq!(listing_of("https://pixiv.net/users/11/manga"), artist);
+    assert_eq!(
+        listing_of("https://www.pixiv.net/users/11/bookmarks/artworks"),
+        None,
+        "not their works"
+    );
+    assert_eq!(listing_of("https://www.pixiv.net/users/abc"), None);
+    assert_eq!(
+        listing_of("https://www.pixiv.net/bookmark_new_illust.php"),
+        account("https://www.pixiv.net/bookmark_new_illust.php")
+    );
+    assert_eq!(
+        listing_of("https://www.pixiv.net/en/tags/%E5%8E%9F%E7%A5%9E/artworks?s_mode=s_tag&p=2"),
+        account("https://www.pixiv.net/tags/%E5%8E%9F%E7%A5%9E/artworks?s_mode=s_tag")
+    );
+    assert_eq!(
+        listing_of("https://www.pixiv.net/tags/genshin"),
+        account("https://www.pixiv.net/tags/genshin/artworks")
+    );
+    assert_eq!(
+        listing_of("https://www.pixiv.net/en/artworks/66806629"),
+        None,
+        "one work"
+    );
+    assert_eq!(
+        pixiv_list_title("https://www.pixiv.net/tags/%E5%8E%9F%E7%A5%9E/artworks?s_mode=s_tag")
+            .as_deref(),
+        Some("#原神")
+    );
+    assert_eq!(
+        pixiv_list_title(PIXIV_FOLLOWING).as_deref(),
+        Some("Pixiv Following")
+    );
+    assert_eq!(
+        pixiv_list_title("https://www.pixiv.net/users/11/artworks"),
+        None
+    );
+}
+
+#[test]
 fn tells_the_kind_of_pasted_text() {
     assert_eq!(kind_of("  youtube.com/@NASA "), Some(ListingKind::Channel));
     assert_eq!(kind_of("x.com/NASA"), Some(ListingKind::Account));

@@ -39,6 +39,7 @@ import {
   selectedItems,
   selectEvery,
   shownItems,
+  showsUploaders,
   sourceOf,
   splitByTicks,
   takesPreset,
@@ -381,7 +382,7 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
                   <ListedItems
                     items={toDownload}
                     layout={layout}
-                    showUploader={listing.kind === "playlist"}
+                    showUploader={showsUploaders(listing)}
                     isSelected={(item) => selection.has(itemKey(item))}
                     isLeaving={(item) => leaving.has(itemKey(item)) && !selection.has(itemKey(item))}
                     disabled={isAdding}
@@ -392,7 +393,7 @@ export function ListingPicker({ listing, onClose, onAdded, onSomeAdded, onWatche
                   <LeftOutItems
                     items={leftOut}
                     layout={layout}
-                    showUploader={listing.kind === "playlist"}
+                    showUploader={showsUploaders(listing)}
                     open={leftOutOpen}
                     disabled={isAdding}
                     onFold={() => setLeftOutOpen((wasOpen) => !wasOpen)}

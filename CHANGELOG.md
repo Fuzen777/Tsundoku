@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.19 · 2026-11-22
+
+### Added
+
+- **Pixiv's lists**: a Pixiv artist's page, the works of the artists you follow (pixiv.net/bookmark_new_illust.php) and a tag's page now list their newest 50 works to pick from, with Load More, Load New and Load All, and can be watched: a check reads the newest page first and finds what's new. A list of several artists names each work's artist.
+
 ## 0.2.18 · 2026-11-22
 
 ### Added

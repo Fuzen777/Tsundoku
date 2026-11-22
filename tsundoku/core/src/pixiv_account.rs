@@ -331,6 +331,9 @@ pub fn gallery_dl_config(link: &str, ffmpeg: Option<&Path>) -> Option<GalleryDlC
             "pixiv": {
                 "refresh-token": token,
                 "tags": "original",
+                // Pixiv flags many requests with no pause between them (Fuzen's experience): its reads (a listing's
+                // pages, each animation's frames' timings) wait as its files do to start with.
+                "sleep-request": [1.0, 2.0],
                 // An animation as its zip of frames, one request, rather than each frame on its own.
                 "ugoira": true,
             },
