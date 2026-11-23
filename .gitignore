@@ -10,3 +10,6 @@ tsundoku/portable/
 /.cargo/
 .vscode/
 *.log
+# The folder's icon in Explorer.
+/desktop.ini
+/folder-icon.ico
