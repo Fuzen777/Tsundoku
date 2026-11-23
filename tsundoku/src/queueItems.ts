@@ -33,10 +33,21 @@ export function useQueueLook(): QueueLook {
   return useContext(QueueLookContext)
 }
 
+/** The stages that only say a download is downloading, which the Downloading heading says already. */
+const DOWNLOADING_STAGES: ReadonlySet<string> = new Set([
+  strings.queue.stages.downloading,
+  strings.queue.stages.downloadingVideo,
+  strings.queue.stages.downloadingAudio,
+])
+
 /** What a download says it's doing (`stage`), or null when its status's heading already says it: "Waiting" under
- * Waiting, "Downloading" under Downloading, but "Merging" and a check window's download under Waiting still show. */
+ * Waiting, "Downloading", "Downloading Video" and "Downloading Audio" under Downloading, but "Merging" and a check
+ * window's download under Waiting still show. */
 export function shownStage(stage: string, item: QueueItem, look: QueueLook): string | null {
-  return look.byStatus && stage === strings.queue.groups[item.state] ? null : stage
+  if (!look.byStatus) return stage
+  const repeated =
+    stage === strings.queue.groups[item.state] || (item.state === "running" && DOWNLOADING_STAGES.has(stage))
+  return repeated ? null : stage
 }
 
 /** What a download's actions run through: each one's error is shown on it, and removing it offers to undo. */

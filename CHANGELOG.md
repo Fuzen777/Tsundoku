@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.34 · 2026-11-23
+
+### Changed
+
+- **Grouped by status, a download under Downloading no longer says "Downloading Video" or "Downloading Audio"**: the heading says it already, as it does for "Waiting" and "Done". A stage that says more, such as Merging or Unpacking, still shows.
+
 ## 0.2.33 · 2026-11-22
 
 ### Added
