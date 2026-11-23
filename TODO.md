@@ -51,6 +51,13 @@ rules:
 
 ### Look
 
+#### Shared Design Alignment
+
+Gaps between the app and the workspace's shared `Coding/DESIGN.md` (written 2026-11-24 with Kotodama as its basis).
+
+- [ ] **Decide the accent.** The shared standard keeps the accent neutral and gives each app one signature color for primary buttons, the keyboard focus ring and links. Here the accent (ai-iro, or the one picked in Settings → Appearance) also drives selection, progress bars, checkboxes and the selected segment. Either move those to neutral and keep the picker as the signature's, or declare the colored accent as a deviation in [DESIGN](./DESIGN.md).
+- [ ] **Trim [DESIGN](./DESIGN.md)** to what is specific to Tsundoku: move out what the shared file now covers, and add the declarations it asks for (signature, Comfortable density, Lucide, no touch support, dark and light, the Mica variant) and any deviation kept on purpose. The light theme's values stay here until the shared file defines one.
+
 #### Not Now
 
 - [ ] **A designed app icon.** The current one is a placeholder: three books piled up, drawn in `tsundoku/src-tauri/icons/source.svg`, from which `npm run tauri icon` makes every size. Do once the app is feature complete.
