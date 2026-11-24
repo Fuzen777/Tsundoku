@@ -10,6 +10,7 @@ import type { AddingSettings } from "./bindings/AddingSettings"
 import type { AppInfo } from "./bindings/AppInfo"
 import type { AppearanceSettings } from "./bindings/AppearanceSettings"
 import type { BackgroundSettings } from "./bindings/BackgroundSettings"
+import type { ButtonPlace } from "./bindings/ButtonPlace"
 import type { ChangelogSection } from "./bindings/ChangelogSection"
 import type { ClickNLoadStatus } from "./bindings/ClickNLoadStatus"
 import type { AccountError } from "./bindings/AccountError"
@@ -36,6 +37,7 @@ import type { ListArrangements } from "./bindings/ListArrangements"
 import type { PickerLayouts } from "./bindings/PickerLayouts"
 import type { ListingKind } from "./bindings/ListingKind"
 import type { ListingMore } from "./bindings/ListingMore"
+import type { MaximizeButtonState } from "./bindings/MaximizeButtonState"
 import type { MoreEvent } from "./bindings/MoreEvent"
 import type { MoreItems } from "./bindings/MoreItems"
 import type { MoreRead } from "./bindings/MoreRead"
@@ -140,6 +142,9 @@ const PIXIV_SIGN_IN_FAILED_EVENT = "pixiv-sign-in-failed"
 const PIXIV_WARNING_CHANGED_EVENT = "pixiv-warning-changed"
 const FANBOX_SIGN_IN_CHANGED_EVENT = "fanbox-sign-in-changed"
 const FANBOX_SIGN_IN_FAILED_EVENT = "fanbox-sign-in-failed"
+/** Sent by the app when the pointer comes onto the maximize button, presses it or leaves: a window of the app's lies
+ * over the button (`title_bar.rs`), so the WebView doesn't see the pointer there. */
+const MAXIMIZE_BUTTON_EVENT = "maximize-button"
 
 function outsideTauri(): Promise<never> {
   return Promise.reject(new Error("This action needs the Tsundoku app, not a browser."))
@@ -207,6 +212,54 @@ export async function restoreBackup(path: string): Promise<void> {
 export async function showMainWindow(): Promise<void> {
   if (!isTauri()) return
   await getCurrentWindow().show()
+}
+
+/** The title bar's Minimize: the window has no frame of its own (`title_bar.rs`). */
+export async function minimizeWindow(): Promise<void> {
+  if (!isTauri()) return
+  await getCurrentWindow().minimize()
+}
+
+/** The title bar's Maximize, or Restore Down while the window is maximized. */
+export async function toggleMaximizeWindow(): Promise<void> {
+  if (!isTauri()) return
+  await getCurrentWindow().toggleMaximize()
+}
+
+/** The title bar's Close: as Windows' own, it goes through `onCloseRequested`. */
+export async function closeWindow(): Promise<void> {
+  if (!isTauri()) return
+  await getCurrentWindow().close()
+}
+
+/** Calls `handler` with whether the window is maximized, now and whenever its size changes. Never in a browser. */
+export function onWindowMaximizedChanged(handler: (maximized: boolean) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  const window = getCurrentWindow()
+  const tell = () => void window.isMaximized().then(handler)
+  tell()
+  return window.onResized(tell)
+}
+
+/** Calls `handler` with whether the window is in front, now and whenever that changes. Never in a browser. */
+export function onWindowFocusChanged(handler: (focused: boolean) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  const window = getCurrentWindow()
+  void window.isFocused().then(handler)
+  return window.onFocusChanged(({ payload }) => handler(payload))
+}
+
+/** Lays the app's window that answers for the maximize button, so that Windows shows its Snap Layouts there, over the
+ * UI's button at `place`. */
+export async function placeMaximizeButton(place: ButtonPlace): Promise<void> {
+  if (!isTauri()) return
+  await invoke("place_maximize_button", { place })
+}
+
+/** Calls `handler` when the pointer comes onto the maximize button, presses it or leaves. */
+export function onMaximizeButtonState(handler: (state: MaximizeButtonState) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return Promise.resolve(() => {})
+  return listen<MaximizeButtonState>(MAXIMIZE_BUTTON_EVENT, (event) => handler(event.payload))
 }
 
 /** Whether the first-run setup is needed. In a browser, adding `?setup` to the address shows it. */

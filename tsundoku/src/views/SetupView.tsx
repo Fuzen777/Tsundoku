@@ -14,6 +14,7 @@ import { Card } from "../components/Card"
 import { StatusMessage } from "../components/StatusMessage"
 import { IconHeading, ToolHeading } from "../components/ToolHeading"
 import { ToolStageProgress } from "../components/ToolStageProgress"
+import { WindowControls } from "../components/WindowControls"
 import { formatBytes } from "../format"
 import { useDetectedTools, useFinishSetup, useFirstRunOptions, useToolDownloads } from "../queries"
 import { strings } from "../strings"
@@ -47,12 +48,17 @@ interface SetupPageProps {
   footer?: ReactNode
 }
 
-/** A screen of the first-run setup: the app name, then a centered column with the title, a sentence, the cards and the
- * buttons. */
+/** A screen of the first-run setup: the title bar (the app name, whose row moves the window, and the window's buttons),
+ * then a centered column with the title, a sentence, the cards and the buttons. */
 function SetupPage({ title, body, children, footer }: SetupPageProps) {
   return (
     <div className="flex h-full flex-col">
-      <AppTitle />
+      <div data-tauri-drag-region="deep" className="flex h-14 shrink-0 items-center">
+        <div className="min-w-0 flex-1">
+          <AppTitle />
+        </div>
+        <WindowControls />
+      </div>
       <main className="min-h-0 flex-1 overflow-auto border-t border-line bg-surface">
         <div className="mx-auto flex max-w-2xl flex-col gap-4 px-6 py-8">
           <header>

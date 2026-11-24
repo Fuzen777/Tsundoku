@@ -24,6 +24,7 @@ import { UndoToastProvider } from "./components/UndoToast"
 import { PixivWarningNotice } from "./components/PixivWarningNotice"
 import { UpdateBanner } from "./components/UpdateBanner"
 import { ViewTabs } from "./components/ViewTabs"
+import { WindowControls } from "./components/WindowControls"
 import { WhatsNewCard } from "./components/WhatsNewCard"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { ASK_BEFORE_ADDING_OVER, checkingTime, type LinkFilesRead, readLinkFiles } from "./linkFiles"
@@ -297,7 +298,8 @@ export function App() {
       <div className="grid h-full grid-cols-[auto_minmax(0,1fr)]">
         {/* The app's name with Collapse Sidebar, Paste Link and Type a Link, then the open view's chapters; collapsed,
             Expand Sidebar and the two buttons as icons. The view's column takes the whole height. Its width eases
-            over 200 ms (sidebarFold.ts), the content inside keeping the width of the layout drawn. */}
+            over 200 ms (sidebarFold.ts), the content inside keeping the width of the layout drawn. The top row is
+            the title bar's left end: its empty space moves the window, as the tabs' row does. */}
         <div
           className={classes(
             "min-h-0 transition-[width] duration-200 ease-decelerate motion-reduce:transition-none",
@@ -307,7 +309,10 @@ export function App() {
           onTransitionEnd={sidebar.onTransitionEnd}
         >
           <div className={classes("flex h-full min-h-0 flex-col", folded ? "w-14" : "w-52")}>
-            <div className={classes("flex h-14 shrink-0 items-center", folded ? "justify-center" : "pr-2")}>
+            <div
+              data-tauri-drag-region="deep"
+              className={classes("flex h-14 shrink-0 items-center", folded ? "justify-center" : "pr-2")}
+            >
               {!folded && (
                 <div className="min-w-0 flex-1">
                   <AppTitle />
@@ -343,7 +348,9 @@ export function App() {
           </div>
         </div>
         <div className="flex min-h-0 flex-col">
-          <div className="flex h-14 shrink-0 items-center pr-4">
+          {/* The rest of the title bar: the window has no frame of its own (title_bar.rs), so its empty space moves the
+              window and a double-click on it maximizes, while the tabs and buttons stay buttons. */}
+          <div data-tauri-drag-region="deep" className="flex h-14 shrink-0 items-center gap-2">
             <ViewTabs
               current={view}
               counts={{
@@ -354,6 +361,7 @@ export function App() {
               // The open view clicked again goes back to its top.
               onSelect={(to) => (to === view ? setChapterTarget({ view, id: null }) : setView(to))}
             />
+            <WindowControls />
           </div>
           {/* Hidden while it has nothing to show, so it takes no room. */}
           <div className="flex flex-col gap-3 pr-4 pb-3 empty:hidden">

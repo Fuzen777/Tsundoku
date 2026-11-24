@@ -49,6 +49,7 @@ pub mod supported_sites;
 mod sync;
 pub mod system;
 pub mod thumbnails;
+pub mod title_bar;
 pub mod tools;
 pub mod unpack;
 pub mod watched;

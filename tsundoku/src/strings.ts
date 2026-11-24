@@ -109,6 +109,13 @@ export const strings = {
     collapseSidebar: "Collapse Sidebar",
     expandSidebar: "Expand Sidebar",
   },
+  /** The caption buttons at the window's top right, as Windows names its own. */
+  window: {
+    minimize: "Minimize",
+    maximize: "Maximize",
+    restore: "Restore Down",
+    close: "Close",
+  },
   /** The window's keyboard shortcuts (shortcuts.ts), as hover texts and Settings → Keyboard Shortcuts show them. */
   shortcuts: {
     /** A control's hover text with its shortcut: "Downloads (Ctrl+1)". */

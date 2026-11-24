@@ -23,6 +23,13 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 
 ## Look and Feel
 
+**82. Title bar with the tabs** · 0.2.38 · Claude tried, in a test copy without your mouse: double-click on the tabs' empty space and on the app's name maximizes and restores (on a tab it only opens the tab), Maximize maximizes and restores with its pressed look, Close quits, the buttons go grey while the window is behind another, and the window's edges and the maximize button answer Windows as resize borders and a maximize button
+- [ ] Rest the pointer on Maximize → Windows 11's Snap Layouts open under it after a moment, as on other apps; picking a layout snaps the window there. Maximize turns gray under the pointer, Minimize too; Close turns red.
+- [ ] Drag the window by an empty spot of the tabs' row, or by the app's name → it moves; dragged to the top of the screen it maximizes, to a side it snaps half. Dragging a maximized window by the same spots restores it under the pointer. Dragging a tab doesn't move the window.
+- [ ] Resize from each edge and corner, the top one included (also over the buttons' top few pixels). Mica, the shadow and the rounded corners are still there.
+- [ ] Maximized, the buttons sit in the screen's top right corner: throwing the pointer to the corner and clicking closes Tsundoku; Restore Down restores.
+- [ ] Move the window to a screen with another scaling (100% and 150%) → Snap Layouts still open over Maximize, not beside it.
+
 **48. Accent color** · 0.1.70
 - [ ] Pick a Color (the last swatch, with a pipette) → Windows' color picker → pick a bright orange → the app turns orange in both themes, readable, and the swatch gets the check. Pick another swatch and back: the orange is remembered. (0.1.74)
 - [ ] Pick a Color opens Windows' color picker in the real app (it did nothing up to 0.1.80), over the window, starting on the custom color, with the full panel open. The window can't be clicked while it's open. Cancel → nothing changes. OK on a color → the app takes it at once. Add a color to Custom Colors, close, open it again → it's still there (until the app restarts). Not tried in the real app yet. (0.1.81)

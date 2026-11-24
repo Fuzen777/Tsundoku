@@ -15,13 +15,14 @@
       {
         "label": "main",
         "title": "Tsundoku",
-        "width": 1100,
+        "width": 1200,
         "height": 720,
         "minWidth": 760,
         "minHeight": 480,
         "center": true,
         "visible": false,
         "transparent": true,
+        "decorations": false,
         "dragDropEnabled": false
       }
     ],

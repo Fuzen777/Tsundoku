@@ -13,6 +13,7 @@ mod pixiv_messages;
 mod queue_status;
 mod report;
 mod shell;
+mod title_bar;
 mod tools;
 mod watched;
 mod web_reader;
@@ -495,6 +496,7 @@ pub fn run() {
             appearance::appearance_options,
             appearance::save_appearance_options,
             appearance::pick_color,
+            title_bar::place_maximize_button,
             downloads::download_options,
             downloads::save_download_options,
         ])

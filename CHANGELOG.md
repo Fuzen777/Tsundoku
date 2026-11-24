@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.38 · 2026-11-24
+
+### Changed
+
+- **The tabs are the title bar**: the window no longer has Windows' title bar above the app. The row with Tsundoku's name and the views' tabs takes its place: drag its empty space to move the window (to a screen edge to snap it), double-click it to maximize or restore, and Minimize, Maximize and Close sit at its right end, drawn like Windows' own. Hovering Maximize still shows Windows 11's Snap Layouts, and the window still resizes from every edge, with Mica, its shadow and rounded corners. A new window opens a little wider, so the tabs keep their names beside the buttons.
+
 ## 0.2.37 · 2026-11-24
 
 ### Changed

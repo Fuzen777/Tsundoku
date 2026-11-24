@@ -8,6 +8,8 @@
 @theme {
   --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  /* Windows' icon font, for the caption buttons' glyphs (WindowControls.tsx): Segoe MDL2 Assets on Windows 10 */
+  --font-caption: "Segoe Fluent Icons", "Segoe MDL2 Assets";
 
   /* Window background, only painted without Mica (Windows 10) */
   --color-bg: light-dark(#f3f3f3, #202020);
@@ -40,6 +42,10 @@
   --color-danger-fill: light-dark(#b3261e, #8f1d1d);
   --color-danger-fill-hover: light-dark(#931f19, #a32424);
   --color-on-danger: light-dark(#ffffff, #ffffff);
+  /* Close in the title bar under the pointer, and pressed: Windows' own red, in both themes */
+  --color-close: light-dark(#c42b1c, #c42b1c);
+  --color-close-pressed: light-dark(rgb(196 43 28 / 0.9), rgb(196 43 28 / 0.9));
+  --color-on-close: light-dark(#ffffff, #ffffff);
   /* Needs attention without blocking, such as the duplicate warning */
   --color-warning: light-dark(#9a5b00, #e8b04a);
   /* Something finished well, such as a tool set up */
