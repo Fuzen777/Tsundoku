@@ -252,13 +252,14 @@ export function RulesView() {
       }
     >
       <div
-        className="flex max-w-3xl flex-col gap-3"
+        className="flex flex-col gap-3"
         onDragOver={(event) => {
           if (dragged !== null) event.preventDefault()
         }}
         onDrop={drop}
       >
-        <p className="text-fg-secondary">{text.intro}</p>
+        {/* The rules fill the width; the sentences explaining them keep to a width that reads well. */}
+        <p className="max-w-3xl text-fg-secondary">{text.intro}</p>
         <RuleTester />
         {error && !editing && <StatusMessage tone="danger" {...error} />}
         <div id={RULES_SECTION_IDS.automatic} data-chapter={RULES_SECTION_IDS.automatic} className="mt-3 scroll-mt-4">
@@ -289,7 +290,7 @@ export function RulesView() {
             }
           >
             <div className="flex flex-col gap-3">
-              <p className="text-fg-secondary">{text.manualIntro}</p>
+              <p className="max-w-3xl text-fg-secondary">{text.manualIntro}</p>
               {manualRows}
               {manualRows.length === 0 && <p className="text-xs text-fg-muted">{text.noManualRules}</p>}
             </div>

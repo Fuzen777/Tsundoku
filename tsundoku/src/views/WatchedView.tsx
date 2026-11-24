@@ -37,6 +37,7 @@ import { ListedItems } from "../components/ListingPicker"
 import { Menu } from "../components/Menu"
 import { Page } from "../components/Page"
 import { PickerViewControls } from "../components/PickerViewControls"
+import { PresentItem } from "../components/PresentItem"
 import { SegmentedControl } from "../components/SegmentedControl"
 import { SourcePicture } from "../components/SourcePicture"
 import { SourcePictureField } from "../components/SourcePictureField"
@@ -89,9 +90,10 @@ const GROUP_OPTIONS = (["none", "site"] as const satisfies readonly WatchedGroup
 const remembered: { expansion: ReadonlyMap<number, boolean> } = { expansion: new Map() }
 
 /**
- * The watched channels, playlists and accounts: a card each, grouped by site and sorted as the toolbar says, the ones
- * whose last check failed first under Needs Attention. A card folds to its summary, and starts open while it has new
- * items. All New Items shows every source's new items in one picker instead.
+ * The watched channels, playlists and accounts: a card each, as many side by side as the width fits, grouped by site and
+ * sorted as the toolbar says, the ones whose last check failed first under Needs Attention. A card folds to its summary,
+ * and starts open while it has new items. All New Items shows every source's new items in one picker instead, across
+ * the whole width.
  */
 export function WatchedView() {
   const { data: sources = [] } = useWatchedSources()
@@ -127,6 +129,9 @@ export function WatchedView() {
     checkWatchedSources(ids).catch((caught: unknown) => setError(describeWatchedError(caught)))
   }
   const allChecking = sources.every((source) => source.checking)
+  const card = (source: WatchedSource) => (
+    <SourceCard source={source} expanded={isExpanded(source, expansion)} onToggle={() => toggle(source)} />
+  )
 
   const actions = sources.length > 0 && (
     <Button size="sm" variant="secondary" disabled={allChecking} title={text.checkAllHint} onClick={() => check(shown.map((source) => source.id))}>
@@ -142,7 +147,7 @@ export function WatchedView() {
         // All New Items fits the view's height, its card shrinking to it, so its list scrolls with its buttons in sight;
         // where the view is shorter than 20 rem (the What's New card above it), the list keeps about 10 rem and the
         // view scrolls.
-        <div className={classes("flex max-w-4xl flex-col gap-3", showingAll && "h-full min-h-80")}>
+        <div className={classes("flex flex-col gap-3", showingAll && "h-full min-h-80")}>
           <div className="flex flex-wrap items-center gap-2">
             <SegmentedControl
               label={text.show}
@@ -208,8 +213,17 @@ export function WatchedView() {
                   onCheck={() => check(group.items.map((source) => source.id))}
                 />
               )}
-              renderItem={(source) => (
-                <SourceCard source={source} expanded={isExpanded(source, expansion)} onToggle={() => toggle(source)} />
+              renderItem={card}
+              // As many columns as fit at 40 rem or more each, so every group's cards are as wide; an opened card grows
+              // taller in its place, the cards beside it keeping their height.
+              renderItems={(items) => (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(40rem,100%),1fr))] items-start gap-3">
+                  {items.map((source) => (
+                    <PresentItem key={source.id} itemKey={source.id}>
+                      {card(source)}
+                    </PresentItem>
+                  ))}
+                </div>
               )}
             />
           )}

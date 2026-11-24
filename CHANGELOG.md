@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.39 · 2026-11-24
+
+### Changed
+
+- **Watched uses the whole width of a wide window**: its cards sit side by side, as many as fit (two or three in a wide window, one in a narrow one), and opening one makes it taller where it is, leaving the cards beside it as they were. All New Items spreads across the whole width too, so more pictures fit on each row.
+- **Rules uses the whole width of a wide window**: Test a Link and the rules stretch across it, so a rule's folder and what else it does wrap less. The sentences explaining how rules work stay narrow enough to read easily.
+
 ## 0.2.38 · 2026-11-24
 
 ### Changed
