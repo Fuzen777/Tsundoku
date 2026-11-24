@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.41 · 2026-11-24
+
+### Changed
+
+- **Slimmer scrollbars**: a thin rounded thumb, with no rail or arrows under it, as in Windows 11. It widens a little under the pointer to be easier to grab. The room kept for it is narrower to match, so the pictures still don't move when it shows.
+
 ## 0.2.40 · 2026-11-24
 
 ### Fixed

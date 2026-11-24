@@ -202,3 +202,36 @@ optgroup {
   background-color: var(--color-bg);
   color: var(--color-fg);
 }
+
+/*
+  Scrollbars, as Windows 11's own: a slim rounded thumb with no rail or arrows under it, widening under the pointer
+  (DESIGN.md → Layout). The bar keeps its 10 px of room, which `scrollbar-gutter: stable` reserves in the views, so
+  the thumb's width never moves what's beside it.
+*/
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+/* 4 px wide inside its 10 px (a transparent border around it), 6 px under the pointer or while it's dragged. */
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: light-dark(rgb(0 0 0 / 0.3), rgb(255 255 255 / 0.3));
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: light-dark(rgb(0 0 0 / 0.5), rgb(255 255 255 / 0.5));
+}
