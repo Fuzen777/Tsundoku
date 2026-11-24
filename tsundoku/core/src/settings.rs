@@ -242,6 +242,9 @@ pub struct AppearanceSettings {
     /// The color picked for `Accent::Custom`, as `#rrggbb`, kept when another accent is picked. The UI works out its
     /// shades for light and dark.
     pub custom_accent: String,
+    /// Whether the sidebar is folded to a narrow strip, its chapters hidden and the add bar's buttons as icons alone.
+    /// Its Collapse Sidebar and Expand Sidebar buttons change it.
+    pub sidebar_collapsed: bool,
 }
 
 /// Ai-iro's fill, what the custom accent starts as.
@@ -253,6 +256,7 @@ impl Default for AppearanceSettings {
             theme: Theme::default(),
             accent: Accent::default(),
             custom_accent: DEFAULT_CUSTOM_ACCENT.to_owned(),
+            sidebar_collapsed: false,
         }
     }
 }

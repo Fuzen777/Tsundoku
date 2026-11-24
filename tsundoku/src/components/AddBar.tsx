@@ -5,6 +5,7 @@ import { strings } from "../strings"
 import { Button } from "./Button"
 import { TextInput } from "./Field"
 import { IconButton } from "./IconButton"
+import { classes } from "./styles"
 
 /** What the app asks of the add bar. */
 export interface AddBarHandle {
@@ -24,15 +25,27 @@ interface AddBarProps {
   onLinkChange: (link: string) => void
   /** Enter or Add, with text in the field. */
   onSubmit: () => void
+  /** In the collapsed sidebar: Paste Link as its icon alone, Type a Link under it. */
+  collapsed?: boolean
   ref?: Ref<AddBarHandle>
 }
 
 /**
  * At the top of the sidebar: Paste Link across it, which adds what was copied in one click, and Type a Link beside it,
  * which opens a field to type or edit a link in, in a panel under them reaching over the view, until it's added or
- * closed. Why a paste added nothing shows under Paste Link for a few seconds, over the sidebar, so nothing moves.
+ * closed. Why a paste added nothing shows under Paste Link for a few seconds, over the sidebar, so nothing moves. In the
+ * collapsed sidebar, both are icons, one under the other.
  */
-export function AddBar({ onPaste, note, onTypeLink, link, onLinkChange, onSubmit, ref }: AddBarProps) {
+export function AddBar({
+  onPaste,
+  note,
+  onTypeLink,
+  link,
+  onLinkChange,
+  onSubmit,
+  collapsed = false,
+  ref,
+}: AddBarProps) {
   const [typing, setTyping] = useState(false)
   const bar = useRef<HTMLDivElement>(null)
   const field = useRef<HTMLInputElement>(null)
@@ -53,6 +66,10 @@ export function AddBar({ onPaste, note, onTypeLink, link, onLinkChange, onSubmit
     typeLinkButton.current?.focus()
   }
   useImperativeHandle(ref, () => ({ typeLink }))
+  function paste() {
+    setTyping(false)
+    onPaste()
+  }
 
   // A click anywhere else closes the field, keeping its text, as Esc does, and leaves the focus to what was clicked.
   useEffect(() => {
@@ -65,20 +82,26 @@ export function AddBar({ onPaste, note, onTypeLink, link, onLinkChange, onSubmit
   }, [typing])
 
   return (
-    <div ref={bar} className="relative flex items-center gap-2">
+    <div ref={bar} className={classes("relative flex items-center gap-2", collapsed && "flex-col")}>
       {/* Ctrl+V outside a text field does the same (shortcuts.ts). */}
-      <Button
-        variant="primary"
-        className="min-w-0 flex-1"
-        title={strings.shortcuts.withKeys(strings.addBar.pasteHint, strings.shortcuts.pasteAnywhere)}
-        onClick={() => {
-          setTyping(false)
-          onPaste()
-        }}
-      >
-        <ClipboardPaste size={16} />
-        {strings.addBar.paste}
-      </Button>
+      {collapsed ? (
+        <IconButton
+          variant="primary"
+          label={strings.shortcuts.withKeys(strings.addBar.paste, strings.shortcuts.pasteAnywhere)}
+          icon={ClipboardPaste}
+          onClick={paste}
+        />
+      ) : (
+        <Button
+          variant="primary"
+          className="min-w-0 flex-1"
+          title={strings.shortcuts.withKeys(strings.addBar.pasteHint, strings.shortcuts.pasteAnywhere)}
+          onClick={paste}
+        >
+          <ClipboardPaste size={16} />
+          {strings.addBar.paste}
+        </Button>
+      )}
       <IconButton
         ref={typeLinkButton}
         label={strings.shortcuts.withKeys(strings.addBar.typeLink, strings.shortcuts.typeLink)}
@@ -90,7 +113,10 @@ export function AddBar({ onPaste, note, onTypeLink, link, onLinkChange, onSubmit
       {note && !typing && (
         <p
           role="status"
-          className="pointer-events-none absolute top-full right-0 left-0 z-10 mt-1.5 animate-tooltip-in rounded border border-line-strong bg-bg px-2 py-1 text-xs text-fg shadow-md"
+          className={classes(
+            "pointer-events-none absolute top-full left-0 z-10 mt-1.5 animate-tooltip-in rounded border border-line-strong bg-bg px-2 py-1 text-xs text-fg shadow-md",
+            collapsed ? "w-max max-w-64" : "right-0",
+          )}
         >
           {note}
         </p>

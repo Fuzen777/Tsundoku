@@ -4,7 +4,6 @@ import type { PickerView } from "./bindings/PickerView"
 import {
   columnsFor,
   intoColumns,
-  lineEnd,
   ownShape,
   resized,
   sizeStep,
@@ -95,19 +94,5 @@ describe("ownShape", () => {
 
   it("is null for a picture without a size", () => {
     expect(ownShape({ naturalWidth: 0, naturalHeight: 0 })).toBeNull()
-  })
-})
-
-describe("lineEnd", () => {
-  it("is the index after the last tile on the line holding a tile", () => {
-    expect(lineEnd(0, 4)).toBe(4)
-    expect(lineEnd(3, 4)).toBe(4)
-    expect(lineEnd(4, 4)).toBe(8)
-    expect(lineEnd(9, 4)).toBe(12)
-  })
-
-  it("puts every tile on a line of its own in one column", () => {
-    expect(lineEnd(2, 1)).toBe(3)
-    expect(lineEnd(2, 0)).toBe(3)
   })
 })

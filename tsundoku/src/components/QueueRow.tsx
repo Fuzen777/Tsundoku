@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ChevronUp, CircleStop, FileText, FolderOpen, Play, RefreshCw, X } from "lucide-react"
+import { CircleStop, FileText, FolderOpen, PanelBottomClose, Play, RefreshCw, X } from "lucide-react"
 import {
   cancelDownload,
   downloadNext,
@@ -217,7 +217,7 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
             ]}
           />
         )}
-        {onHide && <IconButton label={strings.tiles.hideDetails} icon={ChevronUp} onClick={onHide} />}
+        {onHide && <IconButton label={strings.tiles.hideDetails} icon={PanelBottomClose} onClick={onHide} />}
       </div>
     </Card>
   )

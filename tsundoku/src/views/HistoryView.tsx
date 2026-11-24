@@ -1,14 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 import {
-  ChevronUp,
   ExternalLink,
   Film,
   FolderInput,
   FolderOpen,
   History,
   Images,
-  PanelTopOpen,
+  PanelBottomClose,
+  PanelBottomOpen,
   Play,
   RotateCcw,
   Search,
@@ -42,6 +42,7 @@ import { useChapters } from "../chapters"
 import { ArrangeControls, GroupHeading } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
+import { DetailsDock } from "../components/DetailsDock"
 import { EmptyState } from "../components/EmptyState"
 import { ExpandToggle } from "../components/LinkButton"
 import { SelectInput, TextInput } from "../components/Field"
@@ -280,8 +281,9 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ErrorDescription | null>(null)
-  // In Masonry and Gallery, the video whose row shows under its line of pictures, kept across the list's blocks.
+  // In Masonry and Gallery, the video whose row shows in the details panel, kept across the list's blocks.
   const tileRows = useShownRow<null>(list)
+  const shownVideo = tiles && tileRows.shown ? videos.find((video) => video.id === tileRows.shown?.id) : undefined
 
   async function act(action: () => Promise<void>) {
     setBusy(true)
@@ -409,8 +411,7 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
               size={layout.size}
               keyOf={(video) => video.id}
               galleryRatio={galleryRatio}
-              rows={tileRows}
-              renderRow={(video, shown) => <div key={shown.opened}>{historyRow(video, tileRows.hide)}</div>}
+              shownId={tileRows.shown?.id ?? null}
               renderTile={(video, place) => (
                 <HistoryTile
                   video={video}
@@ -634,6 +635,11 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
           {rows.after > 0 && <div style={{ height: rows.after }} />}
         </div>
       </div>
+      {shownVideo && tileRows.shown && (
+        <DetailsDock>
+          <div key={tileRows.shown.opened}>{historyRow(shownVideo, tileRows.hide)}</div>
+        </DetailsDock>
+      )}
     </Page>
   )
 }
@@ -726,8 +732,8 @@ function HistoryTile({
       : []),
     { label: text.openSourcePage, icon: ExternalLink, onSelect: () => run(() => openWebPage(video.url)) },
     place.shown
-      ? { label: strings.tiles.hideDetails, icon: ChevronUp, onSelect: onHide }
-      : { label: strings.tiles.showDetails, icon: PanelTopOpen, onSelect: onShow },
+      ? { label: strings.tiles.hideDetails, icon: PanelBottomClose, onSelect: onHide }
+      : { label: strings.tiles.showDetails, icon: PanelBottomOpen, onSelect: onShow },
     { label: text.downloadAgain, icon: RotateCcw, onSelect: () => showLink(video.url) },
     { label: text.moveFiles, icon: FolderInput, onSelect: () => void onMoveFiles([video.id]) },
     { label: text.forget, icon: X, danger: true, onSelect: () => run(() => forgetOne(queryClient, video)) },
@@ -925,7 +931,7 @@ const HistoryRow = memo(function HistoryRow({
             { label: text.forget, onSelect: forget, danger: true },
           ]}
         />
-        {onHide && <IconButton label={strings.tiles.hideDetails} icon={ChevronUp} onClick={onHide} />}
+        {onHide && <IconButton label={strings.tiles.hideDetails} icon={PanelBottomClose} onClick={onHide} />}
       </div>
       {filesOpen && <FileList downloadId={lastDownload.id} onError={setError} />}
       {downloadsOpen && <DownloadList videoId={video.id} onError={setError} />}

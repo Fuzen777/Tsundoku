@@ -101,8 +101,13 @@ export const strings = {
     presets: "Presets",
     rules: "Rules",
     settings: "Settings",
-    /** The list of a view's chapters under it in the sidebar. */
+    /** The views' tabs along the top of the window, as screen readers name them. */
+    views: "Views",
+    /** The list of the open view's chapters in the sidebar. */
     chapters: (view: string) => `Jump Within ${view}`,
+    /** The sidebar's button that folds it to a narrow strip, hiding the chapters, and the one that opens it again. */
+    collapseSidebar: "Collapse Sidebar",
+    expandSidebar: "Expand Sidebar",
   },
   /** The window's keyboard shortcuts (shortcuts.ts), as hover texts and Settings → Keyboard Shortcuts show them. */
   shortcuts: {
@@ -470,6 +475,8 @@ export const strings = {
     menu: (title: string) => `Actions for ${title}`,
     showDetails: "Show Details",
     hideDetails: "Hide Details",
+    /** The panel along the bottom of the view that shows a clicked picture's row, as screen readers name it. */
+    details: "Details",
   },
   /** The Pending, Downloads and History views' grouping and sorting. */
   lists: {

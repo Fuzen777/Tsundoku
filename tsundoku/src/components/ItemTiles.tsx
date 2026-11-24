@@ -1,7 +1,6 @@
 import { useRef, useState, type ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 import { ownShape } from "../pickerLayout"
-import type { ShownRow, TileRows } from "../tileRows"
 import { ContextMenu, type MenuClose } from "./ContextMenu"
 import { TiledItems, type TileLabels } from "./MediaTiles"
 import type { MenuItem } from "./Menu"
@@ -9,10 +8,10 @@ import { classes } from "./styles"
 import { sitePictureUrl } from "../api"
 
 /*
-  A list's items as pictures, in Masonry or Gallery, each opening its full row under its line of pictures: the
-  Downloads, Pending and History views all show their items this way, so they look and behave alike. `ItemTile` is one
-  picture, `ItemTiles` a run of them, and `useShownRow` (tileRows.ts) the row shown under one, kept by the view or the
-  run.
+  A list's items as pictures, in Masonry or Gallery, a click opening an item's full row in the details panel along the
+  bottom of the view (`DetailsDock`), so no picture moves: the Downloads, Pending and History views all show their items
+  this way, so they look and behave alike. `ItemTile` is one picture, `ItemTiles` a run of them, and `useShownRow`
+  (tileRows.ts) the row shown, one for the whole view.
 */
 
 /** How one picture is drawn in its run. */
@@ -20,11 +19,11 @@ export interface TilePlace {
   /** Gallery's shape, or null for the picture's own (Masonry). */
   ratio: number | null
   labels: TileLabels
-  /** Whether its row is shown under its line. */
+  /** Whether its row shows in the details panel. */
   shown: boolean
 }
 
-interface ItemTilesProps<Item, Opening> {
+interface ItemTilesProps<Item> {
   items: readonly Item[]
   view: "masonry" | "gallery"
   /** The step of the size buttons (`TILE_WIDTHS`). */
@@ -32,25 +31,13 @@ interface ItemTilesProps<Item, Opening> {
   keyOf: (item: Item) => number
   /** Gallery's one shape for every picture, as width over height. */
   galleryRatio: number
-  rows: TileRows<Opening>
+  /** The item whose row the details panel shows, if any. */
+  shownId: number | null
   renderTile: (item: Item, place: TilePlace) => ReactNode
-  /** The item's row, shown under its line of pictures. */
-  renderRow: (item: Item, shown: ShownRow<Opening>) => ReactNode
 }
 
-/** A run of items as pictures, the one asked about showing its row under its line. */
-export function ItemTiles<Item, Opening>({
-  items,
-  view,
-  size,
-  keyOf,
-  galleryRatio,
-  rows,
-  renderTile,
-  renderRow,
-}: ItemTilesProps<Item, Opening>) {
-  const { shown, shownBox } = rows
-  const shownIndex = shown ? items.findIndex((item) => keyOf(item) === shown.id) : -1
+/** A run of items as pictures, the one whose row the details panel shows ringed. */
+export function ItemTiles<Item>({ items, view, size, keyOf, galleryRatio, shownId, renderTile }: ItemTilesProps<Item>) {
   return (
     // Padded for the focus outline.
     <div className="p-1">
@@ -58,24 +45,12 @@ export function ItemTiles<Item, Opening>({
         items={items}
         view={view}
         size={size}
-        after={
-          shown && shownIndex !== -1
-            ? {
-                index: shownIndex,
-                content: (
-                  <div ref={shownBox} className="scroll-my-2">
-                    {renderRow(items[shownIndex], shown)}
-                  </div>
-                ),
-              }
-            : undefined
-        }
         render={(item, labels) => (
           <li key={keyOf(item)} className="min-w-0">
             {renderTile(item, {
               ratio: view === "gallery" ? galleryRatio : null,
               labels,
-              shown: keyOf(item) === shown?.id,
+              shown: keyOf(item) === shownId,
             })}
           </li>
         )}
@@ -84,8 +59,8 @@ export function ItemTiles<Item, Opening>({
   )
 }
 
-/** Pictures' own shapes once loaded, by address: a picture drawn anew in another column (Masonry starts the pictures
- * under an open row again) has its size from its first frame, so nothing above or beside it moves. */
+/** Pictures' own shapes once loaded, by address: a picture drawn anew (a view switched, a group unfolded) has its size
+ * from its first frame, so nothing above or beside it moves. */
 const knownShapes = new Map<string, number>()
 
 interface ItemTileProps {

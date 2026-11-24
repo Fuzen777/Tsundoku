@@ -67,10 +67,3 @@ export function ownShape(picture: { naturalWidth: number; naturalHeight: number 
   const { naturalWidth, naturalHeight } = picture
   return naturalWidth > 0 && naturalHeight > 0 ? Math.min(Math.max(naturalWidth / naturalHeight, NARROWEST), WIDEST) : null
 }
-
-/** Where the line of tiles holding the one at `index` ends, as the index after its last: tiles go `columns` to a line,
- * in Masonry too, where they're dealt to the columns in turn. */
-export function lineEnd(index: number, columns: number): number {
-  const perLine = Math.max(1, columns)
-  return (Math.floor(index / perLine) + 1) * perLine
-}

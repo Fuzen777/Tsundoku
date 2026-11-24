@@ -1,7 +1,6 @@
-import { useRef, useState } from "react"
+import { useState } from "react"
 import {
   Check,
-  ChevronUp,
   CircleAlert,
   CircleStop,
   ClipboardCopy,
@@ -14,7 +13,8 @@ import {
   Images,
   KeyRound,
   ListStart,
-  PanelTopOpen,
+  PanelBottomClose,
+  PanelBottomOpen,
   Play,
   RefreshCw,
   RotateCcw,
@@ -51,12 +51,12 @@ import {
 } from "../queueItems"
 import { tileActions, type TileAction } from "../queueSources"
 import { strings } from "../strings"
-import { useShownRow } from "../tileRows"
+import type { TileRows } from "../tileRows"
 import { ItemTile, ItemTiles, type TilePlace } from "./ItemTiles"
 import { TileLabel } from "./MediaTiles"
 import type { MenuItem } from "./Menu"
 import { ProgressBar } from "./ProgressBar"
-import { QueueRow, type RowOpening } from "./QueueRow"
+import type { RowOpening } from "./QueueRow"
 import { StatusMessage } from "./StatusMessage"
 
 const text = strings.tiles
@@ -66,24 +66,25 @@ interface QueueTilesProps {
   view: "masonry" | "gallery"
   /** The step of the size buttons (`TILE_WIDTHS`). */
   size: number
+  /** The view's download whose row shows in the details panel. */
+  rows: TileRows<RowOpening>
 }
 
 /**
  * Downloads as pictures (`ItemTiles`), in Masonry or Gallery: a run of them in the Downloads view, or a source's under
  * its heading. Each is its picture alone (its title when it has none), with where it stands in its corner (left out
  * where its status's heading says it) and a bar while it downloads; its title and status are its hover text. A
- * right-click (or the menu key) opens its actions, which its row shows as buttons in List; a click shows its row under
- * its line of pictures, with everything a row has (its error, log, password field), and a second click hides it. A
- * double-click on a finished one opens its file. Gallery cuts them to squares when they're all posts, else to 16:9.
+ * right-click (or the menu key) opens its actions, which its row shows as buttons in List; a click shows its row in
+ * the details panel along the bottom of the view (`QueueView`), with everything a row has (its error, log, password
+ * field), and a second click hides it. A double-click on a finished one opens its file. Gallery cuts them to squares
+ * when they're all posts, else to 16:9.
  */
-export function QueueTiles({ items, view, size }: QueueTilesProps) {
+export function QueueTiles({ items, view, size, rows }: QueueTilesProps) {
   const [error, setError] = useState<ErrorDescription | null>(null)
-  const box = useRef<HTMLDivElement>(null)
-  const rows = useShownRow<RowOpening>(box)
   const galleryRatio = items.every((item) => item.video.post !== null) ? 1 : 16 / 9
 
   return (
-    <div ref={box} className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
       <ItemTiles
         items={items}
@@ -91,10 +92,7 @@ export function QueueTiles({ items, view, size }: QueueTilesProps) {
         size={size}
         keyOf={(item) => item.id}
         galleryRatio={galleryRatio}
-        rows={rows}
-        renderRow={(item, shown) => (
-          <QueueRow key={`${item.id}-${shown.opened}`} item={item} opens={shown.opens} onHide={rows.hide} />
-        )}
+        shownId={rows.shown?.id ?? null}
         renderTile={(item, place) => (
           <QueueTile item={item} place={place} onShow={rows.show} onHide={rows.hide} onError={setError} />
         )}
@@ -176,8 +174,8 @@ function QueueTile({ item, place, onShow, onHide, onError }: QueueTileProps) {
         return { label: queue.copyDetails, icon: ClipboardCopy, onSelect: copyDetails }
       case "details":
         return shown
-          ? { label: text.hideDetails, icon: ChevronUp, onSelect: onHide }
-          : { label: text.showDetails, icon: PanelTopOpen, onSelect: () => onShow(item.id, null) }
+          ? { label: text.hideDetails, icon: PanelBottomClose, onSelect: onHide }
+          : { label: text.showDetails, icon: PanelBottomOpen, onSelect: () => onShow(item.id, null) }
       case "downloadNext":
         return { label: queue.downloadNext, icon: ListStart, onSelect: () => act(downloadNext) }
       case "changeFolder":

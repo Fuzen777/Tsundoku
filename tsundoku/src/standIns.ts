@@ -709,7 +709,12 @@ export const standIns = {
   } satisfies PixivWarningStatus,
   backgroundOptions: { keepInTray: true, startWithWindows: false } satisfies BackgroundSettings,
   watchedOptions: { newItemsStart: "unticked" } satisfies WatchedSettings,
-  appearanceOptions: { theme: "auto", accent: "indigo", customAccent: "#165e83" } satisfies AppearanceSettings,
+  appearanceOptions: {
+    theme: "auto",
+    accent: "indigo",
+    customAccent: "#165e83",
+    sidebarCollapsed: false,
+  } satisfies AppearanceSettings,
   defaultDownloadFolder: String.raw`C:\Users\You\Downloads\Tsundoku`,
   folderRules: [
     {

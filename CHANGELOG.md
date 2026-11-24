@@ -2,6 +2,14 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.35 · 2026-11-24
+
+### Changed
+
+- **The views are tabs along the top of the window**: Downloads, Pending, Watched, History, Presets and Rules, with Settings at the right end, above the view rather than in the sidebar. In a narrow window they show their icons only, with their names when hovered.
+- **The sidebar holds the open view's chapters alone**, under its name, below Paste Link, so they're no longer mixed with the views. **Collapse Sidebar**, beside the app's name, folds it to a narrow strip with Paste Link and Type a Link as icons, giving the view more room; Expand Sidebar opens it again, and Tsundoku remembers which.
+- **A picture's details open in a panel along the bottom of the window**, across the whole view, in Pending, Downloads and History's Masonry and Gallery, rather than under its line of pictures, so the pictures no longer jump around. Clicking the picture again, or Hide Details, closes it.
+
 ## 0.2.34 · 2026-11-23
 
 ### Changed

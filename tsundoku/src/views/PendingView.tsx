@@ -1,6 +1,5 @@
-import { useMemo, useRef, useState, type ReactNode } from "react"
+import { useMemo, useState } from "react"
 import {
-  ChevronUp,
   CircleAlert,
   Clock,
   Download,
@@ -13,7 +12,8 @@ import {
   ListVideo,
   Loader2,
   Lock,
-  PanelTopOpen,
+  PanelBottomClose,
+  PanelBottomOpen,
   RefreshCw,
   X,
   type LucideIcon,
@@ -59,6 +59,7 @@ import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
 import { DestinationLine, PickedRuleWarning } from "../components/DestinationLine"
+import { DetailsDock } from "../components/DetailsDock"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { PostFilesPicker } from "../components/PostFilesPicker"
@@ -100,7 +101,7 @@ import {
 } from "../queries"
 import { useDeleteKey } from "../shortcuts"
 import { strings } from "../strings"
-import { useShownRow, type ShownRow } from "../tileRows"
+import { useShownRow, type ShownRow, type TileRows } from "../tileRows"
 import { useOfferUndo } from "../undo"
 
 /** The ways to add links an empty Pending offers: the ones that work on their own first. */
@@ -202,6 +203,9 @@ export function PendingView() {
       if (first !== null && first >= shownCount) setShownCount((Math.floor(first / PENDING_PAGE) + 1) * PENDING_PAGE)
     },
   })
+  // In Masonry and Gallery, the link whose row shows in the details panel, one for the whole view.
+  const tileRows = useShownRow<PendingOpening>(scrollRef)
+  const shownLink = tiles && tileRows.shown ? links.find((link) => link.id === tileRows.shown?.id) : undefined
 
   async function run(action: () => Promise<void>) {
     setBusy(true)
@@ -412,7 +416,7 @@ export function PendingView() {
                             links={run}
                             view={tiles}
                             size={layout.size}
-                            renderRow={pendingRow}
+                            rows={tileRows}
                             tileOf={(link) => ({
                               byStatus,
                               selected: selection.has(link.id),
@@ -436,6 +440,9 @@ export function PendingView() {
             </div>
           )}
         </div>
+      )}
+      {shownLink && tileRows.shown && (
+        <DetailsDock>{pendingRow(shownLink, { shown: tileRows.shown, hide: tileRows.hide })}</DetailsDock>
       )}
     </Page>
   )
@@ -659,7 +666,7 @@ function PendingRow({
           )
         )}
         <IconButton label={strings.pending.remove} icon={X} onClick={() => act(() => removeLinks([link.id]))} />
-        {onHide && <IconButton label={strings.tiles.hideDetails} icon={ChevronUp} onClick={onHide} />}
+        {onHide && <IconButton label={strings.tiles.hideDetails} icon={PanelBottomClose} onClick={onHide} />}
       </div>
     </Card>
   )
@@ -715,19 +722,18 @@ interface PendingTilesProps {
   view: "masonry" | "gallery"
   /** The step of the size buttons (`TILE_WIDTHS`). */
   size: number
-  renderRow: (link: PendingLink, shownFor: { shown: ShownRow<PendingOpening>; hide: () => void }) => ReactNode
+  /** The view's link whose row shows in the details panel. */
+  rows: TileRows<PendingOpening>
   tileOf: (link: PendingLink) => PendingTileFacts
 }
 
-/** Links as pictures (`ItemTiles`), each showing its row under its line when clicked. Gallery cuts them to squares
- * when they're all posts, else to 16:9. */
-function PendingTiles({ links, view, size, renderRow, tileOf }: PendingTilesProps) {
+/** Links as pictures (`ItemTiles`), each showing its row in the details panel when clicked. Gallery cuts them to
+ * squares when they're all posts, else to 16:9. */
+function PendingTiles({ links, view, size, rows, tileOf }: PendingTilesProps) {
   const [error, setError] = useState<ErrorDescription | null>(null)
-  const box = useRef<HTMLDivElement>(null)
-  const rows = useShownRow<PendingOpening>(box)
   const galleryRatio = links.every((link) => link.preview?.video.post) ? 1 : 16 / 9
   return (
-    <div ref={box} className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {error && <StatusMessage tone="danger" {...error} />}
       <ItemTiles
         items={links}
@@ -735,8 +741,7 @@ function PendingTiles({ links, view, size, renderRow, tileOf }: PendingTilesProp
         size={size}
         keyOf={(link) => link.id}
         galleryRatio={galleryRatio}
-        rows={rows}
-        renderRow={(link, shown) => renderRow(link, { shown, hide: rows.hide })}
+        shownId={rows.shown?.id ?? null}
         renderTile={(link, place) => (
           <PendingTile
             link={link}
@@ -824,8 +829,8 @@ function PendingTile({
       : []),
     ...(picksFilesOf(link) ? [{ label: strings.postFiles.pickFiles, icon: ListChecks, onSelect: () => onShow("files") }] : []),
     place.shown
-      ? { label: strings.tiles.hideDetails, icon: ChevronUp, onSelect: onHide }
-      : { label: strings.tiles.showDetails, icon: PanelTopOpen, onSelect: () => onShow(null) },
+      ? { label: strings.tiles.hideDetails, icon: PanelBottomClose, onSelect: onHide }
+      : { label: strings.tiles.showDetails, icon: PanelBottomOpen, onSelect: () => onShow(null) },
     { label: strings.pending.remove, icon: X, danger: true, onSelect: () => act(() => removeLinks([link.id])) },
   ]
   const isPost = video?.post != null

@@ -11,7 +11,7 @@ export interface NavItem {
   icon: LucideIcon
 }
 
-/** The views at the top of the sidebar. */
+/** The views, as tabs along the top of the window (`ViewTabs`). */
 export const mainNavItems: readonly NavItem[] = [
   { id: "queue", label: strings.nav.queue, icon: ListVideo },
   { id: "pending", label: strings.nav.pending, icon: Inbox },
@@ -21,14 +21,15 @@ export const mainNavItems: readonly NavItem[] = [
   { id: "rules", label: strings.nav.rules, icon: FolderTree },
 ]
 
-/** Settings sits at the bottom of the sidebar, and moves up under the views while it's open, its sections under it. */
+/** Settings, at the right end of the views' tabs. */
 export const settingsNavItem: NavItem = {
   id: "settings",
   label: strings.nav.settings,
   icon: Settings,
 }
 
-/** Settings' sections in order, as the sidebar lists them under Settings: each one's heading, or a shorter name. */
+/** Settings' sections in order, as the sidebar lists them while Settings is open: each one's heading, or a shorter
+ * name. */
 export const SETTINGS_SECTIONS = [
   { id: "settings-downloads", title: strings.settings.downloads },
   { id: "settings-archives", title: strings.settings.archives },

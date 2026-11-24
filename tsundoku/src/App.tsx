@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import {
   addPendingLinks,
   addPendingLinksFromFiles,
@@ -14,26 +15,40 @@ import { AddBar, type AddBarHandle } from "./components/AddBar"
 import { AppTitle } from "./components/AppTitle"
 import { Button } from "./components/Button"
 import { Card } from "./components/Card"
+import { IconButton } from "./components/IconButton"
 import { PreviewCard } from "./components/PreviewCard"
 import { Sidebar } from "./components/Sidebar"
 import { StatusMessage } from "./components/StatusMessage"
+import { classes } from "./components/styles"
 import { UndoToastProvider } from "./components/UndoToast"
 import { PixivWarningNotice } from "./components/PixivWarningNotice"
 import { UpdateBanner } from "./components/UpdateBanner"
+import { ViewTabs } from "./components/ViewTabs"
 import { WhatsNewCard } from "./components/WhatsNewCard"
 import { describeDownloadError, type ErrorDescription } from "./errors"
 import { ASK_BEFORE_ADDING_OVER, checkingTime, type LinkFilesRead, readLinkFiles } from "./linkFiles"
 import {
   AppActionsContext,
+  mainNavItems,
+  settingsNavItem,
   type SettingsPlace,
   type HistoryTarget,
   type SettingsTarget,
   type ViewId,
 } from "./navigation"
 import { shownPendingLinks } from "./pendingLinks"
-import { useAppInfo, usePendingLinks, useQueue, useToolsNeedSetup, useWatchedSources } from "./queries"
+import {
+  useAppearanceOptions,
+  useAppInfo,
+  usePendingLinks,
+  useQueue,
+  useSaveAppearanceOptions,
+  useToolsNeedSetup,
+  useWatchedSources,
+} from "./queries"
 import { useAppShortcuts, useWindowPaste } from "./shortcuts"
 import { strings } from "./strings"
+import { DetailsDockContext } from "./tileRows"
 import { type Drop, useLinkDrop, usePreview } from "./usePreview"
 import { HistoryView } from "./views/HistoryView"
 import { PendingView } from "./views/PendingView"
@@ -91,6 +106,18 @@ export function App() {
 
   const { data: appInfo } = useAppInfo()
   const startedInTray = appInfo?.startedInTray ?? false
+  // Folded to a narrow strip, the sidebar keeps the add bar's buttons as icons and hides the chapters. Kept in
+  // settings.json, which main.tsx reads before the first render, so it never shows open first; folded at once, and
+  // still folded if saving fails (it's then only forgotten at the next start).
+  const { data: appearance } = useAppearanceOptions()
+  const { save: saveAppearance } = useSaveAppearanceOptions()
+  const [collapsed, setCollapsed] = useState(appearance?.sidebarCollapsed ?? false)
+  const toggleSidebar = () => {
+    setCollapsed(!collapsed)
+    void saveAppearance({ sidebarCollapsed: !collapsed })
+  }
+  // Where a picture's row shows in the Downloads, Pending and History views: under the view, across the content layer.
+  const [detailsDock, setDetailsDock] = useState<HTMLDivElement | null>(null)
 
   useEffect(() => {
     // Started by Windows with the tray on, the window waits there until it's opened.
@@ -265,13 +292,32 @@ export function App() {
 
   return (
     <AppActionsContext value={actions}>
-      <div className="grid h-full grid-cols-[13rem_minmax(0,1fr)]">
-        {/* The app's name, Paste Link and Type a Link, then the views. The view's column takes the whole height. */}
+      <div
+        className={classes(
+          "grid h-full",
+          collapsed ? "grid-cols-[3.5rem_minmax(0,1fr)]" : "grid-cols-[13rem_minmax(0,1fr)]",
+        )}
+      >
+        {/* The app's name with Collapse Sidebar, Paste Link and Type a Link, then the open view's chapters; collapsed,
+            Expand Sidebar and the two buttons as icons. The view's column takes the whole height. */}
         <div className="flex min-h-0 flex-col">
-          <AppTitle />
+          <div className={classes("flex h-14 shrink-0 items-center", collapsed ? "justify-center" : "pr-2")}>
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <AppTitle />
+              </div>
+            )}
+            <IconButton
+              label={collapsed ? strings.nav.expandSidebar : strings.nav.collapseSidebar}
+              icon={collapsed ? PanelLeftOpen : PanelLeftClose}
+              aria-expanded={!collapsed}
+              onClick={toggleSidebar}
+            />
+          </div>
           <div className="relative z-10 px-2 pb-3">
             <AddBar
               ref={addBar}
+              collapsed={collapsed}
               onPaste={() => void pasteFromClipboard()}
               note={pasteNote?.text ?? null}
               onTypeLink={() => setPasteNote(null)}
@@ -280,21 +326,28 @@ export function App() {
               onSubmit={() => void addText(link)}
             />
           </div>
-          <Sidebar
-            className="flex-1"
-            current={view}
-            counts={{
-              queue: unfinished,
-              pending: shownPendingLinks(pending).length,
-              watched: newlyWatched,
-            }}
-            // The open view clicked again goes back to its top.
-            onSelect={(to) => (to === view ? setChapterTarget({ view, id: null }) : setView(to))}
-            chapters={chapters?.view === view ? chapters : null}
-            onSelectChapter={(id) => setChapterTarget({ view, id })}
-          />
+          {!collapsed && (
+            <Sidebar
+              className="flex-1"
+              chapters={chapters?.view === view ? chapters : null}
+              viewLabel={[...mainNavItems, settingsNavItem].find((item) => item.id === view)?.label ?? ""}
+              onSelectChapter={(id) => setChapterTarget({ view, id })}
+            />
+          )}
         </div>
-        <div className="flex min-h-0 flex-col pt-3">
+        <div className="flex min-h-0 flex-col">
+          <div className="flex h-14 shrink-0 items-center pr-4">
+            <ViewTabs
+              current={view}
+              counts={{
+                queue: unfinished,
+                pending: shownPendingLinks(pending).length,
+                watched: newlyWatched,
+              }}
+              // The open view clicked again goes back to its top.
+              onSelect={(to) => (to === view ? setChapterTarget({ view, id: null }) : setView(to))}
+            />
+          </div>
           {/* Hidden while it has nothing to show, so it takes no room. */}
           <div className="flex flex-col gap-3 pr-4 pb-3 empty:hidden">
             <PixivWarningNotice />
@@ -342,13 +395,18 @@ export function App() {
               />
             )}
           </div>
-          <main className="relative min-h-0 flex-1 rounded-tl-lg border-t border-l border-line bg-surface">
-            {/* Outside the views, so an offer to undo stays when another view is opened. */}
-            <UndoToastProvider>
-              <ChaptersContext value={chaptersLink}>
-                <CurrentView view={view} settingsPlace={settingsPlace} historyTarget={historyTarget} />
-              </ChaptersContext>
-            </UndoToastProvider>
+          <main className="flex min-h-0 flex-1 flex-col rounded-tl-lg border-t border-l border-line bg-surface">
+            <div className="relative min-h-0 flex-1">
+              {/* Outside the views, so an offer to undo stays when another view is opened; above the details panel. */}
+              <UndoToastProvider>
+                <ChaptersContext value={chaptersLink}>
+                  <DetailsDockContext value={detailsDock}>
+                    <CurrentView view={view} settingsPlace={settingsPlace} historyTarget={historyTarget} />
+                  </DetailsDockContext>
+                </ChaptersContext>
+              </UndoToastProvider>
+            </div>
+            <div ref={setDetailsDock} className="shrink-0" />
           </main>
         </div>
       </div>

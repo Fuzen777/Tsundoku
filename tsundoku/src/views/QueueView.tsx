@@ -29,10 +29,11 @@ import type { QueueState } from "../bindings/QueueState"
 import { useChapters } from "../chapters"
 import { ArrangeControls, GroupedList, type Bundling } from "../components/ArrangedList"
 import { Button } from "../components/Button"
+import { DetailsDock } from "../components/DetailsDock"
 import { EmptyState } from "../components/EmptyState"
 import { Page } from "../components/Page"
 import { PickerViewControls } from "../components/PickerViewControls"
-import { QueueRow } from "../components/QueueRow"
+import { QueueRow, type RowOpening } from "../components/QueueRow"
 import { QueueSourceGroup } from "../components/QueueSourceGroup"
 import { QueueTiles } from "../components/QueueTiles"
 import { StatusMessage } from "../components/StatusMessage"
@@ -50,6 +51,7 @@ import {
 import { QueueLookContext } from "../queueItems"
 import { sourceKey } from "../queueSources"
 import { strings } from "../strings"
+import { useShownRow } from "../tileRows"
 import { useOfferUndo, type UndoOffer } from "../undo"
 
 /** The buttons for the whole queue, each shown while a download is in a state it acts on, as the row's own button. An
@@ -137,6 +139,9 @@ export function QueueView() {
       if (holder !== id && folds.collapsed.has(holder)) folds.toggle(holder)
     },
   })
+  // In Masonry and Gallery, the download whose row shows in the details panel, one for the whole view.
+  const tileRows = useShownRow<RowOpening>(scrollRef)
+  const shownItem = tiles && tileRows.shown ? items.find((item) => item.id === tileRows.shown?.id) : undefined
 
   const offerUndo = useOfferUndo()
   const actOnAll = (action: (offerUndo: (offer: UndoOffer) => void) => Promise<void>) => {
@@ -184,12 +189,26 @@ export function QueueView() {
               grouped={grouped}
               keyOf={(item) => item.id}
               renderItem={(item) => <QueueRow item={item} />}
-              renderItems={tiles ? (run) => <QueueTiles items={run} view={tiles} size={layout.size} /> : undefined}
+              renderItems={
+                tiles ? (run) => <QueueTiles items={run} view={tiles} size={layout.size} rows={tileRows} /> : undefined
+              }
               bundles={BY_SOURCE}
               folds={folds}
             />
           </QueueLookContext>
         </div>
+      )}
+      {shownItem && tileRows.shown && (
+        <DetailsDock>
+          <QueueLookContext value={look}>
+            <QueueRow
+              key={`${shownItem.id}-${tileRows.shown.opened}`}
+              item={shownItem}
+              opens={tileRows.shown.opens}
+              onHide={tileRows.hide}
+            />
+          </QueueLookContext>
+        </DetailsDock>
       )}
     </Page>
   )
