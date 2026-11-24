@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.40 · 2026-11-24
+
+### Fixed
+
+- **Pictures no longer shift sideways when the details panel opens**: a panel tall enough to make the list scroll, such as a post that couldn't be read, made a scrollbar appear and the pictures move over to make room for it. Every view now keeps the scrollbar's room, so nothing moves when it shows.
+- **The details panel grows and shrinks smoothly**: clicking a picture whose details are taller or shorter than the ones shown, or opening a log in it, eases the panel to its new height rather than jumping. With Windows' animation effects turned off, it changes at once.
+
 ## 0.2.39 · 2026-11-24
 
 ### Changed

@@ -1,5 +1,5 @@
 import { createContext, useContext, useLayoutEffect, type RefObject } from "react"
-import { prefersReducedMotion } from "./motion"
+import { DECELERATE, MOTION_MS, prefersReducedMotion } from "./motion"
 
 /*
   Items coming into a list and leaving it (DESIGN.md → Motion): in the Pending and Downloads views' lists (and Watched's),
@@ -8,10 +8,6 @@ import { prefersReducedMotion } from "./motion"
   (`useEnterAndLeave`); an item that moves to another group, or a list drawn again in another view, does neither.
 */
 
-/** How long an item takes to fade in, or to collapse away. */
-const DURATION_MS = 200
-/** Fluent's decelerate curve (index.css's `ease-decelerate`), for coming in. */
-const DECELERATE = "cubic-bezier(0.1, 0.9, 0.2, 1)"
 /** Fluent's easy ease, for leaving: gentle at both ends. */
 const EASY_EASE = "cubic-bezier(0.33, 0, 0.67, 1)"
 /** More items than this leaving at once (Clear Finished on a long list) just go: so many collapsing together would
@@ -77,7 +73,7 @@ export function useEnterAndLeave(element: RefObject<HTMLElement | null>, key: nu
     const shown = element.current
     if (!shown || !known) return
     if (known.drawn && !known.seen.has(key) && !prefersReducedMotion()) {
-      shown.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DURATION_MS, easing: DECELERATE })
+      shown.animate([{ opacity: 0 }, { opacity: 1 }], { duration: MOTION_MS, easing: DECELERATE })
     }
     // Still in the page here: React takes it out after.
     return () => {
@@ -116,7 +112,7 @@ function collapse(element: HTMLElement, parent: HTMLElement) {
   element.inert = true
   element.setAttribute("aria-hidden", "true")
   const parentStyle = getComputedStyle(parent)
-  const timing = { duration: DURATION_MS, easing: EASY_EASE, fill: "forwards" as const }
+  const timing = { duration: MOTION_MS, easing: EASY_EASE, fill: "forwards" as const }
   let animation: Animation
   if (parentStyle.display.includes("grid")) {
     animation = element.animate([{ opacity: 1 }, { opacity: 0, transform: "scale(0.9)" }], timing)

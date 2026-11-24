@@ -28,7 +28,9 @@ export function Page({ title, actions, viewControls, scrollRef, onScroll, childr
           </div>
         )}
       </header>
-      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto px-6 pb-6">
+      {/* The scrollbar's room is kept while there's nothing to scroll, so nothing moves sideways when it comes: a list
+          growing longer, or the details panel taking room from it. */}
+      <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-auto px-6 pb-6 [scrollbar-gutter:stable]">
         {children}
       </div>
     </section>
