@@ -1,15 +1,15 @@
 //! Reading a site's own API as its website does, in a hidden window on the sign-in window's profile
 //! (`DataPaths::accounts_browser_folder`), whose sessions the person signed in there: Pixiv's messages
-//! (`pixiv_messages.rs`) and Fanbox's posts. The window (never shown, no capability, only the site's own host, nothing
+//! (`pixiv_messages.rs`), Fanbox's posts and Patreon's (`KeptReader`, which keeps its window open between reads). The window (never shown, no capability, only the site's own host, nothing
 //! opened or downloaded) loads a small page of the site's own, then asks for each address with a `fetch` from that
 //! page, sending its cookies as the site's own script does (WebView2's DevTools call `Runtime.evaluate`, awaiting the
 //! answer), and is destroyed once they're answered. Tsundoku never presses anything there and never reads a page's
 //! layout: only the answers to the addresses it asks.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
 use std::sync::mpsc::{self, Sender};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use tauri::webview::{NewWindowResponse, PageLoadEvent, PermissionResponse};
 use tauri::{AppHandle, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -118,6 +118,153 @@ impl PageReader {
                 Err(error)
             }
         }
+    }
+}
+
+/// A site's API read one address at a time from a window kept open between reads (a listing's pages and a check's
+/// reads share it), with a pause since the last request, at random within `pause_ms`. The window closes once it's
+/// been idle a while (`start`).
+pub struct KeptReader {
+    pub reader: PageReader,
+    pub pause_ms: (u64, u64),
+    /// Held while a read runs, so reads take turns.
+    state: Mutex<KeptState>,
+}
+
+#[derive(Default)]
+struct KeptState {
+    window: Option<WebviewWindow>,
+    /// When the last read ended.
+    last: Option<Instant>,
+}
+
+/// How long a kept window stays open after its last read, and how often that's looked at.
+const KEPT_IDLE: Duration = Duration::from_secs(60);
+const KEPT_IDLE_CHECK: Duration = Duration::from_secs(10);
+
+impl KeptReader {
+    /// The reader, with a thread that closes its window once it's been idle `KEPT_IDLE`.
+    pub fn start(reader: PageReader, pause_ms: (u64, u64)) -> Arc<Self> {
+        let kept = Arc::new(Self {
+            reader,
+            pause_ms,
+            state: Mutex::new(KeptState::default()),
+        });
+        let closer = Arc::downgrade(&kept);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(KEPT_IDLE_CHECK);
+                let Some(kept) = closer.upgrade() else {
+                    return;
+                };
+                kept.close_if_idle();
+            }
+        });
+        kept
+    }
+
+    fn close_if_idle(&self) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.last.is_some_and(|last| last.elapsed() >= KEPT_IDLE)
+            && let Some(window) = state.window.take()
+        {
+            let _ = window.destroy();
+        }
+    }
+
+    /// The reading window, open on the site's page: the one kept from the last read, or a new one.
+    fn window(&self, state: &mut KeptState) -> Result<WebviewWindow, String> {
+        // One closed meanwhile (the app's windows all closing) is opened again.
+        let open = state.window.take().filter(|window| window.title().is_ok());
+        match open {
+            Some(window) => Ok(window),
+            None => self.reader.open(),
+        }
+    }
+
+    /// Each address's answer in turn, or why the site's page couldn't be opened.
+    pub fn get(&self, addresses: &[String]) -> Result<Vec<Result<PageAnswer, String>>, String> {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let window = self.window(&mut state)?;
+        let mut answers = Vec::with_capacity(addresses.len());
+        for address in addresses {
+            let pause = pause_within(self.pause_ms);
+            if let Some(waited) = state
+                .last
+                .map(|at| at.elapsed())
+                .filter(|waited| *waited < pause)
+            {
+                std::thread::sleep(pause - waited);
+            }
+            answers.push(ask(&window, address));
+            state.last = Some(Instant::now());
+        }
+        state.window = Some(window);
+        Ok(answers)
+    }
+
+    /// The value of the cookie `name` the window's session sends to `address` (`cookie`).
+    pub fn cookie(&self, address: &str, name: &str) -> Result<Option<String>, String> {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let window = self.window(&mut state)?;
+        let value = cookie(&window, address, name);
+        state.window = Some(window);
+        state.last = Some(Instant::now());
+        value
+    }
+}
+
+/// A pause within `(least, most)` milliseconds, picked from the clock.
+fn pause_within((least, most): (u64, u64)) -> Duration {
+    let spread = most.saturating_sub(least).max(1);
+    let noise = u64::from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.subsec_nanos()),
+    );
+    Duration::from_millis(least + noise % spread)
+}
+
+/// The page Patreon's API is asked from, and the pause between two of its requests.
+const PATREON_READER_LABEL: &str = "patreon-reader";
+const PATREON_PAUSE_MS: (u64, u64) = (500, 1000);
+
+/// Gives the core the reader Patreon's API is asked through (`tsundoku_core::hosts::patreon`): a hidden window on the
+/// sign-in window's profile, on one of Patreon's pages. Patreon answers its API only to a browser.
+pub fn start_patreon(app: &AppHandle, profile: PathBuf) {
+    let kept = KeptReader::start(
+        PageReader {
+            app: app.clone(),
+            profile,
+            label: PATREON_READER_LABEL,
+            page: tsundoku_core::hosts::patreon::API_PAGE,
+        },
+        PATREON_PAUSE_MS,
+    );
+    tsundoku_core::hosts::patreon::start(Box::new(PatreonReader(kept)));
+}
+
+struct PatreonReader(Arc<KeptReader>);
+
+impl tsundoku_core::hosts::patreon::PatreonApi for PatreonReader {
+    fn get(
+        &self,
+        addresses: &[String],
+    ) -> Result<Vec<Result<tsundoku_core::hosts::ApiAnswer, String>>, String> {
+        Ok(self
+            .0
+            .get(addresses)?
+            .into_iter()
+            .map(|answer| answer.map(api_answer))
+            .collect())
+    }
+}
+
+/// A page's answer as the core takes it.
+pub fn api_answer(answer: PageAnswer) -> tsundoku_core::hosts::ApiAnswer {
+    tsundoku_core::hosts::ApiAnswer {
+        status: answer.status,
+        body: answer.body,
     }
 }
 

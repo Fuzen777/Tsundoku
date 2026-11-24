@@ -79,6 +79,10 @@ pub struct VideoInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub fanbox: Option<FanboxDetails>,
+    /// The links inside a post (a Patreon post's: `patreon::post_links`), which go to Pending once it's downloaded
+    /// (`post_links`). Empty anywhere else.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<String>,
 }
 
 /// A Fanbox post's plan.
@@ -404,6 +408,15 @@ pub enum PreviewError {
     /// doesn't say).
     #[error("this Fanbox post is for supporters of a plan of {fee} yen a month")]
     FanboxLocked { fee: u32 },
+    /// A Patreon post for the creator's paying members (`patreon`), which Tsundoku's window can't open, nor yt-dlp with
+    /// the browser's sign-in for a video or an audio: for those of a tier of `cents` a month or more (0 when Patreon
+    /// doesn't say), in `currency` ("USD").
+    #[error("this Patreon post is for paying members")]
+    PatreonLocked {
+        cents: u32,
+        #[serde(default)]
+        currency: Option<String>,
+    },
     /// A file host's free downloads for this connection are used up for now, such as MEGA's transfer quota.
     #[error("{site}'s download limit is reached: {detail}")]
     LimitReached { site: String, detail: String },
@@ -798,6 +811,7 @@ fn command(
     if let Some(cookies) = &tools.cookies {
         command = command.arg("--cookies-from-browser").arg(cookies);
     }
+    command = command.args(crate::patreon::yt_dlp_args(link));
     if !tools.any_page {
         command = command.args(["--ies", "default,-generic"]);
     }
@@ -929,6 +943,7 @@ pub(crate) fn parse_info(json: &str) -> Result<VideoInfo, PreviewError> {
         playlist: None,
         pixiv: None,
         fanbox: None,
+        links: Vec::new(),
         tags: tags_from(
             info.tags
                 .unwrap_or_default()
@@ -1022,9 +1037,17 @@ pub(crate) fn classify_failure(stderr: &[&str]) -> PreviewError {
         "no video formats found",
         "no video could be found",
         "there's no video",
+        // Patreon's post of images or files only.
+        "no supported media found",
     ]) {
         // A post of images only, such as an Instagram photo: gallery-dl may download it.
         PreviewError::NoVideo { detail }
+    } else if mentions(&["you do not have access to this post"]) {
+        // Patreon's post for paying members (`patreon`).
+        PreviewError::PatreonLocked {
+            cents: 0,
+            currency: None,
+        }
     } else if mentions(&[
         "will begin in",
         "premieres in",
@@ -1380,6 +1403,20 @@ mod tests {
             classify("ERROR: [youtube] abc: This live event will begin in 3 hours."),
             PreviewError::Upcoming { .. }
         ));
+        assert!(
+            matches!(
+                classify("ERROR: [patreon] 153639294: No supported media found in this post"),
+                PreviewError::NoVideo { .. }
+            ),
+            "a Patreon post of images, which gallery-dl downloads"
+        );
+        assert_eq!(
+            classify("ERROR: [patreon] 32452882: You do not have access to this post"),
+            PreviewError::PatreonLocked {
+                cents: 0,
+                currency: None
+            }
+        );
         assert!(matches!(
             classify(
                 "ERROR: [youtube] abc: The uploader has not made this video available in your country"
@@ -1484,6 +1521,23 @@ mod tests {
                 .any(|pair| pair == ["--ffmpeg-location", r"C:\tools\ffmpeg.exe"])
         );
         assert!(!args.contains(&"--ies".to_owned()));
+        assert!(!args.contains(&"--impersonate".to_owned()));
+        let patreon: Vec<_> = super::command(
+            &tools,
+            Path::new("yt-dlp.exe"),
+            Output::Whole,
+            &[],
+            "https://www.patreon.com/posts/743933",
+        )
+        .arguments()
+        .iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+        assert!(
+            patreon
+                .windows(2)
+                .any(|pair| pair == ["--impersonate", "chrome"])
+        );
     }
 
     #[test]

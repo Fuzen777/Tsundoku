@@ -294,6 +294,7 @@ mod tests {
                 tags: Vec::new(),
                 pixiv: None,
                 fanbox: None,
+                links: Vec::new(),
             },
             approximate_date: None,
             last_download: None,

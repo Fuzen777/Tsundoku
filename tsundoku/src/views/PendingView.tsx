@@ -1090,7 +1090,7 @@ function pendingStatus(link: PendingLink): PendingStatus {
 }
 
 /** Whether a link couldn't be read because the site wants an account: a sign-in (Tsundoku's own for Pixiv and Fanbox,
- * a browser's elsewhere) or a subscription it doesn't have (a Fanbox plan, 1fichier's subscribers). */
+ * a browser's elsewhere) or a subscription it doesn't have (a Fanbox plan, a Patreon tier, 1fichier's subscribers). */
 function needsAccount(error: PreviewError | null): boolean {
   return (
     error !== null &&
@@ -1098,6 +1098,7 @@ function needsAccount(error: PreviewError | null): boolean {
       error.kind === "pixivSignInNeeded" ||
       error.kind === "fanboxSignInNeeded" ||
       error.kind === "fanboxLocked" ||
+      error.kind === "patreonLocked" ||
       error.kind === "subscribersOnly")
   )
 }

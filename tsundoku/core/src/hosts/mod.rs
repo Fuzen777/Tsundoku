@@ -16,6 +16,7 @@ pub mod mediafire;
 pub mod mega;
 pub mod onedrive;
 pub mod onefichier;
+pub mod patreon;
 pub mod pcloud;
 pub mod swisstransfer;
 #[cfg(test)]
@@ -80,8 +81,18 @@ pub enum Host {
     Filemail,
     /// Fanbox's posts, read through Tsundoku's window (`fanbox`).
     Fanbox,
+    /// Patreon's posts, read through Tsundoku's window (`patreon`).
+    Patreon,
     /// A site read only through the check window (`window_sites`).
     Window(window_sites::WindowSite),
+}
+
+/// A site's answer to one of its API's addresses, asked through Tsundoku's window (Fanbox's, Patreon's): its HTTP
+/// status and body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ApiAnswer {
+    pub status: u16,
+    pub body: String,
 }
 
 /// What Tsundoku knows about a host, kept in the host's own module (its `FACTS`). Adding a host is a module with its
@@ -120,7 +131,7 @@ pub(crate) type Unlock = fn(&Client, &str, &Password, &CancelToken) -> Result<Sh
 
 impl Host {
     /// The hosts with a reader of their own.
-    pub const BUILT_IN: [Self; 18] = [
+    pub const BUILT_IN: [Self; 19] = [
         Self::Mega,
         Self::MediaFire,
         Self::GoogleDrive,
@@ -139,6 +150,7 @@ impl Host {
         Self::TransferNow,
         Self::Filemail,
         Self::Fanbox,
+        Self::Patreon,
     ];
 
     /// Every host: those with a reader of their own, then the sites read only through the check window.
@@ -164,6 +176,7 @@ impl Host {
             Self::TransferNow => &transfernow::FACTS,
             Self::Filemail => &filemail::FACTS,
             Self::Fanbox => &fanbox::FACTS,
+            Self::Patreon => &patreon::FACTS,
             Self::Window(site) => &window_sites::LIST[site.0],
             Self::Box => &boxcom::FACTS,
             Self::YandexDisk => &yandex::FACTS,
@@ -346,6 +359,7 @@ impl Share {
             tags: Vec::new(),
             pixiv: None,
             fanbox: None,
+            links: Vec::new(),
         }
     }
 }
@@ -392,6 +406,7 @@ pub enum FileSource {
     /// A file only the check window can give (`windowed`).
     Windowed(windowed::WindowedFile),
     Fanbox(fanbox::FanboxFile),
+    Patreon(patreon::PatreonFile),
 }
 
 /// Where a file downloads from, and how to check what arrives.
@@ -448,13 +463,14 @@ impl FileSource {
             Self::Filemail(file) => filemail::address(client, file, cancel),
             Self::Windowed(file) => windowed::address(file),
             Self::Fanbox(file) => Ok(fanbox::address(file)),
+            Self::Patreon(file) => Ok(patreon::address(file)),
         }
     }
 
-    /// Whether its size may be unknown (0) until it downloads: a file the check window gives, or a Fanbox image whose
-    /// server says no size.
+    /// Whether its size may be unknown (0) until it downloads: a file the check window gives, or a Fanbox or Patreon
+    /// file whose server says no size.
     pub fn size_may_be_unknown(&self) -> bool {
-        matches!(self, Self::Windowed(_) | Self::Fanbox(_))
+        matches!(self, Self::Windowed(_) | Self::Fanbox(_) | Self::Patreon(_))
     }
 
     /// How to check the file once it arrives, as far as the host said when it was read: for an address the check

@@ -585,6 +585,7 @@ fn video_of(found: &PostMessages, link: &str) -> Result<VideoInfo, PreviewError>
         tags: post_tags(post),
         pixiv: pixiv_details(post),
         fanbox: None,
+        links: Vec::new(),
     })
 }
 

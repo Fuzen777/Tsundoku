@@ -1598,6 +1598,8 @@ impl DownloadQueue {
 
     /// Settles a run: done (and recorded in the history), failed, stopped, or removed if it was cancelled.
     fn finish(&self, job: &JobSpec, outcome: JobOutcome) {
+        // The links inside a post it downloaded, for Pending once the queue's lock is let go.
+        let mut post_links = Vec::new();
         let mut state = lock(&self.state);
         let running = state.running.remove(&job.id);
         let downloaded = running.as_ref().is_some_and(|running| running.downloaded);
@@ -1696,6 +1698,7 @@ impl DownloadQueue {
                             item.caught_links.clear();
                             item.unpack_files = None;
                             item.archive_password = None;
+                            post_links = item.video.links.clone();
                         }
                         Err(error) => {
                             item.state = QueueState::Failed;
@@ -1712,6 +1715,7 @@ impl DownloadQueue {
         if let Some(offer) = &job.window_offer {
             offer.settle(stopped);
         }
+        crate::post_links::send(&post_links);
         self.schedule();
     }
 

@@ -69,7 +69,7 @@ pub struct SignInSite {
 }
 
 /// Sites whose sign-in Tsundoku can tell from a browser's cookies.
-pub const SIGN_IN_SITES: [SignInSite; 9] = [
+pub const SIGN_IN_SITES: [SignInSite; 10] = [
     SignInSite {
         name: "Instagram",
         domains: &["instagram.com"],
@@ -123,6 +123,13 @@ pub const SIGN_IN_SITES: [SignInSite; 9] = [
         domains: &["bilibili.com"],
         extractor: "bilibili",
         cookies: &["SESSDATA"],
+    },
+    // A post's video or audio for a creator's members opens with the account's membership, through yt-dlp (`patreon`).
+    SignInSite {
+        name: "Patreon",
+        domains: &["patreon.com"],
+        extractor: "patreon",
+        cookies: &["session_id"],
     },
 ];
 

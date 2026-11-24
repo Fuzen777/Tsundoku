@@ -80,7 +80,7 @@ pub fn links_in_file(name: &str, bytes: &[u8]) -> Result<Vec<String>, LinkFileEr
     let text = decode(bytes);
     let links = match kind {
         LinkFileKind::Text => text_links(&text),
-        LinkFileKind::Bookmarks => bookmark_links(&text),
+        LinkFileKind::Bookmarks => anchor_links(&text),
         LinkFileKind::Shortcut => shortcut_links(&text),
     };
     if links.is_empty() {
@@ -148,8 +148,8 @@ fn text_links(text: &str) -> Vec<String> {
 }
 
 /// Every `<a>` tag's `href` that's an http or https link (a bookmarks export also holds `place:` queries and
-/// `javascript:` bookmarklets), with its HTML entities decoded.
-fn bookmark_links(html: &str) -> Vec<String> {
+/// `javascript:` bookmarklets), with its HTML entities decoded: a bookmarks export's, or a post's text (`patreon`).
+pub(crate) fn anchor_links(html: &str) -> Vec<String> {
     let mut links: Vec<String> = Vec::new();
     let lowercase = html.to_ascii_lowercase();
     let mut from = 0;
@@ -240,7 +240,7 @@ fn href_in_tag(html: &str, start: usize) -> (Option<&str>, usize) {
 }
 
 /// Decodes the entities a link in HTML may hold: `&amp;` and the other named ones links use, and numbered ones.
-fn decode_entities(text: &str) -> String {
+pub(crate) fn decode_entities(text: &str) -> String {
     let mut decoded = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(at) = rest.find('&') {
@@ -455,7 +455,7 @@ mod tests {
         let html = "<p><abbr href=\"https://no.example\">x</abbr> <A\nTARGET=_blank HREF=https://example.com/a?x=1&amp;y=2>a</A>\
             <a data-x='>' href='https://example.com/b'>b</a><a href>c</a><a/></p>";
         assert_eq!(
-            bookmark_links(html),
+            anchor_links(html),
             ["https://example.com/a?x=1&y=2", "https://example.com/b"]
         );
     }

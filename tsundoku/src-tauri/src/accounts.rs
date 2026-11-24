@@ -19,7 +19,7 @@ use tsundoku_core::pixiv_account::{self, AccountError, PixivAccount, PixivLogin}
 use tsundoku_core::site_limits::now_ms;
 
 use crate::DataFolder;
-use crate::web_reader::PageReader;
+use crate::web_reader::{KeptReader, PageReader};
 
 const LABEL: &str = "pixiv-sign-in";
 const WIDTH: f64 = 520.0;
@@ -212,153 +212,42 @@ fn finish_fanbox(app: AppHandle, profile: std::path::PathBuf) {
     });
 }
 
-/// Gives the core the reader Fanbox's API is asked through: the sign-in window's session, in a hidden window.
+/// Gives the core the reader Fanbox's API is asked through: the sign-in window's session, in a hidden window kept open
+/// between reads.
 pub fn start_fanbox(app: &AppHandle, profile: std::path::PathBuf) {
-    let reader = Arc::new(FanboxReader {
-        app: app.clone(),
-        profile,
-        state: std::sync::Mutex::new(ReaderState::default()),
-    });
-    let closer = Arc::downgrade(&reader);
-    // Its window closes once it's been idle a while.
-    thread::spawn(move || {
-        loop {
-            thread::sleep(FANBOX_IDLE_CHECK);
-            let Some(reader) = closer.upgrade() else {
-                return;
-            };
-            reader.close_if_idle();
-        }
-    });
-    tsundoku_core::hosts::fanbox::start(Box::new(SharedReader(reader)));
+    let kept = KeptReader::start(
+        PageReader {
+            app: app.clone(),
+            profile,
+            label: FANBOX_READER_LABEL,
+            page: FANBOX_PAGE,
+        },
+        FANBOX_PAUSE_MS,
+    );
+    tsundoku_core::hosts::fanbox::start(Box::new(FanboxReader(kept)));
 }
 
-/// How long Fanbox's reading window stays open after its last read, so a listing's pages and a check's reads share
-/// it, and how often that's looked at.
-const FANBOX_IDLE: std::time::Duration = std::time::Duration::from_secs(60);
-const FANBOX_IDLE_CHECK: std::time::Duration = std::time::Duration::from_secs(10);
+/// Fanbox's API, asked one read at a time from a window kept open between reads (`KeptReader`).
+struct FanboxReader(Arc<KeptReader>);
 
-/// Fanbox's API, asked one read at a time, with a pause since the last request, from a window kept open between
-/// reads.
-struct FanboxReader {
-    app: AppHandle,
-    profile: std::path::PathBuf,
-    /// Held while a read runs, so reads take turns.
-    state: std::sync::Mutex<ReaderState>,
-}
-
-#[derive(Default)]
-struct ReaderState {
-    window: Option<tauri::WebviewWindow>,
-    /// When the last read ended.
-    last: Option<std::time::Instant>,
-}
-
-impl FanboxReader {
-    fn close_if_idle(&self) {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if state.last.is_some_and(|last| last.elapsed() >= FANBOX_IDLE)
-            && let Some(window) = state.window.take()
-        {
-            let _ = window.destroy();
-        }
-    }
-}
-
-struct SharedReader(Arc<FanboxReader>);
-
-impl tsundoku_core::hosts::fanbox::FanboxApi for SharedReader {
+impl tsundoku_core::hosts::fanbox::FanboxApi for FanboxReader {
     fn get(
         &self,
         addresses: &[String],
     ) -> Result<Vec<Result<tsundoku_core::hosts::fanbox::ApiAnswer, String>>, String> {
-        self.0.get(addresses)
-    }
-
-    fn session(&self) -> Result<Option<String>, String> {
-        self.0.session()
-    }
-}
-
-impl FanboxReader {
-    /// The reading window, open on Fanbox's page: the one kept from the last read, or a new one.
-    fn window(&self, state: &mut ReaderState) -> Result<tauri::WebviewWindow, String> {
-        // One closed meanwhile (the app's windows all closing) is opened again.
-        let open = state.window.take().filter(|window| window.title().is_ok());
-        match open {
-            Some(window) => Ok(window),
-            None => PageReader {
-                app: self.app.clone(),
-                profile: self.profile.clone(),
-                label: FANBOX_READER_LABEL,
-                page: FANBOX_PAGE,
-            }
-            .open(),
-        }
+        Ok(self
+            .0
+            .get(addresses)?
+            .into_iter()
+            .map(|answer| answer.map(crate::web_reader::api_answer))
+            .collect())
     }
 
     /// The session's cookie for Fanbox's file server.
     fn session(&self) -> Result<Option<String>, String> {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let window = self.window(&mut state)?;
-        let value = crate::web_reader::cookie(
-            &window,
-            FANBOX_FILES,
-            tsundoku_core::hosts::fanbox::SESSION_COOKIE,
-        );
-        state.window = Some(window);
-        state.last = Some(std::time::Instant::now());
-        value
+        self.0
+            .cookie(FANBOX_FILES, tsundoku_core::hosts::fanbox::SESSION_COOKIE)
     }
-
-    fn get(
-        &self,
-        addresses: &[String],
-    ) -> Result<Vec<Result<tsundoku_core::hosts::fanbox::ApiAnswer, String>>, String> {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let window = self.window(&mut state)?;
-        let mut answers = Vec::with_capacity(addresses.len());
-        for address in addresses {
-            let pause = fanbox_pause();
-            if let Some(waited) = state
-                .last
-                .map(|at| at.elapsed())
-                .filter(|waited| *waited < pause)
-            {
-                thread::sleep(pause - waited);
-            }
-            answers.push(crate::web_reader::ask(&window, address).map(|answer| {
-                tsundoku_core::hosts::fanbox::ApiAnswer {
-                    status: answer.status,
-                    body: answer.body,
-                }
-            }));
-            state.last = Some(std::time::Instant::now());
-        }
-        state.window = Some(window);
-        Ok(answers)
-    }
-}
-
-/// A pause within `FANBOX_PAUSE_MS`, picked from the clock.
-fn fanbox_pause() -> std::time::Duration {
-    let (least, most) = FANBOX_PAUSE_MS;
-    let spread = most.saturating_sub(least).max(1);
-    let noise = u64::from(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |elapsed| elapsed.subsec_nanos()),
-    );
-    std::time::Duration::from_millis(least + noise % spread)
 }
 
 /// Fanbox's home page, where its sign-in ends: www.fanbox.cc, but not its login or the sign-in's own pages.

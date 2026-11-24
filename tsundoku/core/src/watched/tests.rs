@@ -336,6 +336,7 @@ fn video(id: &str) -> VideoInfo {
         tags: Vec::new(),
         pixiv: None,
         fanbox: None,
+        links: Vec::new(),
     }
 }
 

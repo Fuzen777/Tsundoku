@@ -49,11 +49,7 @@ const SIGNED_IN_CHECK: &str = "https://api.fanbox.cc/post.listSupporting?limit=1
 const PROBES_AT_ONCE: usize = 4;
 
 /// Fanbox's answer to one of its API's addresses.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ApiAnswer {
-    pub status: u16,
-    pub body: String,
-}
+pub use super::ApiAnswer;
 
 /// Asks Fanbox's API as its own pages do, from the sign-in window's session.
 pub trait FanboxApi: Send + Sync {
@@ -110,25 +106,9 @@ pub struct PostDetails {
 pub struct Post {
     pub share: Share,
     pub details: PostDetails,
-    /// The links inside it (`post_links`), which go to Pending when it's downloaded (Fuzen's choice).
+    /// The links inside it (`post_links`), which go to Pending when it's downloaded (Fuzen's choice): see
+    /// `crate::post_links`.
     pub links: Vec<String>,
-}
-
-/// Where the links inside a post go: Pending, read as links a page sent (the app crate's `PendingLinks::add_from_page`).
-type LinkSink = Box<dyn Fn(Vec<String>) + Send + Sync>;
-
-static POST_LINKS: OnceLock<LinkSink> = OnceLock::new();
-
-/// Gives where the links inside a downloaded post go, once, at startup.
-pub fn on_post_links(sink: LinkSink) {
-    let _ = POST_LINKS.set(sink);
-}
-
-/// Sends a post's links to Pending, if it has any.
-fn send_links(post: &Post) {
-    if let (false, Some(sink)) = (post.links.is_empty(), POST_LINKS.get()) {
-        sink(post.links.clone());
-    }
 }
 
 impl Post {
@@ -199,6 +179,7 @@ pub(crate) fn listed_video(item: &Value) -> Option<VideoInfo> {
             fee,
             locked: item.get("isRestricted").and_then(Value::as_bool) == Some(true),
         }),
+        links: Vec::new(),
         video_id: id,
     })
 }
@@ -260,7 +241,7 @@ pub(super) fn read(
     cancel: &CancelToken,
 ) -> Result<Share, PreviewError> {
     let post = read_post(client, link, cancel)?;
-    send_links(&post);
+    crate::post_links::send(&post.links);
     with_files(post).map(|post| post.share)
 }
 
@@ -273,7 +254,7 @@ pub fn read_for_preview(
 ) -> Result<Post, PreviewError> {
     let post = read_post(client, link, cancel)?;
     if post.share.files.is_empty() {
-        send_links(&post);
+        crate::post_links::send(&post.links);
     }
     with_files(post)
 }

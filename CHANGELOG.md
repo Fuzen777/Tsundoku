@@ -2,6 +2,17 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.42 · 2026-11-24
+
+### Added
+
+- **Patreon posts' pictures, files and links**: a free Patreon post of pictures or attached files, or with pictures in its text, previews as a post, with its title, creator and date, and downloads every file, or the ones you pick. Tsundoku reads it through a hidden window of its own, as for Fanbox, since Patreon answers only browsers. A post whose point is a video or an audio downloads as before. The links inside a post (in its text, a page it embeds, other Patreon posts it mentions) go to Pending once it's downloaded, or as soon as it's opened when it has nothing else to download, as a Fanbox post's do.
+- **Patreon says when a post is for members**: a post for the creator's paying members says so, with its tier's price when Patreon gives it, rather than "couldn't be read", and waits under Needs an Account in Pending. A members' video or audio still opens with your browser's Patreon sign-in.
+
+### Fixed
+
+- **Patreon videos and audio download with your browser signed in to Patreon**: Patreon refused them ("Forbidden") whenever the browser Tsundoku takes cookies from was signed in to Patreon, as it is when you use Patreon there. They now read and download either way.
+
 ## 0.2.41 · 2026-11-24
 
 ### Changed

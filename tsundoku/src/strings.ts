@@ -1041,6 +1041,10 @@ export const strings = {
         fee > 0
           ? `This post is for supporters of a plan of ¥${fee.toLocaleString()} a month or more, which your account doesn't support.`
           : "This post is for supporters of a plan your account doesn't support.",
+      patreonLocked: (amount: string | null) =>
+        amount === null
+          ? "This post is for the creator's paying members."
+          : `This post is for the creator's members of a tier of ${amount} a month or more.`,
       signInRefused: (site: string) =>
         `${site} didn't accept your browser's sign-in. Signing in to ${site} again in your browser often fixes this.`,
       limitReached: (site: string) =>

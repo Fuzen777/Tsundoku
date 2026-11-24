@@ -318,6 +318,11 @@ pub(crate) fn arguments(job: &JobSpec, result_file: &Path) -> Result<Vec<String>
     if let Some(cookies) = &job.cookies {
         args.extend(["--cookies-from-browser".to_owned(), cookies.clone()]);
     }
+    args.extend(
+        crate::patreon::yt_dlp_args(&job.url)
+            .iter()
+            .map(|arg| (*arg).to_owned()),
+    );
     if let Some(rate_limit) = &job.rate_limit {
         args.extend(["--limit-rate".to_owned(), rate_limit.clone()]);
     }
@@ -519,6 +524,19 @@ mod tests {
             cookies < preset && limit < preset,
             "so a preset's extra arguments can change them"
         );
+    }
+
+    #[test]
+    fn poses_as_chrome_for_a_patreon_post_only() {
+        let mut job = job("best-video", false);
+        let args = arguments(&job, Path::new("result.json")).unwrap();
+        assert!(!args.contains(&"--impersonate".to_owned()));
+        job.url = "https://www.patreon.com/posts/video-sketchbook-32452882".to_owned();
+        let args = arguments(&job, Path::new("result.json")).unwrap();
+        let at = args.iter().position(|arg| arg == "--impersonate").unwrap();
+        let preset = args.iter().position(|arg| arg == "-f").unwrap();
+        assert_eq!(args[at + 1], "chrome");
+        assert!(at < preset, "so a preset's extra arguments can change it");
     }
 
     #[test]

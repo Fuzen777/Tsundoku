@@ -14,6 +14,16 @@ export function formatBytes(bytes: number): string {
   return unitIndex === 0 ? `${value} ${units[0]}` : `${value.toFixed(1)} ${units[unitIndex]}`
 }
 
+/** An amount of money given in cents, in its currency as the reader writes it ("$5.00"), or `null` without a valid
+ * currency code. */
+export function formatMoney(cents: number, currency: string, locale?: string): string | null {
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency }).format(cents / 100)
+  } catch {
+    return null
+  }
+}
+
 /** A download speed: "5.2 MB/s". */
 export function formatSpeed(bytesPerSecond: number): string {
   return strings.units.perSecond(formatBytes(Math.round(bytesPerSecond)))

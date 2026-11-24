@@ -21,6 +21,7 @@ use crate::listing::{self, Found, Listing, ListingMore, MoreItems, MoreRead};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
 use crate::passwords::{self, Password};
+use crate::patreon;
 use crate::pending::LinkReader;
 use crate::pixiv_account;
 use crate::settings::{CookiesBrowser, SettingsStore};
@@ -551,11 +552,28 @@ fn read_with_tools(
     let set = LinkTools::new(tools, cookies_choice, link);
     // A file host Tsundoku reads itself goes there first, since its domains are exact, unless it leaves the link to
     // the tools.
-    let fetched = match read_host(link, password, cancel) {
+    // A Patreon post is read through Tsundoku's window first, which says whether it's yt-dlp's.
+    let host_read = if patreon::post_id(link).is_some() {
+        None
+    } else {
+        read_host(link, password, cancel)
+    };
+    let fetched = match host_read {
         Some(read) => read.map(|video| Fetched {
             video,
             missing_js_runtime: false,
         }),
+        None if patreon::post_id(link).is_some() => read_patreon(
+            link,
+            cancel,
+            hosts::patreon::read_for_preview,
+            |link, cancel| metadata::fetch(&set.videos(any_page, password), link, cancel),
+            from_gallery,
+            |mut fetched, links| {
+                fetched.video.links = links.to_vec();
+                fetched
+            },
+        ),
         None => read_link(
             link,
             cancel,
@@ -581,7 +599,7 @@ fn read_for_preview(
     let followed = follow(link, cancel)?;
     let link = followed.link.as_str();
     let set = LinkTools::new(tools, cookies_choice, link);
-    let host_read = if listing::listing_link(link).is_some() {
+    let host_read = if listing::listing_link(link).is_some() || patreon::post_id(link).is_some() {
         None
     } else {
         read_host(link, password, cancel)
@@ -602,6 +620,22 @@ fn read_for_preview(
                 missing_js_runtime: false,
             })
         })
+    } else if patreon::post_id(link).is_some() {
+        read_patreon(
+            link,
+            cancel,
+            hosts::patreon::read_for_preview,
+            |link, cancel| listing::read_any(&set.videos(true, password), link, cancel),
+            |video| Found::One(from_gallery(video)),
+            |found, links| match found {
+                Found::One(mut fetched) => {
+                    fetched.video.links = links.to_vec();
+                    Found::One(fetched)
+                }
+                // A post of several videos or audios, as yt-dlp lists them.
+                listed => listed,
+            },
+        )
     } else {
         read_link(
             link,
@@ -697,6 +731,82 @@ fn from_gallery(video: VideoInfo) -> Fetched {
     }
 }
 
+/// Tsundoku's window's read of a Patreon post (`hosts::patreon::read_for_preview`).
+type PatreonRead = (Result<VideoInfo, PreviewError>, patreon::PostFacts);
+
+/// Reads a Patreon post (`patreon`): through Tsundoku's window first (`window`), whose answer says whether the post's
+/// point is a video or an audio. yt-dlp reads such a post, which then carries the links inside it (`with_links`); the
+/// window's files are kept only when yt-dlp can't read it. Any other post is the window's (`one`), whose files
+/// Tsundoku downloads itself, sending its links to Pending as it does. A post for paying members says so, unless it's
+/// a video or an audio yt-dlp reads with the browser's sign-in, and one with nothing of its own to download sends its
+/// links to Pending at once. When the window can't read the post at all, yt-dlp tries, as `read_link` lets it.
+fn read_patreon<T>(
+    link: &str,
+    cancel: &CancelToken,
+    window: impl Fn(&str, &CancelToken) -> Result<PatreonRead, PreviewError>,
+    yt_dlp: impl Fn(&str, &CancelToken) -> Result<T, PreviewError>,
+    one: impl Fn(VideoInfo) -> T,
+    with_links: impl Fn(T, &[String]) -> T,
+) -> Result<T, PreviewError> {
+    let (post, facts) = match window(link, cancel) {
+        Ok(read) => read,
+        Err(error) => return read_after_first(error, || yt_dlp(link, cancel)),
+    };
+    if let Some(locked) = facts.locked {
+        // The browser yt-dlp takes cookies from may be signed in to a member's account, which the window isn't.
+        if facts.media
+            && let Ok(found) = yt_dlp(link, cancel)
+        {
+            return Ok(with_links(found, &facts.links));
+        }
+        return Err(locked);
+    }
+    if facts.media {
+        match yt_dlp(link, cancel) {
+            Ok(found) => return Ok(with_links(found, &facts.links)),
+            // The window found nothing of its own to download either: yt-dlp's reason says it best (for a video in a
+            // post of the newer editor's, which yt-dlp didn't read on 2026-11-24: "No supported media found in this
+            // post"). Its links go to Pending at once, as a post of text and links does.
+            Err(error) if post.is_err() => {
+                if matches!(post, Err(PreviewError::NoVideo { .. })) {
+                    crate::post_links::send(&facts.links);
+                }
+                return Err(error);
+            }
+            Err(_) => {}
+        }
+    }
+    match post {
+        Ok(video) => Ok(one(video)),
+        Err(error @ PreviewError::NoVideo { .. }) => {
+            crate::post_links::send(&facts.links);
+            Err(error)
+        }
+        Err(error) => read_after_first(error, || yt_dlp(link, cancel)),
+    }
+}
+
+/// After the reader asked first (gallery-dl, or Tsundoku's window for a Patreon post) couldn't read a link: yt-dlp,
+/// when the first doesn't know the link, or knows the site but failed to read it, which may be a post only yt-dlp
+/// reads. Anything else, such as a missing sign-in, would fail the same way in yt-dlp: the first one's error.
+fn read_after_first<T>(
+    gallery_error: PreviewError,
+    yt_dlp: impl FnOnce() -> Result<T, PreviewError>,
+) -> Result<T, PreviewError> {
+    if !matches!(
+        gallery_error,
+        PreviewError::UnsupportedSite
+            | PreviewError::SiteError { .. }
+            | PreviewError::Failed { .. }
+    ) {
+        return Err(gallery_error);
+    }
+    yt_dlp().map_err(|yt_dlp_error| match gallery_error {
+        PreviewError::UnsupportedSite => yt_dlp_error,
+        _ => gallery_error,
+    })
+}
+
 /// Reads a link with the tool that suits it, falling back to the other when the first can't handle it, so the user
 /// never has to know which one did. Image sites (`sites::prefers_images`) go to gallery-dl first, the rest to
 /// yt-dlp. gallery-dl is optional: without it, a link yt-dlp finds no video at may be images, which the error says.
@@ -710,24 +820,8 @@ fn read_link<T>(
     let prefers_images = sites::prefers_images(link);
 
     if prefers_images && has_gallery_dl {
-        let gallery_error = match gallery_dl(link, cancel) {
-            Ok(found) => return Ok(found),
-            Err(error) => error,
-        };
-        // gallery-dl knowing the site but failing to read it may be a post only yt-dlp reads; anything else, such as
-        // a missing sign-in, would fail the same way in yt-dlp.
-        if !matches!(
-            gallery_error,
-            PreviewError::UnsupportedSite
-                | PreviewError::SiteError { .. }
-                | PreviewError::Failed { .. }
-        ) {
-            return Err(gallery_error);
-        }
-        return yt_dlp(link, cancel).map_err(|yt_dlp_error| match gallery_error {
-            PreviewError::UnsupportedSite => yt_dlp_error,
-            _ => gallery_error,
-        });
+        return gallery_dl(link, cancel)
+            .or_else(|error| read_after_first(error, || yt_dlp(link, cancel)));
     }
 
     match yt_dlp(link, cancel) {
@@ -794,6 +888,7 @@ mod tests {
             tags: Vec::new(),
             pixiv: None,
             fanbox: None,
+            links: Vec::new(),
         }
     }
 
@@ -955,6 +1050,136 @@ mod tests {
                 short_link: None,
             })
         );
+    }
+
+    const PATREON: &str = "https://www.patreon.com/posts/custom-firefox-153639294";
+
+    /// Runs `read_patreon` with the window and yt-dlp answering as given, and returns its answer and what was asked, in
+    /// order.
+    fn read_post(
+        window: Result<PatreonRead, PreviewError>,
+        yt_dlp: Result<VideoInfo, PreviewError>,
+    ) -> (Result<VideoInfo, PreviewError>, Vec<&'static str>) {
+        let asked = RefCell::new(Vec::new());
+        let result = read_patreon(
+            PATREON,
+            &CancelToken::new(),
+            |_, _| {
+                asked.borrow_mut().push("window");
+                window.clone()
+            },
+            |_, _| {
+                asked.borrow_mut().push("yt-dlp");
+                yt_dlp.clone()
+            },
+            |video| video,
+            |mut video, links| {
+                video.links = links.to_vec();
+                video
+            },
+        );
+        (result, asked.into_inner())
+    }
+
+    fn facts(media: bool) -> patreon::PostFacts {
+        patreon::PostFacts {
+            media,
+            locked: None,
+            links: vec!["https://mega.nz/folder/abc#key".to_owned()],
+        }
+    }
+
+    fn post_of_images() -> VideoInfo {
+        info("images", Some(images()))
+    }
+
+    #[test]
+    fn a_patreon_post_of_images_is_the_windows() {
+        let (result, asked) = read_post(
+            Ok((Ok(post_of_images()), facts(false))),
+            Ok(info("video", None)),
+        );
+        let video = result.unwrap();
+        assert_eq!(video.video_id, "images");
+        // Its links go to Pending when its files download (`hosts::patreon::read`).
+        assert!(video.links.is_empty());
+        assert_eq!(asked, ["window"]);
+    }
+
+    #[test]
+    fn a_patreon_posts_video_or_audio_is_yt_dlps_with_the_posts_links() {
+        let (result, asked) = read_post(
+            Ok((Ok(post_of_images()), facts(true))),
+            Ok(info("video", None)),
+        );
+        let video = result.unwrap();
+        assert_eq!(video.video_id, "video");
+        assert_eq!(video.links, ["https://mega.nz/folder/abc#key"]);
+        assert_eq!(asked, ["window", "yt-dlp"]);
+
+        // When yt-dlp can't read it, the window's files are downloaded instead, if it found any.
+        let refused = PreviewError::Failed {
+            detail: "HTTP Error 403".to_owned(),
+        };
+        let (result, _) = read_post(
+            Ok((Ok(post_of_images()), facts(true))),
+            Err(refused.clone()),
+        );
+        assert_eq!(result.unwrap().video_id, "images");
+        let (result, _) = read_post(
+            Ok((Err(patreon::nothing_of_its_own(0)), facts(true))),
+            Err(refused.clone()),
+        );
+        assert_eq!(result.unwrap_err(), refused);
+    }
+
+    #[test]
+    fn a_patreon_post_for_members_says_so() {
+        let locked = PreviewError::PatreonLocked {
+            cents: 500,
+            currency: Some("USD".to_owned()),
+        };
+        let locked_read = |media: bool| -> Result<PatreonRead, PreviewError> {
+            Ok((
+                Err(locked.clone()),
+                patreon::PostFacts {
+                    locked: Some(locked.clone()),
+                    ..facts(media)
+                },
+            ))
+        };
+        let (result, asked) = read_post(locked_read(false), Ok(info("video", None)));
+        assert_eq!(result.unwrap_err(), locked);
+        assert_eq!(asked, ["window"]);
+
+        // A members' video or audio may open with the browser's sign-in, which yt-dlp reads with.
+        let (result, asked) = read_post(locked_read(true), Ok(info("video", None)));
+        assert_eq!(result.unwrap().video_id, "video");
+        assert_eq!(asked, ["window", "yt-dlp"]);
+        let (result, _) = read_post(locked_read(true), Err(no_video()));
+        assert_eq!(result.unwrap_err(), locked);
+    }
+
+    #[test]
+    fn a_patreon_post_of_text_and_links_has_nothing_of_its_own() {
+        let (result, asked) = read_post(
+            Ok((Err(patreon::nothing_of_its_own(1)), facts(false))),
+            Ok(info("video", None)),
+        );
+        assert_eq!(result.unwrap_err(), patreon::nothing_of_its_own(1));
+        assert_eq!(asked, ["window"]);
+    }
+
+    #[test]
+    fn a_patreon_post_the_window_cant_read_goes_to_yt_dlp() {
+        let failed = PreviewError::Failed {
+            detail: "Patreon answered 403".to_owned(),
+        };
+        let (result, asked) = read_post(Err(failed.clone()), Ok(info("video", None)));
+        assert_eq!(result.unwrap().video_id, "video");
+        assert_eq!(asked, ["window", "yt-dlp"]);
+        let (result, _) = read_post(Err(failed.clone()), Err(no_video()));
+        assert_eq!(result.unwrap_err(), failed);
     }
 
     #[test]

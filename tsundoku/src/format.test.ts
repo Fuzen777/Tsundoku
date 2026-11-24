@@ -7,6 +7,7 @@ import {
   formatDay,
   formatDuration,
   formatFileDate,
+  formatMoney,
   formatMonth,
   formatRoughAge,
   formatSpeed,
@@ -41,6 +42,17 @@ describe("formatBytes", () => {
     expect(formatBytes(23_575_744)).toBe("22.5 MB")
     expect(formatBytes(90_993_957)).toBe("86.8 MB")
     expect(formatBytes(5 * 1024 ** 3)).toBe("5.0 GB")
+  })
+})
+
+describe("formatMoney", () => {
+  it("writes cents in their currency", () => {
+    expect(formatMoney(500, "USD", "en-US")).toBe("$5.00")
+    expect(formatMoney(300, "EUR", "en-US")).toBe("€3.00")
+  })
+
+  it("gives nothing for a currency it doesn't know", () => {
+    expect(formatMoney(500, "not a currency", "en-US")).toBeNull()
   })
 })
 

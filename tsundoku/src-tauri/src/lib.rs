@@ -217,9 +217,9 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
             app: app.handle().clone(),
         }),
     })?;
-    // The links inside a downloaded Fanbox post go to Pending, read as links a page sent.
+    // The links inside a downloaded Fanbox or Patreon post go to Pending, read as links a page sent.
     let pending_for_posts = Arc::downgrade(&pending);
-    tsundoku_core::hosts::fanbox::on_post_links(Box::new(move |links| {
+    tsundoku_core::post_links::on_post_links(Box::new(move |links| {
         if let Some(pending) = pending_for_posts.upgrade() {
             let _ = pending.add_from_page(&links);
         }
@@ -238,6 +238,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     app.manage(queue);
     // Fanbox's API, read from the sign-in window's session.
     accounts::start_fanbox(app.handle(), accounts_profile.clone());
+    // Patreon's API, read the same way: Patreon answers it only to a browser.
+    web_reader::start_patreon(app.handle(), accounts_profile.clone());
     // Pixiv's warnings, which stop the queue's Pixiv downloads.
     pixiv_messages::start(app.handle(), accounts_folder, accounts_profile);
     app.manage(pending);

@@ -1190,6 +1190,7 @@ fn video_from_row(row: &Row) -> rusqlite::Result<VideoInfo> {
         tags: Vec::new(),
         pixiv: None,
         fanbox: None,
+        links: Vec::new(),
     })
 }
 
@@ -1492,6 +1493,7 @@ mod tests {
             tags: Vec::new(),
             pixiv: None,
             fanbox: None,
+            links: Vec::new(),
         }
     }
 

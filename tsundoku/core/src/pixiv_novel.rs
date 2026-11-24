@@ -203,6 +203,7 @@ impl Novel {
                 series: self.series.clone(),
             }),
             fanbox: None,
+            links: Vec::new(),
         }
     }
 

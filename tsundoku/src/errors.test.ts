@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { describeHistoryError, describePreviewError, describeToolError, fixFor, isCancelled } from "./errors"
-import { formatClockTime } from "./format"
+import { formatClockTime, formatMoney } from "./format"
 import { strings } from "./strings"
 
 describe("describeToolError", () => {
@@ -137,6 +137,12 @@ describe("file host errors", () => {
       describePreviewError({ kind: "shortLinkToUnsupportedSite", site: "Bitly", target: "example.com" }),
     ).toEqual({
       message: "This Bitly link leads to example.com, which Tsundoku can't download from.",
+    })
+    expect(describePreviewError({ kind: "patreonLocked", cents: 500, currency: "USD" }).message).toBe(
+      strings.preview.errors.patreonLocked(formatMoney(500, "USD")),
+    )
+    expect(describePreviewError({ kind: "patreonLocked", cents: 0, currency: null })).toEqual({
+      message: "This post is for the creator's paying members.",
     })
     expect(describePreviewError({ kind: "subscribersOnly", site: "1fichier" })).toEqual({
       message: strings.preview.errors.subscribersOnly("1fichier"),

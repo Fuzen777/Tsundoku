@@ -322,6 +322,7 @@ mod tests {
             tags: Vec::new(),
             pixiv: None,
             fanbox: None,
+            links: Vec::new(),
         }
     }
 

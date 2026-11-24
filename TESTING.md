@@ -170,6 +170,10 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 **81. Sign in to Fanbox from a link that needs it** · 0.2.30 · Claude saw the card ask and its button open the window, signed out; the sign-in itself needs your account
 - [ ] In a copy not signed in to Fanbox, paste a post of a creator you support. Its card (or its row in Pending, now under Needs an Account) says Fanbox needs Tsundoku signed in, with Sign In to Fanbox. Click it: the sign-in window opens at once, without Settings. Continue as your pixiv account: the window closes and the post is read again, showing its files. The same goes for Sign In to Pixiv on a Pixiv link.
 
+**83. A Patreon post's links go to Pending** · 0.2.42 · Claude read 10 posts in a test copy and downloaded pictures, attached files, a video and a podcast, but none of the free posts linked anywhere
+- [ ] Paste a free Patreon post whose text links elsewhere (a MEGA or Google Drive folder, a YouTube video, another Patreon post) and download it → once it's done, those links are in Pending, read but not started, each once. A link to the creator's own page, a tier's checkout or the post itself isn't there.
+- [ ] Paste a free post of only text and links → its card says it has no images or files of its own and its links went to Pending, and they're there at once.
+
 **80. A Pixiv novel's book in your reader** · 0.2.29 · Claude checked the book's files, not how a reader shows it
 - [ ] Signed in to Pixiv, paste a novel's link (`https://www.pixiv.net/novel/show.php?id=…`) and download it. Open the `.epub` it saves in the reader you use: the cover first, then the novel's pages in order, its chapters listed in the reader's table of contents, furigana shown above their words, and links that open.
 

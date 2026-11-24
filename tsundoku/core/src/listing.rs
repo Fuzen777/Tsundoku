@@ -1427,6 +1427,7 @@ fn item_from_entry(entry: &Value, rough_dates: bool) -> Option<ListedItem> {
             tags: Vec::new(),
             pixiv: None,
             fanbox: None,
+            links: Vec::new(),
         },
         approximate_date,
         last_download: None,

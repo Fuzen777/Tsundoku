@@ -11,7 +11,7 @@ import type { ToolError } from "./bindings/ToolError"
 import type { ToolId } from "./bindings/ToolId"
 import type { UnpackProblem } from "./bindings/UnpackProblem"
 import type { WatchedError } from "./bindings/WatchedError"
-import { formatBytes, formatClockTime } from "./format"
+import { formatBytes, formatClockTime, formatMoney } from "./format"
 import { strings } from "./strings"
 
 /*
@@ -118,6 +118,12 @@ export function describePreviewError(error: unknown): ErrorDescription {
       return { message: error.refused ? text.fanboxSignInRefused : text.fanboxSignIn }
     case "fanboxLocked":
       return { message: text.fanboxLocked(error.fee) }
+    case "patreonLocked":
+      return {
+        message: text.patreonLocked(
+          error.cents > 0 && error.currency !== null ? formatMoney(error.cents, error.currency) : null,
+        ),
+      }
     case "limitReached":
       return { message: text.limitReached(error.site), detail: error.detail }
     case "waitBetweenDownloads":

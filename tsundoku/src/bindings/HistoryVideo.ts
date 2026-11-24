@@ -90,4 +90,9 @@ pixiv?: PixivDetails,
 /**
  * A Fanbox post's plan: what it costs a month, and whether the account can't open it. `None` anywhere else.
  */
-fanbox?: FanboxDetails, };
+fanbox?: FanboxDetails, 
+/**
+ * The links inside a post (a Patreon post's: `patreon::post_links`), which go to Pending once it's downloaded
+ * (`post_links`). Empty anywhere else.
+ */
+links?: Array<string>, };
