@@ -4,7 +4,8 @@ import { ownShape } from "../pickerLayout"
 import { ContextMenu, type MenuClose } from "./ContextMenu"
 import { TiledItems, type TileLabels } from "./MediaTiles"
 import type { MenuItem } from "./Menu"
-import { classes } from "./styles"
+import { PresentItem } from "./PresentItem"
+import { classes, LIFTED_SHADOW, LIFTS_ON_HOVER } from "./styles"
 import { sitePictureUrl } from "../api"
 
 /*
@@ -46,13 +47,13 @@ export function ItemTiles<Item>({ items, view, size, keyOf, galleryRatio, shownI
         view={view}
         size={size}
         render={(item, labels) => (
-          <li key={keyOf(item)} className="min-w-0">
+          <PresentItem key={keyOf(item)} itemKey={keyOf(item)} as="li" className="min-w-0">
             {renderTile(item, {
               ratio: view === "gallery" ? galleryRatio : null,
               labels,
               shown: keyOf(item) === shownId,
             })}
-          </li>
+          </PresentItem>
         )}
       />
     </div>
@@ -135,7 +136,7 @@ export function ItemTile({
   }
 
   return (
-    <div className="group relative">
+    <div className={classes("relative", LIFTS_ON_HOVER)}>
       <div
         ref={tile}
         data-tile={id}
@@ -168,6 +169,7 @@ export function ItemTile({
         style={{ aspectRatio: ratio ?? (pictured ? (ownRatio ?? shape) : 1) }}
         className={classes(
           "relative block w-full cursor-pointer overflow-hidden rounded-md bg-input",
+          LIFTED_SHADOW,
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
           shown ? "ring-2 ring-accent" : inDanger && "ring-2 ring-danger",
         )}

@@ -19,6 +19,7 @@ import { sourceSummary, stateCounts } from "../queueSources"
 import { strings } from "../strings"
 import { useOfferUndo } from "../undo"
 import { Card } from "./Card"
+import { Collapsible } from "./Collapsible"
 import { IconButton } from "./IconButton"
 import { QueueSourcePicture } from "./SourcePicture"
 import { ProgressBar } from "./ProgressBar"
@@ -143,7 +144,9 @@ export function QueueSourceGroup({ source, items, folded, onFold, rows }: QueueS
         {showsBar && <ProgressBar value={fraction} label={text.progress(source.name)} />}
         {error && <StatusMessage tone="danger" {...error} />}
       </Card>
-      {!folded && <div className="ml-6 flex flex-col gap-2 border-l-2 border-line pl-2">{rows}</div>}
+      <Collapsible open={!folded} gap={2} className="ml-6 flex flex-col gap-2 border-l-2 border-line pl-2">
+        {rows}
+      </Collapsible>
     </section>
   )
 }

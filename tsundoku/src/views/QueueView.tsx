@@ -198,8 +198,8 @@ export function QueueView() {
           </QueueLookContext>
         </div>
       )}
-      {shownItem && tileRows.shown && (
-        <DetailsDock>
+      <DetailsDock>
+        {shownItem && tileRows.shown && (
           <QueueLookContext value={look}>
             <QueueRow
               key={`${shownItem.id}-${tileRows.shown.opened}`}
@@ -208,8 +208,8 @@ export function QueueView() {
               onHide={tileRows.hide}
             />
           </QueueLookContext>
-        </DetailsDock>
-      )}
+        )}
+      </DetailsDock>
     </Page>
   )
 }

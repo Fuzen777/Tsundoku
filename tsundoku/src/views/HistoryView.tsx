@@ -635,11 +635,11 @@ export function HistoryView({ target = null }: { target?: HistoryTarget | null }
           {rows.after > 0 && <div style={{ height: rows.after }} />}
         </div>
       </div>
-      {shownVideo && tileRows.shown && (
-        <DetailsDock>
+      <DetailsDock>
+        {shownVideo && tileRows.shown && (
           <div key={tileRows.shown.opened}>{historyRow(shownVideo, tileRows.hide)}</div>
-        </DetailsDock>
-      )}
+        )}
+      </DetailsDock>
     </Page>
   )
 }

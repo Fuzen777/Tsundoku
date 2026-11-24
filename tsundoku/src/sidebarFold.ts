@@ -1,10 +1,5 @@
-import { useEffect, useState, type TransitionEvent } from "react"
-
-/** Windows' Animation Effects turned off (Settings → Accessibility → Visual Effects): the sidebar changes at once. */
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)"
-/** How long the sidebar may take to open or fold before it's taken as done anyway, in case its width's transition never
- * ends (none ran, or it was cut short). The transition itself takes 200 ms (App.tsx). */
-const SETTLED_AT_THE_LATEST_MS = 1000
+import { useState, type TransitionEvent } from "react"
+import { useOpening } from "./motion"
 
 export interface SidebarFold {
   /** Folded to the strip, or folding: what the column's width and Expand Sidebar follow. */
@@ -27,33 +22,12 @@ export interface SidebarFold {
  */
 export function useSidebarFold(startsCollapsed: boolean): SidebarFold {
   const [collapsed, setCollapsed] = useState(startsCollapsed)
-  const [stripLayout, setStripLayout] = useState(startsCollapsed)
-  const [moving, setMoving] = useState(false)
-
-  useEffect(() => {
-    if (!moving) return
-    const timer = setTimeout(() => {
-      setMoving(false)
-      setStripLayout(collapsed)
-    }, SETTLED_AT_THE_LATEST_MS)
-    return () => clearTimeout(timer)
-  }, [moving, collapsed])
-
+  const { drawn, moving, onTransitionEnd } = useOpening(!collapsed, "width")
   return {
     collapsed,
-    stripLayout,
+    stripLayout: !drawn,
     moving,
-    toggle: () => {
-      const next = !collapsed
-      const animated = !window.matchMedia(REDUCED_MOTION).matches
-      setCollapsed(next)
-      setMoving(animated)
-      if (!next || !animated) setStripLayout(next)
-    },
-    onTransitionEnd: (event) => {
-      if (event.target !== event.currentTarget || event.propertyName !== "width") return
-      setMoving(false)
-      setStripLayout(collapsed)
-    },
+    toggle: () => setCollapsed(!collapsed),
+    onTransitionEnd,
   }
 }

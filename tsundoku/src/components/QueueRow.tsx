@@ -18,7 +18,7 @@ import { describeDownloadError, fixFor, type ErrorDescription } from "../errors"
 import { formatContents, joinDetails } from "../format"
 import { canTryNow, describeHold, holdEnd, useTimeLeft } from "../holds"
 import { pickSummary } from "../postFiles"
-import { useDownloadProgress } from "../queueEvents"
+import { justFinished, useDownloadProgress } from "../queueEvents"
 import {
   changeFolder,
   moveToFolder,
@@ -41,6 +41,7 @@ import { PasswordForm } from "./PasswordForm"
 import { ProgressBar } from "./ProgressBar"
 import { StatusMessage } from "./StatusMessage"
 import { Thumbnail } from "./Thumbnail"
+import { classes } from "./styles"
 
 /** What a download's row opens with, when it's shown for a picture in the Queue's Masonry or Gallery: its log, or the
  * field for its password. */
@@ -73,7 +74,8 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
 
   return (
     <Card
-      className="flex items-start gap-3 p-3"
+      // A download that just finished flashes green as it's drawn, in Downloading or again under Done.
+      className={classes("flex items-start gap-3 p-3", justFinished(item.id) && "motion-safe:animate-finished")}
       onDoubleClick={(event) => {
         if (opensFile && !onAControl(event.target)) actOnFile(openDownload)
       }}

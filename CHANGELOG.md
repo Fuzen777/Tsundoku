@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.37 · 2026-11-24
+
+### Changed
+
+- **The details panel is flush with the view's edges**: a picture's row opens in a strip along the bottom of the window from the sidebar to the window's edge, without a card's frame or rounded corners inside it. It rises from the bottom as it opens, keeping the picture you clicked in sight, and sinks back as it closes.
+- **More of the window moves rather than jumps**, briefly: the line under the open tab glides to the next one and the view fades in; groups, a source's downloads in Downloads and Watched cards fold and unfold smoothly; new links fade into Pending and Downloads, and removed ones collapse away; progress bars fill steadily rather than in steps; a download's row flashes green as it finishes; and pictures lift a little under the pointer. With Windows' animation effects turned off, everything changes at once.
+
 ## 0.2.36 · 2026-11-24
 
 ### Changed

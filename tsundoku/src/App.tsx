@@ -408,7 +408,10 @@ export function App() {
               <UndoToastProvider>
                 <ChaptersContext value={chaptersLink}>
                   <DetailsDockContext value={detailsDock}>
-                    <CurrentView view={view} settingsPlace={settingsPlace} historyTarget={historyTarget} />
+                    {/* Fading in as it opens, a new element for each view. */}
+                    <div key={view} className="h-full motion-safe:animate-view-in">
+                      <CurrentView view={view} settingsPlace={settingsPlace} historyTarget={historyTarget} />
+                    </div>
                   </DetailsDockContext>
                 </ChaptersContext>
               </UndoToastProvider>

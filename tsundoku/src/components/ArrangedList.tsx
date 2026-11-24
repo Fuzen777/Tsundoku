@@ -2,10 +2,13 @@ import { Fragment, type ReactNode } from "react"
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, ChevronRight, Folder } from "lucide-react"
 import { bundled, groupPath, sharedBundles, type GroupPlace, type ItemGroup, type ListEntry } from "../arrange"
 import { useFoldedGroups, type FoldedGroups, type GroupedView } from "../foldedGroups"
+import { ListKeysContext, useListKeys } from "../presence"
 import { strings } from "../strings"
 import { SelectInput } from "./Field"
 import { IconButton } from "./IconButton"
 import { SegmentedControl, ToggleButton } from "./SegmentedControl"
+import { Collapsible } from "./Collapsible"
+import { PresentItem } from "./PresentItem"
 import { classes } from "./styles"
 
 const text = strings.lists
@@ -154,7 +157,13 @@ export function GroupedList<Item>({
 }: GroupedListProps<Item>) {
   const ownFolds = useFoldedGroups(view)
   const { collapsed, toggle } = folds ?? ownFolds
-  const row = (item: Item) => <Fragment key={keyOf(item)}>{renderItem(item)}</Fragment>
+  // A new item fades in, one that left collapses away (presence.ts).
+  const listKeys = useListKeys(view, groups.flatMap((group) => group.items).map(keyOf))
+  const row = (item: Item) => (
+    <PresentItem key={keyOf(item)} itemKey={keyOf(item)}>
+      {renderItem(item)}
+    </PresentItem>
+  )
   // A source with one item in the whole list shows it on its own; one with more shows each under its heading, even one
   // alone in its group (grouped by status, say).
   const shared = bundles ? sharedBundles(groups.flatMap((group) => group.items), bundles.keyOf) : null
@@ -195,7 +204,13 @@ export function GroupedList<Item>({
     endRun()
     return drawn
   }
-  if (!grouped) return <div className="flex flex-col gap-2">{rows(groups.flatMap((group) => group.items), "")}</div>
+  if (!grouped) {
+    return (
+      <ListKeysContext value={listKeys}>
+        <div className="flex flex-col gap-2">{rows(groups.flatMap((group) => group.items), "")}</div>
+      </ListKeysContext>
+    )
+  }
 
   const section = (group: ItemGroup<Item>, path: string, nested: boolean): ReactNode => {
     const key = groupPath(path, group.key)
@@ -213,16 +228,22 @@ export function GroupedList<Item>({
           before={selection && <GroupCheckbox items={group.items} selection={selection} label={group.label} />}
           after={headingExtra?.(group)}
         />
-        {!isCollapsed &&
-          (group.subgroups ? (
-            <div className="flex flex-col gap-3">{group.subgroups.map((subgroup) => section(subgroup, key, true))}</div>
-          ) : (
-            rows(group.items, key)
-          ))}
+        {/* Folding and unfolding slide (Collapsible); what's folded away isn't drawn. */}
+        <Collapsible
+          open={!isCollapsed}
+          gap={nested ? 2 : 3}
+          className={classes("flex flex-col", group.subgroups || !nested ? "gap-3" : "gap-2")}
+        >
+          {group.subgroups ? group.subgroups.map((subgroup) => section(subgroup, key, true)) : rows(group.items, key)}
+        </Collapsible>
       </section>
     )
   }
-  return <div className="flex flex-col gap-4">{groups.map((group) => section(group, "", false))}</div>
+  return (
+    <ListKeysContext value={listKeys}>
+      <div className="flex flex-col gap-4">{groups.map((group) => section(group, "", false))}</div>
+    </ListKeysContext>
+  )
 }
 
 interface GroupHeadingProps {

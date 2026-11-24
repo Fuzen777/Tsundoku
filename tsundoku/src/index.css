@@ -64,8 +64,25 @@
     }
   }
 
-  /* Fluent's decelerate curve, as Windows' panes open: quick at first, then settling. The sidebar opening and folding
-     (ease-decelerate, App.tsx) */
+  /* A view fading in as its tab opens it (App.tsx) */
+  --animate-view-in: view-in 150ms ease-out;
+  @keyframes view-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* A download's row or picture as it finishes: a green tint fading back to its own background (queueEvents.ts's
+     justFinished) */
+  --animate-finished: finished 1.2s ease-out;
+  @keyframes finished {
+    from {
+      background-color: color-mix(in oklab, var(--color-success) 22%, transparent);
+    }
+  }
+
+  /* Fluent's decelerate curve, as Windows' panes open: quick at first, then settling. What opens and closes
+     (ease-decelerate): the sidebar, folds, the details panel, the tabs' line (DESIGN.md → Motion) */
   --ease-decelerate: cubic-bezier(0.1, 0.9, 0.2, 1);
 }
 

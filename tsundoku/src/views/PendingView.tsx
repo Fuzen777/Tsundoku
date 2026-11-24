@@ -441,9 +441,9 @@ export function PendingView() {
           )}
         </div>
       )}
-      {shownLink && tileRows.shown && (
-        <DetailsDock>{pendingRow(shownLink, { shown: tileRows.shown, hide: tileRows.hide })}</DetailsDock>
-      )}
+      <DetailsDock>
+        {shownLink && tileRows.shown && pendingRow(shownLink, { shown: tileRows.shown, hide: tileRows.hide })}
+      </DetailsDock>
     </Page>
   )
 }

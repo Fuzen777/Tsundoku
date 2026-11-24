@@ -26,6 +26,7 @@ import type { WatchedSource } from "../bindings/WatchedSource"
 import { GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
+import { Collapsible } from "../components/Collapsible"
 import { EmptyState } from "../components/EmptyState"
 import { FailureFixes } from "../components/FailureFixes"
 import { Field, SelectInput, TextInput } from "../components/Field"
@@ -330,10 +331,11 @@ function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
           <Menu label={text.moreActions} items={[{ label: text.remove, danger: true, onSelect: () => act(remove) }]} />
         </div>
       </div>
-      {!expanded && source.downloadedCount > 0 && (
-        // Under the name, past the chevron and the picture (a playlist's is wider).
+      {/* Folding and unfolding slide (Collapsible). */}
+      <Collapsible open={!expanded && source.downloadedCount > 0} gap={3}>
+        {/* Under the name, past the chevron and the picture (a playlist's is wider). */}
         <LatestDownloads sourceId={source.id} className={source.kind === "playlist" ? "pl-34" : "pl-24"} />
-      )}
+      </Collapsible>
       {source.lastError && !source.checking && (
         <StatusMessage tone="danger" {...describePreviewError(source.lastError)}>
           {fixFor(source.lastError) && <FailureFixes error={source.lastError} onRetry={check} />}
@@ -341,12 +343,10 @@ function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
       )}
       {error && <StatusMessage tone="danger" {...error} />}
       {editing && <SourceEditor source={source} onDone={() => setEditing(false)} />}
-      {expanded && hasItems && (
-        <div className="flex flex-col gap-3 border-t border-line pt-3">
-          {source.newItems.length > 0 && <NewItems source={source} />}
-          {source.skippedItems.length > 0 && <SkippedItems source={source} />}
-        </div>
-      )}
+      <Collapsible open={expanded && hasItems} gap={3} className="flex flex-col gap-3 border-t border-line pt-3">
+        {source.newItems.length > 0 && <NewItems source={source} />}
+        {source.skippedItems.length > 0 && <SkippedItems source={source} />}
+      </Collapsible>
     </Card>
   )
 }

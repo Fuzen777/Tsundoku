@@ -29,11 +29,32 @@ import { checkFoundItems } from "./watchedSources"
 
 const progress = createLiveStore<number, DownloadProgress>()
 
+/** How long a download that just finished counts as just finished: its row's flash, and a little more. */
+const JUST_FINISHED_MS = 1500
+/** The downloads that finished in the last moment, while the app watched: their rows flash (`justFinished`). */
+const justFinishedIds = new Set<number>()
+
+/** Whether a download finished a moment ago, for its row or picture to flash once as it's drawn (DESIGN.md → Motion).
+ * A row drawn again in another group (Done) flashes there. */
+export function justFinished(id: number): boolean {
+  return justFinishedIds.has(id)
+}
+
 /** Starts listening to the queue's events, and decides what closing the window does: with the tray on, it hides;
  * otherwise, it asks first while downloads run. Called once, before the first render (main.tsx). */
 export function trackQueue(queryClient: QueryClient): void {
   let doneIds = new Set<number>()
   void onQueueChanged((items) => {
+    // Those done now that weren't in the copy the UI had: none when it had none yet.
+    const before = queryClient.getQueryData<QueueItem[]>(queryKeys.queue)
+    if (before) {
+      const doneBefore = new Set(before.filter((item) => item.state === "done").map((item) => item.id))
+      for (const item of items) {
+        if (item.state !== "done" || doneBefore.has(item.id)) continue
+        justFinishedIds.add(item.id)
+        setTimeout(() => justFinishedIds.delete(item.id), JUST_FINISHED_MS)
+      }
+    }
     queryClient.setQueryData(queryKeys.queue, items)
     // A pending link or a watched item may now be downloaded already or queued.
     void queryClient.invalidateQueries({ queryKey: queryKeys.pending })

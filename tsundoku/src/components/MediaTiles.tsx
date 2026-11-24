@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { Check, type LucideIcon } from "lucide-react"
 import { columnsFor, intoColumns, ownShape, SMALL_TILE, TILE_WIDTHS, TINY_TILE, tileWidthIn } from "../pickerLayout"
-import { classes } from "./styles"
+import { classes, LIFTED_SHADOW, LIFTS_ON_HOVER } from "./styles"
 import { sitePictureUrl } from "../api"
 
 /** What a tile says under its picture, as the post strip's marks do. */
@@ -150,12 +150,13 @@ function Tile({ spec, ratio, labels, disabled }: TileProps) {
   const shown = picked && !locked
   const inactive = disabled || locked
   return (
-    <li data-item={spec.key} className="min-w-0">
+    <li data-item={spec.key} className={classes("min-w-0", !inactive && LIFTS_ON_HOVER)}>
       <label
         title={spec.hint}
         style={{ aspectRatio: ratio ?? (pictured ? (ownRatio ?? spec.ratio) : 1) }}
         className={classes(
           "relative block w-full overflow-hidden rounded-md bg-input",
+          !inactive && LIFTED_SHADOW,
           "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent",
           inactive ? "cursor-default" : "cursor-pointer",
           mark?.tone === "notPicked" && "ring-2 ring-accent",
