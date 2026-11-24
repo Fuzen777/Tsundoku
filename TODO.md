@@ -56,6 +56,10 @@ rules:
 Gaps between the app and the workspace's shared `Coding/DESIGN.md` (written 2026-11-24 with Kotodama as its basis).
 
 - [ ] **Decide the accent.** The shared standard keeps the accent neutral and gives each app one signature color for primary buttons, the keyboard focus ring and links. Here the accent (ai-iro, or the one picked in Settings → Appearance) also drives selection, progress bars, checkboxes and the selected segment. Either move those to neutral and keep the picker as the signature's, or declare the colored accent as a deviation in [DESIGN](./DESIGN.md).
+- [ ] **Danger button.** A soft red tint (red-500 at 20%, 30% hovered, red-400 text) instead of the solid `--color-danger-fill`, so it doesn't compete with the primary button.
+- [ ] **Toasts.** `UndoToast` becomes the shared stack: at the bottom right, the newest at the bottom, several at once, with the four tones and 12 px corners, instead of one toast centered at the bottom that the next one replaces.
+- [ ] **Deleting a preset** confirms inline (the button turns into a `danger` Confirm), or happens at once with Undo, instead of Windows' dialog. Overwriting a file and closing while downloading keep the dialog.
+- [ ] **Radii.** Cards go from 8 px to 12 px and tooltips from 4 px to 8 px, or both are declared as deviations.
 - [ ] **Trim [DESIGN](./DESIGN.md)** to what is specific to Tsundoku: move out what the shared file now covers, and add the declarations it asks for (signature, Comfortable density, Lucide, no touch support, dark and light, the Mica variant) and any deviation kept on purpose. The light theme's values stay here until the shared file defines one.
 
 #### Not Now
