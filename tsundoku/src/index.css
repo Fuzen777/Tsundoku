@@ -63,6 +63,10 @@
       opacity: 0;
     }
   }
+
+  /* Fluent's decelerate curve, as Windows' panes open: quick at first, then settling. The sidebar opening and folding
+     (ease-decelerate, App.tsx) */
+  --ease-decelerate: cubic-bezier(0.1, 0.9, 0.2, 1);
 }
 
 :root {

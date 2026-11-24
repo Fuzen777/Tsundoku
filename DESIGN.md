@@ -301,4 +301,6 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 - Color changes use Tailwind's `transition-colors` (150 ms).
 - A progress bar's fill eases to each new value over 150 ms; its indeterminate slider loops every 1.4 s (`animate-indeterminate`, defined in `index.css`).
 - A tooltip fades in over 100 ms (`animate-tooltip-in`).
+- Collapse Sidebar and Expand Sidebar ease the sidebar's width over 200 ms with Fluent's decelerate curve (`ease-decelerate`: `cubic-bezier(0.1, 0.9, 0.2, 1)`, as Windows' panes open), pushing the view aside as it opens and letting it slide back as it folds, never over it. The sidebar's content keeps the width of its layout and is clipped while it moves: opening draws the open sidebar at once, uncovered as the column widens; folding keeps it until the strip is reached, then the strip's icons take its place (`sidebarFold.ts`).
+- Whatever moves follows `prefers-reduced-motion`, which Windows' Animation Effects setting sets: turned off, the change happens at once.
 - Nothing else animates yet.

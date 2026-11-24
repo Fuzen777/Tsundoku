@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.36 · 2026-11-24
+
+### Changed
+
+- **The sidebar slides open and shut**: Collapse Sidebar and Expand Sidebar ease its width over a fifth of a second, the view sliding aside as it opens and back as it folds, rather than jumping. With Windows' animation effects turned off, it changes at once.
+
 ## 0.2.35 · 2026-11-24
 
 ### Changed

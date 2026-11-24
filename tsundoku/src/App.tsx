@@ -47,6 +47,7 @@ import {
   useWatchedSources,
 } from "./queries"
 import { useAppShortcuts, useWindowPaste } from "./shortcuts"
+import { useSidebarFold } from "./sidebarFold"
 import { strings } from "./strings"
 import { DetailsDockContext } from "./tileRows"
 import { type Drop, useLinkDrop, usePreview } from "./usePreview"
@@ -108,14 +109,15 @@ export function App() {
   const startedInTray = appInfo?.startedInTray ?? false
   // Folded to a narrow strip, the sidebar keeps the add bar's buttons as icons and hides the chapters. Kept in
   // settings.json, which main.tsx reads before the first render, so it never shows open first; folded at once, and
-  // still folded if saving fails (it's then only forgotten at the next start).
+  // still folded if saving fails (it's then only forgotten at the next start). Its width eases from one to the other.
   const { data: appearance } = useAppearanceOptions()
   const { save: saveAppearance } = useSaveAppearanceOptions()
-  const [collapsed, setCollapsed] = useState(appearance?.sidebarCollapsed ?? false)
+  const sidebar = useSidebarFold(appearance?.sidebarCollapsed ?? false)
   const toggleSidebar = () => {
-    setCollapsed(!collapsed)
-    void saveAppearance({ sidebarCollapsed: !collapsed })
+    sidebar.toggle()
+    void saveAppearance({ sidebarCollapsed: !sidebar.collapsed })
   }
+  const folded = sidebar.stripLayout
   // Where a picture's row shows in the Downloads, Pending and History views: under the view, across the content layer.
   const [detailsDock, setDetailsDock] = useState<HTMLDivElement | null>(null)
 
@@ -292,48 +294,53 @@ export function App() {
 
   return (
     <AppActionsContext value={actions}>
-      <div
-        className={classes(
-          "grid h-full",
-          collapsed ? "grid-cols-[3.5rem_minmax(0,1fr)]" : "grid-cols-[13rem_minmax(0,1fr)]",
-        )}
-      >
+      <div className="grid h-full grid-cols-[auto_minmax(0,1fr)]">
         {/* The app's name with Collapse Sidebar, Paste Link and Type a Link, then the open view's chapters; collapsed,
-            Expand Sidebar and the two buttons as icons. The view's column takes the whole height. */}
-        <div className="flex min-h-0 flex-col">
-          <div className={classes("flex h-14 shrink-0 items-center", collapsed ? "justify-center" : "pr-2")}>
-            {!collapsed && (
-              <div className="min-w-0 flex-1">
-                <AppTitle />
-              </div>
-            )}
-            <IconButton
-              label={collapsed ? strings.nav.expandSidebar : strings.nav.collapseSidebar}
-              icon={collapsed ? PanelLeftOpen : PanelLeftClose}
-              aria-expanded={!collapsed}
-              onClick={toggleSidebar}
-            />
-          </div>
-          <div className="relative z-10 px-2 pb-3">
-            <AddBar
-              ref={addBar}
-              collapsed={collapsed}
-              onPaste={() => void pasteFromClipboard()}
-              note={pasteNote?.text ?? null}
-              onTypeLink={() => setPasteNote(null)}
-              link={link}
-              onLinkChange={setLink}
-              onSubmit={() => void addText(link)}
-            />
-          </div>
-          {!collapsed && (
-            <Sidebar
-              className="flex-1"
-              chapters={chapters?.view === view ? chapters : null}
-              viewLabel={[...mainNavItems, settingsNavItem].find((item) => item.id === view)?.label ?? ""}
-              onSelectChapter={(id) => setChapterTarget({ view, id })}
-            />
+            Expand Sidebar and the two buttons as icons. The view's column takes the whole height. Its width eases
+            over 200 ms (sidebarFold.ts), the content inside keeping the width of the layout drawn. */}
+        <div
+          className={classes(
+            "min-h-0 transition-[width] duration-200 ease-decelerate motion-reduce:transition-none",
+            sidebar.collapsed ? "w-14" : "w-52",
+            sidebar.moving && "overflow-x-clip",
           )}
+          onTransitionEnd={sidebar.onTransitionEnd}
+        >
+          <div className={classes("flex h-full min-h-0 flex-col", folded ? "w-14" : "w-52")}>
+            <div className={classes("flex h-14 shrink-0 items-center", folded ? "justify-center" : "pr-2")}>
+              {!folded && (
+                <div className="min-w-0 flex-1">
+                  <AppTitle />
+                </div>
+              )}
+              <IconButton
+                label={sidebar.collapsed ? strings.nav.expandSidebar : strings.nav.collapseSidebar}
+                icon={sidebar.collapsed ? PanelLeftOpen : PanelLeftClose}
+                aria-expanded={!sidebar.collapsed}
+                onClick={toggleSidebar}
+              />
+            </div>
+            <div className="relative z-10 px-2 pb-3">
+              <AddBar
+                ref={addBar}
+                collapsed={folded}
+                onPaste={() => void pasteFromClipboard()}
+                note={pasteNote?.text ?? null}
+                onTypeLink={() => setPasteNote(null)}
+                link={link}
+                onLinkChange={setLink}
+                onSubmit={() => void addText(link)}
+              />
+            </div>
+            {!folded && (
+              <Sidebar
+                className="flex-1"
+                chapters={chapters?.view === view ? chapters : null}
+                viewLabel={[...mainNavItems, settingsNavItem].find((item) => item.id === view)?.label ?? ""}
+                onSelectChapter={(id) => setChapterTarget({ view, id })}
+              />
+            )}
+          </div>
         </div>
         <div className="flex min-h-0 flex-col">
           <div className="flex h-14 shrink-0 items-center pr-4">
