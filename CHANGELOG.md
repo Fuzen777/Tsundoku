@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.45 · 2026-11-25
+
+### Changed
+
+- **Several channels, playlists and accounts can be picked from at once**: opening another one's list in Pending sends the one open back to Needs Attention, where it now shows its picture, its name, how many items are listed and how many are ticked. Opening it again shows it at once, as you left it: every item loaded, ticks and Undo included, with nothing read again. This lasts while Tsundoku runs. The one open above Pending leaves Needs Attention meanwhile.
+
 ## 0.2.44 · 2026-11-25
 
 ### Added

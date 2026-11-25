@@ -114,6 +114,9 @@ export function PreviewCard({
       {state.stage === "ready" &&
         (state.preview.kind === "listing" ? (
           <ListingPicker
+            // A picker of its own for each listing, one taking another's place at once (`keptPickers`); the same one
+            // stays when its link leaves Pending (Download and Load More).
+            key={state.preview.listing.url}
             listing={state.preview.listing}
             pendingId={pendingId}
             startFullPage={startFullPage}

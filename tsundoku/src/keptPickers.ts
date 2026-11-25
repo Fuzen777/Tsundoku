@@ -1,24 +1,60 @@
+import { useSyncExternalStore } from "react"
+import type { Listing } from "./bindings/Listing"
 import type { KeptTicks } from "./listingPicker"
 
 /**
- * What the listing picker had ticked, with its changes for Undo, for each pending link it was opened from (Pick What to
- * Download), so picking from the link again carries on from there. Kept in memory while the app runs and the link waits
- * in Pending: `forgetPickersBut` drops the others whenever Pending changes.
+ * What the listing picker had for each pending link it was opened from (Pick What to Download), so picking from the link
+ * again carries on from there, at once: what's ticked, with its changes for Undo, and the listing as it stood, every item
+ * loaded included (`listing.items`, with `more` and `total` as they were). Several links can each have theirs, while one
+ * picker shows at a time; Pending's Needs Attention shows the others with their picture and name (`useKeptPicker`).
+ * Kept in memory while the app runs and the link waits in Pending: `forgetPickersBut` drops the others whenever Pending
+ * changes.
  */
-const kept = new Map<number, KeptTicks>()
-
-export function keepPicker(pendingId: number, ticks: KeptTicks): void {
-  kept.set(pendingId, ticks)
+export interface KeptPicker {
+  ticks: KeptTicks | null
+  listing: Listing | null
 }
 
-export function keptPicker(pendingId: number): KeptTicks | undefined {
+const kept = new Map<number, KeptPicker>()
+const listeners = new Set<() => void>()
+
+function change(pendingId: number, update: Partial<KeptPicker>): void {
+  kept.set(pendingId, { ticks: null, listing: null, ...kept.get(pendingId), ...update })
+  for (const listener of listeners) listener()
+}
+
+export function keepPicker(pendingId: number, ticks: KeptTicks): void {
+  change(pendingId, { ticks })
+}
+
+/** Keeps the listing as the picker has it now: its items so far, and where Load More carries on. */
+export function keepListing(pendingId: number, listing: Listing): void {
+  change(pendingId, { listing })
+}
+
+export function keptPicker(pendingId: number): KeptPicker | undefined {
   return kept.get(pendingId)
+}
+
+/** What's kept for a pending link, kept current as its picker changes; nothing for `null`. */
+export function useKeptPicker(pendingId: number | null): KeptPicker | undefined {
+  return useSyncExternalStore(subscribe, () => (pendingId === null ? undefined : kept.get(pendingId)))
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 /** Forgets what was kept for the links no longer in Pending. */
 export function forgetPickersBut(pendingIds: Iterable<number>): void {
   const waiting = new Set(pendingIds)
+  let forgot = false
   for (const id of [...kept.keys()]) {
-    if (!waiting.has(id)) kept.delete(id)
+    if (!waiting.has(id)) {
+      kept.delete(id)
+      forgot = true
+    }
   }
+  if (forgot) for (const listener of listeners) listener()
 }

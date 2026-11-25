@@ -123,6 +123,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] On your screen, paste an Instagram or X account on Downloads → "Account added to Pending" with Open in Pending; open it → the list over the whole window, the site's icon before its name.
 - [ ] Esc → the list sits above Pending, taking a bit more than half the window, Pending's links reachable under it. Collapse → one line with the account's picture, the site's icon, its name and how many are ticked; hovering it shows its link and details.
 - [ ] Load All on a big account, then Collapse and go to another view while it loads → coming back, it's still loading or done, nothing lost.
+- [ ] (0.2.45) Two Pixiv artists in Needs Attention: open the first, untick a few, Load More, then open the second → the first is back in Needs Attention with its picture, name and how many are ticked; open it again → it shows at once with the same works and ticks. Claude tried this with two YouTube channels.
 
 **14. Pick from a channel, playlist or account** · 0.1.57
 - [ ] Paste a YouTube channel (such as `https://www.youtube.com/@NASA`, any tab) → "Listing the channel's newest videos…", then its newest 50 videos, newest first, each with a box, thumbnail, title, rough date and length. New ones are ticked; downloaded ones are greyed, unticked and marked Downloaded (hovering says when); queued ones say In Queue.

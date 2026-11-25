@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { cancelPreview, fetchPreview, listingKind } from "./api"
 import type { LinkPreview } from "./bindings/LinkPreview"
+import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
 import { isCancelled, needsPassword } from "./errors"
 
@@ -63,6 +64,14 @@ export function usePreview() {
     [state],
   )
 
+  /** Shows a listing as it was kept (`keptPickers`), loaded items and all, without reading it again; a fetch in
+   * progress stops. */
+  const showListing = useCallback((listing: Listing) => {
+    latestRequest.current += 1
+    void cancelPreview()
+    setState({ stage: "ready", preview: { kind: "listing", listing }, password: null })
+  }, [])
+
   /** Closes the card, cancelling a fetch in progress. */
   const close = useCallback(() => {
     latestRequest.current += 1
@@ -70,7 +79,7 @@ export function usePreview() {
     setState({ stage: "idle" })
   }, [])
 
-  return { state, show, unlock, close }
+  return { state, show, showListing, unlock, close }
 }
 
 /** What was dropped on the window: its text (a link, several, or text holding them) and its files, either of which

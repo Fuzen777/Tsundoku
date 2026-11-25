@@ -55,8 +55,12 @@ import type { PreviewError } from "../bindings/PreviewError"
 import type { PresetsOverview } from "../bindings/PresetsOverview"
 import type { RulePreset } from "../bindings/RulePreset"
 import type { VideoInfo } from "../bindings/VideoInfo"
+import type { Listing } from "../bindings/Listing"
 import { useChapters } from "../chapters"
+import { ListingPicture } from "../components/ListingPicker"
 import { useCopyLink } from "../copyLink"
+import { useKeptPicker } from "../keptPickers"
+import { nounOf } from "../listingPicker"
 import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
@@ -164,8 +168,10 @@ export function PendingView() {
     ),
   )
   const destinationOf = new Map(readLinks.map(({ link }, index) => [link.id, destinations[index]]))
-  // Links that list several items sit in Needs Attention, above the rest however they're grouped.
-  const toPick = links.filter((link) => link.state === "needsPicking")
+  // Links that list several items sit in Needs Attention, above the rest however they're grouped, but the one whose
+  // picker shows above the view.
+  const { openPickerId } = useAppActions()
+  const toPick = links.filter((link) => link.state === "needsPicking" && link.id !== openPickerId)
   const others = links.filter((link) => link.state !== "needsPicking")
   const grouped = group !== "none" || byStatus
   const arranged = arrangeNested(
@@ -493,6 +499,7 @@ function PendingRow({
   const removeLinks = useRemoveLinks()
   const copyLink = useCopyLink()
   const { pickFromPending } = useAppActions()
+  const listed = useListed(link)
   const preview = link.preview
   const video = preview?.video ?? null
   const presetId = link.presetId ?? allPresetId
@@ -521,12 +528,20 @@ function PendingRow({
         checked={selected}
         onChange={(event) => onSelect(event.target.checked)}
       />
-      <Thumbnail key={video?.thumbnailUrl ?? link.link} url={video?.thumbnailUrl ?? null} className="w-24" />
+      {listed ? (
+        <div className="flex aspect-video w-24 shrink-0 items-center justify-center">
+          <ListingPicture listing={listed.listing} size="row" />
+        </div>
+      ) : (
+        <Thumbnail key={video?.thumbnailUrl ?? link.link} url={video?.thumbnailUrl ?? null} className="w-24" />
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="truncate font-medium" title={video?.title ?? link.link}>
-          {video?.title ?? link.link}
+        <p className="truncate font-medium" title={listed ? link.link : (video?.title ?? link.link)}>
+          {listed?.listing.title ?? video?.title ?? link.link}
         </p>
-        {video ? (
+        {listed ? (
+          <p className="truncate text-xs text-fg-secondary tabular-nums">{listed.details}</p>
+        ) : video ? (
           <p className="truncate text-xs text-fg-secondary tabular-nums">
             {joinDetails([
               video.uploader,
@@ -676,6 +691,24 @@ function PendingRow({
   )
 }
 
+/** A link that needs picking, once its picker listed it while the app runs (`keptPickers`): the listing as it was left,
+ * and "Account · pixiv.net · Newest 60 works · 12 picked" for its row and its picture's hover text. */
+function useListed(link: PendingLink): { listing: Listing; details: string } | null {
+  const kept = useKeptPicker(link.state === "needsPicking" ? link.id : null)
+  const listing = kept?.listing
+  if (!listing) return null
+  const noun = strings.picker.nouns[nounOf(listing)]
+  return {
+    listing,
+    details: joinDetails([
+      strings.picker.kinds[listing.kind],
+      listing.siteName,
+      strings.picker.listed(listing.items.length, noun, listing.newestOnly && listing.more !== null, listing.total),
+      kept.ticks && strings.picker.picked(kept.ticks.selection.size),
+    ]),
+  }
+}
+
 /** The page Copy Link copies: the one reading found (a short link's destination), else the link as it was added. */
 function pageOf(link: PendingLink): string {
   return link.preview?.video.url ?? link.link
@@ -797,21 +830,24 @@ function PendingTile({
   const removeLinks = useRemoveLinks()
   const copyLink = useCopyLink()
   const { pickFromPending } = useAppActions()
+  const listed = useListed(link)
   const video = link.preview?.video ?? null
   const status = pendingStatus(link)
   const shownStatus = status === "notRead" ? (link.state === "reading" ? "reading" : "waiting") : status
   // Needs Attention is always a heading of its own.
   const headingSaysIt = (facts.byStatus || status === "needsAttention") && shownStatus === status
   const statusIcon = headingSaysIt ? undefined : STATUS_ICONS[shownStatus]
-  const title = video?.title ?? link.link
-  const details = video
-    ? joinDetails([
-        video.uploader,
-        video.siteName,
-        video.durationSeconds !== null && formatDuration(video.durationSeconds),
-        pickSummary(video) ?? formatContents(video),
-      ])
-    : null
+  const title = listed?.listing.title ?? video?.title ?? link.link
+  const details = listed
+    ? listed.details
+    : video
+      ? joinDetails([
+          video.uploader,
+          video.siteName,
+          video.durationSeconds !== null && formatDuration(video.durationSeconds),
+          pickSummary(video) ?? formatContents(video),
+        ])
+      : null
   const statusText = shownStatus === "reading" ? strings.pending.reading : strings.pending.groups[status]
   const hint = [title, details, statusText, strings.tiles.hint].filter(Boolean).join("\n")
   const act = (action: () => Promise<void>) => {
@@ -850,12 +886,12 @@ function PendingTile({
       id={link.id}
       place={place}
       title={title}
-      thumbnailUrl={video?.thumbnailUrl ?? null}
+      thumbnailUrl={video?.thumbnailUrl ?? listed?.listing.thumbnailUrl ?? null}
       fallbackIcon={isPost ? Images : Film}
       shape={isPost ? 4 / 5 : 16 / 9}
       hint={hint}
       ariaLabel={joinDetails([title, statusText])}
-      dimmed={!video}
+      dimmed={!video && !listed}
       failed={link.state === "failed"}
       corner={
         statusIcon && (

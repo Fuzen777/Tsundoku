@@ -54,6 +54,7 @@ import {
 import { useAppShortcuts, useWindowPaste } from "./shortcuts"
 import { useSidebarFold } from "./sidebarFold"
 import { strings } from "./strings"
+import { keptPicker } from "./keptPickers"
 import { DetailsDockContext } from "./tileRows"
 import { OfferToastContext, useToasts } from "./undo"
 import { type Drop, useLinkDrop, usePreview } from "./usePreview"
@@ -152,16 +153,27 @@ export function App() {
   const [pickingId, setPickingId] = useState<number | null>(null)
   // Counts the links shown, so one found to be a channel after a newer link was shown doesn't replace that one.
   const shownCount = useRef(0)
+  const { showListing } = preview
+  // One picker shows at a time: opening another sends this one back to Needs Attention, its listing kept as loaded,
+  // with its ticks (`keptPickers`), so opening it again shows it at once, without reading it again.
   const pickFromPending = useCallback(
     (id: number, shown: string) => {
       shownCount.current += 1
       pickingFor.current = id
       setPickingId(id)
       setLink(shown)
-      void showPreview(shown)
+      const kept = keptPicker(id)?.listing
+      if (kept) showListing(kept)
+      else void showPreview(shown)
     },
-    [showPreview],
+    [showPreview, showListing],
   )
+  // Closing the card leaves its link waiting in Needs Attention, with what was kept for it.
+  const closeCard = useCallback(() => {
+    pickingFor.current = null
+    setPickingId(null)
+    closePreview()
+  }, [closePreview])
   /**
    * A channel, playlist or account added (its address says so, or the preview card read it as one): its picker lives
    * in Pending only, so it waits in Needs Attention. With Pending open, its picker opens at once, or, when the card
@@ -354,17 +366,29 @@ export function App() {
   // The What's New card opened by hand (Settings → About), to browse every version's changes, until it's closed.
   const [browsingWhatsNew, setBrowsingWhatsNew] = useState(false)
   const showWhatsNew = useCallback(() => setBrowsingWhatsNew(true), [])
+  // The pending link whose picker shows above Pending, which Needs Attention leaves out meanwhile.
+  const openPickerId = preview.state.stage === "idle" ? null : pickingId
   const actions = useMemo(
     () => ({
       navigate,
       showLink,
       pickFromPending,
+      openPickerId,
       pasteFromClipboard,
       addFileLinks: (read: LinkFilesRead) => void addFileLinks(read),
       showWatchedDownloads,
       showWhatsNew,
     }),
-    [navigate, showLink, pickFromPending, pasteFromClipboard, addFileLinks, showWatchedDownloads, showWhatsNew],
+    [
+      navigate,
+      showLink,
+      pickFromPending,
+      openPickerId,
+      pasteFromClipboard,
+      addFileLinks,
+      showWatchedDownloads,
+      showWhatsNew,
+    ],
   )
 
   if (needsSetup) return <SetupView />
@@ -477,7 +501,7 @@ export function App() {
                   pendingId={pickingId}
                   startFullPage={addingOptions?.pickInFullPage ?? true}
                   hidden={previewHidden}
-                  onClose={preview.close}
+                  onClose={closeCard}
                   onRetry={(retryLink, password) => void preview.show(retryLink, password)}
                   onUnlock={(password) => void preview.unlock(password)}
                   onAdded={() => {

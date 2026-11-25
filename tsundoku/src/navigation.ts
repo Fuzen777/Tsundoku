@@ -78,6 +78,8 @@ export interface AppActions {
   /** Shows a pending link that lists several items in the preview card, to pick from: once what's picked joins the
    * queue, or it's watched, the pending link leaves Pending. */
   pickFromPending: (id: number, link: string) => void
+  /** The pending link whose picker shows above Pending, which Needs Attention leaves out while it does. */
+  openPickerId: number | null
   /** Adds what the clipboard holds, as the add bar's Paste Link does: one link's preview, or several links to
    * Pending. With no link there, the add bar says so. */
   pasteFromClipboard: () => Promise<void>
@@ -101,6 +103,7 @@ export const AppActionsContext = createContext<AppActions>({
   navigate: () => {},
   showLink: () => {},
   pickFromPending: () => {},
+  openPickerId: null,
   pasteFromClipboard: () => Promise.resolve(),
   addFileLinks: () => {},
   showWatchedDownloads: () => {},

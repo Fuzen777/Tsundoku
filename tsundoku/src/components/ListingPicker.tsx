@@ -73,7 +73,7 @@ import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
 import { Thumbnail } from "./Thumbnail"
 import { WatchForm } from "./WatchForm"
-import { keepPicker, keptPicker } from "../keptPickers"
+import { keepListing, keepPicker, keptPicker } from "../keptPickers"
 import { sitePictureUrl } from "../api"
 
 interface ListingPickerProps {
@@ -126,7 +126,7 @@ export function ListingPicker({
   onWatched,
 }: ListingPickerProps) {
   const [picker, setPicker] = useState(() => {
-    const kept = pendingId === null ? undefined : keptPicker(pendingId)
+    const kept = pendingId === null ? null : (keptPicker(pendingId)?.ticks ?? null)
     const fresh = pickerItems(listing.items)
     return kept ? withKeptTicks(fresh, kept) : fresh
   })
@@ -166,10 +166,14 @@ export function ListingPicker({
     }
   }, [])
 
-  // While the link waits in Pending, what's ticked is kept for it as it changes, so picking from it again carries on.
+  // While the link waits in Pending, what's ticked is kept for it as it changes, and the listing as loaded so far, so
+  // picking from it again carries on at once, with nothing read again.
   useEffect(() => {
     if (pendingId !== null) keepPicker(pendingId, keptTicks(picker))
   }, [pendingId, picker])
+  useEffect(() => {
+    if (pendingId !== null) keepListing(pendingId, { ...listing, items: [...items], more, total })
+  }, [pendingId, listing, items, more, total])
 
   // Escape leaves the full page.
   useEffect(() => {
@@ -742,12 +746,15 @@ function PausedStatus({ pause }: { pause: ListingPause }) {
   )
 }
 
-/** How large a listing's picture shows: on the picker, on a watched source's card, or on the picker's folded line, where
+/** How large a listing's picture shows: on the picker, on a watched source's card, on a pending link's row, or on the
+ * picker's folded line, where
  * a playlist shows none (its first video's thumbnail isn't its own picture) and a channel or an account none while it
  * has none. */
 const PICTURE_SIZES = {
   large: { round: "size-24", thumbnail: "w-44" },
   small: { round: "size-14", thumbnail: "w-24" },
+  /** A link's row in Pending, once its picker listed it. */
+  row: { round: "size-12", thumbnail: "w-24" },
   tiny: { round: "size-6", thumbnail: null },
 } as const
 
