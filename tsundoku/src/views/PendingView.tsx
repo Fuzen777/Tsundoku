@@ -886,7 +886,9 @@ function PendingTile({
       id={link.id}
       place={place}
       title={title}
-      thumbnailUrl={video?.thumbnailUrl ?? listed?.listing.thumbnailUrl ?? null}
+      thumbnailUrl={video?.thumbnailUrl ?? null}
+      // Once listed, its own small picture, as the picker's folded line shows it, rather than the whole of it.
+      picture={listed && <ListingPicture listing={listed.listing} size="small" />}
       fallbackIcon={isPost ? Images : Film}
       shape={isPost ? 4 / 5 : 16 / 9}
       hint={hint}

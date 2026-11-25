@@ -70,6 +70,9 @@ interface ItemTileProps {
   place: TilePlace
   title: string
   thumbnailUrl: string | null
+  /** Drawn in place of `thumbnailUrl`, centered on the tile, which keeps `shape`: a small picture of its own, such as a
+   * channel's round one. */
+  picture?: ReactNode
   /** Shown on a tiny tile without a picture, where its title wouldn't fit. */
   fallbackIcon: LucideIcon
   /** Its shape in Masonry until its picture loads, as width over height. */
@@ -108,6 +111,7 @@ export function ItemTile({
   place,
   title,
   thumbnailUrl,
+  picture,
   fallbackIcon: FallbackIcon,
   shape,
   hint,
@@ -129,7 +133,7 @@ export function ItemTile({
   const [ownRatio, setOwnRatio] = useState<number | null>(() =>
     thumbnailUrl === null ? null : (knownShapes.get(thumbnailUrl) ?? null),
   )
-  const pictured = thumbnailUrl !== null && !failed
+  const pictured = !picture && thumbnailUrl !== null && !failed
   const closeMenu = (why: MenuClose) => {
     setMenuAt(null)
     if (why !== "elsewhere") tile.current?.focus()
@@ -166,7 +170,7 @@ export function ItemTile({
           }
           event.preventDefault()
         }}
-        style={{ aspectRatio: ratio ?? (pictured ? (ownRatio ?? shape) : 1) }}
+        style={{ aspectRatio: ratio ?? (pictured ? (ownRatio ?? shape) : picture ? shape : 1) }}
         className={classes(
           "relative block w-full cursor-pointer overflow-hidden rounded-md bg-input",
           LIFTED_SHADOW,
@@ -174,7 +178,9 @@ export function ItemTile({
           shown ? "ring-2 ring-accent" : inDanger && "ring-2 ring-danger",
         )}
       >
-        {pictured ? (
+        {picture ? (
+          <span className={classes("flex size-full items-center justify-center", dimmed && "opacity-50")}>{picture}</span>
+        ) : pictured ? (
           <img
             src={sitePictureUrl(thumbnailUrl)}
             alt=""

@@ -2,6 +2,13 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.47 · 2026-11-25
+
+### Changed
+
+- **Collapse in full page**: the list over the whole window has Collapse too, which brings it back into Pending folded to one line.
+- **Waiting profiles' pictures in Gallery and Masonry**: a channel or account picked from earlier and waiting in Needs Attention shows its small round picture in the middle of its tile, as on the folded line, rather than the whole picture stretched across it.
+
 ## 0.2.46 · 2026-11-25
 
 ### Changed

@@ -123,7 +123,7 @@ type Counted = "counting" | "failed" | null
  * the discarded new ones as skipped for the listing. Undo, after the count, puts back the ticks' changes one at a
  * time. View in Full Page lays it over the whole window, as it opens with Pick in Full Page;
  * otherwise its card takes at most 60% of the window's height, its items scrolling inside, and Collapse folds it to one
- * line (`FoldedPicker`). A video starts with the preset a rule picks for it, else the one picked here. What it loads is
+ * line (`FoldedPicker`), leaving full page first. A video starts with the preset a rule picks for it, else the one picked here. What it loads is
  * kept by the app, so the listing opens with it the next time; while a site makes a load wait (X), the items listed stay
  * to pick from.
  */
@@ -400,9 +400,15 @@ export function ListingPicker({
           </p>
           <p className="text-xs text-fg-secondary tabular-nums">{listed}</p>
         </div>
-        {!fullPage && (
-          <IconButton label={strings.picker.collapse} icon={ChevronUp} onClick={() => setFolded(true)} />
-        )}
+        {/* In full page, it leaves it too, folding the card above Pending. */}
+        <IconButton
+          label={strings.picker.collapse}
+          icon={ChevronUp}
+          onClick={() => {
+            setFullPage(false)
+            setFolded(true)
+          }}
+        />
         <IconButton label={strings.preview.close} icon={X} onClick={onClose} />
       </div>
       {items.length === 0 ? (
