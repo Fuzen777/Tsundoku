@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { cancelPreview, fetchPreview, listingKind } from "./api"
+import type { ItemKey } from "./bindings/ItemKey"
 import type { LinkPreview } from "./bindings/LinkPreview"
 import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
@@ -66,10 +67,10 @@ export function usePreview() {
 
   /** Shows a listing as it was kept (`keptPickers`), loaded items and all, without reading it again; a fetch in
    * progress stops. */
-  const showListing = useCallback((listing: Listing) => {
+  const showListing = useCallback((listing: Listing, skipped: ItemKey[]) => {
     latestRequest.current += 1
     void cancelPreview()
-    setState({ stage: "ready", preview: { kind: "listing", listing }, password: null })
+    setState({ stage: "ready", preview: { kind: "listing", listing, skipped }, password: null })
   }, [])
 
   /** Closes the card, cancelling a fetch in progress. */

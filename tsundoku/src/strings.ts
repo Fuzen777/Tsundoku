@@ -652,7 +652,9 @@ export const strings = {
     empty: "There's nothing to download here yet.",
     selectAll: "Select All",
     select: "Select",
-    selected: (selected: number, count: number) => `${selected.toLocaleString()} of ${count.toLocaleString()} selected`,
+    /** Beside Select All: how many items are shown. */
+    shownCount: (count: number, noun: readonly [string, string]) =>
+      `${count.toLocaleString()} ${count === 1 ? noun[0] : noun[1]}`,
     /** After the count, while Hide Downloaded or the type leaves some out. */
     hidden: (count: number) => `${count.toLocaleString()} hidden`,
     /** The type filter (ItemTypeFilter.tsx), offered while the items are of several types. */
@@ -781,10 +783,21 @@ export const strings = {
       count === 0 ? "Download and Load More" : `Download (${count.toLocaleString()}) and Load More`,
     downloadAndLoadMoreHint: (noun: readonly [string, string]) =>
       `Puts what's ticked in Downloads, then lists the next ${noun[1]}, older than these, to go on picking.`,
-    /** Under the list: what won't download, folded away to start with. */
-    leftOut: "Not Downloading",
-    leftOutHint: "What's unticked, downloaded before or in Downloads. Tick one to download it after all.",
-    nothingTicked: "Nothing is ticked. Everything listed is under Not Downloading.",
+    /** The tabs beside Hide Downloaded: what will download, and what won't, with how many of each. */
+    tab: "Show",
+    tabs: { selected: "Selected", discarded: "Discarded" },
+    tabHints: {
+      selected: "What's ticked: Download takes it.",
+      discarded:
+        "What won't download: unticked, skipped before, downloaded before or in Downloads. Tick one to download it after all.",
+    },
+    emptyTabs: {
+      selected: "Nothing is ticked. Everything listed is under Discarded.",
+      discarded: "Nothing is discarded.",
+    },
+    /** An item unticked when Download last took others from the listing, which starts unticked since. */
+    skipped: "Skipped",
+    skippedHint: "Unticked when you last downloaded from this list, so it starts unticked.",
     /** After the count of what's ticked: puts the latest change of ticks back. */
     undo: "Undo",
     /** Undo's hint, naming the change it puts back: one item by its title, else how many. */

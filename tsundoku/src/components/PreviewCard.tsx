@@ -118,6 +118,7 @@ export function PreviewCard({
             // stays when its link leaves Pending (Download and Load More).
             key={state.preview.listing.url}
             listing={state.preview.listing}
+            skipped={state.preview.skipped}
             pendingId={pendingId}
             startFullPage={startFullPage}
             hidden={hidden}

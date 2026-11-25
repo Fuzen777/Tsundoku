@@ -667,6 +667,30 @@ impl WatchedSources {
         Ok(())
     }
 
+    /// The items the source watching the listing at `page` keeps as skipped, for that listing's picker in Pending,
+    /// which starts them unticked as its own Skipped Before does. None when no source watches it.
+    pub fn skipped_at(&self, page: &str) -> Result<Vec<ItemKey>, WatchedError> {
+        let Some(id) = self.store.find_by_url(page)? else {
+            return Ok(Vec::new());
+        };
+        Ok(self
+            .store
+            .items(id)?
+            .iter()
+            .filter(|item| item.state == ItemState::Skipped)
+            .map(|item| ItemKey::of(&item.video))
+            .collect())
+    }
+
+    /// The listing at `page` was downloaded from in Pending's picker, these items left unticked: those still new
+    /// become skipped in the source watching it, as Download in its own picker does. Nothing when no source watches it.
+    pub fn skip_at(&self, page: &str, keys: &[ItemKey]) -> Result<(), WatchedError> {
+        match self.store.find_by_url(page)? {
+            Some(id) => self.skip(id, keys),
+            None => Ok(()),
+        }
+    }
+
     /// All New Items' Skip All: these items (what it shows) become skipped in every source where they're still new.
     pub fn skip_new(&self, keys: &[ItemKey]) -> Result<(), WatchedError> {
         let keys: HashSet<&ItemKey> = keys.iter().collect();

@@ -21,6 +21,7 @@ use tsundoku_core::preview::{LinkPreview, MoreEvent, PreviewService};
 use tsundoku_core::relocate::MovedFiles;
 use tsundoku_core::site_icons::SiteIcons;
 use tsundoku_core::tools::ToolManager;
+use tsundoku_core::watched::{ItemKey, WatchedSources};
 use tsundoku_core::{site_pictures, thumbnails};
 
 use crate::{DataFolder, shell};
@@ -32,19 +33,30 @@ pub async fn fetch_preview(
     history: State<'_, Arc<History>>,
     previews: State<'_, Arc<PreviewService>>,
     queue: State<'_, Arc<DownloadQueue>>,
+    watched: State<'_, Arc<WatchedSources>>,
     link: String,
     password: Option<String>,
 ) -> Result<LinkPreview, PreviewError> {
-    let (tools, history, previews, queue) = (
+    let (tools, history, previews, queue, watched) = (
         Arc::clone(&tools),
         Arc::clone(&history),
         Arc::clone(&previews),
         Arc::clone(&queue),
+        Arc::clone(&watched),
     );
     // yt-dlp takes seconds to answer: off the async runtime's threads, which must never block.
     let password = password.and_then(Password::new);
     tauri::async_runtime::spawn_blocking(move || {
-        previews.fetch(&tools, &history, &queue, &link, password)
+        let mut preview = previews.fetch(&tools, &history, &queue, &link, password)?;
+        // A watched listing's Skipped Before starts unticked in its picker too.
+        if let LinkPreview::Listing { listing, skipped } = &mut preview {
+            for key in watched.skipped_at(&listing.url).unwrap_or_default() {
+                if !skipped.contains(&key) {
+                    skipped.push(key);
+                }
+            }
+        }
+        Ok(preview)
     })
     .await
     .unwrap_or_else(|error| {
@@ -52,6 +64,24 @@ pub async fn fetch_preview(
             detail: error.to_string(),
         })
     })
+}
+
+/// A listing's picker downloaded what was ticked (`picked`) and left `skipped` unticked: the listing (its page) keeps
+/// them skipped for its picker's next time, and the source watching it, if any, skips those still new.
+#[tauri::command]
+pub fn skip_listing_items(
+    previews: State<'_, Arc<PreviewService>>,
+    watched: State<'_, Arc<WatchedSources>>,
+    listing: String,
+    skipped: Vec<ItemKey>,
+    picked: Vec<ItemKey>,
+) -> Result<(), PreviewError> {
+    previews.record_skipped(&listing, &skipped, &picked)?;
+    watched
+        .skip_at(&listing, &skipped)
+        .map_err(|error| PreviewError::Failed {
+            detail: error.to_string(),
+        })
 }
 
 /// The files of a post its downloads left out, by number, or `None` when there were none (or no download).

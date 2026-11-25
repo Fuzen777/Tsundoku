@@ -25,7 +25,10 @@ import {
   withKeptTicks,
   withMoreItems,
   withQueued,
+  withSkipped,
   withTicks,
+  discardedKeys,
+  keyOf,
   type PickedPreset,
   type PickerItems,
 } from "./listingPicker"
@@ -441,5 +444,25 @@ describe("firstNewSince", () => {
     const before = new Set([itemKey(listed[0])])
     expect(firstNewSince(listed, before)?.video.videoId).toBe("first new")
     expect(firstNewSince(listed.slice(0, 3), before)).toBeUndefined()
+  })
+})
+
+describe("items skipped before", () => {
+  const skipped = new Set([keyOf({ site: "youtube", videoId: "b" })])
+  const downloaded = { id: 1 } as PastDownload
+
+  it("start unticked, as known items do, and so do loaded ones", () => {
+    const picker = pickerItems([item("a"), item("b"), item("c", { lastDownload: downloaded })], skipped)
+    expect([...picker.selection]).toEqual([itemKey(item("a"))])
+    const more = withMoreItems(picker, [item("d"), item("b2")], "channel", new Set([itemKey(item("d"))]))
+    expect(more.selection.has(itemKey(item("d")))).toBe(false)
+    expect(more.selection.has(itemKey(item("b2")))).toBe(true)
+  })
+
+  it("are what Download leaves unticked of the new items, kept once, those taken leaving", () => {
+    const discarded = discardedKeys([item("a"), item("b", { lastDownload: downloaded }), item("c", { inQueue: true })])
+    expect(discarded).toEqual([{ site: "youtube", videoId: "a" }])
+    const key = (videoId: string) => ({ site: "youtube", videoId })
+    expect(withSkipped([key("x"), key("y")], [key("a"), key("x")], [key("y")])).toEqual([key("a"), key("x")])
   })
 })

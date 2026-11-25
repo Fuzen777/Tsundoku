@@ -231,6 +231,16 @@ const MIGRATIONS: &[&str] = &[
     // "inPlace"), over the rules and Settings → Archives for its downloads; NULL leaves it to them, as every source
     // watched before does.
     "ALTER TABLE watched_sources ADD COLUMN unpack TEXT;",
+    // 26: the items of a channel's, playlist's or account's list left unticked when its picker downloaded others
+    // (listing/skipped.rs), by the listing's page, with when, in seconds since 1970: its picker starts them unticked,
+    // marked Skipped. One picked since leaves.
+    "CREATE TABLE skipped_items (
+        listing TEXT NOT NULL,
+        site TEXT NOT NULL,
+        video_id TEXT NOT NULL,
+        skipped_at INTEGER NOT NULL,
+        PRIMARY KEY (listing, site, video_id)
+    );",
 ];
 
 pub struct Database {

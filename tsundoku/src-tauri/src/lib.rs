@@ -382,6 +382,7 @@ pub fn run() {
             tools::set_yt_dlp_channel,
             tools::supported_sites,
             history::fetch_preview,
+            history::skip_listing_items,
             history::cancel_preview,
             history::load_more_of_listing,
             history::cancel_loading_more,

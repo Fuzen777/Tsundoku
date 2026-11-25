@@ -2,6 +2,16 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.46 · 2026-11-25
+
+### Changed
+
+- **Selected and Discarded tabs**: in a channel's, playlist's or account's list, Not Downloading is now Discarded, a tab beside Selected next to Hide Downloaded, each with how many it holds, rather than a folded section under the list. Unticking an item moves it to Discarded at once, and ticking it there moves it back.
+
+### Added
+
+- **Discarded items are remembered as skipped**: Download (or Download and Load More) keeps the new items you left unticked as skipped for that list, so the next time it opens they start under Discarded, marked Skipped, instead of ticked again. If the list is watched, they're also skipped there, as the Watched view's own Download does, and a watched list's Skipped Before starts under Discarded too.
+
 ## 0.2.45 · 2026-11-25
 
 ### Changed

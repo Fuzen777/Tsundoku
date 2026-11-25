@@ -859,6 +859,14 @@ export async function readPendingLinkAgain(id: number): Promise<void> {
   await invoke("read_pending_link_again", { id })
 }
 
+/** A listing's picker downloaded what was ticked (`picked`) and left `skipped` unticked: the listing, by its page,
+ * keeps them skipped for its picker's next time, and the source watching it skips those still new. Rejects with a
+ * PreviewError. */
+export async function skipListingItems(listing: string, skipped: ItemKey[], picked: ItemKey[]): Promise<void> {
+  if (!isTauri()) return
+  await invoke("skip_listing_items", { listing, skipped, picked })
+}
+
 /** A channel, playlist or account added in the window: it waits in Pending's Needs Attention to be picked from (one
  * waiting already is kept), and resolves to its ID there. Rejects with a DownloadError. */
 export function addLinkToPick(link: string): Promise<number> {

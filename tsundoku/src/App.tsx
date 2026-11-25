@@ -162,8 +162,8 @@ export function App() {
       pickingFor.current = id
       setPickingId(id)
       setLink(shown)
-      const kept = keptPicker(id)?.listing
-      if (kept) showListing(kept)
+      const kept = keptPicker(id)
+      if (kept?.listing) showListing(kept.listing, [...kept.skipped])
       else void showPreview(shown)
     },
     [showPreview, showListing],

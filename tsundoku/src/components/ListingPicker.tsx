@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
-import { ChevronDown, ChevronRight, ChevronUp, Film, Images, Maximize2, Minimize2, Play, Undo2, X } from "lucide-react"
+import { ChevronDown, ChevronUp, Film, Images, Maximize2, Minimize2, Play, Undo2, X } from "lucide-react"
 import {
   addManyToQueue,
   cancelLoadingMore,
   confirmWithUser,
   countListing,
   loadMoreOfListing,
+  skipListingItems,
   type ListingPause,
 } from "../api"
+import type { ItemKey } from "../bindings/ItemKey"
 import type { ListedItem } from "../bindings/ListedItem"
 import type { Listing } from "../bindings/Listing"
 import type { ListingMore } from "../bindings/ListingMore"
@@ -29,11 +31,13 @@ import { useTimeLeft } from "../holds"
 import {
   firstNewSince,
   cannotTick,
+  discardedKeys,
   isKnown,
   isLocked,
   isQueued,
   itemKey,
   keptTicks,
+  keyOf,
   LOAD_NEW_COUNT,
   mediaCount,
   nounOf,
@@ -52,6 +56,7 @@ import {
   withKeptTicks,
   withMoreItems,
   withQueued,
+  withSkipped,
   withTicks,
   type MediaCount,
   type TickChange,
@@ -67,7 +72,7 @@ import { IconButton } from "./IconButton"
 import { ItemTypeFilter } from "./ItemTypeFilter"
 import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
 import { PickerViewControls } from "./PickerViewControls"
-import { ToggleButton } from "./SegmentedControl"
+import { SegmentedControl, ToggleButton } from "./SegmentedControl"
 import { SiteIcon } from "./SiteIcon"
 import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
@@ -78,6 +83,9 @@ import { sitePictureUrl } from "../api"
 
 interface ListingPickerProps {
   listing: Listing
+  /** The items skipped the last time the listing was downloaded from, or by the source watching it: they start
+   * unticked, under Discarded, marked Skipped. */
+  skipped: readonly ItemKey[]
   /** The pending link it was opened from (Pick What to Download): its ticks and their changes are kept for it while it
    * waits in Pending, and the picker opens with them again. */
   pendingId: number | null
@@ -94,6 +102,9 @@ interface ListingPickerProps {
   onWatched: () => void
 }
 
+/** The picker's two tabs: what will download, and what won't. */
+type PickerTab = "selected" | "discarded"
+
 /** What the picker is loading: the next items (Load More), on until enough new ones (Load New) or all the rest (Load
  * All). */
 type Loading = MoreRead["kind"]
@@ -106,10 +117,11 @@ type Counted = "counting" | "failed" | null
  * The preview card for a channel, playlist or account: what it is, its items with a box each (the new ones ticked), a
  * type filter when they're of several types (only the images of an account, say), Load More, Load New and Load All
  * when only the newest were listed, and Download, which queues each ticked item shown as its own download, with
- * Download and Load More beside it to go on page by page. The list shows only what will download: an item unticked
- * there moves at once under Not Downloading, folded under the list with what's downloaded before or in the queue
- * (greyed, or hidden with Hide Downloaded), where ticking one moves it back up. Undo, after the count, puts back the
- * ticks' changes one at a time. View in Full Page lays it over the whole window, as it opens with Pick in Full Page;
+ * Download and Load More beside it to go on page by page. Two tabs beside Hide Downloaded split the items: Selected,
+ * what will download, and Discarded, what won't (unticked, skipped before, downloaded before or in the queue, greyed or
+ * hidden with Hide Downloaded); an item moves from one to the other the moment its box changes, and Download records
+ * the discarded new ones as skipped for the listing. Undo, after the count, puts back the ticks' changes one at a
+ * time. View in Full Page lays it over the whole window, as it opens with Pick in Full Page;
  * otherwise its card takes at most 60% of the window's height, its items scrolling inside, and Collapse folds it to one
  * line (`FoldedPicker`). A video starts with the preset a rule picks for it, else the one picked here. What it loads is
  * kept by the app, so the listing opens with it the next time; while a site makes a load wait (X), the items listed stay
@@ -117,6 +129,7 @@ type Counted = "counting" | "failed" | null
  */
 export function ListingPicker({
   listing,
+  skipped: skippedBefore,
   pendingId,
   startFullPage,
   hidden: outOfSight,
@@ -125,9 +138,13 @@ export function ListingPicker({
   onSomeAdded,
   onWatched,
 }: ListingPickerProps) {
+  // What's skipped, as the core keeps it, and by the picker's keys (also for loads, which a ref reads as it is then).
+  const [skipped, setSkipped] = useState<readonly ItemKey[]>(skippedBefore)
+  const skippedKeys = useMemo(() => new Set(skipped.map(keyOf)), [skipped])
+  const skippedNow = useRef<ReadonlySet<string>>(skippedKeys)
   const [picker, setPicker] = useState(() => {
     const kept = pendingId === null ? null : (keptPicker(pendingId)?.ticks ?? null)
-    const fresh = pickerItems(listing.items)
+    const fresh = pickerItems(listing.items, new Set(skippedBefore.map(keyOf)))
     return kept ? withKeptTicks(fresh, kept) : fresh
   })
   const { items, selection, undo } = picker
@@ -148,7 +165,7 @@ export function ListingPicker({
   const isAdding = adding !== null
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [watching, setWatching] = useState(false)
-  const [leftOutOpen, setLeftOutOpen] = useState(false)
+  const [tab, setTab] = useState<PickerTab>("selected")
   const [fullPage, setFullPage] = useState(startFullPage)
   const [folded, setFolded] = useState(false)
   const { layout, change: changeLayout } = usePickerLayout("items")
@@ -172,8 +189,11 @@ export function ListingPicker({
     if (pendingId !== null) keepPicker(pendingId, keptTicks(picker))
   }, [pendingId, picker])
   useEffect(() => {
-    if (pendingId !== null) keepListing(pendingId, { ...listing, items: [...items], more, total })
-  }, [pendingId, listing, items, more, total])
+    if (pendingId !== null) keepListing(pendingId, { ...listing, items: [...items], more, total }, skipped)
+  }, [pendingId, listing, items, more, total, skipped])
+  useEffect(() => {
+    skippedNow.current = skippedKeys
+  }, [skippedKeys])
 
   // Escape leaves the full page.
   useEffect(() => {
@@ -228,9 +248,10 @@ export function ListingPicker({
   const picks = presets ? picksFor(shown, selection, presetFor) : null
   const nothingPicked = !picks || picks.length === 0
   const { ticked: toDownload, leftOut } = splitByTicks(shown, selection)
+  const tabItems = tab === "selected" ? toDownload : leftOut
   const titleOf = new Map(items.map((item) => [itemKey(item), item.video.title]))
 
-  /** Ticks or unticks an item: it moves into the list, or under Not Downloading, at once. */
+  /** Ticks or unticks an item: it moves to Selected, or to Discarded, at once. */
   function select(item: ListedItem, ticked: boolean) {
     setSelection((current) => withItem(current, item, ticked))
   }
@@ -260,7 +281,7 @@ export function ListingPicker({
         read,
         (batch) => {
           if (!open.current) return
-          setPicker((current) => withMoreItems(current, batch.items, listing.kind))
+          setPicker((current) => withMoreItems(current, batch.items, listing.kind, skippedNow.current))
           setMore(batch.more)
           if (batch.total !== null) setTotal(batch.total)
         },
@@ -284,8 +305,9 @@ export function ListingPicker({
     void cancelLoadingMore()
   }
 
-  /** Queues the ticked items shown, then closes the card, or with `thenLoadMore` marks them In Downloads (under Not
-   * Downloading) and lists the next ones, ticked, to go on picking. */
+  /** Queues the ticked items shown, then closes the card, or with `thenLoadMore` marks them In Downloads (under
+   * Discarded) and lists the next ones, ticked, to go on picking. The new items discarded are kept as skipped for the
+   * listing, and in the source watching it, so they start unticked the next time. */
   async function download(thenLoadMore = false) {
     if (!picks || picks.length === 0) return
     const replacing = picks.filter((pick) => pick.overwrite).length
@@ -309,6 +331,11 @@ export function ListingPicker({
       setAdding(null)
       return
     }
+    const discarded = discardedKeys(leftOut)
+    const taken = picks.map(({ video }) => ({ site: video.site, videoId: video.videoId }))
+    // Not kept if it fails: the downloads are queued, and the next time those items start ticked, as before.
+    skipListingItems(listing.url, discarded, taken).catch(() => {})
+    setSkipped((current) => withSkipped(current, discarded, taken))
     if (!thenLoadMore) {
       onAdded()
       return
@@ -402,7 +429,7 @@ export function ListingPicker({
                 />
                 <span className="whitespace-nowrap tabular-nums">
                   {joinDetails([
-                    strings.picker.selected(picked.length, shown.length),
+                    strings.picker.shownCount(shown.length, noun),
                     hidden > 0 && strings.picker.hidden(hidden),
                   ])}
                 </span>
@@ -411,6 +438,23 @@ export function ListingPicker({
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <ItemTypeFilter counts={types.counts} value={types.type} onChange={types.choose} disabled={isAdding} />
+              <SegmentedControl<PickerTab>
+                label={strings.picker.tab}
+                options={[
+                  {
+                    value: "selected",
+                    label: strings.picker.typeCount(strings.picker.tabs.selected, toDownload.length),
+                    hint: strings.picker.tabHints.selected,
+                  },
+                  {
+                    value: "discarded",
+                    label: strings.picker.typeCount(strings.picker.tabs.discarded, leftOut.length),
+                    hint: strings.picker.tabHints.discarded,
+                  },
+                ]}
+                value={tab}
+                onChange={setTab}
+              />
               <ToggleButton
                 label={strings.picker.hideDownloaded}
                 hint={strings.picker.hideDownloadedHint}
@@ -433,34 +477,21 @@ export function ListingPicker({
           >
             {shown.length === 0 ? (
               <p className="text-fg-secondary">{strings.picker.allHidden}</p>
+            ) : tabItems.length === 0 ? (
+              <p className="text-fg-secondary">{strings.picker.emptyTabs[tab]}</p>
             ) : (
-              <>
-                {toDownload.length === 0 ? (
-                  <p className="text-fg-secondary">{strings.picker.nothingTicked}</p>
-                ) : (
-                  <ListedItems
-                    items={toDownload}
-                    layout={layout}
-                    showUploader={showsUploaders(listing)}
-                    isSelected={(item) => selection.has(itemKey(item))}
-                    disabled={isAdding}
-                    onSelect={select}
-                    fill
-                  />
-                )}
-                {leftOut.length > 0 && (
-                  <LeftOutItems
-                    items={leftOut}
-                    layout={layout}
-                    showUploader={showsUploaders(listing)}
-                    open={leftOutOpen}
-                    disabled={isAdding}
-                    fill
-                    onFold={() => setLeftOutOpen((wasOpen) => !wasOpen)}
-                    onSelect={select}
-                  />
-                )}
-              </>
+              <ListedItems
+                // Each tab's list of its own, so its scroll starts at the top.
+                key={tab}
+                items={tabItems}
+                layout={layout}
+                showUploader={showsUploaders(listing)}
+                isSelected={(item) => tab === "selected" && selection.has(itemKey(item))}
+                isSkipped={(item) => skippedKeys.has(itemKey(item))}
+                disabled={isAdding}
+                onSelect={select}
+                fill
+              />
             )}
           </div>
           {loadRow}
@@ -788,52 +819,10 @@ export function ListingPicture({
   )
 }
 
-interface LeftOutItemsProps {
-  items: readonly ListedItem[]
-  layout: PickerLayout
-  showUploader: boolean
-  open: boolean
-  disabled: boolean
-  /** In full page, the items aren't held to a height of their own: the page scrolls. */
-  fill: boolean
-  onFold: () => void
-  onSelect: (item: ListedItem, ticked: boolean) => void
-}
-
-/** Under the list, folded to start with: what won't download (unticked, downloaded before or in Downloads), with how
- * many. Ticking one moves it back up into the list. */
-function LeftOutItems({ items, layout, showUploader, open, disabled, fill, onFold, onSelect }: LeftOutItemsProps) {
-  const Chevron = open ? ChevronDown : ChevronRight
-  return (
-    <section className="flex flex-col gap-2">
-      <button
-        type="button"
-        aria-expanded={open}
-        title={strings.picker.leftOutHint}
-        onClick={onFold}
-        className="flex items-center gap-1.5 self-start rounded text-left text-xs font-semibold text-fg-secondary hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"
-      >
-        <Chevron size={14} className="shrink-0" aria-hidden />
-        {strings.picker.leftOut}
-        <span className="font-normal text-fg-muted tabular-nums">{items.length.toLocaleString()}</span>
-      </button>
-      {open && (
-        <ListedItems
-          items={items}
-          layout={layout}
-          showUploader={showUploader}
-          isSelected={() => false}
-          disabled={disabled}
-          onSelect={onSelect}
-          fill={fill}
-        />
-      )}
-    </section>
-  )
-}
-
 interface ListedRowProps {
   item: ListedItem
+  /** Left unticked the last time its listing was downloaded from: marked Skipped. */
+  skipped?: boolean
   /** A playlist's items may come from several uploaders; a channel's or an account's all come from it. */
   showUploader: boolean
   /** The watched source that found it, in All New Items, first in its details. */
@@ -848,7 +837,15 @@ interface ListedRowProps {
  * or the queue has it, with Downloaded or In Queue. Rows off screen aren't laid out (`content-visibility`), so a
  * playlist of hundreds scrolls smoothly.
  */
-export function ListedRow({ item, showUploader, source = null, selected, disabled, onSelect }: ListedRowProps) {
+export function ListedRow({
+  item,
+  skipped = false,
+  showUploader,
+  source = null,
+  selected,
+  disabled,
+  onSelect,
+}: ListedRowProps) {
   const { video, lastDownload } = item
   const locked = isLocked(item)
   const known = isKnown(item) || locked
@@ -891,13 +888,20 @@ export function ListedRow({ item, showUploader, source = null, selected, disable
           >
             {strings.picker.inQueue}
           </span>
+        ) : lastDownload ? (
+          <span
+            className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
+            title={strings.preview.alreadyDownloaded(formatDay(lastDownload.downloadedAt), lastDownload.preset)}
+          >
+            {strings.picker.downloaded}
+          </span>
         ) : (
-          lastDownload && (
+          skipped && (
             <span
               className="shrink-0 rounded-full border border-line px-1.5 text-xs text-fg-secondary"
-              title={strings.preview.alreadyDownloaded(formatDay(lastDownload.downloadedAt), lastDownload.preset)}
+              title={strings.picker.skippedHint}
             >
-              {strings.picker.downloaded}
+              {strings.picker.skipped}
             </span>
           )
         )}
@@ -929,6 +933,8 @@ interface ListedItemsProps<Item extends ListedItem> {
   /** In All New Items, the watched source that found each item: named under its picture and first in its details. */
   sourceOf?: (item: Item) => string
   isSelected: (item: Item) => boolean
+  /** Left unticked the last time the listing was downloaded from: marked Skipped. */
+  isSkipped?: (item: Item) => boolean
   disabled: boolean
   onSelect: (item: Item, ticked: boolean) => void
   /** In All New Items and the listing picker: the items take what the height around them leaves (a column that shrinks
@@ -946,6 +952,7 @@ export function ListedItems<Item extends ListedItem>({
   showUploader,
   sourceOf,
   isSelected,
+  isSkipped,
   disabled,
   onSelect,
   fill = false,
@@ -958,6 +965,7 @@ export function ListedItems<Item extends ListedItem>({
           <ListedRow
             key={itemKey(item)}
             item={item}
+            skipped={isSkipped?.(item) ?? false}
             showUploader={showUploader}
             source={sourceOf?.(item) ?? null}
             selected={isSelected(item)}
@@ -972,7 +980,9 @@ export function ListedItems<Item extends ListedItem>({
   return (
     <MediaTiles
       tiles={items.map((item) =>
-        listedTile(item, showUploader, sourceOf?.(item) ?? null, isSelected(item), (ticked) => onSelect(item, ticked)),
+        listedTile(item, showUploader, sourceOf?.(item) ?? null, isSelected(item), isSkipped?.(item) ?? false, (ticked) =>
+          onSelect(item, ticked),
+        ),
       )}
       view={layout.view}
       size={layout.size}
@@ -990,6 +1000,7 @@ function listedTile(
   showUploader: boolean,
   source: string | null,
   selected: boolean,
+  skipped: boolean,
   onToggle: (ticked: boolean) => void,
 ): MediaTile {
   const { video, lastDownload } = item
@@ -1003,7 +1014,9 @@ function listedTile(
     ? strings.picker.lockedHint(fee)
     : queued
       ? strings.picker.inQueueHint
-      : lastDownload && strings.preview.alreadyDownloaded(formatDay(lastDownload.downloadedAt), lastDownload.preset)
+      : lastDownload
+        ? strings.preview.alreadyDownloaded(formatDay(lastDownload.downloadedAt), lastDownload.preset)
+        : skipped && strings.picker.skippedHint
   return {
     key: itemKey(item),
     thumbnailUrl: video.thumbnailUrl,
@@ -1034,7 +1047,9 @@ function listedTile(
         ? { text: joinDetails([strings.picker.inQueue, source]), tone: "plain" }
       : lastDownload
         ? { text: joinDetails([strings.picker.downloaded, source]), tone: "done" }
-        : source
+        : skipped
+          ? { text: joinDetails([strings.picker.skipped, source]), tone: "plain" }
+          : source
           ? { text: source, tone: "plain" }
           : null,
     onToggle,

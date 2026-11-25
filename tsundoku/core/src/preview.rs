@@ -17,6 +17,7 @@ use crate::gallery::{self, GalleryTools};
 use crate::history::{History, PastDownload};
 use crate::hosts::{self, Host};
 use crate::listing::saved::{self, SavedListings};
+use crate::listing::skipped::SkippedItems;
 use crate::listing::{self, Found, Listing, ListingMore, MoreItems, MoreRead};
 use crate::metadata::{self, FetchTools, Fetched, PreviewError, VideoInfo};
 use crate::mirrors;
@@ -29,6 +30,7 @@ use crate::short_links::{self, ShortLink};
 use crate::sites;
 use crate::sync::lock;
 use crate::tools::{ToolCacheFolder, ToolId, ToolManager};
+use crate::watched::ItemKey;
 
 /// What the preview card shows for a link: one video or post, or what a channel, playlist or account holds.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -40,6 +42,9 @@ pub enum LinkPreview {
     /// listing is much bigger than the enum's other variant.
     Listing {
         listing: Box<Listing>,
+        /// The items left unticked when its picker last downloaded from it (`listing::skipped`), and those the source
+        /// watching it skipped: its picker starts them unticked, among the items listed now or later.
+        skipped: Vec<ItemKey>,
     },
 }
 
@@ -88,6 +93,8 @@ pub struct PreviewService {
     counting: Mutex<Option<CancelToken>>,
     /// What listings' pickers loaded, or `None` to keep nothing.
     saved: Option<SavedListings>,
+    /// What listings' pickers left unticked when they downloaded, or `None` to keep nothing.
+    skipped: Option<SkippedItems>,
     /// The listing the preview card shows, until its picker loads more of it: it's kept then, with what it loads.
     shown: Mutex<Option<Listing>>,
 }
@@ -98,12 +105,31 @@ impl PreviewService {
         Self::default()
     }
 
-    /// A service that keeps what listings' pickers load in the database.
+    /// A service that keeps what listings' pickers load, and what they skip, in the database.
     pub fn keeping_listings(database: Arc<Database>) -> Self {
         Self {
-            saved: Some(SavedListings::new(database, now_seconds())),
+            saved: Some(SavedListings::new(Arc::clone(&database), now_seconds())),
+            skipped: Some(SkippedItems::new(database)),
             ..Self::default()
         }
+    }
+
+    /// A listing's picker downloaded what was ticked (`picked`), and left `skipped` unticked: the listing at
+    /// `listing` (its page) keeps those skipped, for its picker to start them unticked the next time.
+    pub fn record_skipped(
+        &self,
+        listing: &str,
+        skipped: &[ItemKey],
+        picked: &[ItemKey],
+    ) -> Result<(), PreviewError> {
+        let Some(store) = &self.skipped else {
+            return Ok(());
+        };
+        store
+            .record(listing, skipped, picked, now_seconds())
+            .map_err(|error| PreviewError::Failed {
+                detail: error.to_string(),
+            })
     }
 
     /// Reads what `text` links to (see `read_with_tools`), asks the history whether it was downloaded before, and the
@@ -181,7 +207,14 @@ impl PreviewService {
         }
         let fetched = fetched.map_err(|error| with_site_wait(error, queue, &link))?;
         queue.site_worked(&link);
-        preview_of(fetched, history, queue)
+        let mut preview = preview_of(fetched, history, queue)?;
+        if let (LinkPreview::Listing { listing, skipped }, Some(store)) =
+            (&mut preview, &self.skipped)
+        {
+            // Without them if they can't be read: the picker then ticks every new item.
+            *skipped = store.of(&listing.url).unwrap_or_default();
+        }
+        Ok(preview)
     }
 
     /// Reads the items after those a listing on the preview card has (`more`): the next ones for Load More, on until
@@ -480,6 +513,7 @@ fn preview_of(
             .map_err(history_failed)?;
             Ok(LinkPreview::Listing {
                 listing: Box::new(listing),
+                skipped: Vec::new(),
             })
         }
     }

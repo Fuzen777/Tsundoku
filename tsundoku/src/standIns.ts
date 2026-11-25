@@ -1081,7 +1081,7 @@ export const standIns = {
         } else if (link.includes("images")) {
           reject({ kind: "imagesNotSetUp" })
         } else if (kind) {
-          resolve({ kind: "listing", listing: listingStandIn(kind, isOnX(link), isBig(link)) })
+          resolve({ kind: "listing", listing: listingStandIn(kind, isOnX(link), isBig(link)), skipped: [] })
         } else if (link.includes("instagram")) {
           resolve({ kind: "video", ...postStandIn })
         } else if (link.includes("gofile.io")) {

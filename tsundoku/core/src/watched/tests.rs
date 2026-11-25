@@ -940,6 +940,28 @@ fn downloading_skips_only_the_items_the_picker_showed() {
 }
 
 #[test]
+fn a_picker_elsewhere_skips_in_the_source_watching_its_listing() {
+    let test = Test::new();
+    let id = test.add_new(&["a", "b", "c"]);
+    let page = test.source(id).url;
+    assert!(test.sources.skipped_at(&page).unwrap().is_empty());
+    test.sources.skip_at(&page, &[key("b"), key("z")]).unwrap();
+    assert_eq!(ids(&test.source(id).skipped_items), ["b"]);
+    assert_eq!(test.sources.skipped_at(&page).unwrap(), [key("b")]);
+    test.sources
+        .skip_at("https://www.youtube.com/@nobody/videos", &[key("a")])
+        .unwrap();
+    assert!(
+        test.sources
+            .skipped_at("https://www.youtube.com/@nobody/videos")
+            .unwrap()
+            .is_empty(),
+        "no source watches it"
+    );
+    assert_eq!(test.new_ids(id), ["a", "c"]);
+}
+
+#[test]
 fn downloading_from_every_source_skips_only_what_it_showed() {
     let test = Test::new();
     let first = test.add_new(&["a", "b"]);

@@ -1,3 +1,4 @@
+import type { ItemKey } from "./bindings/ItemKey"
 import type { ListedItem } from "./bindings/ListedItem"
 import type { Listing } from "./bindings/Listing"
 import type { ListingKind } from "./bindings/ListingKind"
@@ -37,10 +38,23 @@ export function isKnown(item: ListedItem): boolean {
   return item.lastDownload !== null || item.inQueue
 }
 
-/** The items ticked to start with: the new ones. */
-export function initialSelection(items: readonly ListedItem[]): Set<string> {
-  return new Set(items.filter((item) => !isKnown(item)).map(itemKey))
+/** An item key of the core's (`ItemKey`) as the picker keys items (`itemKey`). */
+export function keyOf({ site, videoId }: ItemKey): string {
+  return `${site} ${videoId}`
 }
+
+/** Whether an item starts ticked: new (neither the history nor the queue has it) and not skipped the last time its
+ * listing was downloaded from (`skipped`, by `itemKey`). */
+export function startsTicked(item: ListedItem, skipped: ReadonlySet<string>): boolean {
+  return !isKnown(item) && !skipped.has(itemKey(item))
+}
+
+/** The items ticked to start with: the new ones, but those skipped before. */
+export function initialSelection(items: readonly ListedItem[], skipped: ReadonlySet<string> = NONE): Set<string> {
+  return new Set(items.filter((item) => startsTicked(item, skipped)).map(itemKey))
+}
+
+const NONE: ReadonlySet<string> = new Set()
 
 /** The selection with every item of `items` that can be ticked (downloaded ones included) ticked, or none of them;
  * the ticks of items not among them, such as those another type hides, stay. */
@@ -132,9 +146,9 @@ export interface TickChange {
   unticked: readonly string[]
 }
 
-/** The items to start with, the new ones ticked. */
-export function pickerItems(items: readonly ListedItem[]): PickerItems {
-  return { items, selection: initialSelection(items), undo: [] }
+/** The items to start with, the new ones ticked but those skipped before. */
+export function pickerItems(items: readonly ListedItem[], skipped: ReadonlySet<string> = NONE): PickerItems {
+  return { items, selection: initialSelection(items, skipped), undo: [] }
 }
 
 /** The picker with the ticks changed by hand to `selection`, the change kept for Undo; the same picker when nothing
@@ -183,10 +197,15 @@ export function withKeptTicks(current: PickerItems, kept: KeptTicks): PickerItem
  * The picker with items loaded later (Load More, Load All) added: each kept once, the first time it's met, since a read
  * may start with items listed before. An account's posts are put in date order with the others, newest first, since a
  * pinned post among the first ones may be older than those loaded. The ticks made stay; an added item that's new is
- * ticked, as the first ones were, since the list shows only what's ticked (`splitByTicks`): one left unticked would
- * go straight under Not Downloading.
+ * ticked, as the first ones were (but one skipped before), since Selected shows only what's ticked (`splitByTicks`):
+ * one left unticked would go straight to Discarded.
  */
-export function withMoreItems(current: PickerItems, more: readonly ListedItem[], kind: ListingKind): PickerItems {
+export function withMoreItems(
+  current: PickerItems,
+  more: readonly ListedItem[],
+  kind: ListingKind,
+  skipped: ReadonlySet<string> = NONE,
+): PickerItems {
   const known = new Set(current.items.map(itemKey))
   const added = more.filter((item) => {
     const key = itemKey(item)
@@ -196,7 +215,7 @@ export function withMoreItems(current: PickerItems, more: readonly ListedItem[],
   })
   if (added.length === 0) return current
   const merged = [...current.items, ...added]
-  const ticked = added.filter((item) => !isKnown(item)).map(itemKey)
+  const ticked = added.filter((item) => startsTicked(item, skipped)).map(itemKey)
   return {
     ...current,
     items: kind === "account" ? newestFirst(merged) : merged,
@@ -217,9 +236,8 @@ export function withQueued(current: PickerItems, keys: ReadonlySet<string>): Pic
 }
 
 /**
- * The items the picker lists, in their order, split in two: what will download (ticked), and what won't (unticked,
- * downloaded before or in Downloads), which the Not Downloading heading under the list folds away. An item moves the
- * moment its box changes.
+ * The items the picker lists, in their order, split in two: what will download (ticked, its Selected tab), and what
+ * won't (unticked, downloaded before or in Downloads: Discarded). An item moves the moment its box changes.
  */
 export function splitByTicks<Item extends ListedItem>(
   items: readonly Item[],
@@ -232,6 +250,25 @@ export function splitByTicks<Item extends ListedItem>(
     else leftOut.push(item)
   }
   return { ticked, leftOut }
+}
+
+/** What Download records as skipped for the listing (`skipListingItems`): the items discarded that are new, those the
+ * history and the queue don't have, as a watched source skips its new items only. */
+export function discardedKeys(discarded: readonly ListedItem[]): ItemKey[] {
+  return discarded
+    .filter((item) => !isKnown(item) && !cannotTick(item))
+    .map(({ video }) => ({ site: video.site, videoId: video.videoId }))
+}
+
+/** What's skipped once Download took `taken` and discarded `discarded`: those taken leave, those discarded join, each
+ * once. */
+export function withSkipped(
+  current: readonly ItemKey[],
+  discarded: readonly ItemKey[],
+  taken: readonly ItemKey[],
+): ItemKey[] {
+  const leaving = new Set([...taken, ...discarded].map(keyOf))
+  return [...discarded, ...current.filter((key) => !leaving.has(keyOf(key)))]
 }
 
 /** Items by their day, newest first, those without one last; items of one day keep their order. */

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react"
+import type { ItemKey } from "./bindings/ItemKey"
 import type { Listing } from "./bindings/Listing"
 import type { KeptTicks } from "./listingPicker"
 
@@ -13,13 +14,15 @@ import type { KeptTicks } from "./listingPicker"
 export interface KeptPicker {
   ticks: KeptTicks | null
   listing: Listing | null
+  /** The listing's items skipped before (`LinkPreview`'s), with those its picker's downloads skipped since. */
+  skipped: readonly ItemKey[]
 }
 
 const kept = new Map<number, KeptPicker>()
 const listeners = new Set<() => void>()
 
 function change(pendingId: number, update: Partial<KeptPicker>): void {
-  kept.set(pendingId, { ticks: null, listing: null, ...kept.get(pendingId), ...update })
+  kept.set(pendingId, { ticks: null, listing: null, skipped: [], ...kept.get(pendingId), ...update })
   for (const listener of listeners) listener()
 }
 
@@ -27,9 +30,9 @@ export function keepPicker(pendingId: number, ticks: KeptTicks): void {
   change(pendingId, { ticks })
 }
 
-/** Keeps the listing as the picker has it now: its items so far, and where Load More carries on. */
-export function keepListing(pendingId: number, listing: Listing): void {
-  change(pendingId, { listing })
+/** Keeps the listing as the picker has it now: its items so far, where Load More carries on, and what's skipped. */
+export function keepListing(pendingId: number, listing: Listing, skipped: readonly ItemKey[]): void {
+  change(pendingId, { listing, skipped })
 }
 
 export function keptPicker(pendingId: number): KeptPicker | undefined {

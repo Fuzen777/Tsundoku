@@ -1714,6 +1714,7 @@ fn text(value: &Value, field: &str) -> Option<String> {
 
 mod fanbox;
 pub mod saved;
+pub mod skipped;
 mod x_media;
 
 #[cfg(test)]
