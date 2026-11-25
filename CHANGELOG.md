@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.44 · 2026-11-25
+
+### Added
+
+- **Copy Link**: every link in Pending, Downloads and History has Copy Link, as a button on its row (so in the details panel along the bottom too) and in its picture's right-click menu. A toast says it's copied. Tsundoku's clipboard watcher leaves it alone, so it doesn't land back in Pending.
+
 ## 0.2.43 · 2026-11-25
 
 ### Changed

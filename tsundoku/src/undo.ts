@@ -6,9 +6,10 @@ import { strings } from "./strings"
 export interface ToastOffer {
   /** What was done, as the toast says it: "Removed 12 links". */
   message: string
-  /** Undo, or another way on ("Open in Pending"). One that answers a promise shows it running, and closes the toast
-   * once it's done; when it fails, the toast says why and stays. */
-  action: { label: string; run: () => Promise<void> | void }
+  /** Undo, or another way on ("Open in Pending"), or none for a toast that only says what was done ("Link copied").
+   * One that answers a promise shows it running, and closes the toast once it's done; when it fails, the toast says
+   * why and stays. */
+  action?: { label: string; run: () => Promise<void> | void }
   /** Turns a failure of the action into a sentence. Without it, a failure closes the toast. */
   describeError?: (error: unknown) => ErrorDescription
 }

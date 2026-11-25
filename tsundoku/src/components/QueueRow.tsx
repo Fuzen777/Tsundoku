@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CircleStop, FileText, FolderOpen, PanelBottomClose, Play, RefreshCw, X } from "lucide-react"
+import { CircleStop, FileText, FolderOpen, Link, PanelBottomClose, Play, RefreshCw, X } from "lucide-react"
 import {
   cancelDownload,
   downloadNext,
@@ -14,6 +14,7 @@ import {
   tryDownloadNow,
 } from "../api"
 import type { QueueItem } from "../bindings/QueueItem"
+import { useCopyLink } from "../copyLink"
 import { describeDownloadError, fixFor, type ErrorDescription } from "../errors"
 import { formatContents, joinDetails } from "../format"
 import { canTryNow, describeHold, holdEnd, useTimeLeft } from "../holds"
@@ -71,6 +72,7 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
   const { act, removeWithUndo, actOnFile } = useItemActions(item, setActionError)
   const opensFile = item.state === "done" && item.result !== null
   const look = useQueueLook()
+  const copyLink = useCopyLink()
 
   return (
     <Card
@@ -202,6 +204,7 @@ export function QueueRow({ item, opens = null, onHide }: QueueRowProps) {
         {item.state === "failed" && item.error && (
           <CopyDetailsButton id={item.id} error={describeDownloadError(item.error)} onError={setActionError} />
         )}
+        <IconButton label={strings.copyLink.label} icon={Link} onClick={() => copyLink(item.video.url)} />
         {item.state === "done" ? (
           <IconButton label={strings.queue.removeFinished} icon={X} onClick={() => act(removeWithUndo)} />
         ) : (

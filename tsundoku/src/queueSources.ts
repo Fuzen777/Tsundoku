@@ -86,6 +86,7 @@ export type TileAction =
   | "showInFolder"
   | "showLog"
   | "copyDetails"
+  | "copyLink"
   | "details"
   | "downloadNext"
   | "changeFolder"
@@ -109,6 +110,7 @@ export function tileActions(item: QueueItem): TileAction[] {
     state === "done" && "showInFolder",
     state !== "waiting" && "showLog",
     state === "failed" && item.error !== null && "copyDetails",
+    "copyLink",
     "details",
     state === "waiting" && "downloadNext",
     movable && "changeFolder",

@@ -86,10 +86,17 @@ export const strings = {
         ? "1 file of this folder wasn't downloaded before."
         : `${count} files of this folder weren't downloaded before.`,
   },
-  /** The toast that offers to undo a removal, or another action (Toast.tsx). */
+  /** The toast that offers to undo a removal, or another action (UndoToast.tsx). */
   undoToast: {
     undo: "Undo",
     dismiss: "Dismiss",
+  },
+  /** Copy Link, on a row of Pending, Downloads and History (also in the details panel) and in a picture's right-click
+   * menu (copyLink.ts); the toast says how it went. */
+  copyLink: {
+    label: "Copy Link",
+    copied: "Link copied",
+    failed: "Couldn't copy the link",
   },
   nav: {
     /** The downloads added and not cleared yet, running or done (`QueueView`), apart from History's, which keeps every

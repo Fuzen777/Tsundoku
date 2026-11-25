@@ -82,17 +82,32 @@ describe("tileActions", () => {
     ({ ...item(1, state), hold: null, error: null, folderChosen: false, ...more }) as QueueItem
 
   it("offers a picture the buttons its row shows, its details, More Actions, then Cancel or Remove", () => {
-    expect(tileActions(plain("running"))).toEqual(["stop", "showLog", "details", "cancel"])
-    expect(tileActions(plain("waiting"))).toEqual(["stop", "details", "downloadNext", "changeFolder", "cancel"])
+    expect(tileActions(plain("running"))).toEqual(["stop", "showLog", "copyLink", "details", "cancel"])
+    expect(tileActions(plain("waiting"))).toEqual([
+      "stop",
+      "copyLink",
+      "details",
+      "downloadNext",
+      "changeFolder",
+      "cancel",
+    ])
     expect(tileActions(plain("stopped", { folderChosen: true }))).toEqual([
       "resume",
       "showLog",
+      "copyLink",
       "details",
       "changeFolder",
       "usualFolder",
       "cancel",
     ])
-    expect(tileActions(plain("done"))).toEqual(["openFile", "showInFolder", "showLog", "details", "remove"])
+    expect(tileActions(plain("done"))).toEqual([
+      "openFile",
+      "showInFolder",
+      "showLog",
+      "copyLink",
+      "details",
+      "remove",
+    ])
   })
 
   it("offers Copy Details only for a failure it can describe", () => {
@@ -101,6 +116,7 @@ describe("tileActions", () => {
       "retry",
       "showLog",
       "copyDetails",
+      "copyLink",
       "details",
       "changeFolder",
       "cancel",

@@ -26,7 +26,7 @@ interface ToastProps {
 }
 
 /**
- * One offer: what was done, its action (Undo, Open in Pending) and Dismiss. It closes by itself after a few seconds,
+ * One offer: what was done, its action if any (Undo, Open in Pending) and Dismiss. It closes by itself after a few seconds,
  * waiting while the pointer is over it or it has the keyboard's focus, and Escape closes it. When the action fails, it
  * says why and stays until dismissed.
  */
@@ -50,6 +50,7 @@ function Toast({ offer, onClose }: ToastProps) {
   }, [waiting, onClose, key])
 
   const runAction = () => {
+    if (!action) return
     const result = action.run()
     if (!(result instanceof Promise)) {
       onClose(key)
@@ -89,9 +90,11 @@ function Toast({ offer, onClose }: ToastProps) {
       ) : (
         <>
           <p className="min-w-0 truncate">{message}</p>
-          <Button size="sm" loading={running} onClick={runAction}>
-            {action.label}
-          </Button>
+          {action && (
+            <Button size="sm" loading={running} onClick={runAction}>
+              {action.label}
+            </Button>
+          )}
         </>
       )}
       <IconButton label={strings.undoToast.dismiss} icon={X} onClick={() => onClose(key)} />

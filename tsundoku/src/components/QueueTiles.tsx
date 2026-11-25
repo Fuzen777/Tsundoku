@@ -12,6 +12,7 @@ import {
   FolderOpen,
   Images,
   KeyRound,
+  Link,
   ListStart,
   PanelBottomClose,
   PanelBottomOpen,
@@ -35,6 +36,7 @@ import {
 } from "../api"
 import type { QueueItem } from "../bindings/QueueItem"
 import type { QueueState } from "../bindings/QueueState"
+import { useCopyLink } from "../copyLink"
 import { describeDownloadError, type ErrorDescription } from "../errors"
 import { joinDetails } from "../format"
 import { describeHold } from "../holds"
@@ -121,6 +123,7 @@ const STATE_ICONS: Record<QueueState, { icon: LucideIcon; className: string }> =
 function QueueTile({ item, place, onShow, onHide, onError }: QueueTileProps) {
   const progress = useDownloadProgress(item)
   const { act, removeWithUndo, actOnFile } = useItemActions(item, onError)
+  const copyLink = useCopyLink()
   const { shown, labels } = place
 
   const { video, state } = item
@@ -172,6 +175,8 @@ function QueueTile({ item, place, onShow, onHide, onError }: QueueTileProps) {
         return { label: queue.showLog, icon: FileText, onSelect: () => onShow(item.id, "log") }
       case "copyDetails":
         return { label: queue.copyDetails, icon: ClipboardCopy, onSelect: copyDetails }
+      case "copyLink":
+        return { label: strings.copyLink.label, icon: Link, onSelect: () => copyLink(video.url) }
       case "details":
         return shown
           ? { label: text.hideDetails, icon: PanelBottomClose, onSelect: onHide }

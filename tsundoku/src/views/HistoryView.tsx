@@ -7,6 +7,7 @@ import {
   FolderOpen,
   History,
   Images,
+  Link,
   PanelBottomClose,
   PanelBottomOpen,
   Play,
@@ -39,6 +40,7 @@ import type { HistoryVideo } from "../bindings/HistoryVideo"
 import type { MovedFiles } from "../bindings/MovedFiles"
 import type { PastDownload } from "../bindings/PastDownload"
 import { useChapters } from "../chapters"
+import { useCopyLink } from "../copyLink"
 import { ArrangeControls, GroupHeading } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
@@ -693,6 +695,7 @@ function HistoryTile({
   onError,
 }: HistoryTileProps) {
   const { showLink } = useAppActions()
+  const copyLink = useCopyLink()
   const queryClient = useQueryClient()
   const { lastDownload } = video
   const kept = video.thumbnailFile && keptThumbnailUrl(video.thumbnailFile)
@@ -731,6 +734,7 @@ function HistoryTile({
         ]
       : []),
     { label: text.openSourcePage, icon: ExternalLink, onSelect: () => run(() => openWebPage(video.url)) },
+    { label: strings.copyLink.label, icon: Link, onSelect: () => copyLink(video.url) },
     place.shown
       ? { label: strings.tiles.hideDetails, icon: PanelBottomClose, onSelect: onHide }
       : { label: strings.tiles.showDetails, icon: PanelBottomOpen, onSelect: onShow },
@@ -845,6 +849,7 @@ const HistoryRow = memo(function HistoryRow({
   onHide,
 }: HistoryRowProps) {
   const { showLink } = useAppActions()
+  const copyLink = useCopyLink()
   const queryClient = useQueryClient()
   const [error, setError] = useState<ErrorDescription | null>(null)
   const { lastDownload } = video
@@ -922,6 +927,7 @@ const HistoryRow = memo(function HistoryRow({
             icon={ExternalLink}
             onClick={() => run(() => openWebPage(video.url))}
           />
+          <IconButton label={strings.copyLink.label} icon={Link} onClick={() => copyLink(video.url)} />
         </div>
         <Menu
           label={text.moreActions}

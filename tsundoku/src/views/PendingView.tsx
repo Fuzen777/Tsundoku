@@ -8,6 +8,7 @@ import {
   Images,
   Inbox,
   KeyRound,
+  Link,
   ListChecks,
   ListVideo,
   Loader2,
@@ -55,6 +56,7 @@ import type { PresetsOverview } from "../bindings/PresetsOverview"
 import type { RulePreset } from "../bindings/RulePreset"
 import type { VideoInfo } from "../bindings/VideoInfo"
 import { useChapters } from "../chapters"
+import { useCopyLink } from "../copyLink"
 import { ArrangeControls, GroupedList } from "../components/ArrangedList"
 import { Button } from "../components/Button"
 import { Card } from "../components/Card"
@@ -489,6 +491,7 @@ function PendingRow({
 }: PendingRowProps) {
   const [actionError, setActionError] = useState<ErrorDescription | null>(null)
   const removeLinks = useRemoveLinks()
+  const copyLink = useCopyLink()
   const { pickFromPending } = useAppActions()
   const preview = link.preview
   const video = preview?.video ?? null
@@ -665,11 +668,17 @@ function PendingRow({
             />
           )
         )}
+        <IconButton label={strings.copyLink.label} icon={Link} onClick={() => copyLink(pageOf(link))} />
         <IconButton label={strings.pending.remove} icon={X} onClick={() => act(() => removeLinks([link.id]))} />
         {onHide && <IconButton label={strings.tiles.hideDetails} icon={PanelBottomClose} onClick={onHide} />}
       </div>
     </Card>
   )
+}
+
+/** The page Copy Link copies: the one reading found (a short link's destination), else the link as it was added. */
+function pageOf(link: PendingLink): string {
+  return link.preview?.video.url ?? link.link
 }
 
 /** Whether a link's files can be picked: a post of several, or a file host's folder, not in Downloads already. */
@@ -786,6 +795,7 @@ function PendingTile({
   onError: (error: ErrorDescription | null) => void
 }) {
   const removeLinks = useRemoveLinks()
+  const copyLink = useCopyLink()
   const { pickFromPending } = useAppActions()
   const video = link.preview?.video ?? null
   const status = pendingStatus(link)
@@ -828,6 +838,7 @@ function PendingTile({
         ]
       : []),
     ...(picksFilesOf(link) ? [{ label: strings.postFiles.pickFiles, icon: ListChecks, onSelect: () => onShow("files") }] : []),
+    { label: strings.copyLink.label, icon: Link, onSelect: () => copyLink(pageOf(link)) },
     place.shown
       ? { label: strings.tiles.hideDetails, icon: PanelBottomClose, onSelect: onHide }
       : { label: strings.tiles.showDetails, icon: PanelBottomOpen, onSelect: () => onShow(null) },
