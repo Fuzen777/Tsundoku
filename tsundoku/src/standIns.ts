@@ -691,6 +691,7 @@ export const standIns = {
     notifyFailures: true,
     notifyFinished: true,
     clickNLoad: false,
+    pickInFullPage: true,
   } satisfies AddingSettings,
   clickNLoadStatus: { state: { kind: "off" }, port: 9666, senders: ["FileCrypt"] } satisfies ClickNLoadStatus,
   pixivAccount: { name: "Some One", account: "someone" } satisfies PixivAccount,

@@ -158,6 +158,13 @@ pub fn unlock_pending_link(
     pending.unlock(id, password)
 }
 
+/// A channel, playlist or account pasted or dropped in the window: it waits in Pending's Needs Attention to be picked
+/// from, and the answer is its ID there, for the picker.
+#[tauri::command]
+pub fn add_link_to_pick(pending: Pending<'_>, link: String) -> Result<i64, DownloadError> {
+    pending.add_to_pick(&link)
+}
+
 /// A link that needs picking was dealt with in the preview card's picker (items picked from it joined the queue, or
 /// it's watched now): it leaves Pending.
 #[tauri::command]

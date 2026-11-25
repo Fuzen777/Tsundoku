@@ -859,6 +859,13 @@ export async function readPendingLinkAgain(id: number): Promise<void> {
   await invoke("read_pending_link_again", { id })
 }
 
+/** A channel, playlist or account added in the window: it waits in Pending's Needs Attention to be picked from (one
+ * waiting already is kept), and resolves to its ID there. Rejects with a DownloadError. */
+export function addLinkToPick(link: string): Promise<number> {
+  if (!isTauri()) return outsideTauri()
+  return invoke<number>("add_link_to_pick", { link })
+}
+
 /** A pending link that lists several items was dealt with in the preview card's picker (items picked from it joined
  * the queue, or it's watched now): it leaves Pending. Rejects with a DownloadError. */
 export async function pendingLinkPicked(id: number): Promise<void> {
@@ -1258,6 +1265,22 @@ export function sitePictureUrl<T extends string | null | undefined>(url: T): T {
   if (!url || !isTauri() || !/^https:\/\/[is]\.pximg\.net\//.test(url)) return url
   const name = btoa(url).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
   return convertFileSrc(name, "sitepicture") as T
+}
+
+/** Where the window reads the icon of the site a page is on: the `siteicon` protocol (`history::serve_site_icon`),
+ * named by the page's host, which reads it from the site once and keeps it. None in a browser, or for an address that
+ * isn't a web page's. */
+export function siteIconUrl(page: string): string | null {
+  if (!isTauri()) return null
+  let host: string
+  try {
+    const parsed = new URL(page)
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null
+    host = parsed.hostname
+  } catch {
+    return null
+  }
+  return convertFileSrc(host, "siteicon")
 }
 
 export function keptThumbnailUrl(fileName: string): string | null {

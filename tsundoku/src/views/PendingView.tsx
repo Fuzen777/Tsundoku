@@ -118,7 +118,7 @@ const DEFAULT_PRESET = ""
  * nothing to download. Start All sends every link not downloaded before to the queue (those still being read go once
  * they're read); with links selected, Start Selected and Remove Selected act on those instead. The list is grouped and
  * sorted as its toolbar says, under Needs Attention's channels, playlists and accounts, which nothing starts: each is
- * picked from in the preview card. The links show as rows (List) or pictures (Masonry, Gallery), chosen in the header
+ * picked from in the card above Pending. The links show as rows (List) or pictures (Masonry, Gallery), chosen in the header
  * so the choice stays in sight; grouped, the sidebar lists the groups under it as chapters.
  */
 export function PendingView() {

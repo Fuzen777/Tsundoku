@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
-import { ChevronDown, ChevronRight, Film, Images, Maximize2, Minimize2, Play, Undo2, X } from "lucide-react"
+import { ChevronDown, ChevronRight, ChevronUp, Film, Images, Maximize2, Minimize2, Play, Undo2, X } from "lucide-react"
 import {
   addManyToQueue,
   cancelLoadingMore,
@@ -68,6 +68,7 @@ import { ItemTypeFilter } from "./ItemTypeFilter"
 import { MediaTiles, TileLabel, type MediaTile } from "./MediaTiles"
 import { PickerViewControls } from "./PickerViewControls"
 import { ToggleButton } from "./SegmentedControl"
+import { SiteIcon } from "./SiteIcon"
 import { StatusMessage } from "./StatusMessage"
 import { classes } from "./styles"
 import { Thumbnail } from "./Thumbnail"
@@ -80,6 +81,10 @@ interface ListingPickerProps {
   /** The pending link it was opened from (Pick What to Download): its ticks and their changes are kept for it while it
    * waits in Pending, and the picker opens with them again. */
   pendingId: number | null
+  /** Opens in full page (Settings → Adding Links' Pick in Full Page). */
+  startFullPage: boolean
+  /** Pending isn't the open view: the picker stays as it is, out of sight, even in full page. */
+  hidden: boolean
   onClose: () => void
   /** The picked items joined the queue. */
   onAdded: () => void
@@ -104,11 +109,22 @@ type Counted = "counting" | "failed" | null
  * Download and Load More beside it to go on page by page. The list shows only what will download: an item unticked
  * there moves at once under Not Downloading, folded under the list with what's downloaded before or in the queue
  * (greyed, or hidden with Hide Downloaded), where ticking one moves it back up. Undo, after the count, puts back the
- * ticks' changes one at a time. View in Full Page lays it over the whole window. A video starts with the preset a rule
- * picks for it, else the one picked here. What it loads is kept by the app, so the listing opens with it the next time;
- * while a site makes a load wait (X), the items listed stay to pick from.
+ * ticks' changes one at a time. View in Full Page lays it over the whole window, as it opens with Pick in Full Page;
+ * otherwise its card takes at most 60% of the window's height, its items scrolling inside, and Collapse folds it to one
+ * line (`FoldedPicker`). A video starts with the preset a rule picks for it, else the one picked here. What it loads is
+ * kept by the app, so the listing opens with it the next time; while a site makes a load wait (X), the items listed stay
+ * to pick from.
  */
-export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdded, onWatched }: ListingPickerProps) {
+export function ListingPicker({
+  listing,
+  pendingId,
+  startFullPage,
+  hidden: outOfSight,
+  onClose,
+  onAdded,
+  onSomeAdded,
+  onWatched,
+}: ListingPickerProps) {
   const [picker, setPicker] = useState(() => {
     const kept = pendingId === null ? undefined : keptPicker(pendingId)
     const fresh = pickerItems(listing.items)
@@ -133,7 +149,8 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [watching, setWatching] = useState(false)
   const [leftOutOpen, setLeftOutOpen] = useState(false)
-  const [fullPage, setFullPage] = useState(false)
+  const [fullPage, setFullPage] = useState(startFullPage)
+  const [folded, setFolded] = useState(false)
   const { layout, change: changeLayout } = usePickerLayout("items")
   const presetId = chosenId ?? presets?.defaultId ?? null
   // Batches that arrive after the card closed are dropped; closing it stops the load.
@@ -156,13 +173,13 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
 
   // Escape leaves the full page.
   useEffect(() => {
-    if (!fullPage) return
+    if (!fullPage || outOfSight) return
     const leave = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) setFullPage(false)
     }
     window.addEventListener("keydown", leave)
     return () => window.removeEventListener("keydown", leave)
-  }, [fullPage])
+  }, [fullPage, outOfSight])
 
   // A YouTube channel's Videos tab doesn't say how many videos it holds: another read counts them, for Load All to say.
   // Closing the card stops it.
@@ -323,6 +340,21 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
     />
   )
   const lastChange = undo.at(-1)
+  const listed = joinDetails([
+    strings.picker.kinds[listing.kind],
+    strings.picker.listed(items.length, noun, listing.newestOnly && more !== null, total),
+  ])
+  if (folded && !fullPage) {
+    return (
+      <FoldedPicker
+        listing={listing}
+        details={joinDetails([listed, listing.uploader, listing.siteName])}
+        picked={picked.length}
+        onExpand={() => setFolded(false)}
+        onClose={onClose}
+      />
+    )
+  }
   const content = (
     <>
       <div className="flex gap-4">
@@ -331,14 +363,15 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
           <p className="line-clamp-2 font-semibold select-text" title={listing.title}>
             {listing.title}
           </p>
-          <p className="truncate text-fg-secondary">{joinDetails([listing.uploader, listing.siteName])}</p>
-          <p className="text-xs text-fg-secondary tabular-nums">
-            {joinDetails([
-              strings.picker.kinds[listing.kind],
-              strings.picker.listed(items.length, noun, listing.newestOnly && more !== null, total),
-            ])}
+          <p className="flex min-w-0 items-center gap-1.5 text-fg-secondary">
+            <SiteIcon page={listing.url} site={listing.siteName} />
+            <span className="truncate">{joinDetails([listing.uploader, listing.siteName])}</span>
           </p>
+          <p className="text-xs text-fg-secondary tabular-nums">{listed}</p>
         </div>
+        {!fullPage && (
+          <IconButton label={strings.picker.collapse} icon={ChevronUp} onClick={() => setFolded(true)} />
+        )}
         <IconButton label={strings.preview.close} icon={X} onClick={onClose} />
       </div>
       {items.length === 0 ? (
@@ -388,9 +421,11 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
               />
             </div>
           </div>
+          {/* The items scroll here, taking what the rest leaves them: of the whole window in full page, else of the
+              card's 60%. */}
           <div
             ref={list}
-            className={classes("flex flex-col gap-3", fullPage && "-mx-2 min-h-0 flex-1 overflow-y-auto px-2")}
+            className={classes("-mx-2 flex min-h-0 flex-col gap-3 overflow-y-auto px-2", fullPage && "flex-1")}
           >
             {shown.length === 0 ? (
               <p className="text-fg-secondary">{strings.picker.allHidden}</p>
@@ -406,7 +441,7 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
                     isSelected={(item) => selection.has(itemKey(item))}
                     disabled={isAdding}
                     onSelect={select}
-                    fill={fullPage}
+                    fill
                   />
                 )}
                 {leftOut.length > 0 && (
@@ -416,7 +451,7 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
                     showUploader={showsUploaders(listing)}
                     open={leftOutOpen}
                     disabled={isAdding}
-                    fill={fullPage}
+                    fill
                     onFold={() => setLeftOutOpen((wasOpen) => !wasOpen)}
                     onSelect={select}
                   />
@@ -488,7 +523,7 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
       )}
     </>
   )
-  if (!fullPage) return content
+  if (!fullPage || outOfSight) return content
   // Over the whole window, the list taking what the rest leaves it; the card it came from stays where it was.
   return createPortal(
     <div
@@ -500,6 +535,48 @@ export function ListingPicker({ listing, pendingId, onClose, onAdded, onSomeAdde
       {content}
     </div>,
     document.body,
+  )
+}
+
+interface FoldedPickerProps {
+  listing: Listing
+  /** What it is, how many it lists, its uploader and site, for the hover text. */
+  details: string
+  /** How many items are ticked. */
+  picked: number
+  onExpand: () => void
+  onClose: () => void
+}
+
+/** The picker folded to one line: the channel's or account's picture, the site's icon (else its name), the listing's
+ * name and how many items are ticked, which opens it again; its page and details in the hover text. What's ticked and
+ * what's loaded stay, and loading goes on. */
+function FoldedPicker({ listing, details, picked, onExpand, onClose }: FoldedPickerProps) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        aria-expanded={false}
+        title={strings.picker.foldedHint(listing.url, details)}
+        onClick={onExpand}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left focus-visible:outline-2 focus-visible:outline-accent"
+      >
+        <ListingPicture listing={listing} size="tiny" />
+        <SiteIcon
+          page={listing.url}
+          site={listing.siteName}
+          fallback={
+            <span className="shrink-0 text-fg-secondary">{`${listing.siteName}${strings.separator.trimEnd()}`}</span>
+          }
+        />
+        <span className="truncate font-medium">{listing.title}</span>
+        <span className="shrink-0 text-fg-secondary tabular-nums">
+          {`${strings.separator.trimStart()}${strings.picker.picked(picked)}`}
+        </span>
+      </button>
+      <IconButton label={strings.picker.expand} icon={ChevronDown} aria-expanded={false} onClick={onExpand} />
+      <IconButton label={strings.preview.close} icon={X} onClick={onClose} />
+    </div>
   )
 }
 
@@ -665,20 +742,32 @@ function PausedStatus({ pause }: { pause: ListingPause }) {
   )
 }
 
-/** A channel's or an account's picture, round, or a playlist's first thumbnail; `small` for a watched source's card. */
+/** How large a listing's picture shows: on the picker, on a watched source's card, or on the picker's folded line, where
+ * a playlist shows none (its first video's thumbnail isn't its own picture) and a channel or an account none while it
+ * has none. */
+const PICTURE_SIZES = {
+  large: { round: "size-24", thumbnail: "w-44" },
+  small: { round: "size-14", thumbnail: "w-24" },
+  tiny: { round: "size-6", thumbnail: null },
+} as const
+
+/** A channel's or an account's picture, round, or a playlist's first thumbnail. */
 export function ListingPicture({
   listing,
-  small = false,
+  size = "large",
 }: {
   listing: Pick<Listing, "kind" | "thumbnailUrl">
-  small?: boolean
+  size?: keyof typeof PICTURE_SIZES
 }) {
   const [failed, setFailed] = useState(false)
+  const sizes = PICTURE_SIZES[size]
   if (listing.kind === "playlist") {
-    return <Thumbnail key={listing.thumbnailUrl} url={listing.thumbnailUrl} className={small ? "w-24" : "w-44"} />
+    if (!sizes.thumbnail) return null
+    return <Thumbnail key={listing.thumbnailUrl} url={listing.thumbnailUrl} className={sizes.thumbnail} />
   }
+  if (size === "tiny" && (!listing.thumbnailUrl || failed)) return null
   return (
-    <div className={classes("shrink-0 overflow-hidden rounded-full bg-input", small ? "size-14" : "size-24")}>
+    <div className={classes("shrink-0 overflow-hidden rounded-full bg-input", sizes.round)}>
       {listing.thumbnailUrl && !failed && (
         <img
           src={sitePictureUrl(listing.thumbnailUrl)}
@@ -835,8 +924,8 @@ interface ListedItemsProps<Item extends ListedItem> {
   isSelected: (item: Item) => boolean
   disabled: boolean
   onSelect: (item: Item, ticked: boolean) => void
-  /** In All New Items: the items take what the view's height leaves them (in a column that shrinks to the view), rather
-   * than at most 28 rem or half the window. */
+  /** In All New Items and the listing picker: the items take what the height around them leaves (a column that shrinks
+   * to the view, or the picker's card or full page), rather than at most 28 rem or half the window. */
   fill?: boolean
 }
 

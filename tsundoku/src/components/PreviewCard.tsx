@@ -29,12 +29,17 @@ import { PostFilesPicker } from "./PostFilesPicker"
 import { PresetRuleLink } from "./PresetRuleLink"
 import { SharedFilesList } from "./SharedFilesList"
 import { StatusMessage } from "./StatusMessage"
+import { classes } from "./styles"
 import { Thumbnail } from "./Thumbnail"
 
 interface PreviewCardProps {
   state: Exclude<PreviewState, { stage: "idle" }>
   /** The pending link the card shows, when it was opened from Pending's Pick What to Download. */
   pendingId: number | null
+  /** A channel's, playlist's or account's picker opens in full page (Settings → Adding Links' Pick in Full Page). */
+  startFullPage: boolean
+  /** Out of sight: a picker while Pending isn't the open view, kept as it is for when Pending opens again. */
+  hidden: boolean
   /** Cancel, Dismiss or Close. */
   onClose: () => void
   /** The video, or the items picked from a listing, joined the queue. */
@@ -50,10 +55,13 @@ interface PreviewCardProps {
 }
 
 /** Above the view: what a link is, whether it was downloaded before, and Download; or, for a channel, playlist or
- * account, its items to pick from (`ListingPicker`); or, for a link that needs a password, a field for it. */
+ * account, its items to pick from (`ListingPicker`, above Pending only), the card taking at most 60% of the window's
+ * height; or, for a link that needs a password, a field for it. */
 export function PreviewCard({
   state,
   pendingId,
+  startFullPage,
+  hidden,
   onClose,
   onAdded,
   onSomeAdded,
@@ -61,8 +69,11 @@ export function PreviewCard({
   onRetry,
   onUnlock,
 }: PreviewCardProps) {
+  const picking = state.stage === "ready" && state.preview.kind === "listing"
   return (
-    <Card className="flex flex-col gap-3 p-4">
+    // A picker's items scroll in their own column, so the card stays within 60% of the window; with notices above it
+    // too (an update's What's New), it gives up room before the view does, its items first, then scrolling whole.
+    <Card className={classes("flex flex-col gap-3 p-4", picking && "max-h-[60vh] min-h-0 overflow-y-auto")}>
       {state.stage === "loading" && (
         <div className="flex items-center gap-3">
           <Loader2 size={16} className="shrink-0 animate-spin text-fg-secondary" />
@@ -105,6 +116,8 @@ export function PreviewCard({
           <ListingPicker
             listing={state.preview.listing}
             pendingId={pendingId}
+            startFullPage={startFullPage}
+            hidden={hidden}
             onClose={onClose}
             onAdded={onAdded}
             onSomeAdded={onSomeAdded}

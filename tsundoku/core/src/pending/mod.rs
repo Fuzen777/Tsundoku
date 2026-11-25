@@ -385,6 +385,59 @@ impl PendingLinks {
         self.insert(links, LinkOrigin::Added, StartWhenRead::IfRightAway)
     }
 
+    /// Adds a link pasted or dropped in the window that lists several items (its address says so, or the preview card
+    /// read it as a listing), to be picked from in Pending: it waits there as `NeedsPicking` at once, since there's
+    /// nothing to read. A link here already by the same address waits to be picked from too (one being read becomes so
+    /// once read), and a second link to a listing waiting already (`listing_here_already`) isn't added. Answers the ID
+    /// of the link that waits, for the picker to keep its ticks for.
+    pub fn add_to_pick(&self, link: &str) -> Result<i64, DownloadError> {
+        let link = metadata::normalize_link(link).ok_or(DownloadError::NotFound)?;
+        let id = {
+            let mut state = lock(&self.state);
+            if let Some(entry) = state.entries.iter_mut().find(|entry| entry.link == link) {
+                if !matches!(
+                    entry.state,
+                    PendingState::NeedsPicking | PendingState::Reading
+                ) {
+                    entry.state = PendingState::NeedsPicking;
+                    entry.error = None;
+                    entry.start_when_read = StartWhenRead::No;
+                    self.store.update(entry)?;
+                }
+                entry.id
+            } else if let Some(page) = listing::listing_link(&link).map(|listing| listing.link)
+                && let Some(entry) = state.entries.iter().find(|entry| {
+                    entry.state == PendingState::NeedsPicking
+                        && listing::listing_link(&entry.link)
+                            .is_some_and(|listing| listing.link == page)
+                })
+            {
+                return Ok(entry.id);
+            } else {
+                let mut entry = Entry {
+                    id: 0,
+                    link,
+                    state: PendingState::NeedsPicking,
+                    fetched: None,
+                    error: None,
+                    preset_id: None,
+                    folder: None,
+                    rule_id: None,
+                    start_when_read: StartWhenRead::No,
+                    added_at: seconds_since_epoch(),
+                    origin: LinkOrigin::Added,
+                    password: None,
+                };
+                entry.id = self.store.insert(&entry)?;
+                let id = entry.id;
+                state.entries.push(entry);
+                id
+            }
+        };
+        self.notify();
+        Ok(id)
+    }
+
     /// Starts every link Start All would (`starts_with_all`), each video with its own preset or `preset_id`. How many
     /// were started.
     pub fn start_all(&self, preset_id: &str) -> Result<usize, DownloadError> {

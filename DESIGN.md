@@ -196,7 +196,7 @@ Use `<Button>` from `tsundoku/src/components/Button.tsx`: a `variant` and a `siz
 
 ### Undo Toasts
 
-- After a removal that can be undone (Pending's Remove, the queue's Clear Finished), `UndoToast` (`tsundoku/src/components/UndoToast.tsx`) shows a toast centered at the bottom of the content layer: what was done, as a short sentence without a period ("Removed 12 links"), then Undo (`sm`, `secondary`) and Dismiss (an `X` icon button). It looks like a `Menu`'s list: `--color-bg`, a strong line border and a shadow.
+- After a removal that can be undone (Pending's Remove, the queue's Clear Finished), or a channel, playlist or account added while Pending isn't open, `ToastRegion` (`tsundoku/src/components/UndoToast.tsx`) shows a toast centered at the bottom of the content layer: what was done, as a short sentence without a period ("Removed 12 links", "Channel added to Pending"), then its action, Undo or Open in Pending (`sm`, `secondary`) and Dismiss (an `X` icon button). It looks like a `Menu`'s list: `--color-bg`, a strong line border and a shadow.
 - It stays 8 seconds, waiting while the pointer is over it or it has the keyboard's focus; Escape or Dismiss closes it. A new one replaces it, so only the latest removal can be undone.
 - A view offers one through `useOfferUndo` (`tsundoku/src/undo.ts`). The removal itself happens at once; Undo puts things back. When Undo fails, the toast shows why as a `danger` status message and stays until dismissed.
 - Its region is `aria-live`, so screen readers read each toast as it appears.

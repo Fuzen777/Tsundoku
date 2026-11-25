@@ -44,6 +44,7 @@ pub mod room;
 pub mod rules;
 pub mod settings;
 pub mod short_links;
+pub mod site_icons;
 pub mod site_limits;
 pub mod site_pictures;
 pub mod sites;

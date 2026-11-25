@@ -19,6 +19,7 @@ use tsundoku_core::metadata::PreviewError;
 use tsundoku_core::passwords::Password;
 use tsundoku_core::preview::{LinkPreview, MoreEvent, PreviewService};
 use tsundoku_core::relocate::MovedFiles;
+use tsundoku_core::site_icons::SiteIcons;
 use tsundoku_core::tools::ToolManager;
 use tsundoku_core::{site_pictures, thumbnails};
 
@@ -408,6 +409,35 @@ pub fn serve_site_picture<R: Runtime>(
                 .header(header::CACHE_CONTROL, "max-age=86400")
                 .body(picture.bytes),
             Err(_) => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Vec::new()),
+        };
+        if let Ok(response) = response {
+            responder.respond(response);
+        }
+    });
+}
+
+/// Serves a site's icon to the window, at `siteicon://localhost/<host>` (`http://siteicon.localhost/<host>` in
+/// WebView2): the one kept in the data folder, else read from the site (`site_icons::SiteIcons`, which asks only https
+/// addresses of a host with a name). Read off the async runtime's threads, and kept by the window a day.
+pub fn serve_site_icon<R: Runtime>(
+    context: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
+    let icons = context
+        .app_handle()
+        .try_state::<Arc<SiteIcons>>()
+        .map(|icons| Arc::clone(&icons));
+    let host = request.uri().path().trim_start_matches('/').to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        let response = match icons.map(|icons| icons.icon(&host)) {
+            Some(Ok(icon)) => Response::builder()
+                .header(header::CONTENT_TYPE, icon.kind.content_type())
+                .header(header::CACHE_CONTROL, "max-age=86400")
+                .body(icon.bytes),
+            _ => Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Vec::new()),
         };

@@ -37,4 +37,9 @@ notifyFinished: boolean,
  * Pages of the sites `click_n_load::SENDERS` lists can send a folder's links to Pending with their Click'n'Load
  * button, through a receiver on this PC only. Off unless turned on, and in settings saved before it existed.
  */
-clickNLoad: boolean, };
+clickNLoad: boolean, 
+/**
+ * A channel's, playlist's or account's picker opens over the whole window (View in Full Page) when it's opened in
+ * Pending, since picking is what comes next. On unless turned off, and in settings saved before it existed.
+ */
+pickInFullPage: boolean, };

@@ -86,7 +86,7 @@ export const strings = {
         ? "1 file of this folder wasn't downloaded before."
         : `${count} files of this folder weren't downloaded before.`,
   },
-  /** The toast that offers to undo a removal (UndoToast.tsx). */
+  /** The toast that offers to undo a removal, or another action (Toast.tsx). */
   undoToast: {
     undo: "Undo",
     dismiss: "Dismiss",
@@ -158,6 +158,15 @@ export const strings = {
     pasteHint: "Paste One Link or Several",
     /** Under Paste Link when the clipboard holds no link, or nothing that's text. */
     noLinkCopied: "There's no link on the clipboard.",
+    /** The toast for a channel, playlist or account added on another view than Pending, where its picker opens. */
+    toPick: {
+      channel: "Channel added to Pending",
+      playlist: "Playlist added to Pending",
+      account: "Account added to Pending",
+      /** Reading it said it lists several items, but its address doesn't say what it is. */
+      other: "List added to Pending",
+    },
+    openInPending: "Open in Pending",
     /** Beside Paste Link: opens a field under it to type or edit a link. */
     typeLink: "Type a Link",
     placeholder: "Type or Paste a Link",
@@ -781,6 +790,13 @@ export const strings = {
     nothingToUndo: "Nothing to undo yet.",
     fullPage: "View in Full Page",
     exitFullPage: "Exit Full Page (Esc)",
+    /** Folds the picker to one line, which Expand opens again; what's ticked stays. */
+    collapse: "Collapse",
+    expand: "Expand",
+    /** On the folded line, after the listing's name. */
+    picked: (count: number) => `${count.toLocaleString()} picked`,
+    /** The folded line's hover text: the listing's page, then what it is and how many it lists. */
+    foldedHint: (url: string, details: string) => `${url}\n${details}`,
   },
   /** How a picker lays out what it offers: a listing's items, a post's files (PickerViewControls.tsx). */
   pickerView: {
@@ -1598,6 +1614,9 @@ export const strings = {
     clickNLoadPortTaken: (port: number) =>
       `Another app is already listening on port ${port}, where Click'n'Load buttons send their links. Close it (JDownloader, say), then try again.`,
     clickNLoadFailed: "Tsundoku couldn't start listening for Click'n'Load buttons.",
+    pickInFullPage: "Pick in Full Page",
+    pickInFullPageHint:
+      "A channel, playlist or account you add, or pick from in Pending, opens its list over the whole window. Esc brings it back into Pending.",
     tryAgain: "Try Again",
     notify: "Show Notifications",
     notifyHint:

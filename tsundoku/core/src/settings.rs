@@ -169,6 +169,9 @@ pub struct AddingSettings {
     /// Pages of the sites `click_n_load::SENDERS` lists can send a folder's links to Pending with their Click'n'Load
     /// button, through a receiver on this PC only. Off unless turned on, and in settings saved before it existed.
     pub click_n_load: bool,
+    /// A channel's, playlist's or account's picker opens over the whole window (View in Full Page) when it's opened in
+    /// Pending, since picking is what comes next. On unless turned off, and in settings saved before it existed.
+    pub pick_in_full_page: bool,
 }
 
 impl Default for AddingSettings {
@@ -181,6 +184,7 @@ impl Default for AddingSettings {
             notify_failures: true,
             notify_finished: true,
             click_n_load: false,
+            pick_in_full_page: true,
         }
     }
 }
@@ -1575,8 +1579,9 @@ mod tests {
                 notify_failures: true,
                 notify_finished: true,
                 click_n_load: false,
+                pick_in_full_page: true,
             },
-            "Click'n'Load stays off in settings saved before it"
+            "Click'n'Load stays off in settings saved before it, and pickers open in full page"
         );
         assert_eq!(settings.background, BackgroundSettings::default());
     }

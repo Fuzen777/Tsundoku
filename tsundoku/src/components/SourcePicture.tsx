@@ -20,7 +20,7 @@ interface SourcePictureProps {
 export function SourcePicture({ listing, picture }: SourcePictureProps) {
   const url = picture && watchedPictureUrl(picture.file)
   const [failed, setFailed] = useState<string | null>(null)
-  if (!picture || !url || failed === url) return <ListingPicture listing={listing} small />
+  if (!picture || !url || failed === url) return <ListingPicture listing={listing} size="small" />
   return <CroppedPicture kind={listing.kind} url={url} crop={picture.crop} onError={() => setFailed(url)} />
 }
 

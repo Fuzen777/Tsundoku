@@ -18,7 +18,7 @@ const SHORTCUTS = Object.keys(text.shortcutKeys) as ClipboardShortcut[]
 
 /**
  * Settings → Adding Links: the clipboard watcher, the clipboard shortcut, the browser bookmark and the send buttons'
- * userscript, Click'n'Load buttons, Download Right Away for the links they add, and notifications.
+ * userscript, Click'n'Load buttons, Download Right Away for the links they add, Pick in Full Page, and notifications.
  */
 export function AddingSection() {
   const { options, save, error } = useSaveAddingOptions()
@@ -86,6 +86,15 @@ export function AddingSection() {
             onChange={(checked) => void save({ downloadRightAway: checked })}
           />
           <p className="pl-6 text-xs text-fg-muted">{text.downloadRightAwayHint}</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Checkbox
+            label={text.pickInFullPage}
+            checked={options?.pickInFullPage ?? true}
+            disabled={!options}
+            onChange={(checked) => void save({ pickInFullPage: checked })}
+          />
+          <p className="pl-6 text-xs text-fg-muted">{text.pickInFullPageHint}</p>
         </div>
         <div className="flex flex-col gap-1">
           <Checkbox

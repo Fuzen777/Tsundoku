@@ -2,6 +2,18 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.43 · 2026-11-25
+
+### Changed
+
+- **Channels, playlists and accounts are picked in Pending**: one you paste, type or drop waits in Pending under Needs Attention. With Pending open, its list opens at once; on any other view, a toast says it was added, with Open in Pending, and you stay where you were. Going to another view and back finds the list as you left it.
+- **The list opens over the whole window**: picking is what comes next, so it opens in full page, from a paste as from Pick What to Download. Esc brings it back into Pending. Settings → Adding Links → Pick in Full Page turns this off.
+- **The list in Pending leaves room for the rest**: it takes at most 60% of the window, its items scrolling inside, and Collapse (beside its ×) folds it to one line: the channel's or account's picture, the site's icon, the name and how many are ticked, with its link and details when hovered. Click the line to open it again as it was.
+
+### Added
+
+- **Sites' icons**: the list shows the site's own icon before its name, read once from the site and kept.
+
 ## 0.2.42 · 2026-11-24
 
 ### Added

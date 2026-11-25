@@ -137,6 +137,11 @@ impl DataPaths {
         self.root.join("pictures")
     }
 
+    /// Sites' icons (`site_icons`), read once and kept, one file per site.
+    pub fn site_icons_folder(&self) -> PathBuf {
+        self.root.join("site-icons")
+    }
+
     /// The check window's browser profile (its cookies, such as a check passed, and its cache), kept apart from the
     /// app's own WebView.
     pub fn browser_folder(&self) -> PathBuf {

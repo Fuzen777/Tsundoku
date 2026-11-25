@@ -39,6 +39,7 @@ use tsundoku_core::presets::PresetManager;
 use tsundoku_core::preview::{PreviewService, ToolReader};
 use tsundoku_core::rules::RuleManager;
 use tsundoku_core::settings::SettingsStore;
+use tsundoku_core::site_icons::SiteIcons;
 use tsundoku_core::thumbnails::{FfmpegMaker, Thumbnails};
 use tsundoku_core::tools::ToolManager;
 use tsundoku_core::watched::{WatchedChoices, WatchedServices, WatchedSources};
@@ -154,6 +155,8 @@ fn open_data(app: &App) -> Result<Arc<ToolManager>, Box<dyn Error>> {
     let rules = Arc::new(RuleManager::new(Arc::clone(&settings)));
     let logs_folder = paths.logs_folder();
     let pictures_folder = paths.pictures_folder();
+    // Sites' icons, for the `siteicon` protocol.
+    app.manage(Arc::new(SiteIcons::new(paths.site_icons_folder())));
     let tools = Arc::new(ToolManager::new(
         paths,
         Arc::clone(&settings),
@@ -318,6 +321,7 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("thumbnail", history::serve_thumbnail)
         .register_asynchronous_uri_scheme_protocol("picture", watched::serve_picture)
         .register_asynchronous_uri_scheme_protocol("sitepicture", history::serve_site_picture)
+        .register_asynchronous_uri_scheme_protocol("siteicon", history::serve_site_icon)
         .setup(|app| {
             let window = app
                 .get_webview_window("main")
@@ -484,6 +488,7 @@ pub fn run() {
             pending::restore_removed_pending_links,
             pending::read_pending_link_again,
             pending::unlock_pending_link,
+            pending::add_link_to_pick,
             pending::pending_link_picked,
             pending::set_pending_preset,
             pending::set_pending_folder,

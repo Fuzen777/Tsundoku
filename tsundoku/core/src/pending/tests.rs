@@ -1504,8 +1504,9 @@ fn saved_options_are_announced_and_kept() {
             notify_failures: true,
             notify_finished: true,
             click_n_load: false,
+            pick_in_full_page: true,
         },
-        "everything starts off but notifications"
+        "everything starts off but notifications and full-page pickers"
     );
     let options = AddingSettings {
         watch_clipboard: true,
@@ -1983,6 +1984,57 @@ fn a_listing_started_before_it_was_read_waits_to_be_picked_from() {
     assert_eq!(pending.state, PendingState::NeedsPicking);
     assert!(!pending.start_when_read);
     assert!(test.queue.items().is_empty());
+}
+
+#[test]
+fn a_pasted_listing_waits_to_be_picked_from_without_being_read() {
+    let test = Test::new();
+    let channel = test.links.add_to_pick(CHANNEL).unwrap();
+    let album = test.links.add_to_pick(ALBUM).unwrap();
+    assert_ne!(channel, album);
+    let pending = test.link(CHANNEL).unwrap();
+    assert_eq!(pending.id, channel);
+    assert_eq!(pending.state, PendingState::NeedsPicking);
+    assert_eq!(pending.listing, Some(ListingKind::Channel));
+    assert_eq!(test.link(ALBUM).unwrap().listing, None);
+    assert!(test.reader.reads().is_empty(), "nothing to read");
+
+    assert_eq!(
+        test.links.add_to_pick(CHANNEL).unwrap(),
+        channel,
+        "the same link again"
+    );
+    assert_eq!(
+        test.links
+            .add_to_pick("https://www.youtube.com/@someone/shorts")
+            .unwrap(),
+        channel,
+        "another link to the same listing"
+    );
+    assert_eq!(test.links.list().len(), 2);
+    let reopened = test.reopen();
+    assert_eq!(reopened.list(), test.links.list(), "kept through a restart");
+    assert!(test.links.add_to_pick("not a link").is_err());
+}
+
+#[test]
+fn a_listing_here_already_by_its_address_waits_to_be_picked_from_when_pasted() {
+    let test = Test::new();
+    test.reader.answer(
+        CHANNEL,
+        Err(PreviewError::Network {
+            detail: "offline".to_owned(),
+        }),
+    );
+    test.add(&[CHANNEL]);
+    test.wait_until_read(CHANNEL);
+    let failed = test.link(CHANNEL).unwrap();
+    assert_eq!(failed.state, PendingState::Failed);
+    assert_eq!(test.links.add_to_pick(CHANNEL).unwrap(), failed.id);
+    let pending = test.link(CHANNEL).unwrap();
+    assert_eq!(pending.state, PendingState::NeedsPicking);
+    assert_eq!(pending.error, None);
+    assert_eq!(test.links.list().len(), 1);
 }
 
 #[test]
