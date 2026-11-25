@@ -2,6 +2,12 @@
 
 All notable changes to Tsundoku. Versions follow [Semantic Versioning](https://semver.org/): every change bumps the patch number, and a release bumps the minor or major number, folding in the patch entries since the previous release.
 
+## 0.2.48 · 2026-11-25
+
+### Fixed
+
+- **Collapse in full page opened Snap Layouts**: the full-page list now starts under the title bar, so its buttons no longer sit where Windows looks for Maximize. The tabs and the window's buttons stay in sight and in reach above it; another tab hides the list until Pending opens again.
+
 ## 0.2.47 · 2026-11-25
 
 ### Changed

@@ -125,6 +125,7 @@ Decisions live on the [Open Decisions](https://claude.ai/artifact/A8Ewo1fPXDbs7C
 - [ ] Load All on a big account, then Collapse and go to another view while it loads → coming back, it's still loading or done, nothing lost.
 - [ ] (0.2.45) Two Pixiv artists in Needs Attention: open the first, untick a few, Load More, then open the second → the first is back in Needs Attention with its picture, name and how many are ticked; open it again → it shows at once with the same works and ticks. Claude tried this with two YouTube channels.
 - [ ] (0.2.46) Pending's list of a profile you watch: untick a few new items, Download → the Watched card shows them under Skipped Before; open the list again → they start under Discarded, marked Skipped. Claude tried the Skipped part on an unwatched YouTube channel, with nothing actually downloaded.
+- [ ] (0.2.48) In full page, rest the pointer on Collapse and on × → no Snap Layouts; the tabs and the window's buttons stay above the list, and Maximize still opens Snap Layouts. Claude checked only that the list now starts under the title bar: Snap Layouts shows for a real pointer only.
 
 **14. Pick from a channel, playlist or account** · 0.1.57
 - [ ] Paste a YouTube channel (such as `https://www.youtube.com/@NASA`, any tab) → "Listing the channel's newest videos…", then its newest 50 videos, newest first, each with a box, thumbnail, title, rough date and length. New ones are ticked; downloaded ones are greyed, unticked and marked Downloaded (hovering says when); queued ones say In Queue.

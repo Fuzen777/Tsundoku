@@ -565,13 +565,14 @@ export function ListingPicker({
     </>
   )
   if (!fullPage || outOfSight) return content
-  // Over the whole window, the list taking what the rest leaves it; the card it came from stays where it was.
+  // Over the whole window but its title bar (the tabs' row, 56 px), the list taking what the rest leaves it; the card it
+  // came from stays where it was. The title bar stays in sight and in reach: Windows' Snap Layouts window sits over its
+  // Maximize (title_bar.rs), so a button of the picker's there would open Snap Layouts.
   return createPortal(
     <div
       role="dialog"
-      aria-modal="true"
       aria-label={listing.title}
-      className="fixed inset-0 z-40 flex flex-col gap-4 bg-bg p-6"
+      className="fixed inset-x-0 top-14 bottom-0 z-40 flex flex-col gap-4 bg-bg p-6"
     >
       {content}
     </div>,
